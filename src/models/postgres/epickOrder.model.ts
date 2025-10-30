@@ -1,0 +1,56 @@
+import {
+    Model, DataTypes,  CreationOptional
+  } from 'sequelize';
+  import { postgresSequelize } from '../../db'; // Adjust the import path as needed
+
+export class OrderPick extends Model {
+  declare id: number;
+  declare orderNumber: number;
+  declare pickerUserNumber: number;
+
+  declare status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  declare startedAt: Date | null;
+  declare completedAt: Date | null;
+ 
+  declare notes: string | null;
+
+  // rollups
+  declare totalLines: number;
+  declare totalQty: number;
+  declare scannedLines: number;
+  declare scannedQty: number;
+
+  declare OutOfStockItem:number;
+  // metadata
+  declare createdAt: CreationOptional<Date>;
+  declare updatedAt: CreationOptional<Date>;
+}
+
+OrderPick.init({
+  id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+  orderNumber: { type: DataTypes.INTEGER, allowNull: false,unique: true },
+  pickerUserNumber: { type: DataTypes.INTEGER, allowNull: false },
+  customerNumber: { type: DataTypes.INTEGER, allowNull: false },
+  status: {
+    type: DataTypes.ENUM('pending', 'in_progress', 'completed'),
+    allowNull: false,
+    defaultValue: 'in_progress'
+  },
+
+  startedAt: { type: DataTypes.DATE, allowNull: true },
+  completedAt: { type: DataTypes.DATE, allowNull: true },
+
+  notes: { type: DataTypes.TEXT, allowNull: true },
+
+  totalLines: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  totalQty: { type: DataTypes.DECIMAL(18, 4), allowNull: false, defaultValue: 0 },
+  OutOfStockItem: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  scannedLines: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  scannedQty: { type: DataTypes.DECIMAL(18, 4), allowNull: false, defaultValue: 0 },
+
+}, {
+  sequelize: postgresSequelize,
+  tableName: 'Order_Pick',
+  timestamps:true
+ 
+});

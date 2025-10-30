@@ -1,0 +1,55 @@
+// interfaces/pagination.interface.ts
+export interface PaginationOptions {
+  isIncludeAllImg?:any;
+    page?: number;
+    pageSize?:number;
+    limit?: number;
+    tab?: 'payments' | 'charges' | 'credits';
+    retailerId?: number;
+    id?:number;
+    upcNumber?:string;
+    SearchInput?:any;
+    fromDate?:any;
+    toDate?:any;
+    order?: [string, 'ASC' | 'DESC'][];
+    include?: any[];
+    byUserId?:any;
+    searchByUPCNumber?:any;
+    searchByItemNumber?:any;
+    slotId?:number;
+    isActive?:boolean;
+    isBanner?:number;
+    customerId?:number;
+    searchString?:string;
+    customerid?:number;
+    CustomerStatus?:number;
+    CustomerId?:number;
+    imageid?:number;
+    orderCustomerNumber?:number
+    iscustomerlist?:boolean;
+    ProductID?:number;
+    salesUserId?:number;
+    productId?:number;
+    search?:string;
+    isEmailTrak?:boolean;
+    shortBy?:string;
+    routes?:any;
+    stopNumber?:any;
+    routeNumber?:any;
+    customerNumber?:number;
+    driverId?:number;
+    pending?:string;
+    salesCategoryId?: number;
+    priceClassId?: number;
+    isAllow?:string;
+    filter?:any;
+    role?:string;
+    orderNumber?:number;
+    hasPrice?:boolean;
+    orderDate?:string;
+    orderDay?:number;
+    startDate?:string;
+    endDate?:string;
+    salesRepNumber?:any;
+  }
+  

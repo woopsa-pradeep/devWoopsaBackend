@@ -1,0 +1,35 @@
+export interface IDistributorAttributes {
+  PM_ID: string;
+  RJR_Whole_ID?: string;
+  RJR_Ship_ID?: string;
+  RJR_Descriptor?: string;
+  D_Name?: string;
+  D_Addr1?: string;
+  D_Addr2?: string;
+  D_City?: string;
+  D_State?: string;
+  D_Zip?: string;
+  D_Lcontact?: string;
+  D_Fcontact?: string;
+  D_Phone?: string;
+  D_Fax?: string;
+  D_Logo?: string;
+  ClientID?: number;
+  PO_ShipTo1?: string;
+  PO_ShipTo2?: string;
+  PO_ShipTo3?: string;
+  PO_ShipTo4?: string;
+  PO_BillTo1?: string;
+  PO_BillTo2?: string;
+  PO_BillTo3?: string;
+  PO_BillTo4?: string;
+  D_Email?: string;
+  D_OtherName?: string;
+  D_OtherAddr1?: string;
+  D_OtherAddr2?: string;
+  D_OtherCity?: string;
+  D_OtherState?: string;
+  D_OtherZip?: string;
+  D_OtherPhone?: string;
+  D_OtherFax?: string;
+}
