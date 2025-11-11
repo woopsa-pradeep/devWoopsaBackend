@@ -116,7 +116,7 @@ export class SalesService {
   }
 
   async placeOrder(orderData: PlaceOrder, req: any, customerId: any) {
-    const { shippingDetails , hasDiscount} = orderData;
+    const { shippingDetails , hasDiscount ,discountAmount} = orderData;
 
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
@@ -298,7 +298,7 @@ export class SalesService {
 
         await OrderDiscount.create({
           orderNumber: orderHeaderCreated.Order_Number,
-          discount: hasDiscount.discountAmount,
+          discount: Number(discountAmount || 0),
           discountType: 'flat',
           salesId: customer.C_Salesman || 0,
           CustomerNumber: customerId

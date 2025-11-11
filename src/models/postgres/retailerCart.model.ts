@@ -54,7 +54,7 @@ CustomerCart.init(
     },
     type: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       defaultValue: 'order',
     },
     Customer_Number: {
