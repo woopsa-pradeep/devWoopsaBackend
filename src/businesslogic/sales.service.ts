@@ -221,6 +221,7 @@ export class SalesService {
 
       console.log(item.Price, 'item.Price-->')
 
+      console.log(hasDiscount == true,'hasDiscount == true')
       const orderDetail = {
         Order_Number: orderHeaderCreated.Order_Number,
         Item_Number: item.Item_Number,
@@ -230,8 +231,8 @@ export class SalesService {
         Quantity_Ordered: Number(item.Qty),
         Quantity_Shipped: item.Qty,
         Pack: product.Pack,
-        Price: hasDiscount? Number(item.discountPrice): Number(item.Price),
-        Price_Reference:hasDiscount? Number(item.discountPrice): Number(item.Price),
+        Price: hasDiscount == true? Number(item.discountPrice || 0): Number(item.Price),
+        Price_Reference:hasDiscount == true? Number(item.discountPrice || 0): Number(item.Price),
         Retail: product.Retail1,
         NetCost: product.NetCost,
         BaseCost: product.BaseCost,
@@ -294,7 +295,7 @@ export class SalesService {
 
     try{
 
-      if(hasDiscount){
+      if(hasDiscount == true){
 
         await OrderDiscount.create({
           orderNumber: orderHeaderCreated.Order_Number,
