@@ -35,6 +35,7 @@ export interface PlaceOrderRequest {
   Price: number;
   Qty: number;
   TotalPrice: number;
+  discountPrice?: number;
   Tax_Rate: number;
   Price_With_Tax: number;
   TotalPriceWithTax: number;
