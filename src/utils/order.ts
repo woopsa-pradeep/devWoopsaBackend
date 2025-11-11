@@ -2,7 +2,7 @@ import dayjs from "dayjs";
 import { sendEmail } from "./sendMail";
 import { PuppeteerPDFGenerator } from "./puppeteerPdfGenerator";
 import { Distributor } from "../models/mmsql/distributor.model";
-import { generateDistributorOrderNotificationEmail, generateOrderConfirmationEmail } from "../view/emails";
+import { generateDistributorOrderNotificationEmail, generateOrderConfirmationEmail, generateReturnOrderNotificationEmail } from "../view/emails";
 
 type OrderDefaultValues = Record<string, number | string | null | boolean | Date>;
 
@@ -278,3 +278,95 @@ export const sendEmailToOrder = async (
 };
 
 
+export const sendEmailToReturnOrder = async (
+  orderHeaderCreated: any,
+  orderDetails: any[],
+  customer: any,
+  Delivery_Charge: number
+) => {
+  try {
+    const orderSource =
+      orderHeaderCreated.Order_Source === 12
+        ? 'App'
+        : orderHeaderCreated.Order_Source === 13
+        ? 'Web'
+        : 'ERP';
+
+    // 1️⃣ Generate PDF for customer
+    const pdfPath = await PuppeteerPDFGenerator.generateOrderRequestPDF(
+      { orderHeader: orderHeaderCreated, orderDetails },
+      customer
+    );
+
+    // 2️⃣ Prepare customer email HTML
+    const returnEmailHtml = generateReturnOrderNotificationEmail(
+      "CDT Distributor",
+      customer.C_Name,
+      customer.C_Number,
+      customer.C_Email || "",
+      customer.C_Phone || "",
+      orderHeaderCreated.Return_Number,
+      new Date(orderHeaderCreated.Return_Date).toLocaleDateString(),
+      orderSource,
+      orderDetails
+    );
+    
+
+    // 3️⃣ Send email to customer (if email exists)
+    if (customer.C_Email) {
+      const sendCustomer = process.env.SEND_CUSTOMER_EMAIL === 'true';
+      let sendCustomerEmail = sendCustomer ? customer.C_Email : process.env.EMAIL_FROM || "CDT TEAM";
+      console.log(sendCustomerEmail,'sendCustomerEmail');
+      await sendEmail({
+         to: sendCustomerEmail,
+        subject: `Order Confirmation #${orderHeaderCreated.Order_Number} - CDT`,
+        html: returnEmailHtml,
+        attachments: [
+          {
+            filename: `Order_${orderHeaderCreated.Order_Number}.pdf`,
+            path: pdfPath
+          }
+        ]
+      });
+
+      // Clean up PDF after sending
+      setTimeout(async () => {
+        await PuppeteerPDFGenerator.deletePDFFile(pdfPath);
+      }, 5000);
+    }
+
+    // 4️⃣ Send distributor email
+    let distributor: any = await Distributor.findOne({
+      where: {
+        // Add distributor search condition here if required
+      }
+    });
+    distributor = distributor?.dataValues;
+
+    const distributorEmailHtml = generateDistributorOrderNotificationEmail(
+      distributor?.D_Name || 'CDT Distributor',
+      customer.C_Name,
+      customer.C_Number,
+      customer.C_Email || '',
+      customer.C_Phone || '',
+      orderHeaderCreated.Order_Number,
+      new Date(orderHeaderCreated.Order_Date).toLocaleDateString(),
+      orderSource,
+      orderDetails,
+      Delivery_Charge
+    );
+
+    const distributorEmail = distributor?.D_Email || 'distributor@yopmail.com';
+
+    await sendEmail({
+      to: distributorEmail,
+      subject: `New Order #${orderHeaderCreated.Order_Number} - Action Required`,
+      html: distributorEmailHtml
+    });
+
+    console.log(`✅ Emails sent successfully for Order #${orderHeaderCreated.Order_Number}`);
+  } catch (error) {
+    console.error('❌ Error sending emails for order:', error);
+    throw error; // Let the caller decide if they want to fail or ignore
+  }
+};

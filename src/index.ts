@@ -8,7 +8,7 @@ import { testConnections } from './db';
 import { syncPostgresModels } from './models/postgres';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { seedHomeSetting, seedPolicies, seedWarehouseSetting } from './seeder/wareHouseSetting.seeder';
+import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting } from './seeder/wareHouseSetting.seeder';
 import { startCronJobs } from './cron'; // adjust path if needed
 import { getDiscount } from './utils/helper';
 import moment from 'moment';
@@ -65,7 +65,7 @@ async function safeMssqlSync() {
   const modelsToSync = Object.values(sequelize.models).filter(
     (model) =>
       model.tableName !== 'discoutViews' && model.tableName !== 'GetDiscount' &&
-      model.tableName !== 'Order_Header'
+      model.tableName !== 'Order_Header' && model.tableName !== 'Order_Detail'
   );
   
 
@@ -114,6 +114,7 @@ testConnections()
     console.log('✅ MSSQL models synchronized (excluding views)');
     await seedWarehouseSetting();
     await seedHomeSetting();
+    await seedEpickSetting();
     await seedPolicies();
     console.log('✅ Policies seeded');
     app.listen(PORT, () => {

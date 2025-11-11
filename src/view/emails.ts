@@ -1273,3 +1273,125 @@ export function generateSupportTicketForDistributor(
     </html>
      `;
 }
+
+
+export function generateReturnOrderNotificationEmail(
+  distributorName: string,
+  customerName: string,
+  customerNumber: number,
+  customerEmail: string,
+  customerPhone: string,
+  returnNumber: number,
+  returnDate: string,
+  returnSource: string,
+  returnItems: any[] = []
+): string {
+  return `
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #ffffff;
+        color: #333;
+        margin: 0;
+        padding: 20px;
+      }
+      .container {
+        max-width: 800px;
+        margin: auto;
+        padding: 20px;
+        border: 1px solid #ddd;
+        background-color: #fafafa;
+      }
+      h2 {
+        color: #c0392b;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      th, td {
+        padding: 10px;
+        border: 1px solid #ccc;
+        text-align: left;
+        font-size: 14px;
+      }
+      th {
+        background-color: #f7f7f7;
+      }
+      .footer {
+        margin-top: 30px;
+        font-size: 12px;
+        color: #888;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Return Request – Return #${returnNumber}</h2>
+
+      <p>Hi ${distributorName},</p>
+
+      <p><strong>Return Requested By:</strong> ${customerName} – ${customerNumber}</p>
+      <p><strong>Return Date:</strong> ${returnDate}</p>
+      <p><strong>Return Source:</strong> ${returnSource}</p>
+
+      <p>
+        <strong>Total Return Value:</strong> 
+        $${returnItems
+          .reduce(
+            (total, item) =>
+              total + ((item.Price || 0) * (item.Return_Quantity || 0)),
+            0
+          )
+          .toFixed(2)}
+      </p>
+
+      <h3>Return Details</h3>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Item No</th>
+            <th>Name</th>
+            <th>Reason</th>
+            <th>Return Qty</th>
+            <th>Case</th>
+            <th>Size</th>
+            <th>Pack</th>
+            <th>Price</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${returnItems
+            .map(
+              (item) => `
+            <tr>
+              <td>${item.Item_Number || 'N/A'}</td>
+              <td>${item.ItemDescription || 'N/A'}</td>
+              <td>${item.Return_Reason || 'N/A'}</td>
+              <td>${item.Return_Quantity || 0}</td>
+              <td>${item.CaseCount || 0}</td>
+              <td>${item.UOM || 'N/A'}</td>
+              <td>${item.Pack || 0}</td>
+              <td>$${(item.Price || 0).toFixed(2)}</td>
+              <td>$${((item.Price || 0) * (item.Return_Quantity || 0)).toFixed(
+                2
+              )}</td>
+            </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
+
+      <div class="footer">This is a system-generated email. Please do not reply.</div>
+    </div>
+  </body>
+</html>
+  `;
+}

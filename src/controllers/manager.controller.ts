@@ -762,4 +762,88 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const data = await this.managerService.getGenerateBarcodeAndUpload(req.body.text);
     sendResponse(res, 200, true, data, 'Barcode generated and uploaded successfully');
   }
+
+
+  async createInventory(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createInventory(req.body);
+    sendResponse(res, 201, true, data, 'Inventory created successfully');
+  }
+
+  async editInventory(req: AuthRequest, res: Response) {
+    const data = await this.managerService.editInventory(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Inventory edited successfully');
+  }
+
+  // InventoryUPC CRUD controller methods
+  async createInventoryUPC(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createInventoryUPC(req.body);
+    sendResponse(res, 201, true, data, 'InventoryUPC created successfully');
+  }
+
+  async getInventoryUPCById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryUPCById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'InventoryUPC retrieved successfully');
+  }
+
+  
+  async updateInventoryUPC(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateInventoryUPC(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'InventoryUPC updated successfully');
+  }
+
+  async deleteInventoryUPC(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteInventoryUPC(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'InventoryUPC deleted successfully');
+  }
+
+  async getInventoryUPCByItemNumber(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryUPCByItemNumber(req.params.itemNumber);
+    sendResponse(res, 200, true, data, 'InventoryUPCs by item number retrieved successfully');
+  }
+
+  async getInventoryUPCByJurisdiction(req: AuthRequest, res: Response) {
+    const { jurisdictionState, jurisdictionCounty, jurisdictionCity } = req.query;
+    const data = await this.managerService.getInventoryUPCByJurisdiction(
+      Number(jurisdictionState), 
+      jurisdictionCounty ? Number(jurisdictionCounty) : undefined,
+      jurisdictionCity ? Number(jurisdictionCity) : undefined
+    );
+    sendResponse(res, 200, true, data, 'InventoryUPCs by jurisdiction retrieved successfully');
+  }
+  // EpickSetting CRUD controller methods
+  async createEpickSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createEpickSetting(req.body);
+    sendResponse(res, 201, true, data, 'Epick setting created successfully');
+  }
+
+  async getEpickSettingById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getEpickSettingById(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getAllEpickSettings(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllEpickSettings(req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async updateEpickSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateEpickSetting(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Epick setting updated successfully');
+  }
+
+  async deleteEpickSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteEpickSetting(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Epick setting deleted successfully');
+  }
+
+  async createCustomer(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createCustomer(req.body);
+    sendResponse(res, 201, true, data, 'Customer created successfully');
+  }
+
+  async updateUserAllowDiscount(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateUserAllowDiscount(req.body, Number(req.params.id));
+    sendResponse(res, 200, true, data, 'User allow discount updated successfully');
+  }
+ 
 }

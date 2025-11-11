@@ -58,29 +58,41 @@ export const createUserSchema = Joi.object({
     'any.required': 'User is required',
     'string.empty': 'User cannot be empty',
   }),
-  salesRepNumber: Joi.alternatives()
-    .try(Joi.number(), Joi.string().allow(''), Joi.valid(null))
-    .optional()
+
+  // ✅ salesRepNumber is now ARRAY
+  salesRepNumber: Joi.array()
+    .items(
+      Joi.string().trim().allow(''), // e.g. "1234"
+      Joi.number(),                  // e.g. 1234
+    )
+    .default([]) // ✅ Default empty array
     .messages({
-      'number.base': 'SalesRep must be a number',
+      'array.base': 'salesRepNumber must be an array',
+      'string.base': 'Each salesRepNumber must be a string',
+      'number.base': 'Each salesRepNumber must be a number',
     }),
+
   firstName: Joi.string().required().messages({
     'any.required': 'firstName is required',
     'string.empty': 'firstName cannot be empty',
   }),
+
   lastName: Joi.string().required().messages({
     'any.required': 'lastName is required',
     'string.empty': 'lastName cannot be empty',
   }),
+
   role: Joi.string().required().valid('epick', 'sales', 'driver').messages({
     'any.required': 'role is required',
     'string.empty': 'role cannot be empty',
   }),
+
   email: Joi.string().email().required().messages({
     'string.email': 'email must be a valid email address',
     'any.required': 'email is required',
   }),
 });
+
 
 
 // validations/rolePermissionRequest.validation.ts
@@ -214,7 +226,7 @@ export const createItemLimitSchema = Joi.object({
     'string.base': 'Item number must be a string',
     'any.required': 'Item number is required',
   }),
-  QtyLimit: Joi.number().min(1).required().messages({
+  QtyLimit: Joi.number().required().messages({
     'number.base': 'Quantity limit must be a number',
     'number.min': 'Quantity limit must be at least 1',
     'any.required': 'Quantity limit is required',
@@ -226,7 +238,7 @@ export const updateItemLimitSchema = Joi.object({
   Item_Number: Joi.number().optional().messages({
     'string.base': 'Item number must be a string',
   }),
-  QtyLimit: Joi.number().min(1).optional().messages({
+  QtyLimit: Joi.number().optional().messages({
     'number.base': 'Quantity limit must be a number',
     'number.min': 'Quantity limit must be at least 1',
   }),
@@ -1029,7 +1041,156 @@ export const getEmailMarketingQuerySchema = Joi.object({
   })
 });
 
+// InventoryUPC CRUD validation schemas
+export const createInventoryUPCSchema = Joi.object({
+  UPC_Number: Joi.string().optional().allow('', null).messages({
+    'string.base': 'UPC Number must be a string'
+  }),
+  Jurisdiction_State: Joi.number().integer().required().messages({
+    'number.base': 'Jurisdiction State must be a number',
+    'number.integer': 'Jurisdiction State must be an integer',
+    'any.required': 'Jurisdiction State is required'
+  }),
+  Jurisdiction_County: Joi.number().integer().required().messages({
+    'number.base': 'Jurisdiction County must be a number',
+    'number.integer': 'Jurisdiction County must be an integer',
+    'any.required': 'Jurisdiction County is required'
+  }),
+  Jurisdiction_City: Joi.number().integer().required().messages({
+    'number.base': 'Jurisdiction City must be a number',
+    'number.integer': 'Jurisdiction City must be an integer',
+    'any.required': 'Jurisdiction City is required'
+  }),
+  Item_Number: Joi.number().integer().required().messages({
+    'number.base': 'Item Number must be a number',
+    'number.integer': 'Item Number must be an integer',
+    'any.required': 'Item Number is required'
+  }),
+  Status: Joi.number().integer().min(0).max(255).required().messages({
+    'number.base': 'Status must be a number',
+    'number.integer': 'Status must be an integer',
+    'number.min': 'Status must be between 0 and 255',
+    'number.max': 'Status must be between 0 and 255',
+    'any.required': 'Status is required'
+  }),
+  Priority: Joi.number().integer().min(0).max(255).required().messages({
+    'number.base': 'Priority must be a number',
+    'number.integer': 'Priority must be an integer',
+    'number.min': 'Priority must be between 0 and 255',
+    'number.max': 'Priority must be between 0 and 255',
+    'any.required': 'Priority is required'
+  }),
+  Qty: Joi.number().integer().min(0).required().messages({
+    'number.base': 'Quantity must be a number',
+    'number.integer': 'Quantity must be an integer',
+    'number.min': 'Quantity must be greater than or equal to 0',
+    'any.required': 'Quantity is required'
+  })
+});
 
+export const updateInventoryUPCSchema = Joi.object({
+  UPC_Number: Joi.string().optional().allow('', null).messages({
+    'string.base': 'UPC Number must be a string'
+  }),
+  Jurisdiction_State: Joi.number().integer().optional().messages({
+    'number.base': 'Jurisdiction State must be a number',
+    'number.integer': 'Jurisdiction State must be an integer'
+  }),
+  Jurisdiction_County: Joi.number().integer().optional().messages({
+    'number.base': 'Jurisdiction County must be a number',
+    'number.integer': 'Jurisdiction County must be an integer'
+  }),
+  Jurisdiction_City: Joi.number().integer().optional().messages({
+    'number.base': 'Jurisdiction City must be a number',
+    'number.integer': 'Jurisdiction City must be an integer'
+  }),
+  Item_Number: Joi.number().integer().optional().messages({
+    'number.base': 'Item Number must be a number',
+    'number.integer': 'Item Number must be an integer'
+  }),
+  Status: Joi.number().integer().min(0).max(255).optional().messages({
+    'number.base': 'Status must be a number',
+    'number.integer': 'Status must be an integer',
+    'number.min': 'Status must be between 0 and 255',
+    'number.max': 'Status must be between 0 and 255'
+  }),
+  Priority: Joi.number().integer().min(0).max(255).optional().messages({
+    'number.base': 'Priority must be a number',
+    'number.integer': 'Priority must be an integer',
+    'number.min': 'Priority must be between 0 and 255',
+    'number.max': 'Priority must be between 0 and 255'
+  }),
+  Qty: Joi.number().integer().min(0).optional().messages({
+    'number.base': 'Quantity must be a number',
+    'number.integer': 'Quantity must be an integer',
+    'number.min': 'Quantity must be greater than or equal to 0'
+  })
+});
+
+export const createEpickSettingSchema = Joi.object({
+  pin: Joi.string().required().messages({
+    'string.base': 'PIN must be a string',
+    'any.required': 'PIN is required'
+  }),
+  allowSingleScan: Joi.boolean().required().messages({
+    'boolean.base': 'Allow single scan must be a boolean',
+    'any.required': 'Allow single scan is required'
+  })
+});
+
+export const updateEpickSettingSchema = Joi.object({
+  pin: Joi.string().optional().messages({
+    'string.base': 'PIN must be a string'
+  }),
+  allowSingleScan: Joi.boolean().optional().messages({
+    'boolean.base': 'Allow single scan must be a boolean'
+  })
+});
+
+export const getEpickSettingsQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().default(1).messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be greater than 0'
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().default(10).messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be greater than 0',
+    'number.max': 'Limit must be greater than 0 and less than or equal to 100'
+  }),
+  search: Joi.string().optional().messages({
+    'string.base': 'Search must be a string'
+  }),
+  jurisdiction_state: Joi.number().integer().optional().messages({
+    'number.base': 'Jurisdiction State must be a number',
+    'number.integer': 'Jurisdiction State must be an integer'
+  }),
+  jurisdiction_county: Joi.number().integer().optional().messages({
+    'number.base': 'Jurisdiction County must be a number',
+    'number.integer': 'Jurisdiction County must be an integer'
+  }),
+  jurisdiction_city: Joi.number().integer().optional().messages({
+    'number.base': 'Jurisdiction City must be a number',
+    'number.integer': 'Jurisdiction City must be an integer'
+  }),
+  item_number: Joi.number().integer().optional().messages({
+    'number.base': 'Item Number must be a number',
+    'number.integer': 'Item Number must be an integer'
+  }),
+  status: Joi.number().integer().min(0).max(255).optional().messages({
+    'number.base': 'Status must be a number',
+    'number.integer': 'Status must be an integer',
+    'number.min': 'Status must be between 0 and 255',
+    'number.max': 'Status must be between 0 and 255'
+  }),
+  priority: Joi.number().integer().min(0).max(255).optional().messages({
+    'number.base': 'Priority must be a number',
+    'number.integer': 'Priority must be an integer',
+    'number.min': 'Priority must be between 0 and 255',
+    'number.max': 'Priority must be between 0 and 255'
+  })
+});
 
 
 

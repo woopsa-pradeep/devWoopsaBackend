@@ -47,6 +47,11 @@ export interface PlaceOrder {
   orderPlayload: PlaceOrderRequest[];
   Delivery_Charge: number;
   shippingDetails: any;
+  hasDiscount?: {
+    discountAmount: number;
+    discountType: "percent" | "flat";
+    discountReason?: string | null;
+  };
 }
 
 

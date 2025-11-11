@@ -49,6 +49,7 @@ import CustomerCart from "../models/postgres/retailerCart.model";
 import SalesCallTime from "../models/postgres/salesCallTime.model";
 import SalesNote from "../models/postgres/salesNotes";
 import { SupportTicket } from "../models/postgres/supportTicket.model";
+import EpickSetting from "../models/postgres/epickSetting.model";
 
 export class AuthService {
 
@@ -349,12 +350,12 @@ export class AuthService {
 
       token = generateToken({
         id: storeDetail?.C_Number,
-        deviceId: '1',
+        deviceId: '14',
         role: "retailer",
       })
       await Token.create({
         token: token,
-        deviceId: 1,
+        deviceId: 14,
         retailerId: storeDetail?.C_Number,
 
       })
@@ -772,12 +773,15 @@ export class AuthService {
     }
     const wholeStoreDetail = await Distributor.findOne({ attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"], });
 
+    const epickSetting = await EpickSetting.findOne({});
+
 
 
     return {
       token: token,
       rolesPermission: filtered,
       logo: logo?.warehouseImage || null,
+      epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
       role: 'epick',
       profile: {
         id: isUserExist.id,
@@ -786,7 +790,9 @@ export class AuthService {
         lastName: isUserExist.lastName,
         userNumber: isUserExist.userNumber,
         salesRepNumber: isUserExist.salesRepNumber,
-        isSessionActive: isSessionActive
+        isSessionActive: isSessionActive,
+        isUserExist:isUserExist
+        // allowSingleScan: isUserExist.allowSingleScan
       },
       storeDetail: storeDetail,
       wholeStoreDetail: wholeStoreDetail

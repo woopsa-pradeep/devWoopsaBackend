@@ -29,4 +29,8 @@ router.get('/getOrderSummary/:orderNumber',verifyRole(ROLES.EPIK),catchAsync(epi
 //reports 
  router.get('/getReportDate',verifyRole(ROLES.EPIK),catchAsync(epickController.getReportDate.bind(epickController)));
  router.get('/getReportById/:id',verifyRole(ROLES.EPIK),catchAsync(epickController.getReportById.bind(epickController)));
+ router.post('/getSubsituteProduct',verifyRole(ROLES.EPIK),catchAsync(epickController.getSubsituteProduct.bind(epickController)));
+ router.post('/addSubsituteProduct',verifyRole(ROLES.EPIK),catchAsync(epickController.addSubsituteProduct.bind(epickController)));
+ router.post('/putPassScanItem',verifyRole(ROLES.EPIK),catchAsync(epickController.putPassScanItem.bind(epickController)));
+ router.post('/checkPin',verifyRole(ROLES.EPIK),catchAsync(epickController.checkPin.bind(epickController)));
 export default router;

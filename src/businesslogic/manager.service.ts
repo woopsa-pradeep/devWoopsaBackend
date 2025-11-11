@@ -60,6 +60,11 @@ import { ContactUs } from "../models/postgres/contactUs.model";
 import { EmailConfig } from "../models/postgres/emailManagement.model";
 import { EmailMarketing } from "../models/postgres/emailMarketing.model";
 import { generateBarcodeAndUpload } from "../utils/barCodeGenerate";
+import { getDefaultInventoryValues, getNextItemNumber } from "../utils/inventory";
+import EpickSetting from "../models/postgres/epickSetting.model";
+import { PassScanItem } from "../models/postgres/passScanItem.model";
+import { getDefaultCustomerValues } from "../utils/customer";
+import OrderDiscount from "../models/postgres/orderDiscount.model";
 
 export class ManagerService {
 
@@ -503,12 +508,12 @@ export class ManagerService {
 
 
     let whereClause: any = {
-      I_Inactive:false,
-      ShortOrderForm:true,
+      I_Inactive: false,
+      ShortOrderForm: true,
     };
     let searchInUPC = false;
 
-  
+
 
     if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
       // Both filters exist → use OR condition
@@ -523,9 +528,9 @@ export class ManagerService {
       // Only Price_Class filter
       whereClause.Price_Class = { [Op.in]: priceClassId };
     }
-    
 
-    
+
+
 
     if (search) {
       const searchValue = `%${search}%`;
@@ -533,11 +538,11 @@ export class ManagerService {
       if (/^\d{8,}$/.test(search)) {
         searchInUPC = true;
       } else {
-          whereClause[Op.or] = [
-            { Item_Number: { [Op.like]: searchValue } },
-            { Description: { [Op.like]: `%${search}%` } },
-            { ALT_Description2: { [Op.like]: `%${search}%` } }
-          ];
+        whereClause[Op.or] = [
+          { Item_Number: { [Op.like]: searchValue } },
+          { Description: { [Op.like]: `%${search}%` } },
+          { ALT_Description2: { [Op.like]: `%${search}%` } }
+        ];
       }
     }
 
@@ -645,7 +650,7 @@ export class ManagerService {
         QtyLimit: getProductList || null,
         Price1: e.Price1,
         Price2: e.Price2,
-      
+
         UnitOunces: e.UnitOunces,
         OTP_Number: e.OTP_Number,
         BaseCost: e.BaseCost,
@@ -676,7 +681,7 @@ export class ManagerService {
     let product = await Inventory.findOne({
       where: { Item_Number: itemNumber },
 
-      include:[
+      include: [
         {
           model: SalesCategory,
           as: 'SalesCategory',
@@ -695,7 +700,7 @@ export class ManagerService {
           required: false,
         },
         { model: Vendor, as: 'primaryVendor', attributes: ['V_Description'] },
-    { model: Vendor, as: 'manufacturerVendor', attributes: ['V_Description'] },
+        { model: Vendor, as: 'manufacturerVendor', attributes: ['V_Description'] },
       ],
     });
 
@@ -919,7 +924,7 @@ export class ManagerService {
   async getAccountReceivablesList(
     query: PaginationOptions & { tab?: string; search?: string; C_Number?: string; C_Name?: string }
   ) {
-     
+
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
     const search = (query.search ?? '').trim();
@@ -927,10 +932,10 @@ export class ManagerService {
     const offset = (page - 1) * limit;
     const cNumber = query.C_Number ? parseInt(query.C_Number as any) : undefined;
     const cName = (query.C_Name ?? '').trim();
-  
+
     // 1) Resolve selected customer (by C_Number, C_Name, or search fallback)
     let selectedCustomer: any = null;
-  
+
     if (cNumber) {
       selectedCustomer = await Customer.findOne({
         where: { C_Number: cNumber },
@@ -942,9 +947,9 @@ export class ManagerService {
         attributes: ['C_Number', 'C_Name'],
       });
     }
-  
+
     let searchUsedForCustomerSelection = false;
-  
+
     if (!selectedCustomer && search) {
       // Try numeric search as customer number
       if (!isNaN(Number(search))) {
@@ -954,7 +959,7 @@ export class ManagerService {
         });
         if (selectedCustomer) searchUsedForCustomerSelection = true;
       }
-  
+
       // Try by name contains
       if (!selectedCustomer) {
         selectedCustomer = await Customer.findOne({
@@ -964,7 +969,7 @@ export class ManagerService {
         if (selectedCustomer) searchUsedForCustomerSelection = true;
       }
     }
-  
+
     // If no customer resolved, return empty (as per your original requirement)
     if (!selectedCustomer) {
       return {
@@ -975,12 +980,12 @@ export class ManagerService {
         accountReceivablesList: [],
       };
     }
-  
+
     // 2) Build base where per tab
     const whereCondition: any = {
       C_Number: selectedCustomer.C_Number,
     };
-  
+
     if (tab === 'payments') {
       whereCondition.AR_Type = 'C';
     } else if (tab === 'charges') {
@@ -990,7 +995,7 @@ export class ManagerService {
       whereCondition.AR_Type = 'I';
       whereCondition.AR_Amount = { [Op.lt]: 0 };
     }
-  
+
     // 3) Search conditions (only if search wasn't used to pick the customer)
     const searchConditions: any[] = [];
     if (search && !searchUsedForCustomerSelection) {
@@ -1000,21 +1005,21 @@ export class ManagerService {
         return: 'R',
         credit: 'C',
       };
-  
+
       const matchType = Object.entries(mappedTypes).find(([label]) =>
         label.startsWith(search.toLowerCase())
       );
-  
+
       // AR_Ref contains
       searchConditions.push({ AR_Ref: { [Op.like]: `%${search}%` } });
-  
+
       // Numeric searches
       if (!isNaN(Number(search))) {
         searchConditions.push({ Invoice_Number: { [Op.like]: `%${search}%` } });
         // Note: C_Number is numeric but LIKE works on MSSQL/PG when cast—keep as you had
         searchConditions.push({ C_Number: { [Op.like]: `%${search}%` } });
       }
-  
+
       // Customer name
       searchConditions.push(
         Sequelize.where(
@@ -1022,12 +1027,12 @@ export class ManagerService {
           { [Op.like]: `%${search.toLowerCase()}%` }
         )
       );
-  
+
       // Type keyword match
       if (matchType) {
         searchConditions.push({ AR_Type: matchType[1] });
       }
-  
+
       // Payments: subtype match
       if (tab === 'payments') {
         searchConditions.push(
@@ -1037,12 +1042,12 @@ export class ManagerService {
           )
         );
       }
-  
+
       if (tab !== 'refunds' && searchConditions.length > 0) {
         whereCondition[Op.or] = searchConditions;
       }
     }
-  
+
     // 4) Includes
     const include: any[] = [
       {
@@ -1051,19 +1056,19 @@ export class ManagerService {
         attributes: ['C_Number', 'C_Name'],
       },
     ];
-  
+
     if (tab === 'payments') {
       include.push({
         model: ARDefinitions,
         as: 'arDefinition',
-        where:{
-          AR_Type:'C'
+        where: {
+          AR_Type: 'C'
         },
         required: false,
         attributes: ['AR_SubTypeRef'],
       });
     }
-  
+
     if (tab === 'refunds') {
       // IMPORTANT: 'separate: true' prevents row multiplication (duplicates)
       include.push({
@@ -1074,9 +1079,9 @@ export class ManagerService {
         attributes: ['P_Number', 'P_Number_AppliedTo']
       });
     }
-  
+
     // 5) Main query with DISTINCT to fix inflated counts when there are joins
-    const result :any = await CustReceivables.findAndCountAll({
+    const result: any = await CustReceivables.findAndCountAll({
       where: whereCondition,
       limit,
       offset,
@@ -1097,15 +1102,15 @@ export class ManagerService {
       include,
       distinct: true,           // ✅ makes COUNT(DISTINCT "CustReceivables"."P_Number")
     });
-  
+
     const totalCount = typeof result.count === 'number'
       ? result.count
       : Array.isArray(result.count)
         ? result?.count?.length
         : 0;
-  
+
     let rows = result.rows;
-  
+
     // 6) Extra in-memory filter for refunds when search wasn't used for customer selection
     if (tab === 'refunds' && search && !searchUsedForCustomerSelection) {
       const searchLower = search.toLowerCase();
@@ -1114,7 +1119,7 @@ export class ManagerService {
       const matchType = Object.entries(mappedTypes).find(([label]) =>
         label.startsWith(searchLower)
       );
-  
+
       rows = rows.filter((row: any) => {
         const mainMatch =
           (searchNumber !== null && row.Invoice_Number?.toString().includes(search)) ||
@@ -1122,51 +1127,51 @@ export class ManagerService {
           (row.customer?.C_Name?.toLowerCase().includes(searchLower)) ||
           (row.AR_Ref && row.AR_Ref.toLowerCase().includes(searchLower)) ||
           (matchType && row.AR_Type === matchType[1]);
-  
+
         const detailsMatch = row.details?.some((detail: any) =>
           (searchNumber !== null && detail.P_Number_AppliedTo?.toString().includes(search)) ||
           (searchNumber !== null && detail.invoiceTransaction?.Invoice_Number?.toString().includes(search))
         );
-  
+
         return mainMatch || detailsMatch;
       });
     }
-  
+
     // 7) Shape rows into your response format
     const accountReceivablesList = rows.map((item: any) => {
       const amount = Number(item.AR_Amount || 0);
       const applied = Number(item.AR_Applied || 0);
       const balance = amount - applied;
-  
+
       if (tab === 'payments') {
         const subType = item.arDefinition?.AR_SubTypeRef?.trim() || 'N/A';
-        
+
         return {
           subType,
-          reference:item.AR_Ref,
+          reference: item.AR_Ref,
           amount: amount.toFixed(2),
           applied: applied.toFixed(2),
           balance: balance.toFixed(2),
           postingDate: item.AR_CheckDate || item.AR_Date || null,
         };
       }
-  
+
       if (tab === 'charges') {
         let typeLabel = 'Other';
         if (item.AR_Type === 'I') typeLabel = 'Invoice';
         else if (item.AR_Type === 'A') typeLabel = 'Adjustments';
         else if (item.AR_Type === 'R') typeLabel = 'Return';
-  
+
         return {
           type: typeLabel,
-          reference:item.AR_Ref,
+          reference: item.AR_Ref,
           invoiceNumber: item.Invoice_Number || 0,
           invoiceAmount: amount.toFixed(2),
           invoiceDue: balance.toFixed(2),
           invoiceDate: item.AR_Date,
         };
       }
-  
+
       if (tab === 'refunds') {
         let typeLabel = 'Other';
         if (item.AR_Type === 'C') typeLabel = 'Credit';
@@ -1175,36 +1180,36 @@ export class ManagerService {
 
         return {
           type: typeLabel,
-          reference:item.AR_Ref,
+          reference: item.AR_Ref,
           invoiceNumber: item.Invoice_Number || 0,
           invoiceAmount: amount.toFixed(2),
           invoiceDue: balance.toFixed(2),
           invoiceDate: item.AR_Date,
         };
       }
-  
+
       return {};
     });
-  
+
     // 8) Current Due calculation (kept same logic as yours)
     const dueWhereCondition: any = {
       AR_Type: whereCondition.AR_Type,
       C_Number: selectedCustomer.C_Number,
     };
-  
+
     const allDueRecords = await CustReceivables.findAll({
       where: dueWhereCondition,
       attributes: ['AR_Amount', 'AR_Applied'],
     });
-  
+
     const totalDue = allDueRecords.reduce((sum: number, rec: any) => {
       const amt = Number(rec.AR_Amount || 0);
       const app = Number(rec.AR_Applied || 0);
       return sum + (amt - app);
     }, 0);
-  
+
     const currentDue = Number(totalDue.toFixed(2));
-  
+
     return {
       totalCount: tab === 'refunds' && search && !searchUsedForCustomerSelection ? rows.length : totalCount,
       page,
@@ -1604,12 +1609,29 @@ export class ManagerService {
       limit,
       offset
     });
+
+    const allOrderDetails = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Price',
+        'OTP_Amount_State',
+        'Quantity_Ordered',
+        'OffInvoice_Amount',
+        'DepositAmount'
+      ]
+    });
     // Calculate total price, discount, and deposit
     let totalPrice = 0;
     let totalDiscount = 0;
     let totalDeposit = 0;
 
-    for (const detail of orderDetails) {
+    const orderDiscount = await OrderDiscount.findOne({
+      where: { orderNumber: orderNumber }
+    });
+    if(orderDiscount){
+      totalDiscount = orderDiscount.discount;
+    }
+    for (const detail of allOrderDetails) {
       const price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
       const otpAmount = Number(detail.OTP_Amount_State || 0);
       const quantity = Number(detail.Quantity_Ordered || 0);
@@ -1768,7 +1790,7 @@ export class ManagerService {
         {
           status: 'Order Packed',
           no: 2,
-          time:  null,
+          time: null,
           active: false
         },
         {
@@ -1797,7 +1819,7 @@ export class ManagerService {
       {
         status: 'Picklist Print',
         no: 1,
-        time:  null,
+        time: null,
         active: false
       },
       {
@@ -2251,7 +2273,7 @@ export class ManagerService {
       description: body.description || '',
       logo: fileUrl.url || '',
       url: body.url,
-      showInWeb:true,
+      showInWeb: true,
       isActive: true,
       status: true
     };
@@ -2494,7 +2516,7 @@ export class ManagerService {
     const file = req.file;
     const { id } = req.user;
     if (!file) {
-      
+
       const catalogData = {
         name: body.name,
         description: body.description || '',
@@ -2507,10 +2529,10 @@ export class ManagerService {
       const catalog = await RetailerProductCatalog.create(catalogData);
       return catalog;
 
-    }else {
+    } else {
       const { wareHouseName } = req.user;
       const fileUrl = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, wareHouseName || 'retailer-product-catalogs');
-  
+
       const catalogData = {
         name: body.name,
         description: body.description || '',
@@ -2523,7 +2545,7 @@ export class ManagerService {
       const catalog = await RetailerProductCatalog.create(catalogData);
       return catalog;
     }
-   
+
   }
 
   async updateRetailerProductCatalog(id: number, body: IUpdateRetailerProductCatalog, req: AuthRequest) {
@@ -2610,11 +2632,11 @@ export class ManagerService {
       image_url: uploadedImageUrl.url || '',
       isActive: true,
       order,
-      productArray: body.productsList 
-        ? JSON.parse(body.productsList) as number[] 
+      productArray: body.productsList
+        ? JSON.parse(body.productsList) as number[]
         : null,
     });
-    
+
 
     return webView;
   }
@@ -2781,7 +2803,7 @@ export class ManagerService {
       throw new AppError('Failed to create retailer request', 500);
     }
   }
-  
+
 
   async getRetailerRequestById(id: string) {
     const retailerRequest = await CustomerRequest.findByPk(id);
@@ -2876,7 +2898,7 @@ export class ManagerService {
   async createPolicies(body: any) {
     // Check if policies already exist (assuming only one record should exist)
     const existingPolicies = await Policies.findOne();
-    
+
     if (existingPolicies) {
       throw new AppError('Policies already exist. Use update instead.', 400);
     }
@@ -2887,7 +2909,7 @@ export class ManagerService {
 
   async getPolicies() {
     const policies = await Policies.findOne();
-    
+
     if (!policies) {
       throw new AppError('Policies not found', 404);
     }
@@ -2897,7 +2919,7 @@ export class ManagerService {
 
   async updatePolicies(body: any) {
     const policies = await Policies.findOne();
-    
+
     if (!policies) {
       throw new AppError('Policies not found', 404);
     }
@@ -2908,7 +2930,7 @@ export class ManagerService {
 
   async updateRefundPolicies(refundPolicies: string) {
     const policies = await Policies.findOne();
-    
+
     if (!policies) {
       throw new AppError('Policies not found', 404);
     }
@@ -2919,7 +2941,7 @@ export class ManagerService {
 
   async deletePolicies() {
     const policies = await Policies.findOne();
-    
+
     if (!policies) {
       throw new AppError('Policies not found', 404);
     }
@@ -2929,8 +2951,8 @@ export class ManagerService {
   }
 
   // WebCategory CRUD methods
-  async createWebCategory(body: any,req:AuthRequest) {
-    if(req.file){
+  async createWebCategory(body: any, req: AuthRequest) {
+    if (req.file) {
       const uploadedImageUrl = await uploadFileToAzure(req.file.buffer, req.file.originalname, req.file.mimetype, 'webview');
       body.image = uploadedImageUrl.url || '';
     }
@@ -2944,16 +2966,16 @@ export class ManagerService {
     page = Number(page);
     limit = Number(limit);
     const offset = (Number(page) - 1) * Number(limit);
-    
+
     let whereClause: any = {
-      isActive:true
+      isActive: true
     };
-    
+
     if (search) {
       whereClause.name = { [Op.iLike]: `%${String(search)}%` };
     }
-    
-  
+
+
 
     const { count, rows } = await WebCategory.findAndCountAll({
       where: whereClause,
@@ -2975,43 +2997,43 @@ export class ManagerService {
 
   async getWebCategoryById(id: number) {
     const webCategory = await WebCategory.findByPk(id);
-    
+
     if (!webCategory) {
       throw new AppError('Web category not found', 404);
     }
-    
+
     return webCategory;
   }
 
-  async updateWebCategory(id: number, body: any,req:AuthRequest) {
-    if(req.file){
+  async updateWebCategory(id: number, body: any, req: AuthRequest) {
+    if (req.file) {
       const uploadedImageUrl = await uploadFileToAzure(req.file.buffer, req.file.originalname, req.file.mimetype, 'webview');
       body.image = uploadedImageUrl.url || '';
     }
     const webCategory = await WebCategory.findByPk(id);
-    
+
     if (!webCategory) {
       throw new AppError('Web category not found', 404);
     }
-    
+
     await webCategory.update(body);
     return webCategory;
   }
 
   async deleteWebCategory(id: number) {
     const webCategory = await WebCategory.findByPk(id);
-    
+
     if (!webCategory) {
       throw new AppError('Web category not found', 404);
     }
-    
-    await webCategory.update({isActive:false});
+
+    await webCategory.update({ isActive: false });
     return { success: true, message: 'Web category deleted successfully' };
   }
 
   // WebPriceClass CRUD methods
-  async createWebPriceClass(body: any,req:AuthRequest) {
-    if(req.file){
+  async createWebPriceClass(body: any, req: AuthRequest) {
+    if (req.file) {
       const uploadedImageUrl = await uploadFileToAzure(req.file.buffer, req.file.originalname, req.file.mimetype, 'webview');
       body.image = uploadedImageUrl.url || '';
     }
@@ -3025,22 +3047,22 @@ export class ManagerService {
     page = Number(page);
     limit = Number(limit);
     const offset = (Number(page) - 1) * Number(limit);
-    
+
     let whereClause: any = {
-      isActive:true
+      isActive: true
     };
-    
+
     if (search) {
       whereClause.name = { [Op.iLike]: `%${String(search)}%` };
     }
-    
- 
-   
+
+
+
 
     const { count, rows } = await WebPriceClass.findAndCountAll({
       where: whereClause,
       limit: limit,
-      offset:offset,
+      offset: offset,
       order: [['createdAt', 'DESC']]
     });
 
@@ -3057,43 +3079,43 @@ export class ManagerService {
 
   async getWebPriceClassById(id: number) {
     const webPriceClass = await WebPriceClass.findByPk(id);
-    
+
     if (!webPriceClass) {
       throw new AppError('Web price class not found', 404);
     }
-    
+
     return webPriceClass;
   }
 
-  async updateWebPriceClass(id: number, body: any,req:AuthRequest) {
-    if(req.file){
+  async updateWebPriceClass(id: number, body: any, req: AuthRequest) {
+    if (req.file) {
       const uploadedImageUrl = await uploadFileToAzure(req.file.buffer, req.file.originalname, req.file.mimetype, 'webview');
       body.image = uploadedImageUrl.url || '';
     }
     const webPriceClass = await WebPriceClass.findByPk(id);
-    
+
     if (!webPriceClass) {
       throw new AppError('Web price class not found', 404);
     }
-    
+
     await webPriceClass.update(body);
     return webPriceClass;
   }
 
   async deleteWebPriceClass(id: number) {
     const webPriceClass = await WebPriceClass.findByPk(id);
-    
+
     if (!webPriceClass) {
       throw new AppError('Web price class not found', 404);
     }
-    
-    await webPriceClass.update({isActive:false});
+
+    await webPriceClass.update({ isActive: false });
     return { success: true, message: 'Web price class deleted successfully' };
   }
 
   // WebQuickLink CRUD methods
   async createWebQuickLink(body: any) {
-    console.log(body,'=----->');
+    console.log(body, '=----->');
     const webQuickLink = await WebQuickLink.create(body);
     return webQuickLink;
   }
@@ -3152,7 +3174,7 @@ export class ManagerService {
       throw new AppError('Web quick link not found', 404);
     }
 
-    if(req.file){
+    if (req.file) {
       const uploadedImageUrl = await uploadFileToAzure(req.file.buffer, req.file.originalname, req.file.mimetype, 'webview');
       body.image = uploadedImageUrl.url || '';
     }
@@ -3243,34 +3265,34 @@ export class ManagerService {
     return { message: 'Web location deleted successfully' };
   }
 
-  
+
   async setUserDiscountLimit(userId: number, setUserDiscountLimit: number) {
     return await WebUsers.update({ setUserDiscountLimit: setUserDiscountLimit }, { where: { id: userId } });
-   }
+  }
 
 
-   async getCustomerCalenderList(query:PaginationOptions) {
-   let {routeNumber, salesRepNumber} = query;
+  async getCustomerCalenderList(query: PaginationOptions) {
+    let { routeNumber, salesRepNumber } = query;
 
-   const customerWhere: any = {
-    C_Inactive: false,
-    C_OrderDay: {
-      [Op.notIn]: [0, 8]
+    const customerWhere: any = {
+      C_Inactive: false,
+      C_OrderDay: {
+        [Op.notIn]: [0, 8]
+      }
+    };
+
+
+    if (salesRepNumber) {
+      customerWhere.C_Salesman = { [Op.in]: salesRepNumber }; // ✅ IN operator
     }
-  };
 
-
-  if (salesRepNumber) {
-    customerWhere.C_Salesman = { [Op.in]: salesRepNumber }; // ✅ IN operator
-  }
-  
-  const routeWhere: any = {};
-  if (routeNumber) {
-    routeWhere.Route_Number = { [Op.in]: routeNumber }; // ✅ IN operator
-  }
+    const routeWhere: any = {};
+    if (routeNumber) {
+      routeWhere.Route_Number = { [Op.in]: routeNumber }; // ✅ IN operator
+    }
 
     const customers = await Customer.findAll({
-        where: customerWhere,
+      where: customerWhere,
       attributes: [
         'C_Number',
         'C_Name',
@@ -3305,33 +3327,33 @@ export class ManagerService {
     return customers;
   }
 
- 
+
   async getCustomerOrderByCalenderDate(query: PaginationOptions) {
     let { orderDate, orderDay, page = 1, limit = 10, routeNumber, salesRepNumber } = query;
     page = Number(page);
     limit = Number(limit);
     const offset = (page - 1) * limit;
     const dayNum = Number(orderDay);
-  
+
     if (Number.isNaN(dayNum)) throw new AppError("Invalid orderDay", 400);
-  
+
     const normalizedDate = String(orderDate).slice(0, 10); // 'YYYY-MM-DD'
-  
+
     // --- Build filters ---
     const customerWhere: any = {
       C_Inactive: false,
       C_OrderDay: dayNum,
     };
-  
+
     if (salesRepNumber) {
       customerWhere.C_Salesman = salesRepNumber;
     }
-  
+
     const routeWhere: any = {};
     if (routeNumber) {
       routeWhere.Route_Number = routeNumber;
     }
-  
+
     // 1) Customers for that day with filters + count for pagination
     const { count, rows: customers } = await Customer.findAndCountAll({
       where: customerWhere,
@@ -3362,13 +3384,13 @@ export class ManagerService {
       offset,
       raw: true,
     });
-  
+
     if (!customers || customers.length === 0) {
       return { total: 0, page, limit, data: [] };
     }
-  
+
     const customerNumbers = customers.map((c) => c.C_Number);
-  
+
     // 2) Orders for those customers on the date
     const orders = await OrderHeader.findAll({
       where: {
@@ -3378,15 +3400,15 @@ export class ManagerService {
       attributes: ["Order_Number", "C_Number"],
       raw: true,
     });
-  
+
     const customersWithOrders = new Set(orders.map((o: any) => o.C_Number));
-  
+
     // 3) Build result with status
     const result = customers.map((cust) => ({
       ...cust,
       status: customersWithOrders.has(cust.C_Number) ? "done" : "pending",
     }));
-  
+
     return {
       total: count,
       page,
@@ -3427,50 +3449,50 @@ export class ManagerService {
       whereClause.Order_Date[Op.lte] = endDate;
     }
 
-    const orders :any = await OrderHeader.findAll({
+    const orders: any = await OrderHeader.findAll({
       where: whereClause,
       attributes: ['Order_Number', 'C_Number', 'Order_Date'],
       raw: true,
     });
 
     const results = [];
-  for (const order of orders) {
-    const orderNumber = order.Order_Number;
+    for (const order of orders) {
+      const orderNumber = order.Order_Number;
 
-    const details = await OrderDetail.findAll({
-      where: { Order_Number: orderNumber },
-      attributes: [
-        'Price',
-        'OTP_Amount_State',
-        'Quantity_Ordered',
-        'OffInvoice_Amount',
-        'DepositAmount'
-      ],
-      raw: true,
-    });
+      const details = await OrderDetail.findAll({
+        where: { Order_Number: orderNumber },
+        attributes: [
+          'Price',
+          'OTP_Amount_State',
+          'Quantity_Ordered',
+          'OffInvoice_Amount',
+          'DepositAmount'
+        ],
+        raw: true,
+      });
 
-    let totalPrice = 0;
-    let totalQty = 0;
-    for (const d of details) {
-      const price = Number(d.Price || 0) + Number(d.OTP_Amount_State || 0);
-      const qty = Number(d.Quantity_Ordered || 0);
-      totalPrice   += price * qty;
-      totalQty += qty;
+      let totalPrice = 0;
+      let totalQty = 0;
+      for (const d of details) {
+        const price = Number(d.Price || 0) + Number(d.OTP_Amount_State || 0);
+        const qty = Number(d.Quantity_Ordered || 0);
+        totalPrice += price * qty;
+        totalQty += qty;
+      }
+      results.push({
+        ...order,
+        totals: {
+          totalPrice: Number(totalPrice.toFixed(2)),
+          totalQty: totalQty,
+        },
+      });
+
     }
-    results.push({
-      ...order,
-      totals: {
-        totalPrice: Number(totalPrice.toFixed(2)),
-        totalQty: totalQty,
-      },
-    });
-    
-  }
 
-  return {
-    orders: results,
-    totalCount: results.length,
-  }
+    return {
+      orders: results,
+      totalCount: results.length,
+    }
   }
 
   async getCustomerByIdInfoInCalender(customerId: number) {
@@ -3490,7 +3512,7 @@ export class ManagerService {
       ],
 
     })
-   
+
 
     return {
       ...data?.dataValues,
@@ -3516,7 +3538,7 @@ export class ManagerService {
     const offset = (page - 1) * limit;
 
     const whereClause: any = {};
-    
+
     if (search) {
       whereClause[Op.or] = [
         { PhoneNO: { [Op.iLike]: `%${search}%` } },
@@ -3584,7 +3606,7 @@ export class ManagerService {
     const offset = (page - 1) * limit;
 
     const whereClause: any = {};
-    
+
     if (search) {
       whereClause[Op.or] = [
         { host: { [Op.iLike]: `%${search}%` } },
@@ -3672,35 +3694,35 @@ export class ManagerService {
     return emailConfig;
   }
 
-  async testEmailConfig(data: any){
-    const {to, subject, html} = data;
-    const result = await sendDistributorEmail( to, subject, html,);
+  async testEmailConfig(data: any) {
+    const { to, subject, html } = data;
+    const result = await sendDistributorEmail(to, subject, html,);
     return result;
   }
 
   // Email Marketing CRUD service methods
   async createEmailMarketing(data: any) {
-    if (data.status == 'draft'){
+    if (data.status == 'draft') {
       const emailMarketing = await EmailMarketing.create(data);
       return emailMarketing;
-    }else{
+    } else {
 
-    
-    const emailMarketing = await EmailMarketing.create(data);
-     sendEmailToMarketing({
-      to: emailMarketing.to,
-      subject: emailMarketing.subject,
-      cc: emailMarketing.cc,
-      html: emailMarketing.body,
-      attachments: emailMarketing.attachments,
-      id: emailMarketing.id
-    }).catch(async err => {
-      await EmailMarketing.update({ status: 'failed' }, { where: { id: emailMarketing.id } });
-      console.error('Email sending failed:', err);
-    });
-    return emailMarketing;
-  }
-    
+
+      const emailMarketing = await EmailMarketing.create(data);
+      sendEmailToMarketing({
+        to: emailMarketing.to,
+        subject: emailMarketing.subject,
+        cc: emailMarketing.cc,
+        html: emailMarketing.body,
+        attachments: emailMarketing.attachments,
+        id: emailMarketing.id
+      }).catch(async err => {
+        await EmailMarketing.update({ status: 'failed' }, { where: { id: emailMarketing.id } });
+        console.error('Email sending failed:', err);
+      });
+      return emailMarketing;
+    }
+
   }
 
   async getEmailMarketingById(id: number) {
@@ -3716,7 +3738,7 @@ export class ManagerService {
     const offset = (page - 1) * limit;
 
     const whereClause: any = {};
-    
+
     if (search) {
       whereClause[Op.or] = [
         { subject: { [Op.iLike]: `%${search}%` } },
@@ -3769,7 +3791,7 @@ export class ManagerService {
     };
   }
 
-  async uploadAttachment(req:AuthRequest){
+  async uploadAttachment(req: AuthRequest) {
     const file = req.file;
     if (!file) {
       throw new AppError(AuthMessage.FILE_NOT_FOUND, 400);
@@ -3779,15 +3801,15 @@ export class ManagerService {
     return result;
   }
 
-  async sendEmailToCampaign(id:number){
+  async sendEmailToCampaign(id: number) {
     const emailMarketing = await EmailMarketing.findByPk(id);
     if (!emailMarketing) {
       throw new AppError('Email marketing campaign not found', 404);
     }
-    if(emailMarketing.status != 'draft'){
+    if (emailMarketing.status != 'draft') {
       throw new AppError('Email marketing campaign is not draft', 400);
     }
-     sendEmailToMarketing({
+    sendEmailToMarketing({
       to: emailMarketing.to,
       subject: emailMarketing.subject,
       cc: emailMarketing.cc,
@@ -3812,4 +3834,202 @@ export class ManagerService {
     return res;
   }
 
+
+  async createInventory(body: any) {
+    const nextItemNumber = await getNextItemNumber();
+    const defaultValues = getDefaultInventoryValues(0);
+    body.Item_Number = nextItemNumber;
+
+    body.PriceCostModifiedDate = new Date();
+    
+      body.Inactive_Date = new Date();
+
+    const finalBody = {
+      ...defaultValues,
+      ...body
+    }
+    const inventory = await Inventory.create(finalBody);
+
+    if(body.hasAddUpc){
+      console.log(body.upcData, 'this is upcData');
+      const upcData = body.upcData.map((item:any) => ({
+        UPC_Number: item.UPC_Number,
+        Jurisdiction_State: 0,
+        Jurisdiction_County: 0,
+        Jurisdiction_City: 0,
+        Item_Number: nextItemNumber,
+        Status: item.Status,
+        Priority: item.Priority,
+        Qty: item.Qty,
+                   
+        ItemNumber: nextItemNumber 
+      }));
+      
+      await InventoryUPC.bulkCreate(upcData).catch(async err => {
+        console.error('InventoryUPC creation failed:', err);
+      });
+
+    }
+    return inventory;
+  }
+
+  async editInventory(id: number, body: any) {
+    const inventory = await Inventory.findByPk(id);
+    if (!inventory) {
+      throw new AppError('Inventory not found', 404);
+    }
+    if(body.I_Inactive){
+      body.Inactive_Date = new Date();
+    }
+    body.PriceCostModifiedDate = new Date();
+   
+    await inventory.update(body);
+    return inventory;
+  }
+
+  // InventoryUPC CRUD service methods
+  async createInventoryUPC(body: any) {
+    const inventoryUPC = await InventoryUPC.create(body);
+    return inventoryUPC;
+  }
+
+  async getInventoryUPCById(id: number) {
+    const inventoryUPC = await InventoryUPC.findByPk(id);
+    if (!inventoryUPC) {
+      throw new AppError('InventoryUPC not found', 404);
+    }
+    return inventoryUPC;
+  }
+
+   // EpickSetting CRUD methods
+  async createEpickSetting(body: { pin: string; allowSingleScan: boolean }) {
+    const epickSetting = await EpickSetting.create(body);
+    return epickSetting;
+  }
+
+    async getEpickSettingById(id: number) {
+    const epickSetting = await EpickSetting.findByPk(id);
+    if (!epickSetting) {
+      throw new AppError('Epick setting not found', 404);
+    }
+    return epickSetting;
+  }
+
+
+  
+
+  async updateInventoryUPC(id: number, body: any) {
+    const inventoryUPC = await InventoryUPC.findByPk(id);
+    if (!inventoryUPC) {
+      throw new AppError('InventoryUPC not found', 404);
+    }
+    
+    await inventoryUPC.update(body);
+    return inventoryUPC;
+  }
+
+  async deleteInventoryUPC(id: number) {
+    const inventoryUPC = await InventoryUPC.findByPk(id);
+    if (!inventoryUPC) {
+      throw new AppError('InventoryUPC not found', 404);
+    }
+    
+    await inventoryUPC.destroy();
+    return { message: 'InventoryUPC deleted successfully' };
+  }
+
+  async getInventoryUPCByItemNumber(itemNumber: string) {
+    const inventoryUPCs = await InventoryUPC.findAll({
+      where: { Item_Number: itemNumber },
+      order: [['myKey', 'DESC']]
+    });
+    return inventoryUPCs;
+  }
+
+  async getInventoryUPCByJurisdiction(jurisdictionState: number, jurisdictionCounty?: number, jurisdictionCity?: number) {
+    const whereClause: any = { Jurisdiction_State: jurisdictionState };
+    
+    if (jurisdictionCounty !== undefined) {
+      whereClause.Jurisdiction_County = jurisdictionCounty;
+    }
+    
+    if (jurisdictionCity !== undefined) {
+      whereClause.Jurisdiction_City = jurisdictionCity;
+    }
+    
+    const inventoryUPCs = await InventoryUPC.findAll({
+      where: whereClause,
+      order: [['myKey', 'DESC']]
+    });
+    return inventoryUPCs;
+  }
+
+    
+  async updateEpickSetting(id: number, body: { pin?: string; allowSingleScan?: boolean }) {
+    const epickSetting = await EpickSetting.findByPk(id);
+    if (!epickSetting) {
+      throw new AppError('Epick setting not found', 404);
+    }
+
+    await epickSetting.update(body);
+    return epickSetting;
+  }
+
+async getAllEpickSettings(query: PaginationOptions) {
+  const { page = 1, limit = 10 } = query;
+
+  const offset = (page - 1) * limit;
+
+  // Fetch data with pagination
+  const { rows: data, count: total } = await EpickSetting.findAndCountAll({
+    offset,
+    limit,
+    order: [['createdAt', 'DESC']], // optional sorting
+  });
+
+  return {
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+    data,
+  };
+}
+
+  async deleteEpickSetting(id: number) {
+    const epickSetting = await EpickSetting.findByPk(id);
+    if (!epickSetting) {
+      throw new AppError('Epick setting not found', 404);
+    }
+
+    await epickSetting.destroy();
+    return { message: 'Epick setting deleted successfully' };
+  }
+
+  async putPassScanItem(body:any){
+    const passScanItem = await PassScanItem.create(body);
+    return passScanItem;
+
+  }
+
+  async createCustomer(data: any){
+
+
+    const finalData = {
+      ...getDefaultCustomerValues(0),
+      ...data
+    }
+    const customer = await Customer.create(finalData);
+    return customer;
+  }
+
+  async updateUserAllowDiscount(data: any,id: number){
+    const user = await WebUsers.findByPk(id);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    await user.update({ allowDiscount: data.allowDiscount });
+    return user;
+  }
+  
 } 

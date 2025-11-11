@@ -1,13 +1,19 @@
+// interfaces/users.interface.ts
+
 export interface UserAttributes {
   id: number;
   email: string;
   firstName: string;
   lastName: string;
-  role: string;
   status: boolean;
-  userNumber: number;
-  salesRepNumber: number;
+  role: string;
+  userNumber: string | null;
+  salesRepNumber: string[];   // ✅ Updated to array
   password: string;
   isActive: boolean;
   setUserDiscountLimit: number;
+  allowSingleScan: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  allowDiscount: boolean;
 }

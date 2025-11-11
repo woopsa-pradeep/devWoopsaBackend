@@ -67,7 +67,7 @@ export class OrderDetail extends Model {
 OrderDetail.init({
   Order_Number: {
     type: DataTypes.INTEGER,
-    primaryKey: true,
+   
   },
   Line_Number: {
     type: DataTypes.SMALLINT,

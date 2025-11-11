@@ -22,6 +22,10 @@ router.post('/customerListPaginated',verifyRole(ROLES.SALES),catchAsync(listCont
 router.get('/orderHistoryByOrderNumber/:orderNumber',verifyRole(ROLES.SALES),catchAsync(listController.getOrderHistoryByOrderNumber.bind(listController)));
 router.get('/orderHistory/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.getOrderHistory.bind(listController)));
 router.post('/placeOrder/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.placeOrder.bind(listController)));
+
+// return order
+
+router.post('/returnPlaceOrder/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.returnPlaceOrder.bind(listController)));
 router.post('/getInventoryItems/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.getInventoryItems.bind(listController)));
 router.post('/getInventoryItemsBySalesMan/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.getInventoryItemsBySalesMan.bind(listController)));
 
@@ -30,6 +34,9 @@ router.delete('/cartItem/:cartItemId',verifyRole(ROLES.SALES),verifySalesSession
 router.delete('/clearCart/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.clearCart.bind(listController)));
 router.put('/cartItem/:cartItemId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.updateCartItem.bind(listController)));
 router.post('/addToCart/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.addToCart.bind(listController)));
+
+router.post('/addToReturnCart/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.addToReturnCart.bind(listController)));
+router.get('/getReturnCartItems/:customerId',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.getReturnCartItems.bind(listController)));
 
 router.get('/orderHistoryByProductNumber', 
     verifyRole(ROLES.SALES), verifySalesSession,
@@ -49,7 +56,7 @@ router.get('/orderHistoryByProductNumber',
 
   router.get('/addToCartByScanner/:id',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.addToCartByScanner.bind(listController)));
   router.post('/multiScannerItems/:id',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.addToCartMultiScanner.bind(listController)));
-  
+
   router.get('/customerByIdInfoInCalender/:customerId',verifyRole(ROLES.SALES),catchAsync(listController.getCustomerByIdInfoInCalender.bind(listController)));
 
   router.get('/customerCalenderList',verifyRole(ROLES.SALES),  catchAsync(listController.getCustomerCalenderList.bind(listController)));

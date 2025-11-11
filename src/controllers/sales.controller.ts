@@ -48,6 +48,17 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+
+    async getReturnCartItems(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getReturnCartItems(Number(req.params.customerId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async returnPlaceOrder(req: AuthRequest, res: Response) {
+        const data = await this.salesService.returnPlaceOrder(req.body, req, req.params.customerId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async getInventoryItems(req: AuthRequest, res: Response) {
         const data = await this.salesService.getInventoryItems(req.body as PaginationOptions & { search?: string, masterSearch?: string }, Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -110,6 +121,23 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    
+    async addToReturnCart(req: AuthRequest, res: Response) {
+
+        const cartData = {
+            ...req.body,
+            Customer_Number: req.params.customerId,
+            Tax_Rate: req.body.Tax_Rate,
+            Price_With_Tax: req.body.Price_With_Tax,
+            placedBySalesPerson: true,
+            salesPersonNumber: Number(req.user.id),
+            originalPrice: req.body.originalPrice || 0,
+            discount: req.body.discount || 0
+        };
+        const data = await this.salesService.addToReturnCart(cartData, Number(req.user.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async getOrderHistoryByProductNumber(req: AuthRequest, res: Response) {
         const { productNumber, customerId } = req.query;
         const data = await this.salesService.getOrderHistoryByProductNumber(Number(productNumber), Number(customerId));
@@ -157,9 +185,6 @@ export class SalesController {
         const data = await this.salesService.addToCartMultiScanner(req.body, Number(req.params.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
-    
-
-
     async getCustomerByIdInfoInCalender(req: AuthRequest, res: Response) {
         const data = await this.salesService.getCustomerByIdInfoInCalender(Number(req.params.customerId),Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -262,5 +287,7 @@ export class SalesController {
         const data = await this.salesService.getSalesNotesByCustomer(Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+ 
 
 }

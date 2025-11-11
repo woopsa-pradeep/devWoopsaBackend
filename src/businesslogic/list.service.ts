@@ -9,6 +9,19 @@ import { Customer } from "../models/mmsql/customer.model";
 import { Retailer } from "../models/postgres/retailer.model";
 import { getRegisterCustomerName } from "../utils/helper";
 import { CustomerRoute } from "../models/mmsql/customerRoutes.model";
+import { PickRightAreaDefinition } from "../models/mmsql/pickRightAreaDefination.model";
+import { ProjectIdentifiers } from "../models/mmsql/projectIdentifier.model";
+import { CigPack } from "../models/mmsql/cigPack.model";
+import { Inventory_ItemGroups } from "../models/mmsql/inventoryItemGroup.model";
+import { InventoryBrands } from "../models/mmsql/inventoryBrand.model";
+import { ExclusionGroups } from "../models/mmsql/exclusive.model";
+import { TaxRates_City } from "../models/mmsql/taxRateCity.model";
+import { TaxRates_County } from "../models/mmsql/taxRateCounty.model";
+import { TaxRates } from "../models/mmsql/taxRates.model";
+import { Vendor } from "../models/mmsql/vendor.model";
+import { PriceSubclass_Defs } from "../models/mmsql/priceSubClassDefs.model";
+import { NACS_CategoryCodes } from "../models/mmsql/nacsCode.model";
+import { getDefaultCustomerValues } from "../utils/customer";
 
 export class ListService {
 
@@ -213,4 +226,65 @@ async getListOfCustomerForEmail(data: any) {
 }
 
 
+async getListForInventory(){
+  const salesCategory = await SalesCategory.findAll({
+    attributes:['Sales_Category','Category_Desc']
+  })
+  const priceClass = await PriceClass.findAll({
+    attributes:['Price_Class','Class_Desc']
+  })
+
+  const pickRightArea = await PickRightAreaDefinition.findAll({   
+    attributes:['PickArea','PickArea_Description']
+  })
+
+  const priceSubclass = await PriceSubclass_Defs.findAll({
+    attributes:['Price_Subclass','Subclass_Def']
+  })
+  
+  const cigPack = await CigPack.findAll({
+    attributes:['Cig_Pack','Cig_Pack_Select']
+  })
+  const projectIdentifier = await ProjectIdentifiers.findAll({
+    attributes:['Project_Identifier','Description']
+  })
+  const inventoryItemGroup = await Inventory_ItemGroups.findAll({
+    attributes:['Item_GroupID','Item_GroupDescription']
+  })
+  const inventoryBrand = await InventoryBrands.findAll({
+    attributes:['Brand_ID','Brand_Family']
+  })
+  const exclusionGroup = await ExclusionGroups.findAll({
+    attributes:['ExclusionGroup_ID','ExclusionGroup_Description']
+  })
+  const taxRateCity = await TaxRates_City.findAll({
+    attributes:['Jurisdiction_City','TaxDescription']
+  })
+  const taxRateCounty = await TaxRates_County.findAll({
+    attributes:['Jurisdiction_County','TaxDescription']
+  })
+
+  const taxRate = await TaxRates.findAll({
+    attributes:['Jurisdiction_State','TaxDescription']
+  })
+
+  const vendor = await Vendor.findAll({
+    attributes:['Primary_Vendor','V_Description']
+  })
+  const nacsCategory = await NACS_CategoryCodes.findAll({
+    attributes:['NACS_Category_Code','NACS_Description']
+  })
+
+  return {salesCategory,priceClass,pickRightArea,cigPack,projectIdentifier,inventoryItemGroup,inventoryBrand,exclusionGroup,taxRateCity,taxRateCounty,taxRate,vendor,priceSubclass,nacsCategory}
+
 }
+
+
+
+
+
+
+
+
+
+} 

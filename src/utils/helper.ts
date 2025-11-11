@@ -1736,3 +1736,16 @@ export function generateBarcode(orderNumber: number | string): string {
   return `${base}${timestamp}${random}`;
 }
 
+export function generateRandomSixDigitNumber() {
+  return Math.floor(100000 + Math.random() * 900000);
+}
+
+export function pgArrayToJsArray(value: any): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;    // already an array
+  return value
+    .replace("{", "")
+    .replace("}", "")
+    .split(",")
+    .map((v: any) => v.replace(/"/g, ""));
+}

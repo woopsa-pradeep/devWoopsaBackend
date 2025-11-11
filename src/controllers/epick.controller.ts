@@ -90,5 +90,24 @@ export class EpickController {
         const data = await this.epickService.getReportById(Number(req.params.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+    async getSubsituteProduct(req: Request, res: Response) {
+        const data = await this.epickService.getSubsituteProduct(req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async addSubsituteProduct(req: AuthRequest, res: Response) {
+        const data = await this.epickService.addSubsituteProduct(req.body,req.user.id);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async putPassScanItem(req: AuthRequest, res: Response) {
+        const data = await this.epickService.putPassScanItem(req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async checkPin(req: Request, res: Response) {
+        const data = await this.epickService.checkPin(req.body.pin);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
  
 }

@@ -48,6 +48,7 @@ import { sendMultiFCMNotification } from "../utils/sentNotification";
 import Policies from "../models/postgres/policies.model";
 import { WebUsers } from "../models/postgres/users.model";
 import { ContactUs } from "../models/postgres/contactUs.model";
+import OrderDiscount from "../models/postgres/orderDiscount.model";
 
 
 
@@ -1661,7 +1662,6 @@ export class RetailerService {
     let totalPrice = 0;
     let totalDiscount = 0;
     let totalDeposit = 0;
-
     for (const detail of allOrderDetails) {
       const price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
       const quantity = Number(detail.Quantity_Ordered || 0);
@@ -1671,6 +1671,12 @@ export class RetailerService {
       totalDeposit += Number(detail.DepositAmount || 0);
     }
 
+    const orderDiscount = await OrderDiscount.findOne({
+      where: { orderNumber: orderNumber }
+    });
+    if(orderDiscount){
+      totalDiscount = orderDiscount.discount;
+    }
     // Fetch paginated order details with inventory and UPC
     const orderDetails = await OrderDetail.findAll({
       where: { Order_Number: orderNumber },
@@ -2341,8 +2347,8 @@ export class RetailerService {
       Tax_Rate: finalItem.taxRate, // ✅ required
       TotalPrice: finalItem.price,
       TotalPriceWithTax: finalItem.price + finalItem.taxRate,
-      Customer_Number: userId,
       originalPrice: finalItem.price,
+      Customer_Number: userId,
       Item_Number: finalItem.Item_Number,
       Price_With_Tax: finalItem.price + finalItem.taxRate
     };
@@ -2450,10 +2456,10 @@ export class RetailerService {
         Price: Number(finalItem.price),
         Tax_Rate: Number(finalItem.taxRate),
         TotalPrice: Number(finalItem.price),
+        originalPrice: Number(finalItem.price),
         TotalPriceWithTax: Number(finalItem.price) + Number(finalItem.taxRate),
         Customer_Number: userId,
         Item_Number: finalItem.Item_Number,
-        originalPrice: Number(finalItem.price),
         Price_With_Tax: Number(finalItem.price) + Number(finalItem.taxRate),
         isActive: true
       };

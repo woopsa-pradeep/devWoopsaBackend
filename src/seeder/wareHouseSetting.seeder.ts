@@ -1,11 +1,13 @@
 // seeds/warehouse.seed.ts
 
 import { Distributor } from "../models/mmsql/distributor.model";
+import EpickSetting from "../models/postgres/epickSetting.model";
 import HomeSettings from "../models/postgres/homeSetting.model";
 import Policies from "../models/postgres/policies.model";
 import { Retailer } from "../models/postgres/retailer.model";
 import Setting from "../models/postgres/setting.model";
 import { WarehouseSetting } from "../models/postgres/wareHouseSetting.model";
+import { generateRandomSixDigitNumber } from "../utils/helper";
 
 export async function seedWarehouseSetting() {
   const existing = await Setting.findOne();
@@ -81,6 +83,17 @@ export async function seedPolicies() {
         'Woopsa provides SaaS services to U.S. distributors and related users. This policy explains how refunds are handled. 1. Eligibility ● Refunds apply only to subscription/service fees. ● Requests must be made within 7 days of the initial payment. 2. Non-Refundable Items ● Setup, onboarding, or training fees. ● Completed deliveries/orders. ● Fees charged by third-party integrations. 3. Refund Process ● Submit request to [Insert Email] within the eligibility window. ● Refunds are processed within 7–14 business days to the original U.S. payment method. 4. Company Discretion Refund approval is subject to Woopsa’s discretion based on account usage and compliance.',
       Disclaimer:
         'The Services are provided by Woopsa “as is” without any warranties, express or implied, under U.S. law. 1. No Guarantee We do not guarantee uninterrupted availability, GPS accuracy, or error-free operation. 2. User Responsibility ● Delivery routes, product scans, and payment data are system-generated. ● Final responsibility for accuracy lies with distributors, drivers, or sales reps. 3. Third-Party Services Woopsa is not responsible for failures or downtime caused by third-party providers (maps, scanners, payment processors). 4. Limitation of Liability To the fullest extent permitted by U.S. law, Woopsa shall not be liable for indirect, incidental, or consequential damages including lost profits, data loss, or downtime.'
+    });
+  }
+}
+
+export async function seedEpickSetting() {
+  const existing = await EpickSetting.findOne({});
+  if (!existing) {
+    let number = generateRandomSixDigitNumber();
+    await EpickSetting.create({
+      allowSingleScan: true,
+      pin: number.toString(),
     });
   }
 }

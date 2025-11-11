@@ -14,6 +14,7 @@ interface CustomerItemAttributes {
   isActive?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+  type?: string;
   placedBySalesPerson?: boolean;
   salesPersonNumber?: number;
   discount?: number;
@@ -38,6 +39,7 @@ class CustomerCart extends Model<CustomerItemAttributes, CustomerItemCreationAtt
   public originalPrice!: number;
   public isActive!: boolean;
   public discount!: number;
+  public type!: string;
   // timestamps
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -49,6 +51,11 @@ CustomerCart.init(
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
+    },
+    type: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'order',
     },
     Customer_Number: {
       type: DataTypes.INTEGER,

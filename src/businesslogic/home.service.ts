@@ -316,7 +316,7 @@ export class HomeService {
                     required: false
                 }
             ],
-            order: [['Date_Created', 'DESC']]
+            order: [['Item_Number', 'DESC']]
         });
 
         // Step 4: Attach images & format output
