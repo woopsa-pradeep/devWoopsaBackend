@@ -50,16 +50,21 @@ export class SalesService {
     if (!data) return null;
 
     const user = data.toJSON(); // Convert Sequelize instance to plain object
+    const salesRepList: string[] = pgArrayToJsArray(user.salesRepNumber);
 
-    const salesRep = await this.getSalesRepUser(Number(user.salesRepNumber));
+    const newUser = salesRepList.map(Number);
+    const salesRep = await Promise.all(newUser.map(async (id: number) => {
+      const salesRep = await this.getSalesRepUser(id);
+      return {
+        S_Number: salesRep?.S_Number,
+        S_Desc: salesRep?.S_Desc,
+      }
+    }));
 
     return {
       ...user,
       salesRep: salesRep
-        ? {
-          S_Number: salesRep.S_Number,
-          S_Desc: salesRep.S_Desc,
-        }
+        ? salesRep
         : null,
     };
   }
@@ -3177,10 +3182,12 @@ const newSalesRepArray = salesRepList.map(Number);
   
     const normalizedDate = String(orderDate).slice(0, 10); // 'YYYY-MM-DD'
   
+    const salesRepList: string[] = pgArrayToJsArray(webUser.salesRepNumber);
+    const newSalesRepArray = salesRepList.map(Number);
     // 1) Customers for the rep on that day
     const customers: any[] = await Customer.findAll({
       where: {
-        C_Salesman: Number(webUser.salesRepNumber),
+        C_Salesman: { [Op.in]: newSalesRepArray },
         C_Inactive: false,
         C_OrderDay: dayNum,
       },
@@ -3212,7 +3219,7 @@ const newSalesRepArray = salesRepList.map(Number);
       customers.map(async (cust) => {
         const time = await this.checkSalesCallTime(
           cust.C_Number,
-          webUser.salesRepNumber,
+          customerNumbers,
           id
           // optionally pass normalizedDate if your check filters by date
         );
@@ -3406,15 +3413,15 @@ const newSalesRepArray = salesRepList.map(Number);
     });
   }
 
-  async checkSalesCallTime(customerNumber: number, salesRepNumber: number, webUserId: number) {
-    const checkSalesCallTime = await SalesCallTime.findOne({
+  async checkSalesCallTime(customerNumber: number, salesRepNumber: number[], webUserId: number) {
+    const checkSalesCallTime = await SalesCallTime.findAll({
       where: {
         customer_number: customerNumber,
-        salesRepNumber: salesRepNumber,
+        salesRepNumber:  { [Op.in]: salesRepNumber.map(Number) } ,
         webUserId: webUserId,
       },
     });
-    return checkSalesCallTime?.dataValues ? checkSalesCallTime.dataValues : null;
+    return checkSalesCallTime ? checkSalesCallTime : [];
   }
 
   // return order
