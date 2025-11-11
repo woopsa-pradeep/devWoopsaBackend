@@ -567,9 +567,12 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
       where: {
         Item_Number: Item_Number,
         Allowance: 0
-      }
+      },
+      order: [['myKey', 'DESC']], // or createdAt
+
     });
 
+   
     if (!findCustomerAuthorization && !findCustomerPricing) {
       console.log('GOES ELSE-->--->', InventoryItem.Price1)
       productPrice = InventoryItem.Price1;
@@ -622,14 +625,20 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
 
     /// check Allowance
 
-    let findAllowance: any = await InventorySpecials.findOne({
-      where: {
-        Item_Number: Item_Number,
-        Allowance: {
-          [Op.ne]: 0
-        }
-      }
+    // let findAllowance: any = await InventorySpecials.findOne({
+    //   where: {
+    //     Item_Number: Item_Number,
+    //     Allowance: {
+    //       [Op.ne]: 0
+    //     }
+    //   }
+    // });
+
+    let findAllowance :any= await InventorySpecials.findOne({
+      where: { Item_Number },
+      order: [['myKey', 'DESC']], // or createdAt
     });
+    
     findAllowance = findAllowance?.dataValues;
     console.log(findAllowance, 'findAllowance',hasSpecailPriceApply,'hasSpecailPriceApply')
     if (!hasSpecailPriceApply) {

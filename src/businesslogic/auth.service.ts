@@ -719,7 +719,9 @@ export class AuthService {
         lastName: isUserExist.lastName,
         userNumber: isUserExist.userNumber,
         salesRepNumber: isUserExist.salesRepNumber,
-        isSessionActive: isSessionActive
+        isSessionActive: isSessionActive,
+        allowDiscount:isUserExist.allowDiscount,
+        discountLimit:isUserExist.setUserDiscountLimit,
       },
       storeDetail: storeDetail,
       wholeStoreDetail: wholeStoreDetail

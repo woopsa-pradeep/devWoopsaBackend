@@ -19,7 +19,7 @@ import { Vendor } from "../models/mmsql/vendor.model";
 import { CustReceivables } from "../models/mmsql/custReceivables.model";
 import { Token } from "../models/postgres/token.model";
 import { Retailer } from "../models/postgres/retailer.model";
-import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getTaxRateV1, hashPassword, sendEmailToMarketing } from "../utils/helper";
+import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getTaxRateV1, hashPassword, pgArrayToJsArray, sendEmailToMarketing } from "../utils/helper";
 import { generateNewCredentialsEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
 import { sendDistributorEmail, sendEmail } from "../utils/sendMail";
 import { WebUsers } from "../models/postgres/users.model";
@@ -1286,15 +1286,59 @@ export class ManagerService {
     return updateUser;
   }
 
+  // async getUserList(query: PaginationOptions) {
+  //   const page = parseInt(query.page as any) || 1;
+  //   const limit = parseInt(query.limit as any) || 10;
+  //   const search = query.search || '';
+
+  //   const whereCondition: any = {
+  //     isActive: true,
+  //   };
+
+  //   if (search) {
+  //     whereCondition[Op.or] = [
+  //       { email: { [Op.like]: `%${search}%` } },
+  //       { firstName: { [Op.like]: `%${search}%` } },
+  //       { lastName: { [Op.like]: `%${search}%` } },
+  //     ];
+  //   }
+
+  //   const { count: totalCount, rows: userList } = await WebUsers.findAndCountAll({
+  //     where: whereCondition,
+  //     limit,
+  //     offset: (page - 1) * limit,
+
+  //     order: [['createdAt', 'DESC']],
+  //   });
+
+  //   const userListWithSalesRep = await Promise.all(userList.map(async (user: any) => {
+
+  //     const salesRepList: string[] = pgArrayToJsArray(user.salesRepNumber);
+  //   const newSalesRepArray = salesRepList.map(Number);
+
+  //     const salesRep = await this.getSalesRepUser(Number(newSalesRepArray));
+  //     return {
+  //       ...user.dataValues,
+  //       salesRep: salesRep ? { S_Number: salesRep.S_Number, S_Desc: salesRep.S_Desc } : null,
+  //     };
+  //   }));
+  //   return {
+  //     totalCount,
+  //     page,
+  //     limit,
+  //     userListWithSalesRep,
+  //   };
+  // }
+
   async getUserList(query: PaginationOptions) {
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
     const search = query.search || '';
-
+  
     const whereCondition: any = {
       isActive: true,
     };
-
+  
     if (search) {
       whereCondition[Op.or] = [
         { email: { [Op.like]: `%${search}%` } },
@@ -1302,30 +1346,51 @@ export class ManagerService {
         { lastName: { [Op.like]: `%${search}%` } },
       ];
     }
-
+  
     const { count: totalCount, rows: userList } = await WebUsers.findAndCountAll({
       where: whereCondition,
       limit,
       offset: (page - 1) * limit,
-
       order: [['createdAt', 'DESC']],
     });
-
-    const userListWithSalesRep = await Promise.all(userList.map(async (user: any) => {
-      const salesRep = await this.getSalesRepUser(Number(user.salesRepNumber));
-      return {
-        ...user.dataValues,
-        salesRep: salesRep ? { S_Number: salesRep.S_Number, S_Desc: salesRep.S_Desc } : null,
-      };
-    }));
+  
+    // ✅ ADD SALES REP LIST FOR EACH USER
+    const userListWithSalesRep = await Promise.all(
+      userList.map(async (user: any) => {
+  
+        // ✅ Convert PG "{5,2}" → [5,2]
+        const salesRepList = pgArrayToJsArray(user.salesRepNumber);   // ["5","2"]
+        const salesRepIds = salesRepList.map(Number);                 // [5,2]
+  
+        // ✅ Fetch all sales reps for this user
+        const salesReps = await Promise.all(
+          salesRepIds.map((id: number) => this.getSalesRepUser(id))
+        );
+  
+        // ✅ Format: Only send required fields
+        const formattedSalesReps = salesReps
+          .filter(Boolean) // remove nulls
+          .map((rep: any) => ({
+            S_Number: rep.S_Number,
+            S_Desc: rep.S_Desc,
+          }));
+  
+        return {
+          ...user.dataValues,
+          salesRep: formattedSalesReps, // ✅ return array instead of single object
+        };
+      })
+    );
+  
     return {
       totalCount,
       page,
       limit,
-      userListWithSalesRep,
+       userListWithSalesRep,
     };
   }
 
+  
   async createRolePermissions(body: any) {
     const { userId, permissions } = body;
 
