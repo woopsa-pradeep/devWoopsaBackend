@@ -1,6 +1,7 @@
 // seeds/warehouse.seed.ts
 
 import { Distributor } from "../models/mmsql/distributor.model";
+import { AppUpdate } from "../models/postgres/appUpdate.model";
 import EpickSetting from "../models/postgres/epickSetting.model";
 import HomeSettings from "../models/postgres/homeSetting.model";
 import Policies from "../models/postgres/policies.model";
@@ -96,4 +97,18 @@ export async function seedEpickSetting() {
       pin: number.toString(),
     });
   }
+}
+
+export async function seedAppUpdate() {
+  const existing = await AppUpdate.findOne({});
+  if (!existing) {
+    await AppUpdate.create({
+      app_name: 'Woopsa',
+      version_name: 'a_1.0.0',
+      version_code: 'a_1',
+      force_update: 0,
+      platform: 'android',
+    });
+  }
+
 }

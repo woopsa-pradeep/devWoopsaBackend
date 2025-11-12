@@ -7,6 +7,7 @@ export class OrderHistory extends Model {
   public Order_Number!: number;
   public order_Source!:string;
   public isActive!: boolean;
+  public salesId!: number;
   public discount!: number;
   public orderPlaceBy!: string;
   public readonly created_at!: Date;
@@ -20,9 +21,19 @@ OrderHistory.init(
       autoIncrement: true,
       primaryKey: true,
     },
+    type: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'order',
+    },
     C_Number: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+    salesId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
     },
     Order_Number: {
       type: DataTypes.INTEGER,

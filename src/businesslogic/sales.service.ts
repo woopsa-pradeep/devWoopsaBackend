@@ -293,8 +293,12 @@ export class SalesService {
 
     await OrderHistory.create({
       C_Number: customerId,
+      type: 'order',
       Order_Number: orderHeaderCreated.Order_Number,
       order_Source: isWeb ? 'Web' : 'App',
+      orderPlaceBy: 'sales',
+      discount: Number(discountAmount || 0),
+      salesId: req.user.id, // postgress user id
       isActive: true
     });
 
@@ -3764,6 +3768,10 @@ const newSalesRepArray = salesRepList.map(Number);
 
     await OrderHistory.create({
       C_Number: customerId,
+      type: 'return',
+      orderPlaceBy: 'sales',
+      discount: 0,
+      salesId: req.user.id, // postgress user id
       Order_Number: orderHeaderCreated.Order_Number,
       order_Source: isWeb ? 'Web' : 'App',
       isActive: true

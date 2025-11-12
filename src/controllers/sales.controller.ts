@@ -208,6 +208,7 @@ export class SalesController {
 
 
     async getCustomerCalenderList(req: AuthRequest, res: Response) {
+        console.log(req.user.id,'the sales id')
         const data = await this.salesService.getCustomerCalenderList(Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
 

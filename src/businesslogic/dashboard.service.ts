@@ -15,6 +15,7 @@ import { PaginationOptions } from "../interfaces/pagination.interface";
 import InventorySpecials from "../models/mmsql/inventorySpecail.model";
 import { WarehouseSetting } from "../models/postgres/wareHouseSetting.model";
 import Setting from "../models/postgres/setting.model";
+import { OrderHistory } from "../models/postgres/orderHistory.model";
 
 
 export class DashboardService {
@@ -1342,6 +1343,26 @@ export class DashboardService {
         });
 
 
+        // get order by user
+        let dateFilterForOrderHistory = {
+            createdAt: {
+                [Op.between]: [startDate, endDate]
+            }
+        };
+        const orderBySales = await OrderHistory.count({
+            where: {
+                ...dateFilterForOrderHistory,
+                orderPlaceBy: 'sales'
+            }
+        });
+
+        const orderByRetailer = await OrderHistory.count({
+            where: {
+                ...dateFilterForOrderHistory,
+                orderPlaceBy: 'retailer'
+            }
+        });
+
         return {
             summary: {
                 totalActiveCustomer,
@@ -1350,6 +1371,10 @@ export class DashboardService {
                 totalOrder
             },
             orderPlatform,
+            orderByUser: {
+                sales: orderBySales,
+                retailer: orderByRetailer
+            },
             highDemandProducts: top10HighDemandProducts,
             salesPersonPerformance: salesPersonWithDetails,
             dateRange: {
@@ -1676,5 +1701,6 @@ export class DashboardService {
         });
         return top10HighDemandProducts;
     }
+
 
 }

@@ -1126,6 +1126,8 @@ async addMultipleItems(userId: number, body:any) {
 
     await OrderHistory.create({
       C_Number: req.user.id,
+      orderPlaceBy: 'retailer',
+      type: 'order',
       Order_Number: orderHeaderCreated.Order_Number,
       order_Source:isWeb ? 'Web' : 'App',
       isActive: true
