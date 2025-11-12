@@ -12,6 +12,13 @@ import { WebLocation } from './webLocation.model';
 import { OrderPickBox } from './epickOrderBox.model';
 import { OrderPick } from './epickOrder.model';
 import { OrderPickScan } from './epickOrderScan.model';
+import  CustomerCart  from '../postgres/retailerCart.model';
+import { Inventory } from '../mmsql/inventory.model';
+import  {ProductImage}  from '../postgres/product.model';
+import { SalesCategory } from '../mmsql/salesCategory.model';
+import { PriceClass } from '../mmsql/priceClass.model';
+import { InventoryUPC } from '../mmsql/inventoryUpc.model';
+// import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
 
 export function applyAssociations(): void {
 
@@ -79,5 +86,13 @@ OrderPickScan.belongsTo(OrderPick, {
   foreignKey: 'orderNumber',
   targetKey: 'orderNumber',
 });
+
+
+// Inventory.belongsTo(InventoryStatus, {
+//   foreignKey: 'Item_Number',
+//   as: 'inventoryStatus'
+// });
+
+
 
 }

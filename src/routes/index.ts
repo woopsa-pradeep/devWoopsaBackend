@@ -8,6 +8,8 @@ import salesRoutes from './sales.routes';
 import dashboardRoutes from './dashboard.routes';
 import homeRoutes from './home.router';
 import epickRoutes from     './epick.router';
+import checkerRoutes from './checker.router';
+import appUpdateRoutes from './appUpdate.routes';
 
 const router = Router();
 
@@ -21,6 +23,8 @@ router.use('/sales', salesRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/home', homeRoutes);
 router.use('/epick', epickRoutes);
+router.use('/checker', checkerRoutes);
+router.use('/app', appUpdateRoutes);
 
 export default router; 
 

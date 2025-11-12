@@ -78,6 +78,13 @@ async loginWithPassword(req: Request, res: Response) {
     const data = await this.authService.epikLogin(req.body);
     sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
   }
+
+  async loginChecker(req: Request, res: Response) {
+      const data = await this.authService.loginChecker(req.body);
+      sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+  
+
   async changePassword(req: AuthRequest, res: Response) {
   const data = await this.authService.changePassword(req.body, req);
   sendResponse(res, 200, true, data, AuthMessage.PASSWORD_CHANGED);

@@ -129,11 +129,16 @@ export class RetailerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
-  async addToCartByScanner(req: AuthRequest, res: Response) {
-    const data = await this.retailerService.addToCartByScanner(req.params.id,req.user.id);
+  async scanItemByBarcode(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.scanItemByBarcode(req.params.id,req.user.id);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getScannedItems(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.getScannedItems(req.user.id);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+  
   async addToCartMultiScanner(req: AuthRequest, res: Response) {
     const data = await this.retailerService.addToCartMultiScanner(req.body, req.user.id);
     sendResponse(res, 200, true, data, General.SUCCESS);

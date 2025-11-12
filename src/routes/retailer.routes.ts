@@ -99,7 +99,8 @@ router.post('/orderedProducts',
     getOrderedProducts.bind(retailerController))
 );
 router.get('/orderDeliveryStatus/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getOrderDeliveryStatus.bind(retailerController)));
-router.get('/addCartByScanner/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.addToCartByScanner.bind(retailerController)));
+router.get('/scanItemByBarcode/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.scanItemByBarcode.bind(retailerController)));
+router.get('/getScannedItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getScannedItems.bind(retailerController)));
 router.post('/addCartMultiScanner',validateRequest(addToCartMultiScannerValidation),verifyRole(ROLES.RETAILER),catchAsync(retailerController.addToCartMultiScanner.bind(retailerController)));
 
 // PDF generation

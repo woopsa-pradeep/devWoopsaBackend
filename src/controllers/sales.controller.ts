@@ -180,7 +180,7 @@ export class SalesController {
         const data = await this.salesService.addToCartByScanner(upcNumber, Number(req.params.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
-
+ 
     async addToCartMultiScanner(req: AuthRequest, res: Response) {
         const data = await this.salesService.addToCartMultiScanner(req.body, Number(req.params.id));
         sendResponse(res, 200, true, data, General.SUCCESS);

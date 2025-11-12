@@ -49,11 +49,13 @@ import Policies from "../models/postgres/policies.model";
 import { WebUsers } from "../models/postgres/users.model";
 import { ContactUs } from "../models/postgres/contactUs.model";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
+import { Users } from "../models/mmsql/user.model";
 
 
 
 
 export class RetailerService {
+  private scannedItems: Record<number, any[]> = {};
   async getProfile(id: string) {
     const logo :any= await Setting.findOne({ attributes: ["warehouseImage"] });
     const data = await Customer.findByPk(id, {
@@ -376,12 +378,12 @@ export class RetailerService {
           attributes: ['Class_Desc'],
           required: false
         },
-        {
-          model: InventoryStatus,
-          as: 'inventoryStatus',
-          attributes: ['Inventory_OnHand'],
-          required: false
-        },
+        // {
+        //   model: InventoryStatus,
+        //   as: 'inventoryStatus',
+        //   attributes: ['Inventory_OnHand'],
+        //   required: false
+        // },
         includeUPC
       ],
       order: orderClause,
@@ -2240,16 +2242,15 @@ export class RetailerService {
       }
     ];
   }
-
-  async addToCartByScanner(upcNumber: string, userId: number) {
+async addToCartByScanner(upcNumber: string, userId: number) {
     const isUpcAvailable = await InventoryUPC.findOne({
       where: { UPC_Number: upcNumber }
     });
-
+ 
     if (!isUpcAvailable) {
       throw new AppError("Item not found", 400);
     }
-
+ 
     const findItem = await Inventory.findOne({
       where: {
         Item_Number: isUpcAvailable.Item_Number
@@ -2298,11 +2299,11 @@ export class RetailerService {
         }
       ]
     });
-
+ 
     if (!findItem) {
       throw new AppError("Item details not found in Inventory", 404);
     }
-
+ 
     // Fetch supporting data
     const productImage = await ProductImage.findOne({
       where: {
@@ -2310,27 +2311,27 @@ export class RetailerService {
         isAllow: true
       },
     });
-
+ 
     let price = await getDiscount(Number(findItem.Item_Number), userId);
     if (!price) {
       price = await getFirstValidPrice(findItem);
     }
-
+ 
     const inventoryOnHand = await getInventoryOnHand(findItem.Item_Number) || 0;
     let taxRate = 0
     const userJurisdiction = await getJurisdiction(userId);
     if (findItem.OTP_Number) taxRate = await getTaxRateV1(findItem.OTP_Number,userJurisdiction as number,findItem.Item_Number,price);
-
-
+ 
+ 
     let wareHouseSetting: any = await Setting.findOne({}); (userId); // You may have this from context/session
-
+ 
     let allowToOrder = true;
     if (wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible) {
       allowToOrder = true;
     } else if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
       allowToOrder = false;
     }
-
+ 
     // Final enriched item structure
     const finalItem = {
       ...findItem.toJSON(),
@@ -2340,7 +2341,7 @@ export class RetailerService {
       taxRate,
       allowToOrder
     };
-
+ 
     const obj = {
       Qty: 1,
       Price: finalItem.price, // ✅ required
@@ -2352,7 +2353,7 @@ export class RetailerService {
       Item_Number: finalItem.Item_Number,
       Price_With_Tax: finalItem.price + finalItem.taxRate
     };
-
+ 
     const existingCartItem = await CustomerCart.findOne({
       where: {
         Customer_Number: obj.Customer_Number,
@@ -2360,23 +2361,178 @@ export class RetailerService {
         isActive: true
       }
     });
-
+ 
     if (existingCartItem) {
       await existingCartItem.update({
         Qty: existingCartItem.Qty + obj.Qty,
         TotalPrice: Number(existingCartItem.TotalPrice) + Number(obj.TotalPrice),
         TotalPriceWithTax: Number(existingCartItem.TotalPriceWithTax) + Number(obj.TotalPriceWithTax)
       });
-      
+     
       return existingCartItem;
     } else {
       return await CustomerCart.create(obj);
     }
-
-   
-
-
   }
+
+async scanItemByBarcode(barcode: string, userId: number) {
+    // Step 1: Check if UPC exists
+    const upcRecord = await InventoryUPC.findOne({ where: { UPC_Number: barcode } });
+    if (!upcRecord) {
+      throw new AppError(`Item not found for UPC: ${barcode}`, 404);
+    }
+
+    // Step 2: Fetch item details from Inventory
+    const item = await Inventory.findOne({
+      where: { Item_Number: upcRecord.Item_Number },
+      attributes: [
+        "Pack", "Description", "Item_Number", "CaseCount", "UOM",
+        "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
+        "NetCost", "OTP_Number", "Price_Subclass"
+      ],
+      include: [
+        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc"], required: false },
+        {model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
+         { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
+        { model: InventoryUPC, as: "UPCList", attributes: ["UPC_Number"], required: false }
+      ]
+    });
+
+    if (!item) {
+      throw new AppError("Item details not found in Inventory", 404);
+    }
+
+    // Step 3: Pricing & Tax
+    let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
+    const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
+    price = Math.ceil(price * 100) / 100;
+
+    let taxRate = await getTaxRateV1(item.OTP_Number ?? 0, 0, item.Item_Number, price);
+    taxRate = Math.ceil(taxRate * 100) / 100;
+
+    // Step 4: Build response object (same format as your example)
+    // const productImage = await ProductImage.findOne({
+    //   where: { product_number: item.Item_Number.toString(), isAllow: true }
+    // });
+
+    const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
+    const wareHouseSetting: any = await Setting.findOne({});
+    const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
+
+    const formattedItem = {
+      Pack: item.Pack,
+      Description: item.Description,
+      Item_Number: item.Item_Number,
+      CaseCount: item.CaseCount,
+      UOM: item.UOM,
+      isDiscounted,
+      Price1: item.Price1,
+      Tax_Rate: taxRate,
+      OTP_Number: item.OTP_Number,
+      price,
+      isNewItem: true,
+      priceWithTax: price + taxRate,
+      BaseCost: item.BaseCost,
+      Invoice_Cost: item.Invoice_Cost,
+      AvgCost: item.AvgCost,
+      NetCost: item.NetCost,
+      hasProductLimit: false,
+      productLimit: null,
+      UPCList: item.UPCList || [{ UPC_Number: barcode }],
+      Inventory_OnHand: inventoryOnHand,
+      UnitOunces: 0,
+      allowToOrder,
+      hasQtyDiscount: false,
+      qtyDiscount: {
+        allowToDiscount: false,
+        hasCaseDiscount: false,
+        hasQtyDiscount: false,
+        isCaseDiscount: false,
+        isQtyDiscount: false,
+        percentageCaseDiscount: 0,
+        minimumQtyForCaseDiscount: 0,
+        qtyDiscount: [],
+        price,
+      },
+      showTheInventoryStock: true,
+      showLowStock: false,
+      showWithOutPrice: false,
+      SalesCategory: item.SalesCategory?.Category_Desc || null,
+      PriceClass: item.PriceClass?.Class_Desc || null,
+      // showDistributorImage: productImage?.isAllow ?? false,
+      // distributorImage: productImage?.img_url || null,
+      masterImage: `${process.env.AZUREIMAGESERVER}${barcode}.jpg`,
+      quantity: 1, // Default 1 when scanned
+    };
+
+    // Step 5: Add to scannedItems memory (per user)
+    if (!this.scannedItems[userId]) this.scannedItems[userId] = [];
+
+    const existingItem = this.scannedItems[userId].find((i) => i.Item_Number === formattedItem.Item_Number);
+    if (existingItem) {
+      existingItem.quantity += 1;
+    } else {
+      this.scannedItems[userId].push(formattedItem);
+    }
+
+    return formattedItem;
+  }
+
+async getScannedItems(userId: number) {
+  // Fetch all items from CustomerCart table for the logged-in retailer
+  const scannedItems = await CustomerCart.findAll({
+    where: {
+      Customer_Number: userId,
+      isActive: true
+    },
+    attributes: [
+      'Item_Number', 'Qty', 'Price', 'TotalPrice', 
+      'TotalPriceWithTax', 'Tax_Rate', 'Price_With_Tax'
+    ],
+    include: [
+      {
+        model: Inventory,
+        as: 'Inventory',
+        attributes: [
+          'Description', 'Pack', 'CaseCount', 'UOM', 
+          'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'NetCost'
+        ],
+        include: [
+          { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc'], required: false },
+          { model: PriceClass, as: 'PriceClass', attributes: ['Class_Desc'], required: false },
+          { model: InventoryUPC, as: 'UPCList', attributes: ['UPC_Number'], required: false }
+        ]
+      },
+      {
+        model: ProductImage,
+        as: 'ProductImage',
+        attributes: ['image_url', 'isAllow'],
+        required: false
+      }
+    ]
+  });
+
+  if (!scannedItems || scannedItems.length === 0) {
+    return [];
+  }
+
+  // Optionally calculate totals or format output
+  const formatted = scannedItems.map(item => ({
+    Item_Number: item.Item_Number,
+    // Description: item.Inventory?.Description,
+    Qty: item.Qty,
+    Price: item.Price,
+    TotalPrice: item.TotalPrice,
+    TotalPriceWithTax: item.TotalPriceWithTax,
+    Tax_Rate: item.Tax_Rate,
+    // Image: item.productImage?.image_url || null,
+    // Category: item.Inventory?.SalesCategory?.Category_Desc || null,
+    // PriceClass: item.Inventory?.PriceClass?.Class_Desc || null
+  }));
+
+  return formatted;
+}
+
 
   async addToCartMultiScanner(body: any, userId: number) {
     const { upcNumbers, isMultiple, arrayOfUpc } = body;
@@ -2470,6 +2626,7 @@ export class RetailerService {
           Customer_Number: obj.Customer_Number,
           Item_Number: obj.Item_Number,
           isActive: true
+
         }
       });
   

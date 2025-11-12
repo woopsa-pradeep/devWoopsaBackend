@@ -8,6 +8,7 @@ export class OrderHistory extends Model {
   public order_Source!:string;
   public isActive!: boolean;
   public discount!: number;
+  public orderPlaceBy!: string;
   public readonly created_at!: Date;
   public readonly updated_at!: Date;
 }
@@ -35,6 +36,11 @@ OrderHistory.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+    },
+    orderPlaceBy:{
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
     },
     discount:{
       type: DataTypes.DECIMAL(10, 2),

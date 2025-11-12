@@ -24,6 +24,7 @@ router.post('/verifyRetailerOtp',catchAsync(authController.verifyRetailerOtp.bin
  // sales person login
  router.post('/salesLogin', validateRequest(loginSalesSchema), catchAsync(authController.loginSalesUser.bind(authController)));
  router.post('/epikLogin', validateRequest(loginSalesSchema), catchAsync(authController.epikLogin.bind(authController)));
+ router.post('/loginChecker', validateRequest(loginSalesSchema), catchAsync(authController.loginChecker.bind(authController)));
  
  router.post('/changePassword', verifyToken,validateRequest(changePasswordSchema),catchAsync(authController.changePassword.bind(authController)));
  router.post('/logout', verifyToken, catchAsync(authController.logout.bind(authController)));

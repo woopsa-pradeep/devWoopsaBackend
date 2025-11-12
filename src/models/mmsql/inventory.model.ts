@@ -1,6 +1,10 @@
 
 import { sequelize } from '../../db';
 import { DataTypes, Model } from 'sequelize';
+import { InventoryUPC } from './inventoryUpc.model';
+import { SalesCategory } from './salesCategory.model';
+import { PriceClass } from './priceClass.model';
+
 
 export class Inventory extends Model {
   public Item_Number!: number;
@@ -140,6 +144,10 @@ export class Inventory extends Model {
   public IsIncludeDeposit_QB!: boolean;
   public MinimumStockAvailability!: number;
   public ItemExpiryDate?: string;
+  public UPCList?: InventoryUPC[];
+  public SalesCategory?: SalesCategory;
+  public PriceClass?: PriceClass;
+  
 }
 
 Inventory.init(
