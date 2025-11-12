@@ -10,7 +10,7 @@ import Banner from "../models/postgres/banner.model";
 import { ProductImage } from "../models/postgres/product.model";
 import CustomerCart from "../models/postgres/retailerCart.model";
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, checkTimeOut, generatePDFFromHTML, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP } from "../utils/helper";
+import { checkQtyDiscount, checkTimeOut, generatePDFFromHTML, generateToken, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP } from "../utils/helper";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { Operations } from "../utils/operations";
 import { generateOrderConfirmationEmail, generateDistributorOrderNotificationEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
@@ -38,7 +38,7 @@ import { SupportTicket } from "../models/postgres/supportTicket.model";
 import { RetailerProductCatalog } from "../models/postgres/retailerProductCatalog.model";
 import { ICreateRetailerProductCatalog, IUpdateRetailerProductCatalog, IGetRetailerProductCatalogs, IGetStories } from "../interfaces/request.body.interface";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
-import { Manager } from "../constants";
+import { AuthMessage, Manager } from "../constants";
 import { Link } from "../models/postgres/links.model";
 import { Story } from "../models/postgres/Story.model";
 import moment from "moment";
@@ -52,15 +52,16 @@ import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { Users } from "../models/mmsql/user.model";
 import { sendResponse } from "../utils/sendResponse";
 import { Request, Response } from "express"
+import { Token } from "../models/postgres/token.model";
 
 
 
 
 
 export class RetailerService {
-  
+
   async getProfile(id: string) {
-    const logo :any= await Setting.findOne({ attributes: ["warehouseImage"] });
+    const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
     const data = await Customer.findByPk(id, {
       attributes: [
         "C_CoName",
@@ -91,7 +92,7 @@ export class RetailerService {
       ],
     });
     let finalData = data?.dataValues || null;
-      return {
+    return {
       ...finalData,
       logo: logo?.warehouseImage || null
     }
@@ -259,28 +260,28 @@ export class RetailerService {
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
     let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy } = query;
-  
+
     const userJurisdiction = await getJurisdiction(user.id);
 
 
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
-  
+
     page = Number(page);
     limit = Number(limit);
-  
+
     let whereClause: any = {
       I_Inactive: false,
-      ShortOrderForm:true,
+      ShortOrderForm: true,
     };
-  
+
     let searchInUPC = false;
-  
+
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
     } else {
-     
+
       if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
         // Both filters exist → use OR condition
         whereClause[Op.or] = [
@@ -294,7 +295,7 @@ export class RetailerService {
         // Only Price_Class filter
         whereClause.Price_Class = { [Op.in]: priceClassId };
       }
-  
+
 
       if (search) {
         if (/^\d{8,}$/.test(search)) {
@@ -308,9 +309,9 @@ export class RetailerService {
           ];
         }
       }
-      
+
     }
-  
+
     // === UPC JOIN logic ===
     const includeUPC = {
       model: InventoryUPC,
@@ -322,7 +323,7 @@ export class RetailerService {
       },
       required: searchInUPC
     };
-  
+
 
     let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
@@ -333,9 +334,9 @@ export class RetailerService {
     if (shortBy && Number(shortBy) === 2) {
       orderClause = [[col('Description'), 'DESC']];
     }
-    
+
     let totalCount = 0;
-  
+
     if (searchInUPC) {
       const counted = await Inventory.findAll({
         attributes: ['Item_Number'],
@@ -343,14 +344,14 @@ export class RetailerService {
         include: [
           {
             ...includeUPC,
-            attributes: [] 
+            attributes: []
           }
         ],
         group: ['Inventory.Item_Number'],
         raw: true,
         logging: false
       });
-  
+
       totalCount = counted.length;
     } else {
       totalCount = await Inventory.count({
@@ -364,7 +365,7 @@ export class RetailerService {
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass','UnitOunces'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces'
       ],
       where: whereClause,
       include: [
@@ -393,10 +394,10 @@ export class RetailerService {
       offset: (page - 1) * limit,
       logging: false
     });
-  
+
     const itemNumbers = productList.map(e => e.Item_Number);
     const otpNumbers = productList.map(e => e.OTP_Number);
-  
+
     const productImages = await ProductImage.findAll({
       where: {
         product_number: { [Op.in]: itemNumbers.map(String) },
@@ -405,13 +406,13 @@ export class RetailerService {
     });
     const imageMap = new Map(productImages.map(img => [img.product_number, img]));
     const discountMap = await getDiscountsForItemNumbers(itemNumbers, user.id);
-  
+
     // === Final mapping ===
     const finalProductList = await Promise.all(productList.map(async (e: any) => {
       const itemStr = e.Item_Number.toString();
       const productImage = imageMap.get(itemStr) || null;
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
-  
+
       let price = discountMap[e.Item_Number] ?? await getFirstValidPrice(e);
       const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
       price = Math.ceil(price * 100) / 100;
@@ -419,14 +420,14 @@ export class RetailerService {
       let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
       taxRate = Math.ceil(taxRate * 100) / 100;
 
-      const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, user.id,price + taxRate);
+      const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, user.id, price + taxRate);
 
       let allowToOrder = true;
       if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
-  
+
       return {
         Pack: e.Pack,
         Description: e.Description,
@@ -462,7 +463,7 @@ export class RetailerService {
         masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
       };
     }));
-  
+
     return {
       totalCount,
       page,
@@ -471,7 +472,7 @@ export class RetailerService {
       finalProductList
     };
   }
-  
+
 
   async getInventoryItemByItemNumber(itemNumber: string) {
     const data = await Inventory.findOne({
@@ -647,77 +648,77 @@ export class RetailerService {
   }
 
   // ✅ Add all scanned items to Cart
-async addMultipleItems(userId: number, body:any) {
-  let {formattedItems} = body;
-  if (typeof formattedItems === "string") {
-    try {
-      formattedItems = JSON.parse(formattedItems);
-    } catch (error) {
-      throw new AppError("Invalid formattedItems format", 400);
+  async addMultipleItems(userId: number, body: any) {
+    let { formattedItems } = body;
+    if (typeof formattedItems === "string") {
+      try {
+        formattedItems = JSON.parse(formattedItems);
+      } catch (error) {
+        throw new AppError("Invalid formattedItems format", 400);
+      }
     }
-  }
 
-  const cartItemsData = [];
+    const cartItemsData = [];
 
-  for (const item of formattedItems) {
-    const Item_Number = Number(item.Item_Number);
-    const quantity = Number(item.Qty ?? item.quantity ?? 1);
-    const price = Number(item.Price ?? item.price ?? 0);
-    const Tax_Rate = item.Tax_Rate ?? 0;
-    const Price_With_Tax =
-      Number(item.Price_With_Tax ?? item.priceWithTax ?? price + (price * Tax_Rate) / 100);
+    for (const item of formattedItems) {
+      const Item_Number = Number(item.Item_Number);
+      const quantity = Number(item.Qty ?? item.quantity ?? 1);
+      const price = Number(item.Price ?? item.price ?? 0);
+      const Tax_Rate = item.Tax_Rate ?? 0;
+      const Price_With_Tax =
+        Number(item.Price_With_Tax ?? item.priceWithTax ?? price + (price * Tax_Rate) / 100);
 
 
-    const existingCartItem = await CustomerCart.findOne({
-      where: {
-        Customer_Number: userId,
-        Item_Number: Item_Number,
-        isActive: true,
-      },
-    });
-
-    if (existingCartItem) {
-      const newQty = existingCartItem.Qty + quantity;
-
-      const updatedPrice = price * newQty;
-      const updatedPriceWithTax = Price_With_Tax * newQty;
-
-      await existingCartItem.update({
-        Qty: newQty,
-        TotalPrice: updatedPrice,
-        TotalPriceWithTax: updatedPriceWithTax,
+      const existingCartItem = await CustomerCart.findOne({
+        where: {
+          Customer_Number: userId,
+          Item_Number: Item_Number,
+          isActive: true,
+        },
       });
 
-      cartItemsData.push(existingCartItem);
-    } else {
-      // ✅ Create new cart entry if not exist
-      const totalPrice = price * quantity;
-      const totalPriceWithTax = Price_With_Tax * quantity;
+      if (existingCartItem) {
+        const newQty = existingCartItem.Qty + quantity;
 
-      const cartData = {
-        Customer_Number: userId,
-        Item_Number,
-        Description: item.Description,
-        Qty: quantity,
-        Tax_Rate,
-        Price: price,
-        Price_With_Tax,
-        TotalPrice: totalPrice,
-        TotalPriceWithTax: totalPriceWithTax,
-        discount: 0,
-        originalPrice: price,
-        isActive: true,
-      };
-    console.log(price, 'price>>>>>>>>>>>>>>>>')
+        const updatedPrice = price * newQty;
+        const updatedPriceWithTax = Price_With_Tax * newQty;
 
-      const addedCartItem = await CustomerCart.create(cartData);
-      cartItemsData.push(addedCartItem);
+        await existingCartItem.update({
+          Qty: newQty,
+          TotalPrice: updatedPrice,
+          TotalPriceWithTax: updatedPriceWithTax,
+        });
+
+        cartItemsData.push(existingCartItem);
+      } else {
+        // ✅ Create new cart entry if not exist
+        const totalPrice = price * quantity;
+        const totalPriceWithTax = Price_With_Tax * quantity;
+
+        const cartData = {
+          Customer_Number: userId,
+          Item_Number,
+          Description: item.Description,
+          Qty: quantity,
+          Tax_Rate,
+          Price: price,
+          Price_With_Tax,
+          TotalPrice: totalPrice,
+          TotalPriceWithTax: totalPriceWithTax,
+          discount: 0,
+          originalPrice: price,
+          isActive: true,
+        };
+        console.log(price, 'price>>>>>>>>>>>>>>>>')
+
+        const addedCartItem = await CustomerCart.create(cartData);
+        cartItemsData.push(addedCartItem);
+      }
     }
-  }
 
-  // ✅ Return updated cart summary
-  return await this.getCartItems(userId);
-}
+    // ✅ Return updated cart summary
+    return await this.getCartItems(userId);
+  }
   async getCartItems(customerNumber: number) {
     const cartItems: any = await CustomerCart.findAll({
       where: {
@@ -743,7 +744,7 @@ async addMultipleItems(userId: number, body:any) {
       });
 
       let price = await getDiscount(Number(e.Item_Number), Number(e.Customer_Number))
-      let itemInActive = await isItemInActive(e.Item_Number)    
+      let itemInActive = await isItemInActive(e.Item_Number)
       if (!price) {
         const data = await Inventory.findByPk(e.Item_Number)
         price = await getFirstValidPrice(data?.dataValues)
@@ -752,18 +753,18 @@ async addMultipleItems(userId: number, body:any) {
         where: {
           Item_Number: e.Item_Number
         },
-        include: [ {
+        include: [{
           model: InventoryUPC,
-    as: 'UPCList',
-    attributes: ['UPC_Number'],
-    where: {
-      Status: 0,
-    },
-    required: false
-  
-  }]
+          as: 'UPCList',
+          attributes: ['UPC_Number'],
+          where: {
+            Status: 0,
+          },
+          required: false
+
+        }]
       })
-    product = product?.dataValues || null;
+      product = product?.dataValues || null;
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number)
       let wareHouseSetting: any = await Setting.findOne({});
       wareHouseSetting = wareHouseSetting?.dataValues || null;
@@ -777,9 +778,9 @@ async addMultipleItems(userId: number, body:any) {
       else if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
-      const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerNumber,Number(price)+Number(e.Tax_Rate));
+      const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
       const topLatestItems = await getTopLatestItems();
-      const isNewItem =  topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+      const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
       const productLimit = await getProductLimit(e.Item_Number);
       const isDiscounted = await hasDiscountedItem(e.Item_Number, product.Price_Subclass);
@@ -796,7 +797,7 @@ async addMultipleItems(userId: number, body:any) {
         Price1: product.Price1,
         price: price,
         itemInActive,
-        
+
         hasProductLimit: productLimit ? true : false,
         productLimit,
 
@@ -839,7 +840,7 @@ async addMultipleItems(userId: number, body:any) {
 
   async updateCartItem(cartItemId: number, updateData: UpdateCartItemRequest) {
     const cartItem = await CustomerCart.findByPk(cartItemId);
-    
+
     if (!cartItem) {
       throw new AppError("Cart item not found", 404);
     }
@@ -891,9 +892,9 @@ async addMultipleItems(userId: number, body:any) {
     return cartItem;
   }
 
-  async getWareHouseProfileDetails(){
+  async getWareHouseProfileDetails() {
     const data = await Setting.findOne({
-     attributes:['warehouseProfile']
+      attributes: ['warehouseProfile']
     })
     return data?.dataValues
   }
@@ -921,7 +922,7 @@ async addMultipleItems(userId: number, body:any) {
   }
 
   async placeOrder(orderData: PlaceOrder, req: any) {
-    const {shippingDetails} = orderData;
+    const { shippingDetails } = orderData;
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
 
@@ -936,14 +937,14 @@ async addMultipleItems(userId: number, body:any) {
       throw new AppError("Limitation exceeded: Daily order limit reached.", 400);
     }
 
-    let settings :any = await Setting.findOne({});
-     settings  = settings?.dataValues || null;
+    let settings: any = await Setting.findOne({});
+    settings = settings?.dataValues || null;
     const isTimeOut = settings?.warehouseProfile?.cutOffTime || 0;
 
-    console.log(isTimeOut,'isTimeOut-->')
-    const checkTime =   checkTimeOut(isTimeOut);
+    console.log(isTimeOut, 'isTimeOut-->')
+    const checkTime = checkTimeOut(isTimeOut);
 
-    if(!checkTime){
+    if (!checkTime) {
       throw new AppError("Time out: Order time out.", 400);
     }
 
@@ -1063,10 +1064,10 @@ async addMultipleItems(userId: number, body:any) {
         BaseCost: product.BaseCost,
         Invoice_Cost: product.Invoice_Cost,
         AvgCost: product.AvgCost,
-       OTP_Amount_State: Number(item.Tax_Rate ?? 0),
+        OTP_Amount_State: Number(item.Tax_Rate ?? 0),
         OTP_Amount_County: 0,
         OTP_Amount_City: 0,
-        Item_Message:null,
+        Item_Message: null,
         DepositAmount: product.DepositAmount,
         Price_Subclass: product.Price_Subclass,
         OffInvoice_Amount: 0,
@@ -1091,15 +1092,15 @@ async addMultipleItems(userId: number, body:any) {
     try {
       await OrderDetail.bulkCreate(orderDetails);
       console.log('Order details created successfully');
-    } catch (e:any) {
-      console.log(e,'error-->')
+    } catch (e: any) {
+      console.log(e, 'error-->')
 
       if (e?.original?.errors?.length) {
         for (const err of e.original.errors) {
           console.error('[MSSQL RequestError]', err?.message, 'code:', err?.code, 'number:', err?.number);
         }
       }
-    
+
       // 2) Sequelize sometimes puts the real text here too
       if (e?.parent?.message) console.error('[parent.message]', e.parent.message);
       if (e?.sql) console.error('[Sequelize SQL]', e.sql);
@@ -1110,35 +1111,35 @@ async addMultipleItems(userId: number, body:any) {
 
 
 
-  
+
     await Retailer.update({ todayOrderCount: findPersonLimit?.todayOrderCount + 1 }, { where: { Customer_Number: req.user.id } });
 
-    let orderOptionValue = shippingDetails.method + '--' + shippingDetails.selectedTimeSlot + '--' + shippingDetails.instructions 
-    if(shippingDetails.method === 'delivery'){
-      orderOptionValue =  shippingDetails.method + '--' + shippingDetails.instructions
+    let orderOptionValue = shippingDetails.method + '--' + shippingDetails.selectedTimeSlot + '--' + shippingDetails.instructions
+    if (shippingDetails.method === 'delivery') {
+      orderOptionValue = shippingDetails.method + '--' + shippingDetails.instructions
     }
 
-   await OrderHeaderExt.create({
-    Order_Number: orderHeaderCreated.Order_Number,
-        Order_Option: 0,
-        Order_OptionValue: orderOptionValue
-   })
+    await OrderHeaderExt.create({
+      Order_Number: orderHeaderCreated.Order_Number,
+      Order_Option: 0,
+      Order_OptionValue: orderOptionValue
+    })
 
     await OrderHistory.create({
       C_Number: req.user.id,
       orderPlaceBy: 'retailer',
       type: 'order',
       Order_Number: orderHeaderCreated.Order_Number,
-      order_Source:isWeb ? 'Web' : 'App',
+      order_Source: isWeb ? 'Web' : 'App',
       isActive: true
     });
 
-      // Send order confirmation email to customer
-   try{
-    sendEmailToOrder(orderHeaderCreated, orderDetails, customer, Delivery_Charge);
-   }catch(error){
-    console.log(error,'error-->')
-   }
+    // Send order confirmation email to customer
+    try {
+      sendEmailToOrder(orderHeaderCreated, orderDetails, customer, Delivery_Charge);
+    } catch (error) {
+      console.log(error, 'error-->')
+    }
 
     return {
       orderHeader: orderHeaderCreated,
@@ -1179,7 +1180,7 @@ async addMultipleItems(userId: number, body:any) {
         'ItemDescription',
         'CaseWeight',
         'CaseCount',
-    
+
       ],
       include: [
         {
@@ -1262,7 +1263,7 @@ async addMultipleItems(userId: number, body:any) {
       whereCondition.AR_Type = 'I';
       whereCondition.AR_Amount = { [Op.lt]: 0 };
     }
-    
+
 
     // Search conditions
     const searchConditions: any[] = [];
@@ -1304,7 +1305,7 @@ async addMultipleItems(userId: number, body:any) {
       if (tab === 'refunds') {
         searchConditions.push({ AR_Ref: { [Op.like]: `%${search}%` } });
 
-        
+
         if (isNumeric) {
           searchConditions.push({ Invoice_Number: { [Op.like]: `%${search}%` } });
           searchConditions.push({ C_Number: { [Op.like]: `%${search}%` } });
@@ -1330,8 +1331,8 @@ async addMultipleItems(userId: number, body:any) {
         model: ARDefinitions,
         as: 'arDefinition',
         required: false,
-        where:{
-          AR_Type:'C'
+        where: {
+          AR_Type: 'C'
         },
         attributes: ['AR_SubTypeRef'],
       });
@@ -1356,7 +1357,7 @@ async addMultipleItems(userId: number, body:any) {
         'AR_Type',
         'AR_SubType',
         'AR_Ref',
-        
+
         'AR_Amount',
         'AR_Applied',
         'AR_Date',
@@ -1428,7 +1429,7 @@ async addMultipleItems(userId: number, body:any) {
 
         return {
           type: typeLabel,
-          reference:item.AR_Ref,
+          reference: item.AR_Ref,
           invoiceNumber: item.Invoice_Number || 0,
           invoiceAmount: amount.toFixed(2),
           invoiceDue: balance.toFixed(2),
@@ -1441,11 +1442,11 @@ async addMultipleItems(userId: number, body:any) {
         if (item.AR_Type === 'C') typeLabel = 'Credit';
         else if (item.AR_Type === 'R') typeLabel = 'Return';
         else if (item.AR_Type === 'I') typeLabel = 'Invoice';
-       
+
         return {
           type: typeLabel,
           invoiceNumber: item.Invoice_Number || 0,
-          reference:item.AR_Ref,
+          reference: item.AR_Ref,
           invoiceAmount: amount.toFixed(2),
           invoiceDue: balance.toFixed(2),
           invoiceDate: item.AR_Date,
@@ -1511,7 +1512,7 @@ async addMultipleItems(userId: number, body:any) {
   //     whereCondition.AR_Type = 'C';
   //     whereCondition.AR_Amount = { [Op.lt]: 0 };
   //   }
-    
+
 
   //   // Search conditions
   //   const searchConditions: any[] = [];
@@ -1581,7 +1582,7 @@ async addMultipleItems(userId: number, body:any) {
   //     data: rows
   //   };
 
- 
+
   // }
 
 
@@ -1744,7 +1745,7 @@ async addMultipleItems(userId: number, body:any) {
       const price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
       const quantity = Number(detail.Quantity_Ordered || 0);
 
-      totalPrice += (price ) * quantity;
+      totalPrice += (price) * quantity;
       totalDiscount += Number(detail.OffInvoice_Amount || 0);
       totalDeposit += Number(detail.DepositAmount || 0);
     }
@@ -1752,7 +1753,7 @@ async addMultipleItems(userId: number, body:any) {
     const orderDiscount = await OrderDiscount.findOne({
       where: { orderNumber: orderNumber }
     });
-    if(orderDiscount){
+    if (orderDiscount) {
       totalDiscount = orderDiscount.discount;
     }
     // Fetch paginated order details with inventory and UPC
@@ -1787,7 +1788,7 @@ async addMultipleItems(userId: number, body:any) {
         'ItemDescription',
         'CaseWeight',
         'CaseCount',
-       
+
       ],
       include: [
         {
@@ -1950,13 +1951,13 @@ async addMultipleItems(userId: number, body:any) {
     customerId: number,
     query: PaginationOptions & {
       search?: string,
-      filter?: '1week' | '2week' |'3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
+      filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
     }
   ) {
     let { page = 1, limit = 10, search, filter } = query;
     page = Number(page);
     limit = Number(limit);
-    
+
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
 
@@ -2043,8 +2044,8 @@ async addMultipleItems(userId: number, body:any) {
     }
 
     // Build where clause for OrderDetail
-   
-    let matchingInventoryItems:any = [];
+
+    let matchingInventoryItems: any = [];
     // Add search functionality for OrderDetail
     let matchingItemNumbers: number[] | undefined = undefined;
 
@@ -2054,21 +2055,21 @@ async addMultipleItems(userId: number, body:any) {
           I_Inactive: 0,
           [Op.or]: [
             { Item_Number: { [Op.like]: `%${search}%` } },
-            
+
           ],
         },
         attributes: ['Item_Number'],
         raw: true,
       });
-    
+
       matchingItemNumbers = matchingInventoryItems.map(item => item.Item_Number);
     }
-    
-   
+
+
     let orderDetailWhereClause: any = {
       Order_Number: { [Op.in]: allOrderNumbers }
     };
-    
+
     if (matchingItemNumbers && matchingItemNumbers.length > 0) {
       orderDetailWhereClause.Item_Number = { [Op.in]: matchingItemNumbers };
     }
@@ -2078,9 +2079,9 @@ async addMultipleItems(userId: number, body:any) {
       distinct: true,
       col: 'Item_Number'
     });
-    
 
-    const orderDetails:any = await OrderDetail.findAll({
+
+    const orderDetails: any = await OrderDetail.findAll({
       where: orderDetailWhereClause,
       attributes: [
         ['Item_Number', 'Item_Number'],
@@ -2092,29 +2093,29 @@ async addMultipleItems(userId: number, body:any) {
       offset: (page - 1) * limit,
       raw: true,
     });
-    
-    
+
+
     await Promise.all(
       orderDetails.map(async (detail: any) => {
         const inventoryData = await getInventoryFullItemNumber(detail.Item_Number);
         detail.inventory = inventoryData;
       })
     );
-    
-   
 
-    
+
+
+
 
     const itemNumbers = orderDetails.map((e: any) => e.Item_Number);
     // console.log(orderDetails,'orderDetails')
     // const otpNumbers = orderDetails.map((e: any) => e.inventory.OTP_Number);
     const otpNumbers = orderDetails
-  .map((e: any) => e.inventory?.OTP_Number)
-  .filter((num: any) => num != undefined);
+      .map((e: any) => e.inventory?.OTP_Number)
+      .filter((num: any) => num != undefined);
 
 
 
-   
+
 
     const productImages = await ProductImage.findAll({
       where: {
@@ -2124,12 +2125,12 @@ async addMultipleItems(userId: number, body:any) {
     });
     const imageMap = new Map(productImages.map(img => [img.product_number, img]));
     const discountMap = await getDiscountsForItemNumbers(itemNumbers, customerId);
-    
+
     const userJurisdiction = await getJurisdiction(customerId);
-    let taxMap:any = {};
-   
-    
-  
+    let taxMap: any = {};
+
+
+
     const topLatestItems = await getTopLatestItems();
 
     // Process the results to include product images and format the data
@@ -2140,13 +2141,13 @@ async addMultipleItems(userId: number, body:any) {
       let price = discountMap[detail?.Item_Number] ?? await getFirstValidPrice(detail);
       const taxRate = await getTaxRateV1(detail?.inventory?.OTP_Number, userJurisdiction as number, detail?.Item_Number, price);
 
-      const isDiscounted = detail?.inventory?.Price_Subclass ? await hasDiscountedItem(detail?.Item_Number, detail?.inventory?.Price_Subclass) : false  ;
+      const isDiscounted = detail?.inventory?.Price_Subclass ? await hasDiscountedItem(detail?.Item_Number, detail?.inventory?.Price_Subclass) : false;
       let allowToOrder = true;
       if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
       const productLimit = await getProductLimit(detail.Item_Number) || 0;
-      let hasQtyDiscount = await checkQtyDiscount(detail.Item_Number, customerId,price + taxRate) || false;
+      let hasQtyDiscount = await checkQtyDiscount(detail.Item_Number, customerId, price + taxRate) || false;
       // Find the corresponding order header
       const orderHeader = allMatchingOrderHeaders.find((header: any) => header.Order_Number === detail.Order_Number);
 
@@ -2277,7 +2278,7 @@ async addMultipleItems(userId: number, body:any) {
         {
           status: 'Order Packed',
           no: 2,
-          time:  null,
+          time: null,
           active: false
         },
         {
@@ -2300,7 +2301,7 @@ async addMultipleItems(userId: number, body:any) {
       {
         status: 'Order Packed',
         no: 2,
-        time:  null,
+        time: null,
         active: false
       },
       {
@@ -2317,15 +2318,15 @@ async addMultipleItems(userId: number, body:any) {
       }
     ];
   }
-async addToCartByScanner(upcNumber: string, userId: number) {
+  async addToCartByScanner(upcNumber: string, userId: number) {
     const isUpcAvailable = await InventoryUPC.findOne({
       where: { UPC_Number: upcNumber }
     });
- 
+
     if (!isUpcAvailable) {
       throw new AppError("Item not found", 400);
     }
- 
+
     const findItem = await Inventory.findOne({
       where: {
         Item_Number: isUpcAvailable.Item_Number
@@ -2368,11 +2369,11 @@ async addToCartByScanner(upcNumber: string, userId: number) {
         }
       ]
     });
- 
+
     if (!findItem) {
       throw new AppError("Item details not found in Inventory", 404);
     }
- 
+
     // Fetch supporting data
     const productImage = await ProductImage.findOne({
       where: {
@@ -2380,27 +2381,27 @@ async addToCartByScanner(upcNumber: string, userId: number) {
         isAllow: true
       },
     });
- 
+
     let price = await getDiscount(Number(findItem.Item_Number), userId);
     if (!price) {
       price = await getFirstValidPrice(findItem);
     }
- 
+
     const inventoryOnHand = await getInventoryOnHand(findItem.Item_Number) || 0;
     let taxRate = 0
     const userJurisdiction = await getJurisdiction(userId);
-    if (findItem.OTP_Number) taxRate = await getTaxRateV1(findItem.OTP_Number,userJurisdiction as number,findItem.Item_Number,price);
- 
- 
+    if (findItem.OTP_Number) taxRate = await getTaxRateV1(findItem.OTP_Number, userJurisdiction as number, findItem.Item_Number, price);
+
+
     let wareHouseSetting: any = await Setting.findOne({}); (userId); // You may have this from context/session
- 
+
     let allowToOrder = true;
     if (wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible) {
       allowToOrder = true;
     } else if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
       allowToOrder = false;
     }
- 
+
     // Final enriched item structure
     const finalItem = {
       ...findItem.toJSON(),
@@ -2410,7 +2411,7 @@ async addToCartByScanner(upcNumber: string, userId: number) {
       taxRate,
       allowToOrder
     };
- 
+
     const obj = {
       Qty: 1,
       Price: finalItem.price, // ✅ required
@@ -2422,7 +2423,7 @@ async addToCartByScanner(upcNumber: string, userId: number) {
       Item_Number: finalItem.Item_Number,
       Price_With_Tax: finalItem.price + finalItem.taxRate
     };
- 
+
     const existingCartItem = await CustomerCart.findOne({
       where: {
         Customer_Number: obj.Customer_Number,
@@ -2430,21 +2431,21 @@ async addToCartByScanner(upcNumber: string, userId: number) {
         isActive: true
       }
     });
- 
+
     if (existingCartItem) {
       await existingCartItem.update({
         Qty: existingCartItem.Qty + obj.Qty,
         TotalPrice: Number(existingCartItem.TotalPrice) + Number(obj.TotalPrice),
         TotalPriceWithTax: Number(existingCartItem.TotalPriceWithTax) + Number(obj.TotalPriceWithTax)
       });
-     
+
       return existingCartItem;
     } else {
       return await CustomerCart.create(obj);
     }
   }
 
-async scanItemByBarcode(barcode: string, userId: number) {
+  async scanItemByBarcode(barcode: string, userId: number) {
     // Step 1: Check if UPC exists
 
     const upcRecord = await InventoryUPC.findOne({
@@ -2557,17 +2558,17 @@ async scanItemByBarcode(barcode: string, userId: number) {
 
   async addToCartMultiScanner(body: any, userId: number) {
     const { upcNumbers, isMultiple, arrayOfUpc } = body;
-  
+
     // Common helper to get product details by UPC
     const getProductDetailByUPC = async (UPC: string) => {
       const isUpcAvailable = await InventoryUPC.findOne({
         where: { UPC_Number: UPC }
       });
-  
+
       if (!isUpcAvailable) {
         return null;
       }
-  
+
       const findItem = await Inventory.findOne({
         where: { Item_Number: isUpcAvailable.Item_Number },
         attributes: [
@@ -2582,36 +2583,36 @@ async scanItemByBarcode(barcode: string, userId: number) {
           { model: InventoryUPC, as: 'UPCList', attributes: ['UPC_Number'], required: false }
         ]
       });
-  
+
       if (!findItem) {
         throw new AppError(`Item details not found in Inventory for UPC: ${UPC}`, 404);
       }
-  
+
       const productImage = await ProductImage.findOne({
         where: {
           product_number: findItem.Item_Number.toString(),
           isAllow: true
         }
       });
-  
+
       let price = await getDiscount(Number(findItem.Item_Number), userId);
       if (!price) {
         price = await getFirstValidPrice(findItem);
       }
-  
+
       const inventoryOnHand = await getInventoryOnHand(findItem.Item_Number);
       let taxRate = 0;
       if (findItem.OTP_Number) {
         const userJurisdiction = await getJurisdiction(userId);
-        taxRate = await getTaxRateV1(findItem.OTP_Number,userJurisdiction as number,findItem.Item_Number,price);
+        taxRate = await getTaxRateV1(findItem.OTP_Number, userJurisdiction as number, findItem.Item_Number, price);
       }
-  
+
       const wareHouseSetting: any = await Setting.findOne({});
       let allowToOrder = true;
       if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
-  
+
       return {
         ...findItem.toJSON(),
         price,
@@ -2621,11 +2622,11 @@ async scanItemByBarcode(barcode: string, userId: number) {
         allowToOrder
       };
     };
-  
+
     // If single UPC scan
     if (!isMultiple) {
       const finalItem = await getProductDetailByUPC(upcNumbers);
-      if(!finalItem){
+      if (!finalItem) {
         throw new AppError(`Item not found for UPC: ${upcNumbers}`, 400);
       }
       const obj = {
@@ -2640,8 +2641,8 @@ async scanItemByBarcode(barcode: string, userId: number) {
         Price_With_Tax: Number(finalItem.price) + Number(finalItem.taxRate),
         isActive: true
       };
-      
-  
+
+
       const existingCartItem = await CustomerCart.findOne({
         where: {
           Customer_Number: obj.Customer_Number,
@@ -2650,27 +2651,27 @@ async scanItemByBarcode(barcode: string, userId: number) {
 
         }
       });
-  
+
       if (existingCartItem) {
         await existingCartItem.update({
           Qty: existingCartItem.Qty + obj.Qty,
           TotalPrice: Number(existingCartItem.TotalPrice) + Number(obj.TotalPrice),
           TotalPriceWithTax: Number(existingCartItem.TotalPriceWithTax) + Number(obj.TotalPriceWithTax)
         });
-        
+
         return existingCartItem;
       } else {
         return await CustomerCart.create(obj);
       }
     }
-  
+
     // If multiple UPCs scan
     else {
       const results = [];
-  
+
       for (const upc of arrayOfUpc) {
         const finalItem = await getProductDetailByUPC(upc);
-        if(!finalItem){
+        if (!finalItem) {
           continue;
         }
         const obj = {
@@ -2684,8 +2685,8 @@ async scanItemByBarcode(barcode: string, userId: number) {
           Price_With_Tax: Number(finalItem.price) + Number(finalItem.taxRate),
           isActive: true
         };
-        
-  
+
+
         const existingCartItem = await CustomerCart.findOne({
           where: {
             Customer_Number: obj.Customer_Number,
@@ -2693,27 +2694,27 @@ async scanItemByBarcode(barcode: string, userId: number) {
             isActive: true
           }
         });
-  
+
         if (existingCartItem) {
-        
+
 
           await existingCartItem.update({
             Qty: existingCartItem.Qty + obj.Qty,
             TotalPrice: Number(existingCartItem.TotalPrice) + Number(obj.TotalPrice),
             TotalPriceWithTax: Number(existingCartItem.TotalPriceWithTax) + Number(obj.TotalPriceWithTax)
           });
-          
+
           results.push(existingCartItem);
         } else {
           const newCartItem = await CustomerCart.create(obj);
           results.push(newCartItem);
         }
       }
-  
+
       return results; // All items processed
     }
   }
-  
+
 
   async getNotificationList(userId: string) {
     const notificationList = await Notifications.findAll({
@@ -2767,9 +2768,9 @@ async scanItemByBarcode(barcode: string, userId: number) {
     });
   }
 
-  async getPdfOfOrderDetails(query: PaginationOptions & { orientation?: 'portrait' | 'landscape' },userId:number) {
+  async getPdfOfOrderDetails(query: PaginationOptions & { orientation?: 'portrait' | 'landscape' }, userId: number) {
     const { orderNumber, hasPrice = false, orientation = 'landscape' } = query;
-    
+
     // First, get the order header to find customer number
     const orderHeader = await OrderHeader.findByPk(orderNumber);
     if (!orderHeader) {
@@ -2884,7 +2885,7 @@ async scanItemByBarcode(barcode: string, userId: number) {
 
       // Generate PDF from HTML with specified orientation
       const pdfBuffer = await generatePDFFromHTML(html, orientation);
-      
+
       // Upload PDF to Azure
       const fileName = `order-${orderNumber}-${Date.now()}.pdf`;
       const uploadResult = await uploadFileToAzure(
@@ -2897,7 +2898,7 @@ async scanItemByBarcode(barcode: string, userId: number) {
       if (!uploadResult.success) {
         throw new Error(`Failed to upload PDF to Azure: ${uploadResult.error}`);
       }
-      
+
       return {
         success: true,
         data: {
@@ -2907,14 +2908,14 @@ async scanItemByBarcode(barcode: string, userId: number) {
         }
       };
     } else {
-      
+
       const html = renderOrderTableFromERP(rows, {
         showMoney: hasPrice,
         getPrice: (row: any) => row.Price || 0
       }, orderNumber, customerInfo, warehouseInfo);
 
       const pdfBuffer = await generatePDFFromHTML(html, orientation);
-      
+
       const fileName = `order-${orderNumber}-${Date.now()}.pdf`;
       const uploadResult = await uploadFileToAzure(
         pdfBuffer,
@@ -2926,19 +2927,19 @@ async scanItemByBarcode(barcode: string, userId: number) {
       if (!uploadResult.success) {
         throw new Error(`Failed to upload PDF to Azure: ${uploadResult.error}`);
       }
-      
+
       return {
         success: true,
         data: {
           pdfUrl: uploadResult.url,
           fileName: uploadResult.fileName,
-          orderNumber,          
+          orderNumber,
         }
       };
     }
   }
 
-  async  createSupportTicket(ticket: any, userId: number, file: any) {
+  async createSupportTicket(ticket: any, userId: number, file: any) {
     try {
       const [customer, distributor] = await Promise.all([
         Customer.findByPk(userId, {
@@ -2946,7 +2947,7 @@ async scanItemByBarcode(barcode: string, userId: number) {
         }),
         Distributor.findOne()
       ]);
-  
+
       if (file) {
         const uploaded = await uploadFileToAzure(
           file.buffer,
@@ -2958,49 +2959,49 @@ async scanItemByBarcode(barcode: string, userId: number) {
           ticket.attachment = uploaded.url;
         }
       }
-  
+
       const supportTicket = await SupportTicket.create({
         ...ticket,
         C_Number: userId
       });
-  
+
       this.notificationScheduler({
         title: `New support request`,
         description: `Your ticket is created successfully. We’ll keep you posted`,
         userNumber: userId.toString()
-     })
+      })
       // Fire-and-forget email sending
-       this.sendSupportTicketEmails(supportTicket, customer, distributor); 
+      this.sendSupportTicketEmails(supportTicket, customer, distributor);
 
-     
+
       return supportTicket;
     } catch (error) {
       console.error('Error creating support ticket:', error);
       throw new Error('Failed to create support ticket.');
     }
   }
-  
-  
 
-  async  getSupportTicket(
+
+
+  async getSupportTicket(
     userId: number,
     query: PaginationOptions
   ) {
     let { page = 1, limit = 10 } = query;
-  
+
     // Ensure values are numbers and positive
     page = Math.max(1, Number(page));
     limit = Math.max(1, Number(limit));
-  
+
     const offset = (page - 1) * limit;
-  
+
     const { count, rows } = await SupportTicket.findAndCountAll({
       where: { C_Number: userId },
       order: [['createdAt', 'DESC']],
       limit,
       offset
     });
-  
+
     return {
       totalCount: count,
       page,
@@ -3010,12 +3011,12 @@ async scanItemByBarcode(barcode: string, userId: number) {
     };
   }
 
-  async  sendSupportTicketEmails(supportTicket: SupportTicket, customer: any, distributor: any) {
+  async sendSupportTicketEmails(supportTicket: SupportTicket, customer: any, distributor: any) {
     try {
       const { id, subject, description, status } = supportTicket;
-  
+
       const emailJobs: Promise<any>[] = [];
-  
+
       if (customer?.C_Email) {
         const customerHtml = generateSupportTicketEmail(id, subject, description, status);
         emailJobs.push(
@@ -3026,7 +3027,7 @@ async scanItemByBarcode(barcode: string, userId: number) {
           })
         );
       }
-  
+
       if (distributor?.D_Email) {
         const distributorHtml = generateSupportTicketForDistributor(
           id,
@@ -3044,15 +3045,15 @@ async scanItemByBarcode(barcode: string, userId: number) {
           })
         );
       }
-  
+
       await Promise.allSettled(emailJobs);
     } catch (error) {
       console.error(`Email sending failed for Support Ticket #${supportTicket.id}:`, error);
       // Optional: log to external logger / retry queue
     }
   }
-  
-  
+
+
   async notificationScheduler(body: any) {
     await Notifications.create({
       ...body,
@@ -3073,7 +3074,7 @@ async scanItemByBarcode(barcode: string, userId: number) {
   // RetailerProductCatalog CRUD methods
   async createRetailerProductCatalog(body: ICreateRetailerProductCatalog, req: AuthRequest) {
     const file = req.file;
-    const {id} = req.user;
+    const { id } = req.user;
     if (!file) {
       throw new AppError(Manager.RETAILER_PRODUCT_CATALOG_ATTACHMENT_REQUIRED, 400);
     }
@@ -3181,29 +3182,31 @@ async scanItemByBarcode(barcode: string, userId: number) {
     return catalog;
   }
 
-  async getLinks(){
-    const links = await Link.findAll({where:{
-      status: true,
-      isActive: true
-    }});
+  async getLinks() {
+    const links = await Link.findAll({
+      where: {
+        status: true,
+        isActive: true
+      }
+    });
     return links;
   }
 
 
   // story
   async getAllStory(query: PaginationOptions & IGetStories, req: AuthRequest) {
-   
-  
+
+
     const whereCondition: any = {
       isActive: true,
       expiresAt: { [Op.gt]: moment().toDate() }
     };
-  
+
     const stories = await Story.findAll({
       where: whereCondition,
       attributes: ['id', 'mediaUrl', 'mediaType', 'caption', 'expiresAt', 'isActive'],
-     
-     
+
+
       // include: [
       //   {
       //     model: StoryView,
@@ -3218,24 +3221,24 @@ async scanItemByBarcode(barcode: string, userId: number) {
         ['createdAt', 'DESC']
       ]
     });
-  
+
     return {
-   
+
       stories
     };
   }
-  
 
-  async viewStory(storyId: number, req: AuthRequest){
+
+  async viewStory(storyId: number, req: AuthRequest) {
     const { id } = req.user;
     const story = await Story.findByPk(Number(storyId));
     if (!story) {
       throw new AppError(Manager.STORY_NOT_FOUND, 404);
     }
-    
-    const isProductView = await StoryView.findOne({ where: { storyId:Number(storyId), viewerId: Number(id) } });
-    if(!isProductView){
-    await StoryView.create({ storyId:Number(storyId), viewerId: Number(id), viewedAt: moment().toDate() });
+
+    const isProductView = await StoryView.findOne({ where: { storyId: Number(storyId), viewerId: Number(id) } });
+    if (!isProductView) {
+      await StoryView.create({ storyId: Number(storyId), viewerId: Number(id), viewedAt: moment().toDate() });
     }
     return story;
   }
@@ -3248,12 +3251,12 @@ async scanItemByBarcode(barcode: string, userId: number) {
     });
   }
 
-  async getPolicies(){
+  async getPolicies() {
     const policies = await Policies.findOne({});
     return policies;
   }
 
-  async getDistributorContactDetails(userId: number){
+  async getDistributorContactDetails(userId: number) {
     const salesRep = await Customer.findOne({
       where: {
         C_Number: userId
@@ -3272,6 +3275,132 @@ async scanItemByBarcode(barcode: string, userId: number) {
       salesRep: salesRep?.dataValues,
       contact: contact?.dataValues
     }
+  }
+
+  async hasmultipleStore(email: string) {
+    let customer: any = await Customer.findAll({
+      where: {
+        C_Email: email
+      }
+    })
+
+    //  customer = customer?.dataValues
+    console.log(customer, 'the customer');
+    if (customer.length > 1) {
+      const findCustomerId = customer.map((e: any) => e.C_Number)
+      const findRetailer = await Retailer.findAll({
+        where: {
+          Customer_Number: {
+            [Op.in]: findCustomerId
+          }
+        }
+      })
+      if (findRetailer.length > 1) {
+        const storeId = findRetailer.map((e: any) => e.Customer_Number)
+
+        const stores = await Customer.findAll({
+          where: {
+            C_Number: {
+              [Op.in]: storeId
+            }
+          },
+          attributes: ['C_Number', 'C_CoName', 'C_Number']
+        })
+
+        return {
+          hasMultipleStore: true,
+          stores: stores
+        }
+      } else {
+        return {
+          hasMultipleStore: false,
+          stores: []
+        }
+      }
+    } else {
+      return {
+        hasMultipleStore: false,
+        stores: []
+      }
+    }
+
+
+  }
+
+
+
+  async switchStore(storeId: number, req: Request) {
+    const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
+
+    const deviceId = req.headers['x-device-id'] as string;
+    const deviceName = req.headers['x-device-name'] as string;
+    const deviceType = req.headers['x-device-type'] as 'web' | 'mobile';
+
+    const wareHouseDetail = await Distributor.findAll({
+      attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone"],
+    });
+    const storeDetail = await Customer.findOne({
+      where: { C_Number: Number(storeId) },
+      attributes: [
+        "C_CoName",
+        "C_Number",
+        "C_Address",
+        "C_City",
+        "C_State",
+        "C_Phone",
+        "C_Email",
+        "LastBalance",
+        "C_Number",
+        "C_OrderDay",
+      ],
+      include: [
+        {
+          model: SalesRep,
+          as: "salesRep",
+          attributes: ["S_Desc"],
+        },
+        {
+          model: CustomerRoute,
+          as: "Routes",
+          attributes: ["Route_Number", "Stop_Number"],
+        },
+      ],
+    });
+
+
+    let device = await RetailerDevice.findOne({ where: { deviceId: deviceId, customerNumber: storeDetail?.C_Number } });
+
+    if (!device) {
+      device=   await RetailerDevice.create({
+        deviceId: deviceId,
+        deviceName: deviceName,
+        deviceType: deviceType,
+        isAllow: true,
+        customerNumber: storeDetail?.C_Number || 0,
+        deviceToken:  "",
+      });
+    }
+
+    const token = generateToken({
+      id: storeId,
+      deviceId: device?.id.toString() || "",
+      role: "retailer",
+    })
+    await Token.create({
+      token: token,
+      deviceId: device?.id || 0,
+      retailerId: storeId,
+
+    })
+
+    return {
+      wareHouseDetail,
+      storeDetail,
+      role: "retailer",
+      token,
+      logo: logo?.warehouseImage || null
+    };
+
   }
 
 }

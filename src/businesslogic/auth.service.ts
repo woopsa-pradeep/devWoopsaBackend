@@ -38,7 +38,7 @@ import { Retailer } from "../models/postgres/retailer.model";
 import { RetailerDevice } from "../models/postgres/device.model";
 import { Token } from "../models/postgres/token.model";
 import { ForgotPasswordToken } from "../models/postgres/forgotPassword.model";
-import { where } from "sequelize";
+import { Op, where } from "sequelize";
 import { WebUsers } from "../models/postgres/users.model";
 import { RolePermission } from "../models/postgres/rolesPermission.model";
 import SalesSession from "../models/postgres/salesSession.model";
@@ -126,8 +126,19 @@ export class AuthService {
     let adminId: string | null = null;
     let customerId: string | null = null;
     const user = await Customer.findOne({ where: { C_Email: email_phone,C_Inactive: false } });
+    const Testuser = await Customer.findAll({
+      where: {
+        C_Email: email_phone,
+        C_Inactive: false,
+      },
+      attributes: ['C_Number'], 
+    })
+    console.log(Testuser,'the Testuser');
+    const customerNumbers = Testuser.map(user => user.C_Number);
+
     const companyName = await Distributor.findOne({ attributes: ["D_Name"] });
     if (!user) {
+      console.log('the user not found');
       const distributor = await Distributor.findOne({ where: { D_Email: email_phone } });
       if (!distributor) throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
       adminId = distributor.PM_ID;
@@ -138,15 +149,26 @@ export class AuthService {
     } else {
       if ( user.C_Email !== "cdt.parth1@gmail.com") {
 
-        const checkUser = await Retailer.findOne({ where: { Customer_Number: user?.C_Number, isActive: true, isAllow: true } });
+        let checkUser :any = await Retailer.findOne({
+          where: {
+            Customer_Number: {
+              [Op.in]: customerNumbers,
+            },
+            isActive: true,
+            isAllow: true,
+          },
+        });
+
+        checkUser = checkUser?.dataValues
+        console.log(checkUser,'the checkUser');
         if (!checkUser) throw new AppError(AuthMessage.CUSTOMER_NOT_ALLOW_BY_ADMIN, 400);
-        const device = await RetailerDevice.findOne({ where: { deviceId: deviceId, customerNumber: user.C_Number } });
+        const device = await RetailerDevice.findOne({ where: { deviceId: deviceId, customerNumber: checkUser.Customer_Number } });
         if (!device) {
           await RetailerDevice.create({
             deviceId: deviceId,
             deviceName: deviceName,
             deviceType: deviceType,
-            customerNumber: user.C_Number,
+            customerNumber: checkUser.Customer_Number,
             deviceToken: deviceToken || "",
           });
           throw new AppError(AuthMessage.DEVICE_NOT_ALLOWED_CONTACT_ADMIN, 400);
@@ -156,7 +178,7 @@ export class AuthService {
         }
   
         role = "retailer";
-        customerId = user.C_Number.toString();
+        customerId = checkUser.Customer_Number.toString();
       }else {
 
         const checkUser = await Retailer.findOne({ where: { Customer_Number: user?.C_Number, isActive: true, isAllow: true } });
@@ -398,6 +420,7 @@ export class AuthService {
               "C_City",
               "C_State",
               "C_Phone",
+              "C_Email",
               "LastBalance",
               "C_Number",
               "C_OrderDay",

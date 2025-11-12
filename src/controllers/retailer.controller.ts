@@ -275,5 +275,13 @@ export class RetailerController {
     const data = await this.retailerService.getDistributorContactDetails(req.user.id);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
-  
+  async hasmultipleStore(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.hasmultipleStore(req.query.email as string);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async switchStore(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.switchStore(Number(req.params.storeId), req);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 }

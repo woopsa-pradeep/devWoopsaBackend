@@ -170,4 +170,10 @@ router.get('/policies',verifyRole(ROLES.RETAILER),catchAsync(retailerController.
 // distributor contact details
 router.get('/distributorContactDetails',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getDistributorContactDetails.bind(retailerController)));
 
+// has multiple store
+router.get('/hasmultipleStore',catchAsync(retailerController.hasmultipleStore.bind(retailerController)));
+
+// switch store
+router.put('/switchStore/:storeId',verifyRole(ROLES.RETAILER),catchAsync(retailerController.switchStore.bind(retailerController)));
+
 export default router; 
