@@ -2446,7 +2446,14 @@ async addToCartByScanner(upcNumber: string, userId: number) {
 
 async scanItemByBarcode(barcode: string, userId: number) {
     // Step 1: Check if UPC exists
-    const upcRecord = await InventoryUPC.findOne({ where: { UPC_Number: barcode } });
+
+    const upcRecord = await InventoryUPC.findOne({
+      where: {
+        UPC_Number: {
+          [Op.like]: `%${barcode}%`, // matches anywhere in the string
+        },
+      },
+    })
     if (!upcRecord) {
       throw new AppError(`Item not found for UPC: ${barcode}`, 404);
     }
