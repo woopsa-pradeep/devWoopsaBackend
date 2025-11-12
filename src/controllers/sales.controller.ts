@@ -180,6 +180,22 @@ export class SalesController {
         const data = await this.salesService.addToCartByScanner(upcNumber, Number(req.params.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async scanItemByBarcode(req: AuthRequest, res: Response) {
+        const upcNumber = typeof req.query.upcNumber === 'string' ? req.query.upcNumber : undefined;
+        if (!upcNumber) throw new AppError('upcNumber is required', 400);
+        const data = await this.salesService.scanItemByBarcode(upcNumber, Number(req.params.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async addMultipleItems(req: AuthRequest, res: Response) {
+      try {
+        const data = await this.salesService.addMultipleItems(Number(req.params.customerId), req.body);
+        sendResponse(res, 200, true, data, "Items added successfully");
+      } catch (error: any) {
+        sendResponse(res, 500, false, null, error.message || "Something went wrong");
+      }
+    }
  
     async addToCartMultiScanner(req: AuthRequest, res: Response) {
         const data = await this.salesService.addToCartMultiScanner(req.body, Number(req.params.id));

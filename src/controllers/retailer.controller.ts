@@ -134,10 +134,16 @@ export class RetailerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
-  async getScannedItems(req: AuthRequest, res: Response) {
-    const data = await this.retailerService.getScannedItems(req.user.id);
-    sendResponse(res, 200, true, data, General.SUCCESS);
+  async addMultipleItems(req: AuthRequest, res: Response) {
+  try {
+    const data = await this.retailerService.addMultipleItems(req.user.id, req.body);
+    sendResponse(res, 200, true, data, "Items added successfully");
+  } catch (error: any) {
+    sendResponse(res, 500, false, null, error.message || "Something went wrong");
   }
+}
+
+
   
   async addToCartMultiScanner(req: AuthRequest, res: Response) {
     const data = await this.retailerService.addToCartMultiScanner(req.body, req.user.id);

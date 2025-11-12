@@ -9,6 +9,9 @@ import verifyToken from '../middlewares/verifyToken.middleware';
 const router = Router();
  const authController = new AuthController();
 
+
+ 
+
 router.post('/signup',validateRequest(signUpValidation),catchAsync(authController.signUp.bind(authController)));
 router.post('/verifyRetailerOtp',catchAsync(authController.verifyRetailerOtp.bind(authController)));
 
@@ -27,6 +30,7 @@ router.post('/verifyRetailerOtp',catchAsync(authController.verifyRetailerOtp.bin
  router.post('/loginChecker', validateRequest(loginSalesSchema), catchAsync(authController.loginChecker.bind(authController)));
  
  router.post('/changePassword', verifyToken,validateRequest(changePasswordSchema),catchAsync(authController.changePassword.bind(authController)));
+//  router.post('/epikLogout', verifyToken, catchAsync(authController.epikLogout.bind(authController)));
  router.post('/logout', verifyToken, catchAsync(authController.logout.bind(authController)));
 
  router.delete('/deleteAccount', verifyToken, catchAsync(authController.deleteAccount.bind(authController)));

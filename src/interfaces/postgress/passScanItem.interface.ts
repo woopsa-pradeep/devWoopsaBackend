@@ -5,6 +5,7 @@ export interface IPassScanItem {
   userId: number;
   itemNumber: number;
   isActive: boolean;
+  quantityScanned: number;
   note?: string | null;
   createdAt?: Date;
   updatedAt?: Date;

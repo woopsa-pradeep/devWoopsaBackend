@@ -19,7 +19,7 @@ import { placeOrderSchema } from '../validations/order.validation';
 import { multerUpload } from '../middlewares/upload.middleware';
 
 
-const router = Router();
+const  router = Router();
 const retailerController = new RetailerController();
 
 
@@ -100,7 +100,7 @@ router.post('/orderedProducts',
 );
 router.get('/orderDeliveryStatus/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getOrderDeliveryStatus.bind(retailerController)));
 router.get('/scanItemByBarcode/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.scanItemByBarcode.bind(retailerController)));
-router.get('/getScannedItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getScannedItems.bind(retailerController)));
+router.post('/cart/addMultipleItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.addMultipleItems.bind(retailerController)));
 router.post('/addCartMultiScanner',validateRequest(addToCartMultiScannerValidation),verifyRole(ROLES.RETAILER),catchAsync(retailerController.addToCartMultiScanner.bind(retailerController)));
 
 // PDF generation

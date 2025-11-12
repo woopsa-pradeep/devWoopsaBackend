@@ -277,86 +277,166 @@ where: {
         return data;
     }
 
-    async getOrderItem(orderNumber: number) {
+    // async getOrderItem(orderNumber: number) {
+    //   const passScanItem = await PassScanItem.findAll({
+    //     where: {
+    //       isActive: true,
+    //       orderNumber: orderNumber
+    //     },
+    //     attributes: ['itemNumber','orderNumber'],
+    //   });
+    //   const passScanItemNumbers = passScanItem.map((item: any) => item.itemNumber);
 
+    //   console.log(passScanItemNumbers, 'passScanItemNumbers');
+    //   const data = await OrderDetail.findAll({
+    //     where: {
+    //       Item_Number: {
+    //         [Op.notIn]: passScanItemNumbers
+    //       },
+    //       Order_Number: orderNumber,
+    //       [Op.and]: [
+    //         // Ensure Quantity_Ordered is greater than Quantity_Shipped
+    //         { Quantity_Ordered: { [Op.gt]: sequelize.col("Quantity_Shipped") } },
+    //       ],
+    //     },
+    //     attributes: [
+    //       "Order_Number",
+    //       "Line_Number",
+    //       "Quantity_Ordered",
+    //       "Pack",
+    //       "CaseCount",
+    //       "Quantity_Shipped",
+    //       "Item_Number",
+    //       "CaseCount", // You have "CaseCount" twice, you may want to remove one
+    //     ],
+    //     include: [
+    //       {
+    //         model: Inventory,
+    //         as: "inventory",
+    //         attributes: ["Item_Number", "Description", "Section", "Location"],
+    //         include: [
+    //           {
+    //             model: InventoryUPC,
+    //             as: "UPCList",
+    //             attributes: ["UPC_Number"],
+    //             required: false, // optional relation, it will work even if there are no matching records
+    //           },
+    //         ],
+    //       },
+    //     ],
+    //     order: [["Line_Number", "ASC"]],
+    //     limit: 1,
+    //   });
+    //     const finalData = await Promise.all(data.map(async (e: any) => {
+    //         let item = e.dataValues || null;
 
-      const passScanItem = await PassScanItem.findAll({
-        where: {
-          isActive: true,
-          orderNumber: orderNumber
-        },
-        attributes: ['itemNumber','orderNumber'],
-      });
-      const passScanItemNumbers = passScanItem.map((item: any) => item.itemNumber);
+    //         const productImage = await ProductImage.findOne({
+    //             where: {
+    //                 product_number: item.Item_Number.toString(),
+    //                 isAllow: true
+    //             },
+    //         });
 
-      console.log(passScanItemNumbers, 'passScanItemNumbers');
-      const data = await OrderDetail.findAll({
-        where: {
-          Item_Number: {
-            [Op.notIn]: passScanItemNumbers
-          },
-          Order_Number: orderNumber,
-          [Op.and]: [
-            // Ensure Quantity_Ordered is greater than Quantity_Shipped
-            { Quantity_Ordered: { [Op.gt]: sequelize.col("Quantity_Shipped") } },
-          ],
-        },
-        attributes: [
-          "Order_Number",
-          "Line_Number",
-          "Quantity_Ordered",
-          "Pack",
-          "CaseCount",
-          "Quantity_Shipped",
-          "Item_Number",
-          "CaseCount", // You have "CaseCount" twice, you may want to remove one
-        ],
+    //         const inventoryOnHand = await getInventoryOnHand(item.Item_Number)
+    
+    //         return {
+    //             ...item,
+    //             inventoryOnHand: inventoryOnHand,
+    //             masterImage: `${process.env.AZUREIMAGESERVER}${item?.inventory?.UPCList?.[0]?.UPC_Number || ''}.jpg`,
+    //             isDistributorImageShow: productImage?.isAllow ?? false,
+    //             distributorImage: productImage?.img_url || null,
+    //         }
+              
+    //     }))
+              
+    //     return finalData;
+    // }
+
+ async getOrderItem(orderNumber: number) {
+  // ✅ 1. Get all scanned items for this order
+  const passScanItem = await PassScanItem.findAll({
+    where: {
+      isActive: true,
+      orderNumber: orderNumber,
+    },
+    attributes: ["itemNumber", "orderNumber", "quantity_scanned"], 
+  });
+
+  // ✅ 2. Create a map for quick lookup of scanned quantities
+  const scannedMap = Object.fromEntries(
+    passScanItem.map((item: any) => [item.itemNumber, item.quantity_scanned || 0])
+  );
+
+  // ✅ 3. Fetch order details (excluding fully scanned items)
+  const data = await OrderDetail.findAll({
+    where: {
+      Item_Number: {
+        [Op.notIn]: passScanItem.map((i: any) => i.itemNumber),
+      },
+      Order_Number: orderNumber,
+      [Op.and]: [
+        // Ensure Quantity_Ordered > Quantity_Shipped
+        { Quantity_Ordered: { [Op.gt]: sequelize.col("Quantity_Shipped") } },
+      ],
+    },
+    attributes: [
+      "Order_Number",
+      "Line_Number",
+      "Quantity_Ordered",
+      "Pack",
+      "CaseCount",
+      "Quantity_Shipped",
+      "Item_Number",
+    ],
+    include: [
+      {
+        model: Inventory,
+        as: "inventory",
+        attributes: ["Item_Number", "Description", "Section", "Location"],
         include: [
           {
-            model: Inventory,
-            as: "inventory",
-            attributes: ["Item_Number", "Description", "Section", "Location"],
-            include: [
-              {
-                model: InventoryUPC,
-                as: "UPCList",
-                attributes: ["UPC_Number"],
-                required: false, // optional relation, it will work even if there are no matching records
-              },
-            ],
+            model: InventoryUPC,
+            as: "UPCList",
+            attributes: ["UPC_Number"],
+            required: false,
           },
         ],
-        order: [["Line_Number", "ASC"]],
-        limit: 1,
+      },
+    ],
+    order: [["Line_Number", "ASC"]],
+    limit: 1,
+  });
+
+  // ✅ 4. Enrich data with images, inventory, and Quantity_Scanned
+  const finalData = await Promise.all(
+    data.map(async (e: any) => {
+      const item = e.dataValues || {};
+
+      const productImage = await ProductImage.findOne({
+        where: {
+          product_number: item.Item_Number.toString(),
+          isAllow: true,
+        },
       });
-      
 
-      
-        
+      const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
 
-        const finalData = await Promise.all(data.map(async (e: any) => {
-            let item = e.dataValues || null;
+      return {
+        ...item,
+        inventoryOnHand,
+        masterImage: `${process.env.AZUREIMAGESERVER}${
+          item?.inventory?.UPCList?.[0]?.UPC_Number || ""
+        }.jpg`,
+        isDistributorImageShow: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
 
-            const productImage = await ProductImage.findOne({
-                where: {
-                    product_number: item.Item_Number.toString(),
-                    isAllow: true
-                },
-            });
+          
+      };
+    })
+  );
 
-            const inventoryOnHand = await getInventoryOnHand(item.Item_Number)
-
-            return {
-                ...item,
-                inventoryOnHand: inventoryOnHand,
-                masterImage: `${process.env.AZUREIMAGESERVER}${item?.inventory?.UPCList?.[0]?.UPC_Number || ''}.jpg`,
-                isDistributorImageShow: productImage?.isAllow ?? false,
-                distributorImage: productImage?.img_url || null,
-            }
-
-        }))
-        return finalData;
-    }
+  return finalData;
+}
 
    
 

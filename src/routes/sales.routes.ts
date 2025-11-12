@@ -53,8 +53,10 @@ router.get('/orderHistoryByProductNumber',
 
   router.post('/removeMultipleItemsFromCart',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.removeMultipleItemsFromCart.bind(listController)));
 
-
+  router.get('/scanItemByBarcode/:customerId',verifyRole(ROLES.SALES),catchAsync(listController.scanItemByBarcode.bind(listController)));
+  router.post('/cart/addMultipleItems/:customerId',verifyRole(ROLES.SALES),catchAsync(listController.addMultipleItems.bind(listController)));
   router.get('/addToCartByScanner/:id',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.addToCartByScanner.bind(listController)));
+
   router.post('/multiScannerItems/:id',verifyRole(ROLES.SALES),verifySalesSession,catchAsync(listController.addToCartMultiScanner.bind(listController)));
 
   router.get('/customerByIdInfoInCalender/:customerId',verifyRole(ROLES.SALES),catchAsync(listController.getCustomerByIdInfoInCalender.bind(listController)));

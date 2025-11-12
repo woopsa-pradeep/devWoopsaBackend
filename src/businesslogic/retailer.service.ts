@@ -50,12 +50,15 @@ import { WebUsers } from "../models/postgres/users.model";
 import { ContactUs } from "../models/postgres/contactUs.model";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { Users } from "../models/mmsql/user.model";
+import { sendResponse } from "../utils/sendResponse";
+import { Request, Response } from "express"
+
 
 
 
 
 export class RetailerService {
-  private scannedItems: Record<number, any[]> = {};
+  
   async getProfile(id: string) {
     const logo :any= await Setting.findOne({ attributes: ["warehouseImage"] });
     const data = await Customer.findByPk(id, {
@@ -356,7 +359,6 @@ export class RetailerService {
       });
     }
     const topLatestItems = await getTopLatestItems();
-  console.log(topLatestItems, 'topLatestItems')
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
@@ -569,7 +571,7 @@ export class RetailerService {
           const validItemNumbers = itemNumbers.filter((num: number) => !isNaN(num));
 
           if (validItemNumbers.length > 0) {
-            console.log(validItemNumbers, 'validItemNumbers')
+            // console.log(validItemNumbers, 'validItemNumbers')
             // Fetch inventory data for these item numbers
             const inventoryData = await Inventory.findAll({
               where: {
@@ -644,6 +646,78 @@ export class RetailerService {
     }
   }
 
+  // ✅ Add all scanned items to Cart
+async addMultipleItems(userId: number, body:any) {
+  let {formattedItems} = body;
+  if (typeof formattedItems === "string") {
+    try {
+      formattedItems = JSON.parse(formattedItems);
+    } catch (error) {
+      throw new AppError("Invalid formattedItems format", 400);
+    }
+  }
+
+  const cartItemsData = [];
+
+  for (const item of formattedItems) {
+    const Item_Number = Number(item.Item_Number);
+    const quantity = Number(item.Qty ?? item.quantity ?? 1);
+    const price = Number(item.Price ?? item.price ?? 0);
+    const Tax_Rate = item.Tax_Rate ?? 0;
+    const Price_With_Tax =
+      Number(item.Price_With_Tax ?? item.priceWithTax ?? price + (price * Tax_Rate) / 100);
+
+
+    const existingCartItem = await CustomerCart.findOne({
+      where: {
+        Customer_Number: userId,
+        Item_Number: Item_Number,
+        isActive: true,
+      },
+    });
+
+    if (existingCartItem) {
+      const newQty = existingCartItem.Qty + quantity;
+
+      const updatedPrice = price * newQty;
+      const updatedPriceWithTax = Price_With_Tax * newQty;
+
+      await existingCartItem.update({
+        Qty: newQty,
+        TotalPrice: updatedPrice,
+        TotalPriceWithTax: updatedPriceWithTax,
+      });
+
+      cartItemsData.push(existingCartItem);
+    } else {
+      // ✅ Create new cart entry if not exist
+      const totalPrice = price * quantity;
+      const totalPriceWithTax = Price_With_Tax * quantity;
+
+      const cartData = {
+        Customer_Number: userId,
+        Item_Number,
+        Description: item.Description,
+        Qty: quantity,
+        Tax_Rate,
+        Price: price,
+        Price_With_Tax,
+        TotalPrice: totalPrice,
+        TotalPriceWithTax: totalPriceWithTax,
+        discount: 0,
+        originalPrice: price,
+        isActive: true,
+      };
+    console.log(price, 'price>>>>>>>>>>>>>>>>')
+
+      const addedCartItem = await CustomerCart.create(cartData);
+      cartItemsData.push(addedCartItem);
+    }
+  }
+
+  // ✅ Return updated cart summary
+  return await this.getCartItems(userId);
+}
   async getCartItems(customerNumber: number) {
     const cartItems: any = await CustomerCart.findAll({
       where: {
@@ -2020,7 +2094,6 @@ export class RetailerService {
     
     await Promise.all(
       orderDetails.map(async (detail: any) => {
-        console.log(detail.Item_Number, 'detail.Item_Number--->');
         const inventoryData = await getInventoryFullItemNumber(detail.Item_Number);
         detail.inventory = inventoryData;
       })
@@ -2031,7 +2104,7 @@ export class RetailerService {
     
 
     const itemNumbers = orderDetails.map((e: any) => e.Item_Number);
-    console.log(orderDetails,'orderDetails')
+    // console.log(orderDetails,'orderDetails')
     // const otpNumbers = orderDetails.map((e: any) => e.inventory.OTP_Number);
     const otpNumbers = orderDetails
   .map((e: any) => e.inventory?.OTP_Number)
@@ -2286,12 +2359,6 @@ async addToCartByScanner(upcNumber: string, userId: number) {
           required: false
         },
         {
-          model: InventoryStatus,
-          as: 'inventoryStatus',
-          attributes: ['Inventory_OnHand'],
-          required: false
-        },
-        {
           model: InventoryUPC,
           as: 'UPCList',
           attributes: ['UPC_Number'],
@@ -2392,8 +2459,8 @@ async scanItemByBarcode(barcode: string, userId: number) {
       ],
       include: [
         { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc"], required: false },
-        {model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
-         { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
+        { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
+        // { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
         { model: InventoryUPC, as: "UPCList", attributes: ["UPC_Number"], required: false }
       ]
     });
@@ -2411,9 +2478,9 @@ async scanItemByBarcode(barcode: string, userId: number) {
     taxRate = Math.ceil(taxRate * 100) / 100;
 
     // Step 4: Build response object (same format as your example)
-    // const productImage = await ProductImage.findOne({
-    //   where: { product_number: item.Item_Number.toString(), isAllow: true }
-    // });
+    const productImage = await ProductImage.findOne({
+      where: { product_number: item.Item_Number.toString(), isAllow: true }
+    });
 
     const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
     const wareHouseSetting: any = await Setting.findOne({});
@@ -2459,79 +2526,24 @@ async scanItemByBarcode(barcode: string, userId: number) {
       showWithOutPrice: false,
       SalesCategory: item.SalesCategory?.Category_Desc || null,
       PriceClass: item.PriceClass?.Class_Desc || null,
-      // showDistributorImage: productImage?.isAllow ?? false,
-      // distributorImage: productImage?.img_url || null,
+      showDistributorImage: productImage?.isAllow ?? false,
+      distributorImage: productImage?.img_url || null,
       masterImage: `${process.env.AZUREIMAGESERVER}${barcode}.jpg`,
       quantity: 1, // Default 1 when scanned
     };
 
-    // Step 5: Add to scannedItems memory (per user)
-    if (!this.scannedItems[userId]) this.scannedItems[userId] = [];
+    // // Step 5: Add to scannedItems memory (per user)
+    // if (!this.scannedItems[userId]) this.scannedItems[userId] = [];
 
-    const existingItem = this.scannedItems[userId].find((i) => i.Item_Number === formattedItem.Item_Number);
-    if (existingItem) {
-      existingItem.quantity += 1;
-    } else {
-      this.scannedItems[userId].push(formattedItem);
-    }
-
+    // const existingItem = this.scannedItems[userId].find((i) => i.Item_Number === formattedItem.Item_Number);
+    // if (existingItem) {
+    //   existingItem.quantity += 1;
+    // } else {
+    //   this.scannedItems[userId].push(formattedItem);
+    // }
+    console.log('Scanned Item:', formattedItem);
     return formattedItem;
   }
-
-async getScannedItems(userId: number) {
-  // Fetch all items from CustomerCart table for the logged-in retailer
-  const scannedItems = await CustomerCart.findAll({
-    where: {
-      Customer_Number: userId,
-      isActive: true
-    },
-    attributes: [
-      'Item_Number', 'Qty', 'Price', 'TotalPrice', 
-      'TotalPriceWithTax', 'Tax_Rate', 'Price_With_Tax'
-    ],
-    include: [
-      {
-        model: Inventory,
-        as: 'Inventory',
-        attributes: [
-          'Description', 'Pack', 'CaseCount', 'UOM', 
-          'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'NetCost'
-        ],
-        include: [
-          { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc'], required: false },
-          { model: PriceClass, as: 'PriceClass', attributes: ['Class_Desc'], required: false },
-          { model: InventoryUPC, as: 'UPCList', attributes: ['UPC_Number'], required: false }
-        ]
-      },
-      {
-        model: ProductImage,
-        as: 'ProductImage',
-        attributes: ['image_url', 'isAllow'],
-        required: false
-      }
-    ]
-  });
-
-  if (!scannedItems || scannedItems.length === 0) {
-    return [];
-  }
-
-  // Optionally calculate totals or format output
-  const formatted = scannedItems.map(item => ({
-    Item_Number: item.Item_Number,
-    // Description: item.Inventory?.Description,
-    Qty: item.Qty,
-    Price: item.Price,
-    TotalPrice: item.TotalPrice,
-    TotalPriceWithTax: item.TotalPriceWithTax,
-    Tax_Rate: item.Tax_Rate,
-    // Image: item.productImage?.image_url || null,
-    // Category: item.Inventory?.SalesCategory?.Category_Desc || null,
-    // PriceClass: item.Inventory?.PriceClass?.Class_Desc || null
-  }));
-
-  return formatted;
-}
 
 
   async addToCartMultiScanner(body: any, userId: number) {

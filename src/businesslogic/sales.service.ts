@@ -1315,6 +1315,7 @@ export class SalesService {
     const totalAmountWithTax = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
     return {
       finalCartItems,
+      items: finalCartItems,
       totalItems,
       totalAmountWithTax,
       userItemLimitQty: findTheLimit?.maxOrderLimit,
@@ -2752,6 +2753,173 @@ const newSalesRepArray = salesRepList.map(Number);
     return finalItem
 
   }
+
+  async scanItemByBarcode(barcode: string, userId: number) {
+      // Step 1: Check if UPC exists
+      const upcRecord = await InventoryUPC.findOne({ where: { UPC_Number: barcode } });
+      if (!upcRecord) {
+        throw new AppError(`Item not found for UPC: ${barcode}`, 404);
+      }
+  
+      // Step 2: Fetch item details from Inventory
+      const item = await Inventory.findOne({
+        where: { Item_Number: upcRecord.Item_Number },
+        attributes: [
+          "Pack", "Description", "Item_Number", "CaseCount", "UOM",
+          "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
+          "NetCost", "OTP_Number", "Price_Subclass"
+        ],
+        include: [
+          { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc"], required: false },
+          { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
+          // { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
+          { model: InventoryUPC, as: "UPCList", attributes: ["UPC_Number"], required: false }
+        ]
+      });
+  
+      if (!item) {
+        throw new AppError("Item details not found in Inventory", 404);
+      }
+  
+      // Step 3: Pricing & Tax
+      let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
+      const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
+      price = Math.ceil(price * 100) / 100;
+  
+      let taxRate = await getTaxRateV1(item.OTP_Number ?? 0, 0, item.Item_Number, price);
+      taxRate = Math.ceil(taxRate * 100) / 100;
+  
+      // Step 4: Build response object (same format as your example)
+      const productImage = await ProductImage.findOne({
+        where: { product_number: item.Item_Number.toString(), isAllow: true }
+      });
+  
+      const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
+      const wareHouseSetting: any = await Setting.findOne({});
+      const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
+  
+      const formattedItem = {
+        Pack: item.Pack,
+        Description: item.Description,
+        Item_Number: item.Item_Number,
+        CaseCount: item.CaseCount,
+        UOM: item.UOM,
+        isDiscounted,
+        Price1: item.Price1,
+        Tax_Rate: taxRate,
+        OTP_Number: item.OTP_Number,
+        price,
+        isNewItem: true,
+        priceWithTax: price + taxRate,
+        BaseCost: item.BaseCost,
+        Invoice_Cost: item.Invoice_Cost,
+        AvgCost: item.AvgCost,
+        NetCost: item.NetCost,
+        hasProductLimit: false,
+        productLimit: null,
+        UPCList: item.UPCList || [{ UPC_Number: barcode }],
+        Inventory_OnHand: inventoryOnHand,
+        UnitOunces: 0,
+        allowToOrder,
+        hasQtyDiscount: false,
+        qtyDiscount: {
+          allowToDiscount: false,
+          hasCaseDiscount: false,
+          hasQtyDiscount: false,
+          isCaseDiscount: false,
+          isQtyDiscount: false,
+          percentageCaseDiscount: 0,
+          minimumQtyForCaseDiscount: 0,
+          qtyDiscount: [],
+          price,
+        },
+        showTheInventoryStock: true,
+        showLowStock: false,
+        showWithOutPrice: false,
+        SalesCategory: item.SalesCategory?.Category_Desc || null,
+        PriceClass: item.PriceClass?.Class_Desc || null,
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${barcode}.jpg`,
+        quantity: 1, // Default 1 when scanned
+      };
+
+      console.log('Scanned Item:', formattedItem);
+      return formattedItem;
+    }
+
+  async addMultipleItems(customerNumber: number, body:any) {
+    let {formattedItems} = body;
+    if (typeof formattedItems === "string") {
+      try {
+        formattedItems = JSON.parse(formattedItems);
+      } catch (error) {
+        throw new AppError("Invalid formattedItems format", 400);
+      }
+    }
+  
+    const cartItemsData = [];
+  
+    for (const item of formattedItems) {
+      const Item_Number = Number(item.Item_Number);
+      const quantity = Number(item.Qty ?? item.quantity ?? 1);
+      const price = Number(item.Price ?? item.price ?? 0);
+      const Tax_Rate = item.Tax_Rate ?? 0;
+      const Price_With_Tax =
+        Number(item.Price_With_Tax ?? item.priceWithTax ?? price + (price * Tax_Rate) / 100);
+  
+  
+      const existingCartItem = await CustomerCart.findOne({
+        where: {
+          Customer_Number: customerNumber,
+          Item_Number: Item_Number,
+          isActive: true,
+        },
+      });
+  
+      if (existingCartItem) {
+        const newQty = existingCartItem.Qty + quantity;
+  
+        const updatedPrice = price * newQty;
+        const updatedPriceWithTax = Price_With_Tax * newQty;
+  
+        await existingCartItem.update({
+          Qty: newQty,
+          TotalPrice: updatedPrice,
+          TotalPriceWithTax: updatedPriceWithTax,
+        });
+  
+        cartItemsData.push(existingCartItem);
+      } else {
+        // ✅ Create new cart entry if not exist
+        const totalPrice = price * quantity;
+        const totalPriceWithTax = Price_With_Tax * quantity;
+  
+        const cartData = {
+          Customer_Number: customerNumber,
+          Item_Number,
+          Description: item.Description,
+          Qty: quantity,
+          Tax_Rate,
+          Price: price,
+          Price_With_Tax,
+          TotalPrice: totalPrice,
+          TotalPriceWithTax: totalPriceWithTax,
+          discount: 0,
+          originalPrice: price,
+          isActive: true,
+        };
+      console.log(price, 'price>>>>>>>>>>>>>>>>')
+  
+        const addedCartItem = await CustomerCart.create(cartData);
+        cartItemsData.push(addedCartItem);
+      }
+    }
+  
+    // ✅ Return updated cart summary
+    return await this.getCartItems(customerNumber);
+  }
+
 
 
   async addToCartMultiScanner(body: any, userId: number) {
