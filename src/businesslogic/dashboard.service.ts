@@ -1293,7 +1293,10 @@ export class DashboardService {
         const salesPersonData = await OrderDetail.findAll({
             attributes: [
                 'orderHeader.S_Number',
-                [Sequelize.fn('SUM', Sequelize.col('Price')), 'totalSales'],
+                [
+                    Sequelize.literal('SUM([OrderDetail].[Price] + ISNULL([OrderDetail].[OTP_Amount_State], 0))'),
+                    'totalSales'
+                  ],                  
                 [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('orderHeader.Order_Number'))), 'orderCount'],
                 [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
             ],
@@ -1313,6 +1316,12 @@ export class DashboardService {
             order: [[Sequelize.fn('SUM', Sequelize.col('Price')), 'DESC']],
             raw: true
         });
+
+        
+          
+          
+          
+          
 
         // Get sales rep details for each sales person
         const salesPersonWithDetails = await Promise.all(

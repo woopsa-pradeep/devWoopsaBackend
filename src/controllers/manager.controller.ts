@@ -648,6 +648,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Customer calender list fetched successfully');
   }
 
+  async getCustomerTotalOrderByCustomer(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerTotalOrderByCustomer(req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, 'Customer total order by customer fetched successfully');
+  }
+
   async getCustomerOrderOfCurrentWeek(req: AuthRequest, res: Response) {
     const data = await this.managerService.getCustomerOrderOfCurrentWeek(req.query as PaginationOptions,Number(req.params.customerId));
     sendResponse(res, 200, true, data, 'Customer order of current week fetched successfully');

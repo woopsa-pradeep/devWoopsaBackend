@@ -168,6 +168,7 @@ router.delete('/web-locations/:id', verifyRole(ROLES.MANAGER), catchAsync(manage
 router.put('/setUserLimits/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.setUserDiscountLimit.bind(managerController)));
 router.post('/customerCalenderList', verifyRole(ROLES.MANAGER), catchAsync(managerController.getCustomerCalenderList.bind(managerController)));
 router.get('/getCustomerOrderByCalenderDate', verifyRole(ROLES.MANAGER), catchAsync(managerController.getCustomerOrderByCalenderDate.bind(managerController)));
+router.get('/getCustomerTotalOrderByCustomer', verifyRole(ROLES.MANAGER), catchAsync(managerController.getCustomerTotalOrderByCustomer.bind(managerController)));
 router.get('/customerOrderOfCurrentWeek/:customerId', verifyRole(ROLES.MANAGER), catchAsync(managerController.getCustomerOrderOfCurrentWeek.bind(managerController)));
 router.get('/customerByIdInfoInCalender/:customerId', verifyRole(ROLES.MANAGER), catchAsync(managerController.getCustomerByIdInfoInCalender.bind(managerController)));
 

@@ -3483,6 +3483,92 @@ export class ManagerService {
     };
   }
 
+  async getCustomerTotalOrderByCustomer(query: PaginationOptions) {
+    let { orderDate, orderDay, routeNumber, salesRepNumber } = query;
+  
+    const dayNum = Number(orderDay);
+    if (Number.isNaN(dayNum)) throw new AppError("Invalid orderDay", 400);
+  
+    const normalizedDate = String(orderDate).slice(0, 10); // 'YYYY-MM-DD'
+  
+    // --- Build filters ---
+    const customerWhere: any = {
+      C_Inactive: false,
+      C_OrderDay: dayNum,
+    };
+  
+    if (salesRepNumber) {
+      customerWhere.C_Salesman = salesRepNumber;
+    }
+  
+    const routeWhere: any = {};
+    if (routeNumber) {
+      routeWhere.Route_Number = routeNumber;
+    }
+  
+    // 1️⃣ Customers for that day
+    const { count, rows: customers } = await Customer.findAndCountAll({
+      where: customerWhere,
+      attributes: [
+        "C_Number",
+        "C_Name",
+        "C_CoName",
+        "C_Email",
+        "C_Phone",
+        "C_PhoneMobile",
+        "C_Address",
+        "C_City",
+        "C_State",
+        "C_Zip",
+        "C_Country",
+        "C_Salesman",
+      ],
+      include: [
+        {
+          model: CustomerRoute,
+          as: "Routes",
+          attributes: ["Route_Number", "Stop_Number"],
+          where: Object.keys(routeWhere).length ? routeWhere : undefined,
+          required: !!routeNumber,
+        },
+      ],
+      
+      raw: true,
+    });
+  
+    const customerNumbers = customers.map((c: any) => c.C_Number);
+  
+    // 2️⃣ Orders for those customers on that date
+    const orders = await OrderHeader.findAll({
+      where: {
+        C_Number: { [Op.in]: customerNumbers },
+        Order_Date: normalizedDate,
+      },
+      attributes: ["Order_Number", "C_Number"],
+      raw: true,
+    });
+  
+    const customersWithOrders = new Set(orders.map((o: any) => o.C_Number));
+  
+    // 3️⃣ Build result list + status
+    const result = customers.map((cust) => ({
+      ...cust,
+      status: customersWithOrders.has(cust.C_Number) ? "done" : "pending",
+    }));
+  
+    // 4️⃣ Count done vs pending
+    const doneCount = result.filter((r) => r.status === "done").length;
+    const pendingCount = result.filter((r) => r.status === "pending").length;
+  
+    // 5️⃣ Return result + summary
+    return {
+      total: count,
+      doneCount,
+      pendingCount
+    };
+  }
+  
+
   async checkSalesCallTime(customerNumber: number, salesRepNumber: number, webUserId: number) {
     const checkSalesCallTime = await SalesCallTime.findOne({
       where: {
