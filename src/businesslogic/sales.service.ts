@@ -335,7 +335,9 @@ export class SalesService {
 
 
   async getOrderHistory(customerNumber: number, query: PaginationOptions & { search?: string, startDate?: string, endDate?: string }) {
-    const { page = 1, limit = 10, search, startDate, endDate } = query;
+    let { page = 1, limit = 10, search, startDate, endDate } = query;
+    page = Number(query.page || (query as any)['page ']) || 1;
+    limit = Number(query.limit || (query as any)['limit ']) || 10;
     const offset = (page - 1) * limit;
 
     // Build where clause for OrderHeader
