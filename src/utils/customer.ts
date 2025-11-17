@@ -1,4 +1,5 @@
 import { ICustomerAttributes } from "../interfaces/customer.interface";
+import { Customer } from "../models/mmsql/customer.model";
 
 export const getDefaultCustomerValues = (UserID: number): Partial<ICustomerAttributes> => {
   const currentDate = new Date();
@@ -6,6 +7,7 @@ export const getDefaultCustomerValues = (UserID: number): Partial<ICustomerAttri
   return {
     C_SpecialTaxCode: "E",
     C_RetailCode: 0,
+    C_Class: 0,
     C_StatementCode: 0,
     C_AuthorizedOnly: false,
     PriceLevel_Default: 0,
@@ -17,7 +19,9 @@ export const getDefaultCustomerValues = (UserID: number): Partial<ICustomerAttri
     ExpDate_CigtTax: currentDate,
     C_Password: "",
     C_ChainStore: "",
+    
     ExpDate_OtherTax: currentDate,
+
     C_StoreID: "",
     C_StoreIDQ: "",
     C_RetailRounding: "0123456789",
@@ -53,9 +57,11 @@ export const getDefaultCustomerValues = (UserID: number): Partial<ICustomerAttri
     FTP_Protocol: 0,
     FTP_Mode: 0,
     FTP_FileExt: "0",
+    C_OutputFolder: "",
     ExpDate_OtherTax2: currentDate,
     ExpDate_OtherTax3: currentDate,
     MSA_StateTaxJurisdiction: "NA",
+    C_StatementAccount: 0,
     C_PromotionGroup: "",
     C_AdminOnly: false,
     eCommerce_UpdateTag: true,
@@ -65,3 +71,10 @@ export const getDefaultCustomerValues = (UserID: number): Partial<ICustomerAttri
     C_StatementFormat: 0,
   };
 };
+
+
+export async function getNextCustomerNumber() {
+  const maxCustomer = await Customer.max('C_Number');
+  const nextCustomerNumber = (maxCustomer as number) + 1;
+  return nextCustomerNumber;
+}   

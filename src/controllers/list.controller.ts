@@ -4,6 +4,7 @@ import { ListService } from "../businesslogic/list.service";
 import { General } from "../constants";
 import { sendResponse } from "../utils/sendResponse";
 
+
 export class ListController {
     private listService: ListService;
   
@@ -68,6 +69,16 @@ export class ListController {
 
     async getListForInventory(req: Request, res: Response) {
         const data = await this.listService.getListForInventory();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+    
+    async getListOfCustomersCreate(req: Request, res: Response) {
+        const data = await this.listService.getListOfCustomersCreate();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getListOfVendorsCreate(req: Request, res: Response) {
+        const data = await this.listService.getListOfVendorsCreate();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 }

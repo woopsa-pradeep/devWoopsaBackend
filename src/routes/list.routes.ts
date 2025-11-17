@@ -18,6 +18,8 @@ router.get('/customerRouteList',verifyToken,catchAsync(listController.getCustome
 router.get('/productListBySearch',verifyToken,catchAsync(listController.getProductListBySearch.bind(listController)));
 router.get('/listOfRoutes',verifyToken,catchAsync(listController.getListOfRoutes.bind(listController)));
 router.post('/listOfCustomerForEmail',verifyToken,catchAsync(listController.getListOfCustomerForEmail.bind(listController)));
-router.get('/listForInventory',catchAsync(listController.getListForInventory.bind(listController)));
+router.get('/listForInventory',catchAsync(listController.getListForInventory.bind(listController)));  
 
+router.get('/listOfCustomersCreate',verifyToken,catchAsync(listController.getListOfCustomersCreate.bind(listController)));
+router.get('/listOfVendorsCreate',verifyToken,catchAsync(listController.getListOfVendorsCreate.bind(listController)));
  export default router;

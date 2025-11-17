@@ -51,3 +51,38 @@ export const updateSalesNoteSchema = Joi.object({
     'string.max': 'Note cannot exceed 1000 characters'
   })
 });
+
+// OrderConfirmation validation schemas
+export const createOrderConfirmationSchema = Joi.object({
+  order_Number: Joi.number().required().messages({
+    'number.base': 'Order number must be a number',
+    'string.empty': 'Order number cannot be empty',
+    'any.required': 'Order number is required'
+  }),
+  status: Joi.string().optional().messages({
+    'string.base': 'Status must be a string'
+  }),
+  current_orderline: Joi.number().integer().min(0).optional().messages({
+    'number.base': 'Current orderline must be a number',
+    'number.integer': 'Current orderline must be an integer',
+    'number.min': 'Current orderline must be 0 or greater'
+  }),
+ 
+});
+
+export const updateOrderConfirmationSchema = Joi.object({
+  status: Joi.string().optional().messages({
+    'string.base': 'Status must be a string'
+  }),
+  current_orderline: Joi.number().integer().min(0).optional().messages({
+    'number.base': 'Current orderline must be a number',
+    'number.integer': 'Current orderline must be an integer',
+    'number.min': 'Current orderline must be 0 or greater'
+  }),
+  startTime: Joi.date().allow(null).optional().messages({
+    'date.base': 'Start time must be a valid date'
+  }),
+  endTime: Joi.date().allow(null).optional().messages({
+    'date.base': 'End time must be a valid date'
+  })
+});

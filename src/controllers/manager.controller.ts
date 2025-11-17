@@ -774,6 +774,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 201, true, data, 'Inventory created successfully');
   }
 
+ async createVendor(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createVendor(req.body );
+    sendResponse(res, 201, true, data, 'Vendor created successfully');
+  }
+
   async editInventory(req: AuthRequest, res: Response) {
     const data = await this.managerService.editInventory(Number(req.params.id), req.body);
     sendResponse(res, 200, true, data, 'Inventory edited successfully');
@@ -815,6 +820,13 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     );
     sendResponse(res, 200, true, data, 'InventoryUPCs by jurisdiction retrieved successfully');
   }
+
+  async checkUPCExists(req: AuthRequest, res: Response) {
+    const {  upc } = req.params;
+    const data = await this.managerService.checkUPCExists(upc);
+    sendResponse(res, 200, true, data, data ? "UPC exists " : "UPC not found");
+  }
+
   // EpickSetting CRUD controller methods
   async createEpickSetting(req: AuthRequest, res: Response) {
     const data = await this.managerService.createEpickSetting(req.body);

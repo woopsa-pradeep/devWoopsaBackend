@@ -983,5 +983,18 @@ export class AuthService {
     return { message: "Account deactivated successfully." };
   }
 
+  async getServerDetail(serverId:string){
+    const isServerIdMatch = process.env.SERVER_ID === serverId;
+    if(!isServerIdMatch){
+      throw new AppError("Server ID does not match", 400);
+    }
+    const serverDetail = await Distributor.findOne({ attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"] });
+    const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
+    return {
+      serverDetail: serverDetail,
+      logo: logo?.warehouseImage || null,
+    };
+  }
+
 
 }

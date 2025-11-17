@@ -288,7 +288,6 @@ function calculateAdjustedPrice(priceAdjustment: any, inventory: any): number {
 
 export async function getDiscount(Item_Number: number, C_Number: number) {
   try {
-    console.log(Item_Number, C_Number, "Item_Number, C_Number")
     // let discount: any = await GetDiscount.findAll({
     //   where: {
     //     Item_Number: Item_Number,

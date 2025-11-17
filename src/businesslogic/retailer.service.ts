@@ -778,6 +778,7 @@ export class RetailerService {
       else if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
+      price = Math.ceil(price * 100) / 100;
       const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
       const topLatestItems = await getTopLatestItems();
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);

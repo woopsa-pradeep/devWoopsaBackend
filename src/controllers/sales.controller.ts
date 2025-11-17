@@ -305,6 +305,63 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
- 
+    // OrderConfirmation CRUD methods
+    async createOrderConfirmation(req: AuthRequest, res: Response) {
+        const orderData = {
+            ...req.body,
+            sales_id: req.body.sales_id || req.user.id
+        };
+        const data = await this.salesService.createOrderConfirmation(orderData);
+        sendResponse(res, 201, true, data, "Order confirmation created successfully");
+    }
+
+    async getAllOrderConfirmations(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getAllOrderConfirmations(
+            req.query as PaginationOptions & { search?: string; sales_id?: number; status?: string }
+        );
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getOrderConfirmationById(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getOrderConfirmationById(Number(req.params.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getOrderConfirmationByOrderNumber(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getOrderConfirmationByOrderNumber(req.params.orderNumber);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async updateOrderConfirmation(req: AuthRequest, res: Response) {
+        const data = await this.salesService.updateOrderConfirmation(
+            Number(req.params.id),
+            req.body
+        );
+        sendResponse(res, 200, true, data, "Order confirmation updated successfully");
+    }
+
+    async deleteOrderConfirmation(req: AuthRequest, res: Response) {
+        const data = await this.salesService.deleteOrderConfirmation(Number(req.params.id));
+        sendResponse(res, 200, true, data, data.message);
+    }
+
+    async getOrderConfirmationsBySalesId(req: AuthRequest, res: Response) {
+        const salesId = Number(req.params.salesId) || req.user.id;
+        const data = await this.salesService.getOrderConfirmationsBySalesId(
+            salesId,
+            req.query as PaginationOptions
+        );
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async orderConfirmation(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getOrderConfirmationList(req.query as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getOrderConfirmationDetailsHistory(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getOrderConfirmationDetailsHistory(Number(req.params.orderNumber), req.query as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 
 }

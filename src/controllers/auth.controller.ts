@@ -102,5 +102,8 @@ async resendOtp(req: AuthRequest, res: Response) {
   sendResponse(res, 200, true, data, "OTP sent successfully.");
 }
 
-
+async getServerDetail(req: Request, res: Response) {
+  const data = await this.authService.getServerDetail(req.params.serverId);
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
 }

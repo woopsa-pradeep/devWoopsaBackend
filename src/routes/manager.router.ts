@@ -202,6 +202,9 @@ router.post('/email-marketing/:id/send', verifyRole(ROLES.MANAGER), catchAsync(m
 router.post('/create-inventory', catchAsync(managerController.createInventory.bind(managerController)));
 router.put('/edit-inventory/:id', catchAsync(managerController.editInventory.bind(managerController)));
 
+//vendor CRUD routes
+router.post('/create-vendor', catchAsync(managerController.createVendor.bind(managerController)));
+
 // InventoryUPC CRUD routes
 router.post('/inventory-upc', verifyRole(ROLES.MANAGER), validateRequest(createInventoryUPCSchema), catchAsync(managerController.createInventoryUPC.bind(managerController)));
 router.get('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryUPCById.bind(managerController)));
@@ -209,6 +212,7 @@ router.put('/inventory-upc/:id', verifyRole(ROLES.MANAGER), validateRequest(upda
 router.delete('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteInventoryUPC.bind(managerController)));
 router.get('/inventory-upc/item-number/:itemNumber', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryUPCByItemNumber.bind(managerController)));
 router.get('/inventory-upc/jurisdiction', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryUPCByJurisdiction.bind(managerController)));
+router.get('/check-upc/:upc', verifyRole(ROLES.MANAGER), catchAsync(managerController.checkUPCExists.bind(managerController)));
 // EpickSetting CRUD routes
 router.post('/epick-settings', verifyRole(ROLES.MANAGER), validateRequest(createEpickSettingSchema), catchAsync(managerController.createEpickSetting.bind(managerController)));
 router.get('/epick-settings', verifyRole(ROLES.MANAGER), validateRequest(getEpickSettingsQuerySchema), catchAsync(managerController.getAllEpickSettings.bind(managerController)));
@@ -216,6 +220,6 @@ router.get('/epick-settings/:id', verifyRole(ROLES.MANAGER), catchAsync(managerC
 router.put('/epick-settings/:id', verifyRole(ROLES.MANAGER), validateRequest(updateEpickSettingSchema), catchAsync(managerController.updateEpickSetting.bind(managerController)));
 router.delete('/epick-settings/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteEpickSetting.bind(managerController)));
 // router.post('/pass-scan-items', verifyRole(ROLES.MANAGER), catchAsync(managerController.putPassScanItem.bind(managerController)));
-router.post('/createCustomer', verifyRole(ROLES.MANAGER), catchAsync(managerController.createCustomer.bind(managerController)));
+router.post('/createCustomer', catchAsync(managerController.createCustomer.bind(managerController)));
 router.put('/updateUserAllowDiscount/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUserAllowDiscount.bind(managerController)));
 export default router; 

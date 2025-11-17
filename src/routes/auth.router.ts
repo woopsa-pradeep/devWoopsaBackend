@@ -23,7 +23,7 @@ router.post('/verifyRetailerOtp',catchAsync(authController.verifyRetailerOtp.bin
  router.post('/resetPassword',validateRequest(resetPasswordSchema),catchAsync(authController.resetPassword.bind(authController)));
  router.post('/verifyToken',catchAsync(authController.verifyToken.bind(authController)));
  router.post('/resendOtp',  catchAsync(authController.resendOtp.bind(authController)));
-
+ router.get('/getServerDetail/:serverId', catchAsync(authController.getServerDetail.bind(authController)));
  // sales person login
  router.post('/salesLogin', validateRequest(loginSalesSchema), catchAsync(authController.loginSalesUser.bind(authController)));
  router.post('/epikLogin', validateRequest(loginSalesSchema), catchAsync(authController.epikLogin.bind(authController)));

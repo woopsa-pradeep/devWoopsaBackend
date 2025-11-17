@@ -6,7 +6,7 @@ import { Router } from "express";
 import { changePasswordSchema } from "../validations/auth.validation";
 import { validateRequest } from "../middlewares/validation.middleware";
 import { verifySalesSession } from "../middlewares/sales.middleware";
-import { createSalesCallTimeSchema, updateSalesCallTimeSchema, createSalesNoteSchema, updateSalesNoteSchema } from "../validations/sales.validation";
+import { createSalesCallTimeSchema, updateSalesCallTimeSchema, createSalesNoteSchema, updateSalesNoteSchema, createOrderConfirmationSchema, updateOrderConfirmationSchema } from "../validations/sales.validation";
 
 
 const router = Router();
@@ -84,5 +84,16 @@ router.get('/orderHistoryByProductNumber',
   router.put('/sales-notes/:id',verifyRole(ROLES.SALES),validateRequest(updateSalesNoteSchema),catchAsync(listController.updateSalesNote.bind(listController)));
   router.delete('/sales-notes/:salesId',verifyRole(ROLES.SALES),catchAsync(listController.deleteSalesNote.bind(listController)));
   router.get('/sales-notes-customer/:customerId',verifyRole(ROLES.SALES),catchAsync(listController.getSalesNotesByCustomer.bind(listController)));
+
+  // OrderConfirmation CRUD routes
+  router.get('/order-confirmation/details/:orderNumber',verifyRole(ROLES.SALES),catchAsync(listController.getOrderConfirmationDetailsHistory.bind(listController)));
+  router.get('/order-confirmation/list',verifyRole(ROLES.SALES),catchAsync(listController.orderConfirmation.bind(listController)));
+  router.post('/order-confirmation',verifyRole(ROLES.SALES),validateRequest(createOrderConfirmationSchema),catchAsync(listController.createOrderConfirmation.bind(listController)));
+ 
+  router.put('/order-confirmation/:id',verifyRole(ROLES.SALES),catchAsync(listController.updateOrderConfirmation.bind(listController)));
+  
+  router.delete('/order-confirmation/:id',verifyRole(ROLES.SALES),catchAsync(listController.deleteOrderConfirmation.bind(listController)));
+
+  router.get('/order-confirmation/sales/:salesId',verifyRole(ROLES.SALES),catchAsync(listController.getOrderConfirmationsBySalesId.bind(listController)));
 
  export default router;

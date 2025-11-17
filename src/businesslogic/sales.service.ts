@@ -39,6 +39,8 @@ import moment from "moment";
 import SalesCallTime from "../models/postgres/salesCallTime.model";
 import SalesNote from "../models/postgres/salesNotes";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
+import { OrderConfirmation } from "../models/postgres/orderConfirmation.model";
+import { sequelize } from "../db";
 
 export class SalesService {
 
@@ -3958,5 +3960,467 @@ const newSalesRepArray = salesRepList.map(Number);
       return newCartItem;
     }
   }
+
+  // OrderConfirmation CRUD methods
+  async createOrderConfirmation(orderData: {
+    order_Number: string;
+   
+    current_orderline?: number;
+    sales_id: number
+  }) {
+    const createData: any = {
+      order_Number: orderData.order_Number,
+      sales_id: orderData.sales_id,
+    };
+    
   
+    if (orderData.current_orderline !== undefined) {
+      createData.current_orderline = orderData.current_orderline;
+    }
+    await OrderDetail.update(
+      { Quantity_Shipped: 0 },
+      {
+        where: {
+          Order_Number: orderData.order_Number
+        }
+      }
+    );
+    
+    createData.startTime = new Date();
+  
+    const orderConfirmation = await OrderConfirmation.create(createData);
+    return orderConfirmation;
+  }
+
+  async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sales_id?: number; status?: string }) {
+    const { page = 1, limit = 10, search, sales_id, status } = query;
+    const offset = (page - 1) * limit;
+
+    let whereClause: any = {};
+
+    if (search) {
+      whereClause.order_Number = { [Op.like]: `%${search}%` };
+    }
+
+    if (sales_id) {
+      whereClause.sales_id = sales_id;
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    const { count: totalCount, rows: orderConfirmations } = await OrderConfirmation.findAndCountAll({
+      where: whereClause,
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    return {
+      data: orderConfirmations,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    };
+  }
+
+  async getOrderConfirmationById(id: number) {
+    const orderConfirmation = await OrderConfirmation.findByPk(id);
+    if (!orderConfirmation) {
+      throw new AppError("Order confirmation not found", 404);
+    }
+    return orderConfirmation;
+  }
+
+  async getOrderConfirmationByOrderNumber(orderNumber: string) {
+    const orderConfirmation = await OrderConfirmation.findOne({
+      where: { order_Number: orderNumber },
+      order: [['createdAt', 'DESC']],
+    });
+    if (!orderConfirmation) {
+      throw new AppError("Order confirmation not found", 404);
+    }
+    return orderConfirmation;
+  }
+
+  async updateOrderConfirmation(
+    id: number,
+    updateData: {
+      status?: string;
+      current_orderline?: number;
+      endTime?: Date | null;
+      orderDetail: Array<{
+        Order_Number: number;
+        Line_Number: number;
+        Quantity_Ordered: number;
+        Quantity_Shipped: number;
+      }>;
+    }
+  ) {
+  
+    try {
+      // 1) Load order confirmation inside the transaction
+      const orderConfirmation = await OrderConfirmation.findByPk(id);
+  
+      if (!orderConfirmation) {
+        throw new AppError("Order confirmation not found", 404);
+      }
+  
+      // 2) Handle endTime based on status
+      if (updateData.status === "completed") {
+        updateData.endTime = new Date();
+      } else {
+        updateData.endTime = null;
+      }
+  
+      // 3) Extract orderDetail array and remove it from updateData
+      const { orderDetail } = updateData;
+      delete (updateData as any).orderDetail;
+  
+      // 4) Update OrderConfirmation row
+      await orderConfirmation.update(updateData);
+  
+      // 5) Update related OrderDetail rows (if provided)
+      if (Array.isArray(orderDetail) && orderDetail.length > 0) {
+        for (const item of orderDetail) {
+          await OrderDetail.update(
+            {
+              Quantity_Ordered: item.Quantity_Ordered,
+              Quantity_Shipped: item.Quantity_Shipped,
+            },
+            {
+              where: {
+                Order_Number: item.Order_Number,
+                Line_Number: item.Line_Number,
+              },
+        
+            }
+          );
+        }
+      }
+  
+      // 6) Commit transaction
+
+  
+      // Optionally re-fetch if you want latest from DB
+      return orderConfirmation;
+    } catch (err) {
+      throw err;
+    }
+  }
+  
+  async deleteOrderConfirmation(id: number) {
+    const orderConfirmation = await OrderConfirmation.findByPk(id);
+    if (!orderConfirmation) {
+      throw new AppError("Order confirmation not found", 404);
+    }
+
+    await orderConfirmation.destroy();
+    return { message: "Order confirmation deleted successfully" };
+  }
+
+  
+
+  async getOrderConfirmationsBySalesId(salesId: number, query?: PaginationOptions) {
+    const { page = 1, limit = 10 } = query || {};
+    const offset = (page - 1) * limit;
+
+    const { count: totalCount, rows: orderConfirmations } = await OrderConfirmation.findAndCountAll({
+      where: { sales_id: salesId },
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    return {
+      data: orderConfirmations,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    };
+  }
+
+
+  async getOrderConfirmationList(query: PaginationOptions) {
+  
+    // Handle query parameters with potential trailing spaces
+    const page = Number(query.page || (query as any)['page ']) || 1;
+    const limit = Number(query.limit || (query as any)['limit ']) || 10;
+    const customerNumber = query.customerNumber || (query as any)['customerNumber '];
+    const startDate = query.startDate || (query as any)['startDate '];
+    const endDate = query.endDate || (query as any)['endDate '];
+
+    const offset = (page - 1) * limit;
+
+    // Build where condition
+    const whereCondition: any = {};
+
+    if (customerNumber) {
+      whereCondition.C_Number = Number(customerNumber);
+    }
+
+    if (startDate && endDate) {
+      whereCondition.Order_Date = {
+        [Op.between]: [startDate, endDate]
+      };
+    }
+
+    // First, get the order headers with pagination
+    const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+      attributes: [
+        'Order_Number',
+        'C_Number',
+        'Order_Source',
+        'Order_Date'
+      ],
+      where: whereCondition,
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country'],
+          required: false,
+          include: [
+            {
+              model: CustomerRoute,
+              as: 'Routes',
+              attributes: ['Route_Number', 'Stop_Number'],
+              required: false
+            }
+          ]
+        }
+      ],
+      order: [['Order_Number', 'DESC']],
+      limit,
+      offset,
+    });
+
+    // Get the order numbers to fetch quantities
+    const orderNumbers = orderList.map((order: any) => order.Order_Number);
+
+    // Get total quantities for these orders
+    let quantityMap = new Map();
+    if (orderNumbers.length > 0) {
+      const quantityResults = await OrderDetail.findAll({
+        attributes: [
+          'Order_Number',
+          [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+        ],
+        where: {
+          Order_Number: { [Op.in]: orderNumbers }
+        },
+        group: ['Order_Number'],
+        raw: true
+      });
+
+      // Create a map for quick lookup
+      quantityResults.forEach((result: any) => {
+        quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
+      });
+    }
+
+    // Format the response
+    const formattedOrderList = await Promise.all(
+      orderList.map(async (order: any) => {
+        // Map Order_Source to readable names
+        let orderSourceName = 'ERP';
+        if (order.Order_Source === 13) {
+          orderSourceName = 'Web';
+        } else if (order.Order_Source === 12) {
+          orderSourceName = 'App';
+        }
+  
+        const route = order.customer?.Routes?.[0];
+  
+        const isOrderConfirmed = await OrderConfirmation.findOne({
+          where: { order_Number: order.Order_Number },
+          attributes: ['status','id','current_orderline'],
+          raw: true,
+        });
+  
+        return {
+          Order_Number: order.Order_Number,
+          C_Number: order.C_Number,
+          status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
+          Order_Source: order.Order_Source,
+          isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
+          Order_Source_Name: orderSourceName,
+          Order_Date: order.Order_Date,
+          customerName: order.customer?.C_Name || 'N/A',
+          address: order.customer?.C_Address || 'N/A',
+          city: order.customer?.C_City || 'N/A',
+          state: order.customer?.C_State || 'N/A',
+          zip: order.customer?.C_Zip || 'N/A',
+          country: order.customer?.C_Country || 'N/A',
+          route: route?.Route_Number ?? null,
+          stop: route?.Stop_Number ?? null,
+          totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
+        };
+      })
+    );
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(Number(totalCount) / Number(limit)),
+      orderList: formattedOrderList,
+    };
+  }
+
+  async getOrderConfirmationDetailsHistory(orderNumber: number, query: PaginationOptions) {
+    let { page = 1, limit = 10 } = query;
+    page = Number(query.page || (query as any)['page ']) || 1;
+    limit = Number(query.limit || (query as any)['limit ']) || 10;
+    const offset = (page - 1) * limit;
+
+    // Fetch order header
+    const orderHeader = await OrderHeader.findByPk(orderNumber, {
+      attributes: [
+        'Order_Number',
+        'Order_Date',
+        'User_ID',
+        'Order_Source',
+        'Delivery_Charge'
+      ]
+    });
+
+    // Get total count of order lines
+    const totalCount = await OrderDetail.count({
+      where: { Order_Number: orderNumber }
+    });
+
+    // Fetch full order details (no pagination) to calculate totals
+    const allOrderDetails = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Price',
+        'OTP_Amount_State',
+        'Quantity_Ordered',
+        'OffInvoice_Amount',
+        'DepositAmount'
+      ]
+    });
+
+    // Totals calculation
+    let totalPrice = 0;
+    let totalDiscount = 0;
+    let totalDeposit = 0;
+
+    for (const detail of allOrderDetails) {
+      const price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
+      const quantity = Number(detail.Quantity_Ordered || 0);
+
+      totalPrice += (price) * quantity;
+      totalDiscount += Number(detail.OffInvoice_Amount || 0);
+      totalDeposit += Number(detail.DepositAmount || 0);
+    }
+
+    // Fetch paginated order details with inventory and UPC
+    const orderDetails = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Order_Number',
+        'Line_Number',
+        'Item_Number',
+        'Sales_Category',
+        'OTP_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Pack',
+        'Price',
+        'Price_Reference',
+        'Retail',
+        'NetCost',
+        'BaseCost',
+        'Invoice_Cost',
+        'AvgCost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+        'DepositAmount',
+        'Price_Subclass',
+        'OffInvoice_Amount',
+        'Taxable',
+        'EBT',
+        'Points',
+        'STAMP_Qty',
+        'ItemDescription',
+        'CaseWeight',
+        'CaseCount',
+   
+      ],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [
+            'Item_Number',
+            'Description',
+            'Pack',
+            'CaseCount',
+            'UOM'
+          ],
+          required: false,
+          include: [
+            {
+              model: InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              required: false,
+            }
+          ]
+        }
+      ],
+      order: [['Line_Number', 'ASC']],
+      limit,
+      offset
+    });
+
+    const orderDiscount = await OrderDiscount.findOne({
+      where: { orderNumber: orderNumber }
+    });
+    if(orderDiscount){
+      totalDiscount = orderDiscount.discount;
+    }
+    const orderDetailsWithImages = await Promise.all(orderDetails.map(async (detail: any) => {
+      const productImage = await ProductImage.findOne({
+        where: {
+          product_number: detail.Item_Number.toString(),
+          isAllow: true
+        },
+      });
+      let Price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
+      return {
+        ...detail.toJSON(),
+        Price,
+        isDistributorImageShow: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory?.UPCList?.[0]?.UPC_Number}.jpg`,
+      };
+    }));
+
+    return {
+      orderHeader: {
+        ...orderHeader?.toJSON(),
+        Total_Price: totalPrice,
+        Total_Discount: totalDiscount,
+        Total_Deposit: totalDeposit
+      },
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      data: orderDetailsWithImages
+    };
+  }
+
+
 }

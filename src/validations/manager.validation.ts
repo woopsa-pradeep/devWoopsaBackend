@@ -1088,6 +1088,25 @@ export const createInventoryUPCSchema = Joi.object({
   })
 });
 
+export const createVendorSchema = Joi.object({
+  V_Description: Joi.string().required().messages({
+    "any.required": "Vendor description is required"
+  }),
+  V_Addr1: Joi.string().required().messages({
+    'string.email': 'email must be a valid email address',
+    "any.required": "Vendor address line 1 is required"
+  }),
+  V_City: Joi.string().required().messages({
+    "any.required": "Vendor city is required"
+  }),
+  V_State: Joi.string().required().messages({
+    "any.required": "Vendor state is required"
+  }),
+  V_Zip: Joi.string().required().messages({
+    "any.required": "Vendor zip code is required"
+  }),
+}).unknown(true);
+
 export const updateInventoryUPCSchema = Joi.object({
   UPC_Number: Joi.string().optional().allow('', null).messages({
     'string.base': 'UPC Number must be a string'

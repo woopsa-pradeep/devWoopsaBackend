@@ -63,8 +63,9 @@ import { generateBarcodeAndUpload } from "../utils/barCodeGenerate";
 import { getDefaultInventoryValues, getNextItemNumber } from "../utils/inventory";
 import EpickSetting from "../models/postgres/epickSetting.model";
 import { PassScanItem } from "../models/postgres/passScanItem.model";
-import { getDefaultCustomerValues } from "../utils/customer";
+import { getDefaultCustomerValues, getNextCustomerNumber } from "../utils/customer";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
+import { getDefaultVendorValues, getNextVendorNumber } from "../utils/vendor";
 
 export class ManagerService {
 
@@ -4024,6 +4025,23 @@ export class ManagerService {
     return inventory;
   }
 
+
+
+  async createVendor(body: any ) {
+    const nextVendorNumber = await getNextVendorNumber(); 
+    const defaultValues = getDefaultVendorValues(0);
+    
+    body.Primary_Vendor = nextVendorNumber;
+    body.Date_Created = new Date();
+    body.Last_Modified = new Date();
+
+    const finalBody = { ...defaultValues, ...body };
+    const vendor = await Vendor.create(finalBody);
+
+    return vendor;
+  }
+
+
   async editInventory(id: number, body: any) {
     const inventory = await Inventory.findByPk(id);
     if (!inventory) {
@@ -4115,6 +4133,20 @@ export class ManagerService {
     return inventoryUPCs;
   }
 
+  async checkUPCExists(UPC_Number: string) {
+    if (!UPC_Number) {
+      throw new AppError('UPC_Number is required', 400);
+    }
+
+    const item = await InventoryUPC.findOne({
+      where: {
+        UPC_Number: UPC_Number, 
+      },
+      attributes: ["UPC_Number", "Item_Number"],
+    });
+
+    return item ? true : false;
+  }
     
   async updateEpickSetting(id: number, body: { pin?: string; allowSingleScan?: boolean }) {
     const epickSetting = await EpickSetting.findByPk(id);
@@ -4164,10 +4196,11 @@ async getAllEpickSettings(query: PaginationOptions) {
   }
 
   async createCustomer(data: any){
-
+    const nextCustomerNumber = await getNextCustomerNumber();
 
     const finalData = {
       ...getDefaultCustomerValues(0),
+      C_Number: nextCustomerNumber,
       ...data
     }
     const customer = await Customer.create(finalData);
