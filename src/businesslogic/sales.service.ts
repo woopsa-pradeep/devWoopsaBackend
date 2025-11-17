@@ -2763,14 +2763,37 @@ const newSalesRepArray = salesRepList.map(Number);
   }
 
   async scanItemByBarcode(barcode: string, userId: number) {
+
+    let upcRecord;
+
       // Step 1: Check if UPC exists
-      const upcRecord = await InventoryUPC.findOne({
-        where: {
-          UPC_Number: {
-            [Op.like]: `%${barcode}%`, // matches anywhere in the string
+      // const upcRecord = await InventoryUPC.findOne({
+      //   where: {
+      //     UPC_Number: {
+      //       [Op.like]: `%${barcode}%`,
+      //     },
+      //   },
+      // })
+
+      if (barcode.length > 9) {
+        // If barcode is long → use LIKE search
+        upcRecord = await InventoryUPC.findOne({
+          where: {
+            UPC_Number: {
+              [Op.like]: `%${barcode}%`,
+            },
           },
-        },
-      })
+        });
+      } else {
+        // If barcode length <= 9 → exact match
+        upcRecord = await InventoryUPC.findOne({
+          where: {
+            UPC_Number: barcode
+          },
+        });
+      }
+      
+
       if (!upcRecord) {
         throw new AppError(`Item not found for UPC: ${barcode}`, 404);
       }
