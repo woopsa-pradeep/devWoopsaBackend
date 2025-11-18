@@ -9,12 +9,13 @@ import { multerUpload } from "../middlewares/upload.middleware";
 import { hasExistingOrder, hasOrderTakenByOtherPicker } from "../middlewares/epick.middleware";
 
 
-const router = Router();
+const router = Router(); 
  const epickController = new EpickController();
  router.get('/getOrder',verifyRole(ROLES.EPIK),catchAsync(epickController.getOrder.bind(epickController)));
  router.get('/getOrderBox/:orderNumber',verifyRole(ROLES.EPIK),catchAsync(epickController.getOrderBox.bind(epickController)));
  router.get('/getOrderItem/:orderNumber',verifyRole(ROLES.EPIK),hasOrderTakenByOtherPicker,catchAsync(epickController.getOrderItem.bind(epickController)));
  router.post('/addProductInBox',verifyRole(ROLES.EPIK),catchAsync(epickController.addProductInBox.bind(epickController)));
+ router.post('/addProductsInBoxBatch',verifyRole(ROLES.EPIK),catchAsync(epickController.addProductsInBoxBatch.bind(epickController)));
  router.post('/addOrderBox',verifyRole(ROLES.EPIK),catchAsync(epickController.addOrderBox.bind(epickController)));
  router.post('/acceptOrder',verifyRole(ROLES.EPIK),validateRequest(orderPickCreateSchema),hasExistingOrder,hasOrderTakenByOtherPicker,catchAsync(epickController.acceptOrder.bind(epickController)));
  router.post('/addImagesNotes/:id',verifyRole(ROLES.EPIK),multerUpload.array('images'),catchAsync(epickController.addImagesNotes.bind(epickController)));

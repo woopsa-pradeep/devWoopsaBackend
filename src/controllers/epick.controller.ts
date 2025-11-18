@@ -17,6 +17,11 @@ export class EpickController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async addProductsInBoxBatch(req: AuthRequest, res: Response) {
+        const data = await this.epickService.addProductsInBoxBatch(req.body, Number(req.user.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
 
     async getOrderItem(req: Request, res: Response) {
         const data = await this.epickService.getOrderItem(Number(req.params.orderNumber));
