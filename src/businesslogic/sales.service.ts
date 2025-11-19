@@ -41,6 +41,7 @@ import SalesNote from "../models/postgres/salesNotes";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { OrderConfirmation } from "../models/postgres/orderConfirmation.model";
 import { sequelize } from "../db";
+import { Users } from "../models/mmsql/user.model";
 
 export class SalesService {
 
@@ -151,8 +152,8 @@ export class SalesService {
       Jurisdiction_State: customer.Jurisdiction_State || '',
       Jurisdiction_County: customer.Jurisdiction_County || '',
       Jurisdiction_City: customer.Jurisdiction_City || '',
-      Route_Number: customerRoutes?.Route_Number || 101,
-      Stop_Number: customerRoutes?.Stop_Number || 65,
+      Route_Number: customerRoutes?.Route_Number || 0,
+      Stop_Number: customerRoutes?.Stop_Number || 0,
       Delivery_ID: customer.Delivery_ID || 0,
       User_ID: Number(req.user.userNumber),
       Reference: `USER-${req.user.userNumber}`,
@@ -168,6 +169,8 @@ export class SalesService {
       Cig20tax: 0,
       Cig25tax: 0,
       POS_ChangeDue: 0,
+      Order_Pricing_Account: customer.C_PricingAccount || 0,
+
       Points: 0,
       Total_Weight: 0,
       Delivery_Charge_Select: !!customer.Delivery_Charge,
@@ -248,8 +251,11 @@ export class SalesService {
         Invoice_Cost: product.Invoice_Cost,
         AvgCost: product.AvgCost,
        OTP_Amount_State: Number(item.Tax_Rate ?? 0),
+       
         OTP_Amount_County: 0,
         OTP_Amount_City: 0,
+        Item_Message: product.Item_Message ? product.Item_Message :  ' ',
+
         DepositAmount: product.DepositAmount,
         Price_Subclass: product.Price_Subclass,
         OffInvoice_Amount: 0,
@@ -4015,7 +4021,54 @@ const newSalesRepArray = salesRepList.map(Number);
     return orderConfirmation;
   }
 
-  async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sales_id?: number; status?: string }) {
+
+  async  restartOrderConfirmation(orderData: {
+    order_Number: string;
+    sales_id: number;
+    current_orderline?: number;
+  }) {
+    const { order_Number, sales_id, current_orderline } = orderData;
+  
+    // Step 1: Find existing confirmation
+    const existing = await OrderConfirmation.findOne({
+      where: { order_Number }
+    });
+  
+    if (!existing) {
+      throw new AppError("Order confirmation not found", 404);
+    }
+  
+    // Step 2: Mark old confirmation as ended
+   await OrderConfirmation.destroy({where:{order_Number}});
+ 
+
+    // Step 3: Reset order detail shipped quantity
+    await OrderDetail.update(
+      { Quantity_Shipped: 0, Confirmed:false },
+      { where: { Order_Number: order_Number } }
+    );
+  
+    // Step 4: Prepare new confirmation
+    const createData: any = {
+      order_Number,
+      sales_id,
+      startTime: new Date(),
+      isActive: true
+    };
+  
+    if (current_orderline !== undefined) {
+      createData.current_orderline = current_orderline;
+    }
+  
+    // Step 5: Create new order confirmation
+    const newOrder = await OrderConfirmation.create(createData);
+  
+    return newOrder;
+  }
+  
+
+
+async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sales_id?: number; status?: string }) {
     const { page = 1, limit = 10, search, sales_id, status } = query;
     const offset = (page - 1) * limit;
 
@@ -4075,6 +4128,7 @@ const newSalesRepArray = salesRepList.map(Number);
     updateData: {
       status?: string;
       current_orderline?: number;
+      Bundles?: number;
       endTime?: Date | null;
       orderDetail: Array<{
         Order_Number: number;
@@ -4085,9 +4139,11 @@ const newSalesRepArray = salesRepList.map(Number);
     }
   ) {
   
+
+    console.log(updateData, 'updateData-->')
     try {
       // 1) Load order confirmation inside the transaction
-      const orderConfirmation = await OrderConfirmation.findByPk(id);
+      const orderConfirmation = await OrderConfirmation.findOne({where:{order_Number:id}});
   
       if (!orderConfirmation) {
         throw new AppError("Order confirmation not found", 404);
@@ -4096,6 +4152,9 @@ const newSalesRepArray = salesRepList.map(Number);
       // 2) Handle endTime based on status
       if (updateData.status === "completed") {
         updateData.endTime = new Date();
+        
+
+    
       } else {
         updateData.endTime = null;
       }
@@ -4105,8 +4164,11 @@ const newSalesRepArray = salesRepList.map(Number);
       delete (updateData as any).orderDetail;
   
       // 4) Update OrderConfirmation row
-      await orderConfirmation.update(updateData);
-  
+      await orderConfirmation.update(updateData,{
+        where: { order_Number: id }
+      });
+
+      
       // 5) Update related OrderDetail rows (if provided)
       if (Array.isArray(orderDetail) && orderDetail.length > 0) {
         for (const item of orderDetail) {
@@ -4114,6 +4176,7 @@ const newSalesRepArray = salesRepList.map(Number);
             {
               Quantity_Ordered: item.Quantity_Ordered,
               Quantity_Shipped: item.Quantity_Shipped,
+              Confirmed:true,
             },
             {
               where: {
@@ -4125,9 +4188,22 @@ const newSalesRepArray = salesRepList.map(Number);
           );
         }
       }
+
+      if (updateData.status === "completed") {
+       
+        await OrderHeader.update({
+          Bundles:updateData.Bundles,
+        },{
+          where: { Order_Number: id }
+        });
+        
+        
+    
+      } 
   
       // 6) Commit transaction
 
+      
   
       // Optionally re-fetch if you want latest from DB
       return orderConfirmation;
@@ -4135,7 +4211,8 @@ const newSalesRepArray = salesRepList.map(Number);
       throw err;
     }
   }
-  
+
+
   async deleteOrderConfirmation(id: number) {
     const orderConfirmation = await OrderConfirmation.findByPk(id);
     if (!orderConfirmation) {
@@ -4172,137 +4249,359 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
   async getOrderConfirmationList(query: PaginationOptions) {
-  
-    // Handle query parameters with potential trailing spaces
+    const { status,search } = query;
+
+    // Normalize query params (handle trailing-space keys)
     const page = Number(query.page || (query as any)['page ']) || 1;
     const limit = Number(query.limit || (query as any)['limit ']) || 10;
-    const customerNumber = query.customerNumber || (query as any)['customerNumber '];
+    const customerNumber =
+      query.customerNumber || (query as any)['customerNumber '];
     const startDate = query.startDate || (query as any)['startDate '];
     const endDate = query.endDate || (query as any)['endDate '];
-
+  
     const offset = (page - 1) * limit;
-
-    // Build where condition
-    const whereCondition: any = {};
-
+  
+    // Build base where condition for MSSQL
+    const whereCondition: any = {
+      Order_Updated: false,
+    };
+  
     if (customerNumber) {
       whereCondition.C_Number = Number(customerNumber);
     }
-
+  
     if (startDate && endDate) {
       whereCondition.Order_Date = {
-        [Op.between]: [startDate, endDate]
+        [Op.between]: [startDate, endDate],
       };
     }
-
-    // First, get the order headers with pagination
-    const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
-      attributes: [
-        'Order_Number',
-        'C_Number',
-        'Order_Source',
-        'Order_Date'
-      ],
-      where: whereCondition,
-      include: [
-        {
-          model: Customer,
-          as: 'customer',
-          attributes: ['C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country'],
-          required: false,
-          include: [
-            {
-              model: CustomerRoute,
-              as: 'Routes',
-              attributes: ['Route_Number', 'Stop_Number'],
-              required: false
-            }
-          ]
-        }
-      ],
-      order: [['Order_Number', 'DESC']],
-      limit,
-      offset,
-    });
-
-    // Get the order numbers to fetch quantities
-    const orderNumbers = orderList.map((order: any) => order.Order_Number);
-
-    // Get total quantities for these orders
-    let quantityMap = new Map();
-    if (orderNumbers.length > 0) {
-      const quantityResults = await OrderDetail.findAll({
-        attributes: [
-          'Order_Number',
-          [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
-        ],
-        where: {
-          Order_Number: { [Op.in]: orderNumbers }
-        },
-        group: ['Order_Number'],
-        raw: true
-      });
-
-      // Create a map for quick lookup
-      quantityResults.forEach((result: any) => {
-        quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
-      });
-    }
-
-    // Format the response
-    const formattedOrderList = await Promise.all(
-      orderList.map(async (order: any) => {
-        // Map Order_Source to readable names
-        let orderSourceName = 'ERP';
-        if (order.Order_Source === 13) {
-          orderSourceName = 'Web';
-        } else if (order.Order_Source === 12) {
-          orderSourceName = 'App';
-        }
   
-        const route = order.customer?.Routes?.[0];
+    // Small helper to normalize status strings
+    const normalize = (val?: string | null) =>
+      val ? val.toString().trim().toLowerCase() : null;
   
-        const isOrderConfirmed = await OrderConfirmation.findOne({
-          where: { order_Number: order.Order_Number },
-          attributes: ['status','id','current_orderline'],
+    const normalizedStatus = normalize(status);
+    const isNotConfirmedFilter =
+      normalizedStatus === 'not_confirmed' ||
+      normalizedStatus === 'not_confirmd' ||
+      normalizedStatus === 'not confirmed' ||
+      normalizedStatus === 'notconfirmed';
+  
+
+
+      const normalizedSearch = search ? search.toString().trim() : null;
+
+
+    if (status) {
+
+      if (normalizedSearch) {
+        whereCondition.order_Number = {
+          [Op.like]: `%${normalizedSearch}%`,
+        };
+      }
+
+      // 1A) Status is NOT "not_confirmed" → paginate in OrderConfirmation
+      if (!isNotConfirmedFilter) {
+        const {
+          count: totalCount,
+          rows: confirmations,
+        } = await OrderConfirmation.findAndCountAll({
+          where: {
+            isActive: true,
+            status: normalizedStatus as string, // pending | inprogress | completed | notcompleted
+          },
+          attributes: ['order_Number', 'status', 'id', 'current_orderline'],
+          order: [['order_Number', 'DESC']],
+          limit,
+          offset,
           raw: true,
         });
   
-        return {
-          Order_Number: order.Order_Number,
-          C_Number: order.C_Number,
-          status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
-          Order_Source: order.Order_Source,
-          isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
-          Order_Source_Name: orderSourceName,
-          Order_Date: order.Order_Date,
-          customerName: order.customer?.C_Name || 'N/A',
-          address: order.customer?.C_Address || 'N/A',
-          city: order.customer?.C_City || 'N/A',
-          state: order.customer?.C_State || 'N/A',
-          zip: order.customer?.C_Zip || 'N/A',
-          country: order.customer?.C_Country || 'N/A',
-          route: route?.Route_Number ?? null,
-          stop: route?.Stop_Number ?? null,
-          totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
+        const orderNumbers = confirmations.map((c: any) => c.order_Number);
+  
+        if (!orderNumbers.length) {
+          return {
+            totalCount,
+            page,
+            limit,
+            totalPages: Math.ceil(Number(totalCount) / Number(limit)),
+            orderList: [],
+          };
+        }
+  
+        // Restrict MSSQL query to these orderNumbers
+        const headerWhere = {
+          ...whereCondition,
+          Order_Number: { [Op.in]: orderNumbers },
         };
-      })
-    );
+  
+        const orderList = await OrderHeader.findAll({
+          attributes: [
+            'Order_Number',
+            'C_Number',
+            'Order_Source',
+            'Order_Date',
+          ],
+          where: headerWhere,
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [
+                'C_Name',
+                'C_Address',
+                'C_City',
+                'C_State',
+                'C_Zip',
+                'C_Country',
+              ],
+              required: false,
+              include: [
+                {
+                  model: CustomerRoute,
+                  as: 'Routes',
+                  attributes: ['Route_Number', 'Stop_Number'],
+                  required: false,
+                },
+                {
+                  model: SalesRep,
+                  as: 'salesRep',
+                  attributes: ['S_Number', 'S_Desc'],
+                  required: false,
+                },
+              ],
+            },
+          ],
+          order: [['Order_Number', 'DESC']],
+        });
+  
+        const headerOrderNumbers = orderList.map(
+          (order: any) => order.Order_Number,
+        );
+  
+        // Quantity map from MSSQL
+        const quantityMap = new Map<number, number>();
+        if (headerOrderNumbers.length > 0) {
+          const quantityResults = await OrderDetail.findAll({
+            attributes: [
+              'Order_Number',
+              [
+                Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')),
+                'totalQuantity',
+              ],
+            ],
+            where: {
+              Order_Number: { [Op.in]: headerOrderNumbers },
+            },
+            group: ['Order_Number'],
+            raw: true,
+          });
+  
+          quantityResults.forEach((result: any) => {
+            quantityMap.set(
+              result.Order_Number,
+              Number(result.totalQuantity || 0),
+            );
+          });
+        }
+  
+        // Build a map from order_Number → confirmation row for quick lookup
+        const confirmationMap = new Map<number, any>();
+        confirmations.forEach((c: any) => {
+          confirmationMap.set(c.order_Number, c);
+        });
+  
+        // Format response
+        const formattedOrderList = orderList.map((order: any) => {
+          // Map Order_Source to readable names
+          let orderSourceName = 'ERP';
+          if (order.Order_Source === 13) {
+            orderSourceName = 'Web';
+          } else if (order.Order_Source === 12) {
+            orderSourceName = 'App';
+          }
+  
+          const route = order.customer?.Routes?.[0];
+          const salesRep = order.customer?.salesRep;
+  
+          const confirmation = confirmationMap.get(order.Order_Number) || null;
+  
+          return {
+            Order_Number: order.Order_Number,
+            C_Number: order.C_Number,
+            status: confirmation ? confirmation.status : 'Not Confirmed',
+            Order_Source: order.Order_Source,
+            isOrderConfirmed: confirmation,
+            Order_Source_Name: orderSourceName,
+            Order_Date: order.Order_Date,
+            customerName: order.customer?.C_Name || 'N/A',
+            address: order.customer?.C_Address || 'N/A',
+            city: order.customer?.C_City || 'N/A',
+            state: order.customer?.C_State || 'N/A',
+            zip: order.customer?.C_Zip || 'N/A',
+            country: order.customer?.C_Country || 'N/A',
+            route: route?.Route_Number ?? null,
+            stop: route?.Stop_Number ?? null,
+            salesRep: salesRep?.S_Desc ?? null,
+            totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
+          };
+        });
+  
+        return {
+          totalCount,
+          page,
+          limit,
+          totalPages: Math.ceil(Number(totalCount) / Number(limit)),
+          orderList: formattedOrderList,
+        };
+      }}else {
 
-    return {
-      totalCount,
-      page,
-      limit,
-      totalPages: Math.ceil(Number(totalCount) / Number(limit)),
-      orderList: formattedOrderList,
-    };
+      const whereCondition: any = {
+        Order_Updated:false,
+      };
+  
+
+      if (normalizedSearch) {
+        whereCondition.Order_Number = {
+          [Op.like]: `%${normalizedSearch}%`,
+        };
+      }
+      
+      if (customerNumber) {
+        whereCondition.C_Number = Number(customerNumber);
+      }
+  
+      if (startDate && endDate) {
+        whereCondition.Order_Date = {
+          [Op.between]: [startDate, endDate]
+        };
+      }
+  
+      // First, get the order headers with pagination
+      const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+        attributes: [
+          'Order_Number',
+          'C_Number',
+          'Order_Source',
+          'Order_Date',
+        ],
+        where: whereCondition,
+        include: [
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: [
+              'C_Name',
+              'C_Address',
+              'C_City',
+              'C_State',
+              'C_Zip',
+              'C_Country',
+            ],
+            required: false,
+            include: [
+              {
+                model: CustomerRoute,
+                as: 'Routes',
+                attributes: ['Route_Number', 'Stop_Number'],
+                required: false,
+              },
+              {
+                model: SalesRep,
+                as: 'salesRep',
+                attributes: ['S_Number', 'S_Desc'],
+                required: false,
+              },
+            ],
+          },
+        ],
+        order: [['Order_Number', 'DESC']],
+        limit,
+        offset,
+      });
+      
+  
+      // Get the order numbers to fetch quantities
+      const orderNumbers = orderList.map((order: any) => order.Order_Number);
+  
+      // Get total quantities for these orders
+      let quantityMap = new Map();
+      if (orderNumbers.length > 0) {
+        const quantityResults = await OrderDetail.findAll({
+          attributes: [
+            'Order_Number',
+            [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+          ],
+          where: {
+            Order_Number: { [Op.in]: orderNumbers }
+          },
+          group: ['Order_Number'],
+          raw: true
+        });
+  
+        // Create a map for quick lookup
+        quantityResults.forEach((result: any) => {
+          quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
+        });
+      }
+  
+      // Format the response
+      const formattedOrderList = await Promise.all(
+        orderList.map(async (order: any) => {
+          // Map Order_Source to readable names
+          let orderSourceName = 'ERP';
+          if (order.Order_Source === 13) {
+            orderSourceName = 'Web';
+          } else if (order.Order_Source === 12) {
+            orderSourceName = 'App';
+          }
+    
+          const route = order.customer?.Routes?.[0];
+    
+          const isOrderConfirmed = await OrderConfirmation.findOne({
+            where: { order_Number: order.Order_Number, isActive: true },
+            attributes: ['status','id','current_orderline'],
+            raw: true,
+          });
+    
+          return {
+            Order_Number: order.Order_Number,
+            C_Number: order.C_Number,
+            status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
+            Order_Source: order.Order_Source,
+            isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
+            Order_Source_Name: orderSourceName,
+            Order_Date: order.Order_Date,
+            customerName: order.customer?.C_Name || 'N/A',
+            address: order.customer?.C_Address || 'N/A',
+            city: order.customer?.C_City || 'N/A',
+            state: order.customer?.C_State || 'N/A',
+            zip: order.customer?.C_Zip || 'N/A',
+            country: order.customer?.C_Country || 'N/A',
+            route: route?.Route_Number ?? null,
+            stop: route?.Stop_Number ?? null,
+            salesRep: order.customer?.salesRep?.S_Desc ?? null,
+            totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
+          };
+        })
+      );
+  
+      return {
+        totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(Number(totalCount) / Number(limit)),
+        orderList: formattedOrderList,
+      };
+
+    }
+    // Build where condition
+   
   }
 
   async getOrderConfirmationDetailsHistory(orderNumber: number, query: PaginationOptions) {
     let { page = 1, limit = 10 } = query;
-    page = Number(query.page || (query as any)['page ']) || 1;
-    limit = Number(query.limit || (query as any)['limit ']) || 10;
-    const offset = (page - 1) * limit;
+   
 
     // Fetch order header
     const orderHeader = await OrderHeader.findByPk(orderNumber, {
@@ -4402,9 +4701,7 @@ const newSalesRepArray = salesRepList.map(Number);
           ]
         }
       ],
-      order: [['Line_Number', 'ASC']],
-      limit,
-      offset
+      order: [['Line_Number', 'ASC']]
     });
 
     const orderDiscount = await OrderDiscount.findOne({
@@ -4429,6 +4726,8 @@ const newSalesRepArray = salesRepList.map(Number);
         masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory?.UPCList?.[0]?.UPC_Number}.jpg`,
       };
     }));
+
+
 
     return {
       orderHeader: {

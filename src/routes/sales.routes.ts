@@ -90,6 +90,8 @@ router.get('/orderHistoryByProductNumber',
   router.get('/order-confirmation/list',verifyRole(ROLES.SALES),catchAsync(listController.orderConfirmation.bind(listController)));
   router.post('/order-confirmation',verifyRole(ROLES.SALES),validateRequest(createOrderConfirmationSchema),catchAsync(listController.createOrderConfirmation.bind(listController)));
  
+  router.post('/restart-order-confirmation',verifyRole(ROLES.SALES),validateRequest(createOrderConfirmationSchema),catchAsync(listController.restartOrderConfirmation.bind(listController)));
+
   router.put('/order-confirmation/:id',verifyRole(ROLES.SALES),catchAsync(listController.updateOrderConfirmation.bind(listController)));
   
   router.delete('/order-confirmation/:id',verifyRole(ROLES.SALES),catchAsync(listController.deleteOrderConfirmation.bind(listController)));

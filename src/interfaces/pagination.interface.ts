@@ -1,5 +1,6 @@
 // interfaces/pagination.interface.ts
 export interface PaginationOptions {
+  status?:string;
   isIncludeAllImg?:any;
     page?: number;
     pageSize?:number;

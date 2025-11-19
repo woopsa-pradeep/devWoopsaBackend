@@ -10,13 +10,14 @@ interface OrderConfirmationAttributes {
   sales_id: number;
   startTime: Date | null;
   endTime: Date | null;
+  isActive: boolean;
  
 }
 
 // Optional for creation
 type OrderConfirmationCreationAttributes = Optional<
   OrderConfirmationAttributes,
-  'id' | 'status' | 'current_orderline' | 'startTime' | 'endTime'
+  'id' | 'status' | 'current_orderline' | 'startTime' | 'endTime' 
 >;
 
 // Model class
@@ -34,7 +35,7 @@ export class OrderConfirmation
   public sales_id!: number;
   public startTime!: Date | null;
   public endTime!: Date | null;
-
+    public isActive!: boolean;
 
 }
 
@@ -53,7 +54,7 @@ OrderConfirmation.init(
     status: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: 'pending',
+      defaultValue: 'in-progress',
     },
     current_orderline: {
       type: DataTypes.INTEGER,
@@ -71,6 +72,11 @@ OrderConfirmation.init(
     endTime: {
       type: DataTypes.DATE,
       allowNull: true,
+    },
+    isActive: { 
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
     }
   },
   {

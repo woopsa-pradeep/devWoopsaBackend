@@ -315,6 +315,15 @@ export class SalesController {
         sendResponse(res, 201, true, data, "Order confirmation created successfully");
     }
 
+    async restartOrderConfirmation(req: AuthRequest, res: Response) {
+        const orderData = {
+            ...req.body,
+            sales_id: req.body.sales_id || req.user.id
+        };
+        const data = await this.salesService.restartOrderConfirmation(orderData);
+        sendResponse(res, 201, true, data, "Order confirmation created successfully");
+    }
+
     async getAllOrderConfirmations(req: AuthRequest, res: Response) {
         const data = await this.salesService.getAllOrderConfirmations(
             req.query as PaginationOptions & { search?: string; sales_id?: number; status?: string }

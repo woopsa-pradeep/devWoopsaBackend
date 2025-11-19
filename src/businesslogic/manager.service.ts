@@ -4216,4 +4216,27 @@ async getAllEpickSettings(query: PaginationOptions) {
     return user;
   }
   
+
+  async updateCustomer(data: any,id: number){
+
+    const finalData = {
+      ...getDefaultCustomerValues(0),
+      ...data
+    }
+    const customer = await Customer.update(finalData,{where:{C_Number:id}});
+    return customer;
+  }
+
+  
+
+  async updateVendor(body: any ,id: number) {
+    const defaultValues = getDefaultVendorValues(0);
+    body.Last_Modified = new Date();
+    const finalBody = { ...defaultValues, ...body };
+    const vendor = await Vendor.update(finalBody,{where:{Primary_Vendor:id}});
+    return vendor;
+  }
+
+  
+
 } 
