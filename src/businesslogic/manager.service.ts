@@ -16,6 +16,7 @@ import { PriceClass } from "../models/mmsql/priceClass.model";
 import Banner from "../models/postgres/banner.model";
 import { SalesCategory } from "../models/mmsql/salesCategory.model";
 import { Vendor } from "../models/mmsql/vendor.model";
+import { Users } from "../models/mmsql/user.model"
 import { CustReceivables } from "../models/mmsql/custReceivables.model";
 import { Token } from "../models/postgres/token.model";
 import { Retailer } from "../models/postgres/retailer.model";
@@ -66,6 +67,7 @@ import { PassScanItem } from "../models/postgres/passScanItem.model";
 import { getDefaultCustomerValues, getNextCustomerNumber } from "../utils/customer";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { getDefaultVendorValues, getNextVendorNumber } from "../utils/vendor";
+import { getDefaultErpUserValues , getNextUserNumber } from "../utils/erpUsers";
 
 export class ManagerService {
 
@@ -4041,6 +4043,42 @@ export class ManagerService {
     return vendor;
   }
 
+  async createErpUser(body: any){
+    const defaultErpUserValues = getDefaultErpUserValues();
+    const nextUserNumber = await getNextUserNumber();
+
+    body.UserNumber = nextUserNumber;
+    const finalBody = { ...defaultErpUserValues, ...body,UserNumber: nextUserNumber };
+    const erpUser = await Users.create(finalBody);
+
+    return erpUser;
+  }
+
+  async updateErpUser(id: number, body: any){
+    const userNumber = await Users.findByPk(id);
+    if(!userNumber){
+      throw new AppError('ERP user not found', 404);
+    }
+
+    await userNumber.update(body);
+    return userNumber;
+  }
+
+  async getAllErpUsers() {
+    const userList = await Users.findAll({
+      order: [["UserNumber", "ASC"]],
+    });
+
+    return userList;
+}       
+
+async getErpUserById(id: number){
+    const erpUser  = await Users.findByPk(id)
+    if(!erpUser){
+      throw new AppError('ERP User not found', 404);
+    }
+    return erpUser;
+}
 
   async editInventory(id: number, body: any) {
     const inventory = await Inventory.findByPk(id);
@@ -4069,6 +4107,8 @@ export class ManagerService {
     }
     return inventoryUPC;
   }
+
+  
 
    // EpickSetting CRUD methods
   async createEpickSetting(body: { pin: string; allowSingleScan: boolean }) {

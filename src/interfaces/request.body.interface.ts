@@ -4,6 +4,7 @@ export const ROLES = {
   RETAILER: "retailer",
   SALES: "sales",
   EPIK: "epick",
+  CHECKER: "checker",
 }
 
 export interface IContactUs {

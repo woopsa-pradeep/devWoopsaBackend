@@ -6,6 +6,7 @@ import { sendResponse } from "../utils/sendResponse";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { IGetProductInformation, ICreateLink, ICreateNotificationScheduler, ICreateStory, IUpdateLink, IUpdateNotificationScheduler, IUpdateStory, IGetNotificationSchedulers, IGetStories, ICreateRetailerProductCatalog, IGetRetailerProductCatalogs, IUpdateRetailerProductCatalog, ICreateWebView, IUpdateWebView, IGetWebViews, IWebViewGroupedResponse } from "../interfaces/request.body.interface";
 import { uploadFileToAzure } from "../utils/azureUploader";
+import { number } from "joi";
 
 
 export class ManagerController {
@@ -777,6 +778,26 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
  async createVendor(req: AuthRequest, res: Response) {
     const data = await this.managerService.createVendor(req.body );
     sendResponse(res, 201, true, data, 'Vendor created successfully');
+  }
+
+  async createErpUser(req: AuthRequest, res: Response){
+    const data = await this.managerService.createErpUser(req.body);
+    sendResponse(res , 201 ,true, data, 'ERP User created successfully');
+  }
+
+  async updateErpUser(req: AuthRequest, res: Response){
+    const data = await this.managerService.updateErpUser(Number(req.params.id), req.body)
+    sendResponse(res, 200, true, data, 'ERP User updated successfully')
+  }
+
+  async getAllErpUsers(req: AuthRequest, res: Response){
+    const data = await this.managerService.getAllErpUsers();
+    sendResponse(res, 200, true, data, "ERP Users fetched successfully");
+  }
+
+   async getErpUserById(req: AuthRequest, res: Response){
+    const data = await this.managerService.getErpUserById(Number(req.params.id))
+    sendResponse(res, 200, true, data, "ERP User fetched successfully");
   }
 
   async editInventory(req: AuthRequest, res: Response) {

@@ -832,7 +832,7 @@ export class AuthService {
       where: {
         email: body.email,
         status: true,
-        // role: "checker",
+        role: "checker",
         isActive: true,
       },
     });

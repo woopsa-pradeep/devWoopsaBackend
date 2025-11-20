@@ -132,15 +132,46 @@ export class EpickService {
         console.log(acceptedOrderNumbers, 'acceptedOrderNumbers');
       
         // 2) Query OrderHeader for orders, excluding accepted ones via NOT IN
-        const headerWhere: any = {};
+        // Exclude orders where Invoice_Number > 0 OR P_Number > 0 OR Invoice_Total > 0
+        // Include orders where ALL three are <= 0 or null
+        const headerWhere: any = {
+          [Op.and]: [
+            // Exclude orders where Order_Updated = 1
+            { Order_Updated: { [Op.ne]: true } },
+            // Exclude orders where ANY of the three is > 0 (OR condition)
+            // Include orders where ALL three are <= 0 or null
+            {
+              [Op.and]: [
+                {
+                  [Op.or]: [
+                    { Invoice_Number: { [Op.lte]: 0 } },
+                    { Invoice_Number: null }
+                  ]
+                },
+                {
+                  [Op.or]: [
+                    { P_Number: { [Op.lte]: 0 } },
+                    { P_Number: null }
+                  ]
+                },
+                {
+                  [Op.or]: [
+                    { Invoice_Total: { [Op.lte]: 0 } },
+                    { Invoice_Total: null }
+                  ]
+                }
+              ]
+            }
+          ]
+        };
         
         // Apply start date filter only if provided
         if (startDate) {
-          headerWhere.Order_Date = { [Op.gte]: startDate };
+          headerWhere[Op.and].push({ Order_Date: { [Op.gte]: startDate } });
         }
         
         if (acceptedOrderNumbers.length > 0) {
-          headerWhere.Order_Number = { [Op.notIn]: acceptedOrderNumbers };
+          headerWhere[Op.and].push({ Order_Number: { [Op.notIn]: acceptedOrderNumbers } });
         }
         console.log(headerWhere, 'headerWhere');
         const todayOrder = await OrderHeader.findAll({
@@ -1200,13 +1231,81 @@ export class EpickService {
     if (!data) {
       throw new AppError("Order not found", 404);
     }
+    
+    // Get picker user ID from OrderPick
+    const pickerUserId = data.pickerUserNumber;
+    
+    // Find the user in WebUsers table to get userNumber
+    const pickerUser = await WebUsers.findOne({
+      where: {
+        id: pickerUserId
+      },
+      attributes: ['userNumber']
+    });
+
+    if (!pickerUser) {
+      throw new AppError("Picker user not found", 404);
+    }
+
+    // Get userNumber from WebUsers (convert string to number for Picker_ID)
+    const pickerUserNumber = pickerUser.userNumber 
+    
+    if (!pickerUserNumber) {
+      throw new AppError("Picker user number not found", 404);
+    }
+    
+    // Count bundles (box + drink) and totes from OrderPickBox
+    const orderBoxes = await OrderPickBox.findAll({
+      where: {
+        orderNumber: id
+      },
+      attributes: ['type']
+    });
+
+    // Count bundles = number of (box + drink)
+    const bundlesCount = orderBoxes.filter(
+      (box: any) => box.type === 'box' || box.type === 'drink'
+    ).length;
+
+    // Count totes = number of (tote)
+    const totesCount = orderBoxes.filter(
+      (box: any) => box.type === 'tote'
+    ).length;
+
+    // Update OrderPick status
     await data.update({
       status: 'completed',
       completedAt: moment().toDate()
     })
 
+    // Update Order_Header with Picker_ID, Bundles, and Totes
+    await OrderHeader.update(
+      {
+        Picker_ID: pickerUserNumber,
+        Bundles: bundlesCount,
+        Totes: totesCount
+      },
+      {
+        where: {
+          Order_Number: id
+        }
+      }
+    );
+
+    // Update all Order_Detail.Confirmed to 1 (true)
+    await OrderDetail.update(
+      {
+        Confirmed: true
+      },
+      {
+        where: {
+          Order_Number: id
+        }
+      }
+    );
 
     console.log(data, 'data--->');
+    console.log(`Bundles: ${bundlesCount}, Totes: ${totesCount}`);
 
     return data;
   }
@@ -1242,8 +1341,6 @@ export class EpickService {
       attributes: ['orderNumber', 'totalLines', 'scannedLines', 'OutOfStockItem', 'status']
     })
     return orderSummarny;
-
-
 
   }
 

@@ -56,6 +56,7 @@ export const Manager = {
   BANNER_LIST_SUCCESFULLY: "Banner List Successfully",
   FETCH_AR_LIST_SUCCESS: "Account receivables list fetched successfully.",
   FETCH_VENDOR_LIST_SUCCESS: "Vendor list fetched successfully.",
+  FETCH_ERP_USER_LIST_SUCCESS: "Erp User list fetched successfully",
   PRODUCT_FETCHED_SUCCESSFULLY: "Product fetched successfully",
   PRODUCT_NOT_FOUND: "Product not found",
   WAREHOUSE_SETTING_UPDATED: "Warehouse setting updated successfully",

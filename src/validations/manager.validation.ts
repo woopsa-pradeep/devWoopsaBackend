@@ -49,9 +49,9 @@ export const saasValidationBannerSchema = Joi.object({
       'number.base': 'Item number must be a number.',
     }),
 });
+// validation/erpUser.validation.ts
 
 // validations/users.validation.ts
-
 
 export const createUserSchema = Joi.object({
   userNumber: Joi.number().required().messages({
@@ -1106,6 +1106,66 @@ export const createVendorSchema = Joi.object({
     "any.required": "Vendor zip code is required"
   }),
 }).unknown(true);
+
+export const createErpUserSchema = Joi.object({
+  UserID: Joi.string()
+    .max(5)
+    .allow(null, '')
+    .messages({
+      'string.base': 'UserID must be a string',
+      'string.max': 'UserID cannot exceed 5 characters',
+    }),
+
+  UserName: Joi.string()
+    .max(50)
+    .required()
+    .messages({
+      'string.base': 'UserName must be a string',
+      'string.max': 'UserName cannot exceed 50 characters',
+      'any.required': 'UserName is required',
+    }),
+
+  UserPassword: Joi.string()
+    .max(5)
+    .required()
+    .messages({
+      'string.base': 'UserPassword must be a string',
+      'string.max': 'UserPassword cannot exceed 5 characters',
+      'any.required': 'UserPassword is required',
+    }),
+
+  UserGroup: Joi.number()
+    .integer()
+    .allow(null)
+    .messages({
+      'number.base': 'UserGroup must be a number',
+    }),
+  })
+
+
+export const updateErpUserSchema = Joi.object({
+  UserID: Joi.string()
+    .max(5)
+    .allow(null, '')
+    .messages({
+      'string.base': 'UserID must be a string',
+      'string.max': 'UserID cannot exceed 5 characters',
+    }),
+
+  UserName: Joi.string()
+    .max(50)
+    .messages({
+      'string.base': 'UserName must be a string',
+      'string.max': 'UserName cannot exceed 50 characters',
+    }),
+
+  UserPassword: Joi.string()
+    .max(5)
+    .messages({
+      'string.base': 'UserPassword must be a string',
+      'string.max': 'UserPassword cannot exceed 5 characters',
+    }),
+  })
 
 export const updateInventoryUPCSchema = Joi.object({
   UPC_Number: Joi.string().optional().allow('', null).messages({

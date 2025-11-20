@@ -6,7 +6,7 @@ import { ROLES } from '../interfaces/request.body.interface';
 import { multerUpload } from '../middlewares/upload.middleware';
 import { uploadProductImageSchema } from '../validations/test.validation';
 import { validateRequest } from '../middlewares/validation.middleware';
-import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, roleUdatePermissionRequestSchema , updateWarehouseSettingSchema, createItemLimitSchema, updateItemLimitSchema, createNotificationSchedulerSchema, updateNotificationSchedulerSchema, getNotificationSchedulerSchema, createLinkSchema, updateLinkSchema, getLinksQuerySchema, createStorySchema, updateStorySchema, getStoriesQuerySchema, createWebViewSchema, updateWebViewSchema, getWebViewsQuerySchema, createRetailerRequestSchema, createPoliciesSchema, updatePoliciesSchema, updateRefundPoliciesSchema, createWebCategorySchema, updateWebCategorySchema, createWebQuickLinkSchema, updateWebQuickLinkSchema, createWebLocationSchema, updateWebLocationSchema, getWebLocationsQuerySchema, createContactUsSchema, updateContactUsSchema, getContactUsQuerySchema, createEmailConfigSchema, updateEmailConfigSchema, createEmailMarketingSchema, getEmailMarketingQuerySchema, createInventoryUPCSchema, updateInventoryUPCSchema, createEpickSettingSchema, getEpickSettingsQuerySchema, updateEpickSettingSchema } from '../validations/manager.validation';
+import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, roleUdatePermissionRequestSchema , updateWarehouseSettingSchema, createItemLimitSchema, updateItemLimitSchema, createNotificationSchedulerSchema, updateNotificationSchedulerSchema, getNotificationSchedulerSchema, createLinkSchema, updateLinkSchema, getLinksQuerySchema, createStorySchema, updateStorySchema, getStoriesQuerySchema, createWebViewSchema, updateWebViewSchema, getWebViewsQuerySchema, createRetailerRequestSchema, createPoliciesSchema, updatePoliciesSchema, updateRefundPoliciesSchema, createWebCategorySchema, updateWebCategorySchema, createWebQuickLinkSchema, updateWebQuickLinkSchema, createWebLocationSchema, updateWebLocationSchema, getWebLocationsQuerySchema, createContactUsSchema, updateContactUsSchema, getContactUsQuerySchema, createEmailConfigSchema, updateEmailConfigSchema, createEmailMarketingSchema, getEmailMarketingQuerySchema, createInventoryUPCSchema, updateInventoryUPCSchema, createEpickSettingSchema, getEpickSettingsQuerySchema, updateEpickSettingSchema, createErpUserSchema, updateErpUserSchema } from '../validations/manager.validation';
 import { itemGlobalSchema, retailerSchema, salesRepSchema, warehouseProfileSchema } from '../validations/setting.validation';
 import { createRetailerProductCatalogSchema, updateRetailerProductCatalogSchema } from '../validations/retailer.validation';
 
@@ -204,6 +204,12 @@ router.put('/edit-inventory/:id', catchAsync(managerController.editInventory.bin
 
 //vendor CRUD routes
 router.post('/create-vendor', catchAsync(managerController.createVendor.bind(managerController)));
+
+//ERPUser CRUD routes
+router.post('/createErpUser' ,validateRequest(createErpUserSchema),catchAsync(managerController.createErpUser.bind(managerController)));
+router.get('/erp-users' , verifyRole(ROLES.MANAGER), catchAsync(managerController.getAllErpUsers.bind(managerController)))
+router.get('/erpuser/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getErpUserById.bind(managerController)))
+router.put('/updateErpUser/:id', validateRequest(updateErpUserSchema),catchAsync(managerController.updateErpUser.bind(managerController)));
 
 // InventoryUPC CRUD routes
 router.post('/inventory-upc', verifyRole(ROLES.MANAGER), validateRequest(createInventoryUPCSchema), catchAsync(managerController.createInventoryUPC.bind(managerController)));

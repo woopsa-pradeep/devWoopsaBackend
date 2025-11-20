@@ -59,28 +59,61 @@ export class ListService {
 
     const whereClause = search
       ? {
-        I_Inactive: false,
-        ShortOrderForm: true,
-        [Op.or]: [
-          { Item_Number: { [Op.like]: `%${search}%` } },
-
-          { Description: { [Op.like]: `%${search}%` } },
-          { ALT_Description2: { [Op.like]: `%${search}%` } },
-        ],
-      }
+          I_Inactive: false,
+          ShortOrderForm: true,
+          [Op.or]: [
+            { Item_Number: { [Op.like]: `%${search}%` } },
+            { Description: { [Op.like]: `%${search}%` } },
+            { ALT_Description2: { [Op.like]: `%${search}%` } },
+          ],
+        }
       : {
-        I_Inactive: false,
-        ShortOrderForm: true
-      };
+          I_Inactive: false,
+          ShortOrderForm: true,
+        };
 
     const result = await Inventory.findAll({
       where: whereClause,
-      order: [['Date_Created', 'DESC']],
+      order: [['Date_Created', 'DESC']], // keep pagination order intact
       limit: search ? undefined : limit,
       offset: search ? undefined : (page - 1) * limit,
     });
 
-    return result;
+    // ------- CUSTOM SORTING AFTER FETCH -------
+    const sortedResult = result.sort((a, b) => {
+      const valA = a.Description?.trim() || "";
+      const valB = b.Description?.trim() || "";
+
+      const getCategory = (str: string): number => {
+        if (!str) return 4;
+
+        const first = str[0];
+
+        // 1️⃣ SYMBOLS: anything not a letter or number (supports Unicode)
+        if (/^[^\p{L}\p{N}]/u.test(first)) return 1;
+
+        // 2️⃣ NUMBERS: starts with digit
+        if (/^[0-9]/.test(str)) return 2;
+
+        // 3️⃣ LETTERS: starts with a letter (A-Z or Unicode)
+        if (/^[\p{L}]/u.test(str)) return 3;
+
+        return 4;
+      };
+
+      const categoryA = getCategory(valA);
+      const categoryB = getCategory(valB);
+
+      if (categoryA !== categoryB) return categoryA - categoryB;
+
+      // Same category → natural alphanumeric sorting (#1A < #2A < #10A, test2 < test10)
+      return valA.localeCompare(valB, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    });
+
+    return sortedResult;
   }
 
   async getCustomerList() {
@@ -90,8 +123,41 @@ export class ListService {
       },
       attributes: ['C_Number', 'C_Name', 'C_CoName', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Phone', 'C_Email']
     })
-    return findCustomer;
-  }
+      const sortedCustomers = findCustomer.sort((a, b) => {
+        const valA = a.C_Name?.trim() || "";
+        const valB = b.C_Name?.trim() || "";
+
+        const getCategory = (str: string): number => {
+          if (!str) return 4;
+
+          const first = str[0];
+
+          // SYMBOLS: anything not letter or number
+          if (/^[^\p{L}\p{N}]/u.test(first)) return 1;
+
+          // NUMBERS: starts with digit
+          if (/^[0-9]/.test(str)) return 2;
+
+          // LETTERS: starts with letter
+          if (/^[\p{L}]/u.test(str)) return 3;
+
+          return 4;
+        };
+
+        const categoryA = getCategory(valA);
+        const categoryB = getCategory(valB);
+
+        if (categoryA !== categoryB) return categoryA - categoryB;
+
+        // Same category → natural alphanumeric sort (handles #1, #2, etc.)
+        return valA.localeCompare(valB, undefined, {
+          numeric: true,
+          sensitivity: "base"
+        });
+      });
+
+      return sortedCustomers;
+    }
 
   async getUserList() {
     return await Users.findAll({
@@ -326,7 +392,7 @@ export class ListService {
   }
 
 
-    async getListOfVendorsCreate() {  
+  async getListOfVendorsCreate() {  
     const vendorGroup = await Vendor.findAll({
       attributes: ['Primary_Vendor', 'V_Description']
     });
@@ -349,9 +415,47 @@ export class ListService {
       order: [['Terms', 'ASC']],
     });
 
-    return { vendorGroup , jurisdictionState  , buyerID ,  documentFormats ,terms };
+    // ------- CUSTOM SORTING FOR VENDOR GROUP -------
+    const sortedVendorGroup = vendorGroup.sort((a, b) => {
+      const valA = (a.V_Description ?? "").trim();
+      const valB = (b.V_Description ?? "").trim();
+
+      // 0️⃣ Empty values at the bottom
+      if (!valA && valB) return 1;
+      if (!valB && valA) return -1;
+      if (!valA && !valB) return 0;
+
+      const getCategory = (str: string): number => {
+        if (!str) return 4;
+        const first = str[0];
+
+        // SYMBOLS: anything not letter or number (Unicode-safe)
+        if (/^[^\p{L}\p{N}]/u.test(first)) return 1;
+
+        // NUMERIC: starts with digit
+        if (/^[0-9]/.test(str)) return 2;
+
+        // LETTER: starts with A-Z or Unicode letter
+        if (/^[\p{L}]/u.test(str)) return 3;
+
+        return 4;
+      };
+
+      const categoryA = getCategory(valA);
+      const categoryB = getCategory(valB);
+
+      if (categoryA !== categoryB) return categoryA - categoryB;
+
+      // If same category → natural alphanumeric sorting (#1A < #2B < #10A, A < B)
+      return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: "base" });
+    });
+
+    return { 
+      vendorGroup: sortedVendorGroup,
+      jurisdictionState,
+      buyerID,
+      documentFormats,
+      terms
+    };
   }
-
-
-
 } 

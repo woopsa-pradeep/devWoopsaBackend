@@ -36,7 +36,6 @@ Users.init(
     UserNumber: {
       type: DataTypes.SMALLINT,
       allowNull: false,
-      autoIncrement: true,
       primaryKey: true,
     },
     UserID: {
