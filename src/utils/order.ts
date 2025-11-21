@@ -3,6 +3,8 @@ import { sendEmail } from "./sendMail";
 import { PuppeteerPDFGenerator } from "./puppeteerPdfGenerator";
 import { Distributor } from "../models/mmsql/distributor.model";
 import { generateDistributorOrderNotificationEmail, generateOrderConfirmationEmail, generateReturnOrderNotificationEmail } from "../view/emails";
+import HomeSettings from "../models/postgres/homeSetting.model";
+import settings from "../models/postgres/setting.model";
 
 type OrderDefaultValues = Record<string, number | string | null | boolean | Date>;
 
@@ -248,6 +250,10 @@ export const sendEmailToOrder = async (
     });
     distributor = distributor?.dataValues;
 
+    const settingsRecord: any = await settings.findOne({});
+    const orderEmailNotification = settingsRecord?.orderEmailNotification;
+
+
     const distributorEmailHtml = generateDistributorOrderNotificationEmail(
       distributor?.D_Name || 'CDT Distributor',
       customer.C_Name,
@@ -263,8 +269,11 @@ export const sendEmailToOrder = async (
 
     const distributorEmail = distributor?.D_Email || 'distributor@yopmail.com';
 
+    let emailToSend = orderEmailNotification || distributorEmail;
+
+
     await sendEmail({
-      to: distributorEmail,
+      to: emailToSend,
       subject: `New Order #${orderHeaderCreated.Order_Number} - Action Required`,
       html: distributorEmailHtml
     });
@@ -272,7 +281,7 @@ export const sendEmailToOrder = async (
     console.log(`✅ Emails sent successfully for Order #${orderHeaderCreated.Order_Number}`);
   } catch (error) {
     console.error('❌ Error sending emails for order:', error);
-    throw error; // Let the caller decide if they want to fail or ignore
+    throw error; // Let the caller decide if they want to fail or ignore.
   }
 };
 

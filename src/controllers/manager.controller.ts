@@ -195,6 +195,10 @@ async getOrderDeliveryStatus(req: AuthRequest, res: Response) {
   sendResponse(res, 200, true, data, General.SUCCESS);
 }
 
+async updateEmailNotification(req: AuthRequest, res: Response) {
+  const data = await this.managerService.updateEmailNotification(req.body);
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
 // ItemLimit CRUD controller methods
 async createItemLimit(req: AuthRequest, res: Response) {
   const data = await this.managerService.createItemLimit(req.body);

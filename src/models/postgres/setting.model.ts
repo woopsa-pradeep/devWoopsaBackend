@@ -68,6 +68,12 @@ Setting.init(
       type: DataTypes.STRING,
       defaultValue: '',
     },
+    
+    orderEmailNotification: {
+      type: DataTypes.STRING,
+      defaultValue: null,
+      allowNull: true
+    }
 
 
   },

@@ -68,6 +68,7 @@ import { getDefaultCustomerValues, getNextCustomerNumber } from "../utils/custom
 import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { getDefaultVendorValues, getNextVendorNumber } from "../utils/vendor";
 import { getDefaultErpUserValues , getNextUserNumber } from "../utils/erpUsers";
+import settings from "../models/postgres/setting.model"
 
 export class ManagerService {
 
@@ -1897,6 +1898,18 @@ export class ManagerService {
         active: true
       }
     ];
+  }
+
+  // async updateEmailNotification( body: any){
+  //   const updatedEmail = await settings.update(body);
+  //   return updatedEmail;
+  // }
+
+  async updateEmailNotification( body: any) {
+    const updatedEmail = await settings.update(body, {
+      where: { }
+    });
+    return updatedEmail;
   }
 
   // helperfucntion

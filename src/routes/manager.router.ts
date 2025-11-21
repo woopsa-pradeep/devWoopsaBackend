@@ -47,6 +47,7 @@ router.get('/homeSetting', verifyRole(ROLES.MANAGER), catchAsync(managerControll
 router.put('/updateHomeSetting', verifyRole(ROLES.MANAGER), validateRequest(homeSettingsSchema), catchAsync(managerController.updateHomeSetting.bind(managerController)));
 router.post('/getProductInformation', verifyRole(ROLES.MANAGER), catchAsync(managerController.getProductInformation.bind(managerController)));
 router.get('/orderDeliveryStatus/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getOrderDeliveryStatus.bind(managerController)));
+router.put('/settings/email' , catchAsync(managerController.updateEmailNotification.bind(managerController)));
 
 
 //settings
