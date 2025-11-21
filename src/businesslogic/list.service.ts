@@ -31,6 +31,7 @@ import { CustomerStatus } from "../models/mmsql/customerStatus.model";
 import { DocumentAdditionalFormats } from "../models/mmsql/documentAdditionalFormat.model";
 import { EDIFormatsUser } from "../models/mmsql/ediFormatUser.model";
 
+
 export class ListService {
 
   async getSalesCategoryList() {
@@ -294,6 +295,7 @@ export class ListService {
         'C_Email',
         'C_OrderDay'
       ],
+      order: [['C_Name','ASC']]
     });
 
     return customers;
@@ -302,57 +304,74 @@ export class ListService {
 
   async getListForInventory() {
     const salesCategory = await SalesCategory.findAll({
-      attributes: ['Sales_Category', 'Category_Desc']
+      attributes: ['Sales_Category', 'Category_Desc'],
+      order: [['Category_Desc','ASC']]
     })
     const priceClass = await PriceClass.findAll({
-      attributes: ['Price_Class', 'Class_Desc']
+      attributes: ['Price_Class', 'Class_Desc'],
+      order: [['Class_Desc','ASC']]
     })
 
     const pickRightArea = await PickRightAreaDefinition.findAll({
-      attributes: ['PickArea', 'PickArea_Description']
+      attributes: ['PickArea', 'PickArea_Description'],
+      order: [['PickArea_Description','ASC']]
     })
 
     const priceSubclass = await PriceSubclass_Defs.findAll({
-      attributes: ['Price_Subclass', 'Subclass_Def']
+      attributes: ['Price_Subclass', 'Subclass_Def'],
+      order: [['Subclass_Def','ASC']]
     })
 
     const cigPack = await CigPack.findAll({
-      attributes: ['Cig_Pack', 'Cig_Pack_Select']
+      attributes: ['Cig_Pack', 'Cig_Pack_Select'],
+      order: [['Cig_Pack','ASC']]
     })
     const projectIdentifier = await ProjectIdentifiers.findAll({
-      attributes: ['Project_Identifier', 'Description']
+      attributes: ['Project_Identifier', 'Description'],
+      order: [['Description','ASC']]
+
     })
     const inventoryItemGroup = await Inventory_ItemGroups.findAll({
-      attributes: ['Item_GroupID', 'Item_GroupDescription']
+      attributes: ['Item_GroupID', 'Item_GroupDescription'],
+      order: [['Item_GroupDescription','ASC']]
     })
     const inventoryBrand = await InventoryBrands.findAll({
-      attributes: ['Brand_ID', 'Brand_Family']
+      attributes: ['Brand_ID', 'Brand_Family'],
+      order: [['Brand_Family','ASC']]
     })
     const exclusionGroup = await ExclusionGroups.findAll({
-      attributes: ['ExclusionGroup_ID', 'ExclusionGroup_Description']
+      attributes: ['ExclusionGroup_ID', 'ExclusionGroup_Description'],
+      order: [['ExclusionGroup_Description','ASC']]
     })
     const taxRateCity = await TaxRates_City.findAll({
-      attributes: ['Jurisdiction_City', 'TaxDescription']
+      attributes: ['Jurisdiction_City', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
     })
     const taxRateCounty = await TaxRates_County.findAll({
-      attributes: ['Jurisdiction_County', 'TaxDescription']
+      attributes: ['Jurisdiction_County', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
     })
 
     const taxRate = await TaxRates.findAll({
-      attributes: ['Jurisdiction_State', 'TaxDescription']
+      attributes: ['Jurisdiction_State', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
     })
 
     const vendor = await Vendor.findAll({
-      attributes: ['Primary_Vendor', 'V_Description']
+      attributes: ['Primary_Vendor', 'V_Description'],
+      order: [['V_Description','ASC']]
     })
     const nacsCategory = await NACS_CategoryCodes.findAll({
-      attributes: ['NACS_Category_Code', 'NACS_Description']
+      attributes: ['NACS_Category_Code', 'NACS_Description'],
+      order: [['NACS_Description','ASC']]
     })
     const otherTaxes = await OtherTaxes.findAll({
-      attributes: ['OTP_Number', 'OTP_Description']
+      attributes: ['OTP_Number', 'OTP_Description'],
+      order: [['OTP_Description','ASC']]
     })
     const msaCategory = await MSA_CategoryCodes.findAll({
-      attributes: ['MSA_Category_Code', 'MSA_Description']
+      attributes: ['MSA_Category_Code', 'MSA_Description'],
+      order: [['MSA_Description','ASC']]
     })
     return { salesCategory, priceClass, pickRightArea, cigPack, projectIdentifier, inventoryItemGroup, inventoryBrand, exclusionGroup, taxRateCity, taxRateCounty, taxRate, vendor, priceSubclass, nacsCategory, otherTaxes, msaCategory }
 
@@ -362,47 +381,61 @@ export class ListService {
 
   async getListOfCustomersCreate() {
     const terms = await Terms.findAll({
-      attributes: ['TermsCode', 'Terms']
+      attributes: ['TermsCode', 'Terms'],
+      order: [['Terms','ASC']]
     })
     const customerStatus = await CustomerStatus.findAll({
-      attributes: ['C_StatusCode', 'C_Status', 'C_StatusDescription', 'C_ClassCategory']
+      attributes: ['C_StatusCode', 'C_Status', 'C_StatusDescription', 'C_ClassCategory'],
+      order: [['C_StatusDescription','ASC']]
     })
     const classOfTrade = await ClassOfTrade.findAll({
-      attributes: ['Trade_Code', 'Trade_Desc']
+      attributes: ['Trade_Code', 'Trade_Desc'],
+      order: [['Trade_Desc','ASC']]
     })
     const deliveryType = await DeliveryTypes.findAll({
-      attributes: ['Delivery_ID', 'Delivery_Type', 'Delivery_Description', 'Delivery_Active']
+      attributes: ['Delivery_ID', 'Delivery_Type', 'Delivery_Description', 'Delivery_Active'],
+      order: [['Delivery_Description','ASC']]
     })
 
     const documentAdditionalFormat = await DocumentAdditionalFormats.findAll({
-      attributes: ['Document_Type', 'Document_FormatID', 'Document_Description', 'Document_ReportFileName']
+      attributes: ['Document_Type', 'Document_FormatID', 'Document_Description', 'Document_ReportFileName'],
+      order: [['Document_Description','ASC']]
     })
     const ediFormatUser = await EDIFormatsUser.findAll({
-      attributes: ['EDI_ID', 'EDI_Format', 'EDI_DescriptionUser', 'EDI_OptionsUser', 'EDI_AccountNumber']
+      attributes: ['EDI_ID', 'EDI_Format', 'EDI_DescriptionUser', 'EDI_OptionsUser', 'EDI_AccountNumber'],
+      order: [['EDI_DescriptionUser','ASC']]
     })
 
     const salesRep = await SalesRep.findAll({
-      attributes: ['S_Number', 'S_Desc']
+      attributes: ['S_Number', 'S_Desc'],
+      order: [['S_Desc','ASC']]
     })
 
     const salesCategory = await SalesCategory.findAll({
+      attributes: ['Sales_Category' ,'Category_Desc'],
+      order: [['Category_Desc','ASC']]
     })
+
 
     return { terms, customerStatus, classOfTrade, deliveryType, documentAdditionalFormat, ediFormatUser, salesRep ,salesCategory};
   }
 
 
-  async getListOfVendorsCreate() {  
-    const vendorGroup = await Vendor.findAll({
-      attributes: ['Primary_Vendor', 'V_Description']
-    });
+  async getListOfVendorsCreate() {
+  
+  const vendorGroup = await Vendor.findAll({
+    attributes: ['Primary_Vendor', 'V_Description'],
+    order: [['V_Description', 'ASC']],
+  });
 
     const jurisdictionState = await TaxRates.findAll({
-      attributes: ['Jurisdiction_State', 'TaxDescription']
+      attributes: ['Jurisdiction_State', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
     });
 
     const buyerID = await Users.findAll({
-      attributes: ['UserNumber', 'UserID']
+      attributes: ['UserNumber', 'UserID'],
+      order: [['UserID','ASC']]
     });
 
     const documentFormats = await DocumentAdditionalFormats.findAll({
@@ -415,47 +448,13 @@ export class ListService {
       order: [['Terms', 'ASC']],
     });
 
-    // ------- CUSTOM SORTING FOR VENDOR GROUP -------
-    const sortedVendorGroup = vendorGroup.sort((a, b) => {
-      const valA = (a.V_Description ?? "").trim();
-      const valB = (b.V_Description ?? "").trim();
-
-      // 0️⃣ Empty values at the bottom
-      if (!valA && valB) return 1;
-      if (!valB && valA) return -1;
-      if (!valA && !valB) return 0;
-
-      const getCategory = (str: string): number => {
-        if (!str) return 4;
-        const first = str[0];
-
-        // SYMBOLS: anything not letter or number (Unicode-safe)
-        if (/^[^\p{L}\p{N}]/u.test(first)) return 1;
-
-        // NUMERIC: starts with digit
-        if (/^[0-9]/.test(str)) return 2;
-
-        // LETTER: starts with A-Z or Unicode letter
-        if (/^[\p{L}]/u.test(str)) return 3;
-
-        return 4;
-      };
-
-      const categoryA = getCategory(valA);
-      const categoryB = getCategory(valB);
-
-      if (categoryA !== categoryB) return categoryA - categoryB;
-
-      // If same category → natural alphanumeric sorting (#1A < #2B < #10A, A < B)
-      return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: "base" });
-    });
 
     return { 
-      vendorGroup: sortedVendorGroup,
-      jurisdictionState,
-      buyerID,
-      documentFormats,
-      terms
+      vendorGroup: vendorGroup,
+      jurisdictionState: jurisdictionState,
+      buyerID: buyerID,
+      documentFormats: documentFormats,
+      terms: terms,
     };
   }
 } 

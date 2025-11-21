@@ -1115,7 +1115,15 @@ export const createErpUserSchema = Joi.object({
       'string.base': 'UserID must be a string',
       'string.max': 'UserID cannot exceed 5 characters',
     }),
-
+  UserIsActive: Joi.alternatives()
+    .try(
+      Joi.boolean(),
+      Joi.number().valid(0, 1)
+    )
+    .default(true)
+    .messages({
+      'any.only': 'UserIsActive must be either 0, 1, true or false',
+    }),
   UserName: Joi.string()
     .max(50)
     .required()
@@ -1151,7 +1159,15 @@ export const updateErpUserSchema = Joi.object({
       'string.base': 'UserID must be a string',
       'string.max': 'UserID cannot exceed 5 characters',
     }),
-
+  UserIsActive: Joi.alternatives()
+    .try(
+      Joi.boolean(),
+      Joi.number().valid(0, 1)
+    )
+    .default(true)
+    .messages({
+      'any.only': 'UserIsActive must be either 0, 1, true or false',
+    }),
   UserName: Joi.string()
     .max(50)
     .messages({

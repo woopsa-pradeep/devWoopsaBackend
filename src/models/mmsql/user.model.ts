@@ -77,7 +77,6 @@ Users.init(
     UserIsActive: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
-    
     },
   },
   {

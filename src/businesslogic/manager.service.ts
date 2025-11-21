@@ -4046,7 +4046,9 @@ export class ManagerService {
   async createErpUser(body: any){
     const defaultErpUserValues = getDefaultErpUserValues();
     const nextUserNumber = await getNextUserNumber();
-
+ if (body.UserIsActive !== undefined) {
+    body.UserIsActive = body.UserIsActive == 1 ? true : false;
+  }
     body.UserNumber = nextUserNumber;
     const finalBody = { ...defaultErpUserValues, ...body,UserNumber: nextUserNumber };
     const erpUser = await Users.create(finalBody);
@@ -4056,6 +4058,9 @@ export class ManagerService {
 
   async updateErpUser(id: number, body: any){
     const userNumber = await Users.findByPk(id);
+     if (body.UserIsActive !== undefined) {
+        body.UserIsActive = body.UserIsActive == 1 ? true : false;
+      }
     if(!userNumber){
       throw new AppError('ERP user not found', 404);
     }

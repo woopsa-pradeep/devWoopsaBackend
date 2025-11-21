@@ -1700,7 +1700,7 @@ export async function getTopLatestItems() {
       I_Inactive: false,
       ShortOrderForm: true,
     },
-    order: [['Date_Created', 'DESC']],
+    order: [['Item_Number', 'DESC']],
     limit: 30,
     offset: 0,
     logging: console.log // <-- logs the SQL

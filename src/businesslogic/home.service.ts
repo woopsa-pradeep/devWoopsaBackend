@@ -193,7 +193,7 @@ export class HomeService {
                     required: false
                 }
             ],
-            order: [['Date_Created', 'DESC']],
+            order: [['Item_Number', 'DESC']],
             limit,
             offset: (page - 1) * limit,
         });
