@@ -73,7 +73,7 @@ export const getDefaultOrderValues = (): OrderDefaultValues => {
     POS_CardFee: 0,
     POS_PaidOnAccount: 0,
     AssignedToEPickUser: null,
-    AssignedOnforEPick:dateTimeObject,
+    // AssignedOnforEPick:dateTimeObject,
     EpickStatusFromPicker: null,
     EpickCompletedOn: null,
     OrderedOn: null,
