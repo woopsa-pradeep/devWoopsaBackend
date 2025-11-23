@@ -888,4 +888,13 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'User allow discount updated successfully');
   }
  
+  async updateCustomer(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateCustomer(req.body, Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Customer updated successfully');
+}
+  async updateVendor(req: AuthRequest, res: Response){
+    const data = await this.managerService.updateVendor(req.body, Number(req.params.id))
+    sendResponse(res, 200, true, data, 'Vendor updated successfully')
+  }
+
 }

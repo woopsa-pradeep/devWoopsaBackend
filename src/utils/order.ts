@@ -5,6 +5,7 @@ import { Distributor } from "../models/mmsql/distributor.model";
 import { generateDistributorOrderNotificationEmail, generateOrderConfirmationEmail, generateReturnOrderNotificationEmail } from "../view/emails";
 import HomeSettings from "../models/postgres/homeSetting.model";
 import settings from "../models/postgres/setting.model";
+import { OrderHeader } from "../models/mmsql/orderHeader.model";
 
 type OrderDefaultValues = Record<string, number | string | null | boolean | Date>;
 
@@ -72,7 +73,7 @@ export const getDefaultOrderValues = (): OrderDefaultValues => {
     POS_CardFee: 0,
     POS_PaidOnAccount: 0,
     AssignedToEPickUser: null,
-    AssignedOnforEPick: null,
+    AssignedOnforEPick:dateTimeObject,
     EpickStatusFromPicker: null,
     EpickCompletedOn: null,
     OrderedOn: null,
@@ -142,6 +143,11 @@ export const nonDefaultValuesObj = {
   Delivery_Charge_Select: null,
   Other_Charge_Select: null
 };
+
+export const getNextOrderNumber = async () => {
+  const orderNumber = await OrderHeader.max('Order_Number');
+  return (orderNumber as number) + 1;
+}
 
 
 type OrderDetailDefaultValues = Record<string, number | string | boolean | null>;

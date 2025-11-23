@@ -204,7 +204,8 @@ router.post('/create-inventory', catchAsync(managerController.createInventory.bi
 router.put('/edit-inventory/:id', catchAsync(managerController.editInventory.bind(managerController)));
 
 //vendor CRUD routes
-router.post('/create-vendor', catchAsync(managerController.createVendor.bind(managerController)));
+router.post('/create-vendor', verifyRole(ROLES.MANAGER), catchAsync(managerController.createVendor.bind(managerController)));
+router.put('/updateVendor/:id', verifyRole(ROLES.MANAGER),  catchAsync(managerController.updateVendor.bind(managerController)));
 
 //ERPUser CRUD routes
 router.post('/createErpUser' ,validateRequest(createErpUserSchema),catchAsync(managerController.createErpUser.bind(managerController)));
@@ -229,4 +230,6 @@ router.delete('/epick-settings/:id', verifyRole(ROLES.MANAGER), catchAsync(manag
 // router.post('/pass-scan-items', verifyRole(ROLES.MANAGER), catchAsync(managerController.putPassScanItem.bind(managerController)));
 router.post('/createCustomer', catchAsync(managerController.createCustomer.bind(managerController)));
 router.put('/updateUserAllowDiscount/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUserAllowDiscount.bind(managerController)));
+router.put('/updateCustomer/:id' , verifyRole(ROLES.MANAGER), catchAsync(managerController.updateCustomer.bind(managerController)));
+
 export default router; 

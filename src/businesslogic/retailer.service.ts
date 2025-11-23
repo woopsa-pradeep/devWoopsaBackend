@@ -20,7 +20,7 @@ import { Distributor } from "../models/mmsql/distributor.model";
 import { col, Op, Order, Sequelize, where } from "sequelize";
 import { AddToCartRequest, UpdateCartItemRequest, CartSummary, CartResponse, PlaceOrder } from "../interfaces/cart.interface";
 import { CustomerRoute } from "../models/mmsql/customerRoutes.model";
-import { getDefaultOrderDetailValues, getDefaultOrderValues, sendEmailToOrder } from "../utils/order";
+import { getDefaultOrderDetailValues, getDefaultOrderValues, getNextOrderNumber, sendEmailToOrder } from "../utils/order";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { OrderDetail } from "../models/mmsql/orderDetail.model";
 import { OptionDefsValues } from "../models/mmsql/optionDefsValue.model";
@@ -963,13 +963,15 @@ export class RetailerService {
     if (!customer) {
       throw new AppError("Customer not found", 404);
     }
+    const orderNumber = await getNextOrderNumber();
 
     // Prepare dynamic header data
     const orderHeaderObject = {
+      Order_Number: orderNumber,
       C_Number: req.user.id,
       S_Number: customer.C_Salesman || 0,
       Order_Source: isWeb ? 13 : 12,
-      AR_C_Number: customer.C_StatementAccount || 0,
+      AR_C_Number: customer.C_StatementAccount || orderNumber,
       Jurisdiction_State: customer.Jurisdiction_State || '',
       Jurisdiction_County: customer.Jurisdiction_County || '',
       Jurisdiction_City: customer.Jurisdiction_City || '',
@@ -990,7 +992,7 @@ export class RetailerService {
       Cig20tax: 0,
       Cig25tax: 0,
       POS_ChangeDue: 0,
-      Order_Pricing_Account: customer.C_PricingAccount || 0,
+      Order_Pricing_Account: customer.C_PricingAccount || orderNumber,
       Points: 0,
       Total_Weight: 0,
       Delivery_Charge_Select: !!customer.Delivery_Charge,
@@ -2503,13 +2505,14 @@ export class RetailerService {
     if (!item) {
       throw new AppError("Item details not found in Inventory", 404);
     }
+    const userJurisdiction = await getJurisdiction(userId);
 
     // Step 3: Pricing & Tax
     let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
     const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
     price = Math.ceil(price * 100) / 100;
 
-    let taxRate = await getTaxRateV1(item.OTP_Number ?? 0, 0, item.Item_Number, price);
+    let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
     taxRate = Math.ceil(taxRate * 100) / 100;
 
     // Step 4: Build response object (same format as your example)

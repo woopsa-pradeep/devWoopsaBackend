@@ -16,7 +16,7 @@ import CustomerCart from "../models/postgres/retailerCart.model";
 import { AddToCartRequest, CartResponse, PlaceOrder, UpdateCartItemRequest } from "../interfaces/cart.interface";
 import { Customer } from "../models/mmsql/customer.model";
 import SalesSession from "../models/postgres/salesSession.model";
-import { getDefaultOrderDetailValues, getDefaultOrderValues, sendEmailToOrder, sendEmailToReturnOrder } from "../utils/order";
+import { getDefaultOrderDetailValues, getDefaultOrderValues, getNextOrderNumber, sendEmailToOrder, sendEmailToReturnOrder } from "../utils/order";
 import { CustomerRoute } from "../models/mmsql/customerRoutes.model";
 import { OptionDefsValues } from "../models/mmsql/optionDefsValue.model";
 import { WarehouseSetting } from "../models/postgres/wareHouseSetting.model";
@@ -135,6 +135,9 @@ export class SalesService {
     // Get customer and route info
 
     const customer = await Customer.findOne({ where: { C_Number: customerId } });
+
+
+    console.log(customer, 'customer-->---->')
     const customerRoutes = await CustomerRoute.findOne({ where: { C_Number: customerId } });
 
 
@@ -142,13 +145,16 @@ export class SalesService {
     if (!customer) {
       throw new AppError("Customer not found", 404);
     }
+    const orderNumber = await getNextOrderNumber();
 
     // Prepare dynamic header data
     const orderHeaderObject = {
+      Order_Number: orderNumber,
+
       C_Number: customerId,
       S_Number: customer.C_Salesman || 0,
       Order_Source: isWeb ? 13 : 12,
-      AR_C_Number: customer.C_StatementAccount || 0,
+      AR_C_Number: customer.C_StatementAccount || orderNumber,
       Jurisdiction_State: customer.Jurisdiction_State || '',
       Jurisdiction_County: customer.Jurisdiction_County || '',
       Jurisdiction_City: customer.Jurisdiction_City || '',
@@ -169,7 +175,7 @@ export class SalesService {
       Cig20tax: 0,
       Cig25tax: 0,
       POS_ChangeDue: 0,
-      Order_Pricing_Account: customer.C_PricingAccount || 0,
+      Order_Pricing_Account: customer.C_PricingAccount || orderNumber,
 
       Points: 0,
       Total_Weight: 0,
@@ -2826,10 +2832,11 @@ const newSalesRepArray = salesRepList.map(Number);
   
       // Step 3: Pricing & Tax
       let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
+      const userJurisdiction = await getJurisdiction(userId);
       const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
       price = Math.ceil(price * 100) / 100;
   
-      let taxRate = await getTaxRateV1(item.OTP_Number ?? 0, 0, item.Item_Number, price);
+      let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
       taxRate = Math.ceil(taxRate * 100) / 100;
   
       // Step 4: Build response object (same format as your example)

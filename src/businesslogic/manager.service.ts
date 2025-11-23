@@ -285,12 +285,12 @@ export class ManagerService {
   }
 
   async getCustomerList(query: PaginationOptions & { search?: string }) {
-    const page = parseInt(query.page as any) || 1;
-    const limit = parseInt(query.limit as any) || 10;
-    const search = query.search || '';
+  const page = parseInt(query.page as any) || 1;
+  const limit = parseInt(query.limit as any) || 10;
+  const search = query.search || '';
 
-    const whereCondition = search
-      ? {
+  const whereCondition = search
+    ? {
         [Op.or]: [
           { C_Number: { [Op.like]: `%${search}%` } },
           { C_Name: { [Op.like]: `%${search}%` } },
@@ -299,111 +299,111 @@ export class ManagerService {
           { C_Email: { [Op.like]: `%${search}%` } },
         ],
       }
-      : {};
+    : {};
 
-    const { count: totalCount, rows: customerList } = await Customer.findAndCountAll({
-      attributes: [
-        'C_Number',
-        'C_Name',
-        'C_Email',
-        'C_Inactive',
-        'C_CoName',
-        'C_PhoneMobile',
-        'C_Address',
-        'C_City',
-        'C_State',
-        'C_Zip',
-        'C_DateCreated',
-        'C_Inactive'
-      ],
-      where: whereCondition,
-      include: [
-        {
-          model: CustomerRoute,
-          as: 'Routes',
-          attributes: ['Route_Number', 'Stop_Number'],
-        },
-      ],
-      limit,
-      offset: (page - 1) * limit,
-      order: [['C_DateCreated', 'DESC']],
-    });
-
-    const customerNumbers = customerList.map((customer: any) => customer.C_Number);
-
-    // 📦 Get order statistics
-    const orderStats = await OrderHeader.findAll({
-      where: {
-        C_Number: { [Op.in]: customerNumbers }
+  const { count: totalCount, rows: customerList } = await Customer.findAndCountAll({
+    attributes: [
+      'C_Number',
+      'C_Name',
+      'C_Email',
+      'C_Inactive',
+      'C_CoName',
+      'C_PhoneMobile',
+      'C_Address',
+      'C_City',
+      'C_State',
+      'C_Zip',
+      'C_DateCreated'
+    ],
+    where: whereCondition,
+    include: [
+      {
+        model: CustomerRoute,
+        as: 'Routes',
+        attributes: ['Route_Number', 'Stop_Number'],
       },
-      attributes: [
-        'C_Number',
-        'Order_Source',
-        [Sequelize.fn('COUNT', Sequelize.col('Order_Number')), 'orderCount']
-      ],
-      group: ['C_Number', 'Order_Source'],
-      raw: true
-    });
+    ],
+    limit,
+    offset: (page - 1) * limit,
+    order: [['C_DateCreated', 'DESC']],
+  });
 
-    const statsMap = new Map();
-    orderStats.forEach((stat: any) => {
-      const customerNumber = stat.C_Number;
-      if (!statsMap.has(customerNumber)) {
-        statsMap.set(customerNumber, { ERP: 0, Mobile: 0, Web: 0 });
-      }
-      const customerStats = statsMap.get(customerNumber);
-      if (stat.Order_Source === 12) customerStats.Mobile = parseInt(stat.orderCount);
-      else if (stat.Order_Source === 13) customerStats.Web = parseInt(stat.orderCount);
-      else customerStats.ERP = parseInt(stat.orderCount);
-    });
+  const customerNumbers = customerList.map((c: any) => c.C_Number);
 
-    const customerLimits = await Retailer.findAll({
-      where: {
-        Customer_Number: { [Op.in]: customerNumbers }
-      },
-      attributes: ['Customer_Number', 'maxOrderLimit', 'minOrderAmount'],
-      raw: true
-    });
-
-    const limitMap = new Map();
-    customerLimits.forEach(limit => {
-      limitMap.set(limit.Customer_Number, {
-        maxOrderLimit: limit.maxOrderLimit,
-        minOrderAmount: limit.minOrderAmount
-      });
-    });
-
-
-    const customerListWithStats = await Promise.all(customerList.map(async (customer: any) => {
-      const customerStats = statsMap.get(customer.C_Number) || {
-        ERP: 0,
-        Mobile: 0,
-        Web: 0
-      };
-
-      const customerLimit = limitMap.get(customer.C_Number) || {
-        maxOrderLimit: null,
-        minOrderAmount: null
-      };
-      const isRegisterCustomer = await checkRegisterCustomer(customer.C_Number);
-
-
-      return {
-        ...customer.toJSON(),
-        isRegisterCustomer,
-        orderStats: customerStats,
-        customerLimit
-      };
-    }));
-
+  if (customerNumbers.length === 0) {
     return {
       totalCount,
       page,
       limit,
-      totalPages: Math.ceil(totalCount / limit),
-      customerList: customerListWithStats,
+      totalPages: 0,
+      customerList: [],
     };
   }
+
+  const orderStats = await OrderHeader.findAll({
+    where: { C_Number: { [Op.in]: customerNumbers } },
+    attributes: [
+      'C_Number',
+      'Order_Source',
+      [Sequelize.fn('COUNT', Sequelize.col('Order_Number')), 'orderCount'],
+    ],
+    group: ['C_Number', 'Order_Source'],
+    raw: true,
+  });
+
+  const statsMap = new Map();
+  orderStats.forEach((stat: any) => {
+    if (!statsMap.has(stat.C_Number)) {
+      statsMap.set(stat.C_Number, { ERP: 0, Mobile: 0, Web: 0 });
+    }
+    const item = statsMap.get(stat.C_Number);
+    if (stat.Order_Source === 12) item.Mobile = parseInt(stat.orderCount);
+    else if (stat.Order_Source === 13) item.Web = parseInt(stat.orderCount);
+    else item.ERP = parseInt(stat.orderCount);
+  });
+
+  const customerLimits = await Retailer.findAll({
+    where: { Customer_Number: { [Op.in]: customerNumbers } },
+    attributes: ['Customer_Number', 'maxOrderLimit', 'minOrderAmount'],
+    raw: true,
+  });
+
+  const limitMap = new Map();
+  customerLimits.forEach((limit) => {
+    limitMap.set(limit.Customer_Number, {
+      maxOrderLimit: limit.maxOrderLimit,
+      minOrderAmount: limit.minOrderAmount,
+    });
+  });
+
+  const registeredCustomers = await Retailer.findAll({
+    where: { Customer_Number: { [Op.in]: customerNumbers } },
+    attributes: ['Customer_Number'],
+    raw: true,
+  });
+
+  const registerSet = new Set(registeredCustomers.map((r) => r.Customer_Number));
+
+  const customerListWithStats = customerList.map((customer: any) => {
+    const cNum = customer.C_Number;
+
+    return {
+      ...customer.toJSON(),
+      isRegisterCustomer: registerSet.has(cNum),
+      orderStats: statsMap.get(cNum) || { ERP: 0, Mobile: 0, Web: 0 },
+      customerLimit: limitMap.get(cNum) || { maxOrderLimit: null, minOrderAmount: null },
+    };
+  });
+
+  return {
+    totalCount,
+    page,
+    limit,
+    totalPages: Math.ceil(totalCount / limit),
+    customerList: customerListWithStats,
+  };
+}
+
 
   async getCustomerListWithOrderStats(query: PaginationOptions & { search?: string }) {
     const page = parseInt(query.page as any) || 1;
@@ -4004,7 +4004,7 @@ export class ManagerService {
 
   async createInventory(body: any) {
     const nextItemNumber = await getNextItemNumber();
-    const defaultValues = getDefaultInventoryValues(0);
+    const defaultValues = await getDefaultInventoryValues(0);
     body.Item_Number = nextItemNumber;
 
     body.PriceCostModifiedDate = new Date();

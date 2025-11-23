@@ -2,9 +2,11 @@
 import moment from 'moment';
 import { Inventory } from '../models/mmsql/inventory.model';
 
-export const getDefaultInventoryValues = (UserID: number) => {
+export const getDefaultInventoryValues = async (UserID: number) => {
+  const nextItemNumber = await getNextItemNumber();
   const currentDate = moment.utc().format('YYYY-MM-DD HH:mm:ss.SSSSSSS +00:00');
 
+  
   return {
     // Price fields
     Price7: 0,
@@ -24,12 +26,12 @@ export const getDefaultInventoryValues = (UserID: number) => {
     // Other fields
     Cig_Total: 0,
     eCommerce: false,
-    eCommerce_UpdateTag: false,
-    eCommerce_FTP_HostID: null,
+    eCommerce_UpdateTag: 1,
+    eCommerce_FTP_HostID: 0,
     Cig_Upc_Ref: '',
 
     PM_Exclude: false,
-    Vendor_ItemNumberLegacy: null,
+    Vendor_ItemNumberLegacy: 0,
     TaxableAtRetail: false,
 
     Date_Created: currentDate,
@@ -37,7 +39,7 @@ export const getDefaultInventoryValues = (UserID: number) => {
     Date_CreatedUser: UserID,
     Date_LastChangeUser: UserID,
 
-    ROQ_Method: null,
+    ROQ_Method: 0,
     BumpToMinimum: 0,
     NoRetailRounding: false,
     ImageFlag: false,
@@ -48,8 +50,8 @@ export const getDefaultInventoryValues = (UserID: number) => {
     CatchWeight_Capture: false,
     MaximumCustomerOrderQty: 0,
     MaximumCustomerOrderDays: 0,
-    Item_Number_Verify: 0,
-    ItemExpiryDate: null,
+    Item_Number_Verify: nextItemNumber,
+    ItemExpiryDate: currentDate,
     UseMasterImage: false,
     IsAddOnDeposit_Inventory: false,
     AddOnDeposit_Item_Number: 0,
