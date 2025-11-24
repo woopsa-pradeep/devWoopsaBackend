@@ -16,4 +16,5 @@ export interface UserAttributes {
   createdAt: Date;
   updatedAt: Date;
   allowDiscount: boolean;
+  allowDeliveryCharge: boolean;
 }

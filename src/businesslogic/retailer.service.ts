@@ -2453,6 +2453,7 @@ export class RetailerService {
     // Step 1: Check if UPC exists
 
     let upcRecord;
+    barcode = barcode.trim();
 
       // Step 1: Check if UPC exists
       // const upcRecord = await InventoryUPC.findOne({

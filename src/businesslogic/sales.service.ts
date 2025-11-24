@@ -2787,6 +2787,7 @@ const newSalesRepArray = salesRepList.map(Number);
       //   },
       // })
 
+      barcode = barcode.trim();
       if (barcode.length > 9) {
         // If barcode is long → use LIKE search
         upcRecord = await InventoryUPC.findOne({
@@ -3622,6 +3623,18 @@ const newSalesRepArray = salesRepList.map(Number);
       order: [['createdAt', 'DESC']]
     });
     return salesNotes;
+  }
+
+  async addUpc(body:any){
+    const result = await InventoryUPC.create(body);
+    return result;
+
+  }
+
+
+  async updateUpc(id:number,body:any){
+    const result = await InventoryUPC.update(body,{where:{myKey:id}});
+    return result;
   }
 
   // helper function

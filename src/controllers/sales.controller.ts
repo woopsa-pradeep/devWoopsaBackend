@@ -184,7 +184,7 @@ export class SalesController {
     async scanItemByBarcode(req: AuthRequest, res: Response) {
         const upcNumber = typeof req.query.upcNumber === 'string' ? req.query.upcNumber : undefined;
         if (!upcNumber) throw new AppError('upcNumber is required', 400);
-        const data = await this.salesService.scanItemByBarcode(upcNumber, Number(req.params.id));
+        const data = await this.salesService.scanItemByBarcode(upcNumber, Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -304,6 +304,20 @@ export class SalesController {
         const data = await this.salesService.getSalesNotesByCustomer(Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+
+    async addUpc(req: AuthRequest, res: Response) {
+        const data = await this.salesService.addUpc(req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async updateUpc(req: AuthRequest, res: Response) {
+        const data = await this.salesService.updateUpc(Number(req.params.id), req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+
+
 
     // OrderConfirmation CRUD methods
     async createOrderConfirmation(req: AuthRequest, res: Response) {

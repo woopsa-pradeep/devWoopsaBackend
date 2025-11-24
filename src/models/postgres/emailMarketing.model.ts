@@ -31,11 +31,15 @@ EmailMarketing.init(
     status: {
         type: DataTypes.ENUM('draft', 'queued', 'sent', 'failed'),
         allowNull: false,
-        defaultValue: 'queued',
+        defaultValue: 'sent',
     },
     subject: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    failed_emails: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      allowNull: true,
     },
     body: {
       type: DataTypes.TEXT,

@@ -26,7 +26,7 @@ export class WebUsers
   public setUserDiscountLimit!: number;
   public allowSingleScan!: boolean;
   public allowDiscount!: boolean;
-
+public allowDeliveryCharge!: boolean;
   public readonly createdAt!: Date;
   public readonly    updatedAt!: Date;
 }
@@ -47,6 +47,11 @@ WebUsers.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+    },
+    allowDeliveryCharge:{
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     firstName: {
       type: DataTypes.STRING,

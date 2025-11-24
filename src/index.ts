@@ -12,6 +12,12 @@ import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting }
 import { startCronJobs } from './cron'; // adjust path if needed
 import { getDiscount } from './utils/helper';
 import moment from 'moment';
+import './workers/emailWorker'; // Start the email worker
+import './workers/emailNotificationWorker'; // Start the email notification worker
+import { createBullBoard } from '@bull-board/api';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+import { ExpressAdapter } from '@bull-board/express';
+import { emailQueue, emailNotificationQueue } from './configuration/config';
 
 startCronJobs();
 
@@ -22,6 +28,20 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(cors());
+
+// Bull Board UI Setup for Redis Queue Monitoring
+const serverAdapter = new ExpressAdapter();
+serverAdapter.setBasePath('/admin/queues');
+
+createBullBoard({
+  queues: [
+    new BullMQAdapter(emailQueue),
+    new BullMQAdapter(emailNotificationQueue),
+  ],
+  serverAdapter: serverAdapter,
+});
+
+app.use('/admin/queues', serverAdapter.getRouter());
 
 app.get('/', (req: Request, res: Response) => {
   res.send('Hello TypeScript with Node.js!');
@@ -120,6 +140,7 @@ testConnections()
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
       console.log(`📊 Dual database setup: MSSQL + PostgreSQL`);
+      console.log(`📧 Redis Queue UI available at http://localhost:${PORT}/admin/queues`);
     });
   })
   .catch((error: Error) => {

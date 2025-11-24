@@ -191,6 +191,8 @@ router.patch('/email-configs/:id/toggle', verifyRole(ROLES.MANAGER), catchAsync(
 router.post('/email-configs/test', verifyRole(ROLES.MANAGER), catchAsync(managerController.testEmailConfig.bind(managerController)));
 
 // Email Marketing CRUD routes
+router.post('/email-marketingv1', verifyRole(ROLES.MANAGER), validateRequest(createEmailMarketingSchema), catchAsync(managerController.createEmailMarketing.bind(managerController)));
+
 router.post('/email-marketing', verifyRole(ROLES.MANAGER), validateRequest(createEmailMarketingSchema), catchAsync(managerController.createEmailMarketing.bind(managerController)));
 router.get('/email-marketing', verifyRole(ROLES.MANAGER), validateRequest(getEmailMarketingQuerySchema), catchAsync(managerController.getAllEmailMarketing.bind(managerController)));
 router.get('/email-marketing/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getEmailMarketingById.bind(managerController)));

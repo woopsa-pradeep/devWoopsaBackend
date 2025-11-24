@@ -86,3 +86,41 @@ export const updateOrderConfirmationSchema = Joi.object({
     'date.base': 'End time must be a valid date'
   })
 });
+
+
+export const inventoryUPCValidation = Joi.object({
+
+  UPC_Number: Joi.string().required(),
+  Jurisdiction_State: Joi.number()
+    .integer()
+    .required(),
+
+  Jurisdiction_County: Joi.number()
+    .integer()
+    .required(),
+
+  Jurisdiction_City: Joi.number()
+    .integer()
+    .required(),
+
+  Item_Number: Joi.number()
+    .integer()
+    .required(),
+
+  Status: Joi.number()
+    .integer()
+    .min(0)
+    .max(255) // tinyint range
+    .required(),
+
+  Priority: Joi.number()
+    .integer()
+    .min(0)
+    .max(255) // tinyint range
+    .required(),
+
+  Qty: Joi.number()
+    .integer()
+    .min(0)
+    .required(),
+});

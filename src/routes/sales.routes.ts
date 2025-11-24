@@ -6,7 +6,7 @@ import { Router } from "express";
 import { changePasswordSchema } from "../validations/auth.validation";
 import { validateRequest } from "../middlewares/validation.middleware";
 import { verifySalesSession } from "../middlewares/sales.middleware";
-import { createSalesCallTimeSchema, updateSalesCallTimeSchema, createSalesNoteSchema, updateSalesNoteSchema, createOrderConfirmationSchema, updateOrderConfirmationSchema } from "../validations/sales.validation";
+import { createSalesCallTimeSchema, updateSalesCallTimeSchema, createSalesNoteSchema, updateSalesNoteSchema, createOrderConfirmationSchema, updateOrderConfirmationSchema, inventoryUPCValidation } from "../validations/sales.validation";
 
 
 const router = Router();
@@ -84,6 +84,10 @@ router.get('/orderHistoryByProductNumber',
   router.put('/sales-notes/:id',verifyRole(ROLES.SALES),validateRequest(updateSalesNoteSchema),catchAsync(listController.updateSalesNote.bind(listController)));
   router.delete('/sales-notes/:salesId',verifyRole(ROLES.SALES),catchAsync(listController.deleteSalesNote.bind(listController)));
   router.get('/sales-notes-customer/:customerId',verifyRole(ROLES.SALES),catchAsync(listController.getSalesNotesByCustomer.bind(listController)));
+
+  // InventoryUPC CRUD routes
+  router.post('/upc',verifyRole(ROLES.SALES),validateRequest(inventoryUPCValidation),catchAsync(listController.addUpc.bind(listController)));
+  router.put('/upc/:id',verifyRole(ROLES.SALES),catchAsync(listController.updateUpc.bind(listController)));
 
   // OrderConfirmation CRUD routes
   router.get('/order-confirmation/details/:orderNumber',verifyRole(ROLES.SALES),catchAsync(listController.getOrderConfirmationDetailsHistory.bind(listController)));

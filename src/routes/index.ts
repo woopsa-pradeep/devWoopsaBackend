@@ -10,6 +10,7 @@ import homeRoutes from './home.router';
 import epickRoutes from     './epick.router';
 import checkerRoutes from './checker.router';
 import appUpdateRoutes from './appUpdate.routes';
+import redisRoutes from './redis.routes';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.use('/home', homeRoutes);
 router.use('/epick', epickRoutes);
 router.use('/checker', checkerRoutes);
 router.use('/app', appUpdateRoutes);
-
+router.use('/redis', redisRoutes);
 export default router; 
 
 

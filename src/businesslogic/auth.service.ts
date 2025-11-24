@@ -743,6 +743,7 @@ export class AuthService {
         lastName: isUserExist.lastName,
         userNumber: isUserExist.userNumber,
         salesRepNumber: isUserExist.salesRepNumber,
+        allowDeliveryCharge:isUserExist.allowDeliveryCharge,
         isSessionActive: isSessionActive,
         allowDiscount:isUserExist.allowDiscount,
         discountLimit:isUserExist.setUserDiscountLimit,

@@ -69,6 +69,7 @@ import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { getDefaultVendorValues, getNextVendorNumber } from "../utils/vendor";
 import { getDefaultErpUserValues , getNextUserNumber } from "../utils/erpUsers";
 import settings from "../models/postgres/setting.model"
+import { emailNotificationQueue } from "../configuration/config";
 
 export class ManagerService {
 
@@ -1080,7 +1081,7 @@ export class ManagerService {
         as: 'details',
         required: false,
         separate: true, // ✅ key fix for duplicates
-        attributes: ['P_Number', 'P_Number_AppliedTo']
+        attributes: ['P_Number_AppliedFrom', 'P_Number_AppliedTo']
       });
     }
 
@@ -3874,20 +3875,55 @@ export class ManagerService {
       return emailMarketing;
     } else {
 
+      const { to, subject, body, cc, attachments } = data;
+      if (!Array.isArray(to) || to.length === 0) {
+        throw new AppError('to array is required', 400);
+      }
+      if (!subject || !body) {
+        throw new AppError('subject and html are required', 400);
+      }
 
       const emailMarketing = await EmailMarketing.create(data);
-      sendEmailToMarketing({
-        to: emailMarketing.to,
-        subject: emailMarketing.subject,
-        cc: emailMarketing.cc,
-        html: emailMarketing.body,
-        attachments: emailMarketing.attachments,
+
+
+      const jobs: any[] = to.map((u: any) => ({
+        to: u.toLowerCase(),      // adapt to your structure
+        subject,
+        html:body,
+        cc,
+        attachments,
         id: emailMarketing.id
-      }).catch(async err => {
-        await EmailMarketing.update({ status: 'failed' }, { where: { id: emailMarketing.id } });
-        console.error('Email sending failed:', err);
-      });
-      return emailMarketing;
+      }));
+  
+      // Add jobs to notification queue
+      await Promise.all(
+        jobs.map((job) =>
+          emailNotificationQueue.add('send-notification-email', job, {
+            attempts: 3,              // retry up to 3 times
+            backoff: { type: 'exponential', delay: 10000 }, // 10s, 20s, 40s
+            removeOnComplete: true,
+            removeOnFail: false,
+          })
+        )
+      );
+  
+      // RESPONSE IS FAST – server not blocked.
+      return {
+        message: 'Notification emails queued successfully',
+        queuedCount: jobs.length,
+      };
+
+      // sendEmailToMarketing({
+      //   to: emailMarketing.to,
+      //   subject: emailMarketing.subject,
+      //   cc: emailMarketing.cc,
+      //   html: emailMarketing.body,
+      //   attachments: emailMarketing.attachments,
+      //   id: emailMarketing.id
+      // }).catch(async err => {
+      //   await EmailMarketing.update({ status: 'failed' }, { where: { id: emailMarketing.id } });
+      //   console.error('Email sending failed:', err);
+      // });
     }
 
   }
