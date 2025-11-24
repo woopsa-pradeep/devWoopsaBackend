@@ -154,7 +154,7 @@ export class SalesService {
       C_Number: customerId,
       S_Number: customer.C_Salesman || 0,
       Order_Source: isWeb ? 13 : 12,
-      AR_C_Number: customer.C_StatementAccount || orderNumber,
+      AR_C_Number: customer.C_StatementAccount || customerId,
       Jurisdiction_State: customer.Jurisdiction_State || '',
       Jurisdiction_County: customer.Jurisdiction_County || '',
       Jurisdiction_City: customer.Jurisdiction_City || '',
@@ -175,7 +175,7 @@ export class SalesService {
       Cig20tax: 0,
       Cig25tax: 0,
       POS_ChangeDue: 0,
-      Order_Pricing_Account: customer.C_PricingAccount || orderNumber,
+      Order_Pricing_Account: customer.C_PricingAccount || customerId,
 
       Points: 0,
       Total_Weight: 0,
