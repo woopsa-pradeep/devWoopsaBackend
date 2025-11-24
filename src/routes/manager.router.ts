@@ -228,7 +228,7 @@ router.get('/epick-settings/:id', verifyRole(ROLES.MANAGER), catchAsync(managerC
 router.put('/epick-settings/:id', verifyRole(ROLES.MANAGER), validateRequest(updateEpickSettingSchema), catchAsync(managerController.updateEpickSetting.bind(managerController)));
 router.delete('/epick-settings/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteEpickSetting.bind(managerController)));
 // router.post('/pass-scan-items', verifyRole(ROLES.MANAGER), catchAsync(managerController.putPassScanItem.bind(managerController)));
-router.post('/createCustomer', catchAsync(managerController.createCustomer.bind(managerController)));
+router.post('/createCustomer', verifyRole(ROLES.MANAGER), catchAsync(managerController.createCustomer.bind(managerController)));
 router.put('/updateUserAllowDiscount/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUserAllowDiscount.bind(managerController)));
 router.put('/updateCustomer/:id' , verifyRole(ROLES.MANAGER), catchAsync(managerController.updateCustomer.bind(managerController)));
 

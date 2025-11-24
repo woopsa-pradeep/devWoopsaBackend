@@ -168,6 +168,11 @@ Vendor.hasMany(Inventory, {
     foreignKey: 'C_Number',
     as: 'customer',
   });
+
+  Customer.hasOne(CustomerRoute, {
+  foreignKey: 'C_Number',
+  as: 'customerRoute'
+  });
   
   Customer.hasMany(OrderHeader, {
     foreignKey: 'C_Number',

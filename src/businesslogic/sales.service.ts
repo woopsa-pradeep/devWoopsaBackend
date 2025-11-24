@@ -4617,8 +4617,32 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         'Order_Date',
         'User_ID',
         'Order_Source',
-        'Delivery_Charge'
+        'Delivery_Charge',
+      ], 
+        include: [
+    {
+      model: Customer,
+      as: 'customer',
+      attributes: [
+        'C_Name',
+        'C_Number',
+        'C_Address',
+        'C_City',
+        'C_State',
+        'C_Phone'
+      ],
+      include: [
+        {
+          model: CustomerRoute,
+          as: 'customerRoute',
+          attributes: [
+            'Route_Number',
+            'Stop_Number'
+          ]
+        }
       ]
+    }
+  ]
     });
 
     // Get total count of order lines

@@ -416,8 +416,22 @@ export class ListService {
       order: [['Category_Desc','ASC']]
     })
 
+    const taxRateCity = await TaxRates_City.findAll({
+      attributes: ['Jurisdiction_City', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    })
+    const taxRateCounty = await TaxRates_County.findAll({
+      attributes: ['Jurisdiction_County', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    })
 
-    return { terms, customerStatus, classOfTrade, deliveryType, documentAdditionalFormat, ediFormatUser, salesRep ,salesCategory};
+    const taxRate = await TaxRates.findAll({
+      attributes: ['Jurisdiction_State', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    })
+
+
+    return { terms, customerStatus, classOfTrade, deliveryType, documentAdditionalFormat, ediFormatUser, salesRep ,salesCategory,taxRateCity,taxRateCounty,taxRate};
   }
 
 

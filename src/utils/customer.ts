@@ -5,7 +5,7 @@ export const getDefaultCustomerValues = (UserID: number): Partial<ICustomerAttri
   const currentDate = new Date();
 
   return {
-    C_SpecialTaxCode: "E",
+    C_SpecialTaxCode: "",
     C_RetailCode: 0,
     C_Class: 0,
     C_StatementCode: 0,
@@ -50,13 +50,13 @@ export const getDefaultCustomerValues = (UserID: number): Partial<ICustomerAttri
     LastPaymentAmount: 0,
     LastPostDatedTotal: 0,
     WebHistory: 0,
-    FTP_Host: "0",
-    FTP_User: "0",
-    FTP_Password: "0",
+    FTP_Host: "",
+    FTP_User: "",
+    FTP_Password: "",
     FTP_Directory: "0",
     FTP_Protocol: 0,
     FTP_Mode: 0,
-    FTP_FileExt: "0",
+    FTP_FileExt: "",
     C_OutputFolder: "",
     ExpDate_OtherTax2: currentDate,
     ExpDate_OtherTax3: currentDate,
