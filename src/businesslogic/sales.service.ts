@@ -4438,6 +4438,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             'C_Number',
             'Order_Source',
             'Order_Date',
+            'Invoice_Number'
           ],
           where: headerWhere,
           include: [
@@ -4466,6 +4467,13 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
                   attributes: ['S_Number', 'S_Desc'],
                   required: false,
                 },
+                {
+                  model:OrderDetail,
+                  as: 'orderDetails',
+                  attributes: ['Order_Number', 'Line_Number', 'Quantity_Ordered', 'Pack', 'CaseCount'],
+                  required: true,
+                 
+                }
               ],
             },
           ],
@@ -4509,41 +4517,53 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         });
   
         // Format response
-        const formattedOrderList = orderList.map((order: any) => {
-          // Map Order_Source to readable names
-          let orderSourceName = 'ERP';
-          if (order.Order_Source === 13) {
-            orderSourceName = 'Web';
-          } else if (order.Order_Source === 12) {
-            orderSourceName = 'App';
-          }
-  
-          const route = order.customer?.Routes?.[0];
-          const salesRep = order.customer?.salesRep;
-  
-          const confirmation = confirmationMap.get(order.Order_Number) || null;
-  
-          return {
-            Order_Number: order.Order_Number,
-            C_Number: order.C_Number,
-            status: confirmation ? confirmation.status : 'Not Confirmed',
-            Order_Source: order.Order_Source,
-            isOrderConfirmed: confirmation,
-            Order_Source_Name: orderSourceName,
-            Order_Date: order.Order_Date,
-            customerName: order.customer?.C_Name || 'N/A',
-            address: order.customer?.C_Address || 'N/A',
-            city: order.customer?.C_City || 'N/A',
-            state: order.customer?.C_State || 'N/A',
-            zip: order.customer?.C_Zip || 'N/A',
-            country: order.customer?.C_Country || 'N/A',
-            route: route?.Route_Number ?? null,
-            stop: route?.Stop_Number ?? null,
-            salesRep: salesRep?.S_Desc ?? null,
-            totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
-          };
-        });
-  
+        const formattedOrderList = await Promise.all(
+          orderList.map(async (order: any) => {
+            // Map Order_Source to readable names
+            let orderSourceName = 'ERP';
+            if (order.Order_Source === 13) {
+              orderSourceName = 'Web';
+            } else if (order.Order_Source === 12) {
+              orderSourceName = 'App';
+            }
+      
+            const route = order.customer?.Routes?.[0];
+      
+            const isOrderConfirmed = await OrderConfirmation.findOne({
+              where: { order_Number: order.Order_Number, isActive: true },
+              include: [
+                {
+                  model: WebUsers,
+                  as: 'sales',
+                  attributes: ['id', 'firstName', 'lastName'],
+                }
+              ],
+              attributes: ['status','id','current_orderline','startTime','endTime','sales_id'],
+              raw: true,
+            });
+      
+            return {
+              Order_Number: order.Order_Number,
+              C_Number: order.C_Number,
+              status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
+              Order_Source: order.Order_Source,
+              isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
+              Order_Source_Name: orderSourceName,
+              Order_Date: order.Order_Date,
+              Invoice_Generated: order.Invoice_Number > 0 ? true : false,
+              customerName: order.customer?.C_Name || 'N/A',
+              address: order.customer?.C_Address || 'N/A',
+              city: order.customer?.C_City || 'N/A',
+              state: order.customer?.C_State || 'N/A',
+              zip: order.customer?.C_Zip || 'N/A',
+              country: order.customer?.C_Country || 'N/A',
+              route: route?.Route_Number ?? null,
+              stop: route?.Stop_Number ?? null,
+              salesRep: order.customer?.salesRep?.S_Desc ?? null,
+              totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
+            };
+          })
+        );
         return {
           totalCount,
           page,
@@ -4551,7 +4571,9 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           totalPages: Math.ceil(Number(totalCount) / Number(limit)),
           orderList: formattedOrderList,
         };
-      }}else {
+      }}
+      
+      else {
 
       const whereCondition: any = {
         Order_Updated:false,
@@ -4581,6 +4603,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           'C_Number',
           'Order_Source',
           'Order_Date',
+          'Invoice_Number'
         ],
         where: whereCondition,
         include: [
@@ -4611,7 +4634,15 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
               },
             ],
           },
+          {
+            model:OrderDetail,
+            as: 'orderDetails',
+            attributes: ['Order_Number', 'Line_Number', 'Quantity_Ordered', 'Pack', 'CaseCount'],
+            required: true,
+           
+          }
         ],
+       
         order: [['Order_Number', 'DESC']],
         limit,
         offset,
@@ -4657,7 +4688,14 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     
           const isOrderConfirmed = await OrderConfirmation.findOne({
             where: { order_Number: order.Order_Number, isActive: true },
-            attributes: ['status','id','current_orderline'],
+            include: [
+              {
+                model: WebUsers,
+                as: 'sales',
+                attributes: ['id', 'firstName', 'lastName'],
+              }
+            ],
+            attributes: ['status','id','current_orderline','startTime','endTime','sales_id'],
             raw: true,
           });
     
@@ -4669,6 +4707,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
             Order_Source_Name: orderSourceName,
             Order_Date: order.Order_Date,
+            Invoice_Generated: order.Invoice_Number > 0 ? true : false,
             customerName: order.customer?.C_Name || 'N/A',
             address: order.customer?.C_Address || 'N/A',
             city: order.customer?.C_City || 'N/A',

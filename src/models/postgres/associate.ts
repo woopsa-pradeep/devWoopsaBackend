@@ -18,6 +18,7 @@ import  {ProductImage}  from '../postgres/product.model';
 import { SalesCategory } from '../mmsql/salesCategory.model';
 import { PriceClass } from '../mmsql/priceClass.model';
 import { InventoryUPC } from '../mmsql/inventoryUpc.model';
+import { OrderConfirmation } from './orderConfirmation.model';
 // import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
 
 export function applyAssociations(): void {
@@ -57,6 +58,20 @@ OrderPick.hasMany(OrderPickBox, {
   sourceKey: 'orderNumber',   
   as: 'boxes'
 });
+
+
+
+OrderConfirmation.belongsTo(WebUsers, {
+  foreignKey: 'sales_id',
+  as: 'sales',       // ← use 'sales' consistently
+});
+
+WebUsers.hasMany(OrderConfirmation, {
+  foreignKey: 'sales_id',
+  as: 'salesOrders', // any name you like for reverse
+});
+
+
 
 OrderPickBox.belongsTo(OrderPick, {
   foreignKey: 'orderNumber',

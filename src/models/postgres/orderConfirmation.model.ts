@@ -35,7 +35,7 @@ export class OrderConfirmation
   public sales_id!: number;
   public startTime!: Date | null;
   public endTime!: Date | null;
-    public isActive!: boolean;
+  public isActive!: boolean;
 
 }
 
