@@ -3695,7 +3695,7 @@ const newSalesRepArray = salesRepList.map(Number);
         {
           model: InventoryUPC,
           as: 'UPCList',
-          attributes: ['UPC_Number', 'myKey'],
+          attributes: ['UPC_Number', 'myKey','Status'],
           required: false
         },
       ],
