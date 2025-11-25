@@ -4525,13 +4525,6 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
                   attributes: ['S_Number', 'S_Desc'],
                   required: false,
                 },
-                {
-                  model:OrderDetail,
-                  as: 'orderDetails',
-                  attributes: ['Order_Number', 'Line_Number', 'Quantity_Ordered', 'Pack', 'CaseCount'],
-                  required: true,
-                 
-                }
               ],
             },
           ],
@@ -4658,6 +4651,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
       }
   
       // First, get the order headers with pagination
+      // Use distinct: true to count unique orders when there are joins
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
         attributes: [
           'Order_Number',
@@ -4665,8 +4659,10 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           'Order_Source',
           'Order_Date',
           'Invoice_Number',
-        'Bundles'        ],
+          'Bundles'
+        ],
         where: whereCondition,
+        distinct: true, // Important: count distinct orders, not joined rows
         include: [
           {
             model: Customer,
@@ -4695,15 +4691,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
               },
             ],
           },
-          {
-            model:OrderDetail,
-            as: 'orderDetails',
-            attributes: ['Order_Number', 'Line_Number', 'Quantity_Ordered', 'Pack', 'CaseCount'],
-            required: true,
-           
-          }
         ],
-       
         order: [['Order_Number', 'DESC']],
         limit,
         offset,
