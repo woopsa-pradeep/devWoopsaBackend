@@ -2489,7 +2489,8 @@ export class RetailerService {
 
     // Step 2: Fetch item details from Inventory
     const item = await Inventory.findOne({
-      where: { Item_Number: upcRecord.Item_Number },
+      where: { Item_Number: upcRecord.Item_Number,I_Inactive: false,
+        ShortOrderForm: true, },
       attributes: [
         "Pack", "Description", "Item_Number", "CaseCount", "UOM",
         "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",

@@ -42,6 +42,7 @@ import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { OrderConfirmation } from "../models/postgres/orderConfirmation.model";
 import { sequelize } from "../db";
 import { Users } from "../models/mmsql/user.model";
+import { RecordLock } from "../models/mmsql/recordLocks.model";
 
 export class SalesService {
 
@@ -2813,7 +2814,8 @@ const newSalesRepArray = salesRepList.map(Number);
   
       // Step 2: Fetch item details from Inventory
       const item = await Inventory.findOne({
-        where: { Item_Number: upcRecord.Item_Number },
+        where: { Item_Number: upcRecord.Item_Number,I_Inactive: false,
+          ShortOrderForm: true },
         attributes: [
           "Pack", "Description", "Item_Number", "CaseCount", "UOM",
           "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
@@ -4103,6 +4105,8 @@ const newSalesRepArray = salesRepList.map(Number);
     if (orderData.current_orderline !== undefined) {
       createData.current_orderline = orderData.current_orderline;
     }
+
+
     await OrderDetail.update(
       { Quantity_Shipped: 0 },
       {
@@ -4115,6 +4119,14 @@ const newSalesRepArray = salesRepList.map(Number);
     createData.startTime = new Date();
   
     const orderConfirmation = await OrderConfirmation.create(createData);
+
+    const userInfo = await WebUsers.findByPk(orderData.sales_id);
+    await RecordLock.create({
+      Lock_Type: 0,
+      Lock_Number: Number(orderData.order_Number),
+      Lock_User: Number(userInfo?.userNumber ?? 0),
+      Lock_Workstation: 0
+    });
     return orderConfirmation;
   }
 
@@ -4438,7 +4450,8 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             'C_Number',
             'Order_Source',
             'Order_Date',
-            'Invoice_Number'
+            'Invoice_Number',
+            'Bundles'
           ],
           where: headerWhere,
           include: [
@@ -4559,6 +4572,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
               country: order.customer?.C_Country || 'N/A',
               route: route?.Route_Number ?? null,
               stop: route?.Stop_Number ?? null,
+              Bundles: order.Bundles,
               salesRep: order.customer?.salesRep?.S_Desc ?? null,
               totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
             };
@@ -4603,8 +4617,8 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           'C_Number',
           'Order_Source',
           'Order_Date',
-          'Invoice_Number'
-        ],
+          'Invoice_Number',
+        'Bundles'        ],
         where: whereCondition,
         include: [
           {
@@ -4715,6 +4729,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             zip: order.customer?.C_Zip || 'N/A',
             country: order.customer?.C_Country || 'N/A',
             route: route?.Route_Number ?? null,
+            Bundles: order.Bundles,
             stop: route?.Stop_Number ?? null,
             salesRep: order.customer?.salesRep?.S_Desc ?? null,
             totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
