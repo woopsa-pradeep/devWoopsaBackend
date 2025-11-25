@@ -317,6 +317,11 @@ export class SalesController {
     }
 
 
+    async getItemForUpc(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getItemForUpc(req.body );
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
 
 
     // OrderConfirmation CRUD methods

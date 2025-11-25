@@ -88,6 +88,7 @@ router.get('/orderHistoryByProductNumber',
   // InventoryUPC CRUD routes
   router.post('/upc',verifyRole(ROLES.SALES),validateRequest(inventoryUPCValidation),catchAsync(listController.addUpc.bind(listController)));
   router.put('/upc/:id',verifyRole(ROLES.SALES),catchAsync(listController.updateUpc.bind(listController)));
+  router.post('/get-upc-list',verifyRole(ROLES.SALES),catchAsync(listController.getItemForUpc.bind(listController)));
 
   // OrderConfirmation CRUD routes
   router.get('/order-confirmation/details/:orderNumber',verifyRole(ROLES.SALES),catchAsync(listController.getOrderConfirmationDetailsHistory.bind(listController)));

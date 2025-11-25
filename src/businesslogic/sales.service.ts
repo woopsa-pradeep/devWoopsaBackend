@@ -3631,6 +3631,83 @@ const newSalesRepArray = salesRepList.map(Number);
 
   }
 
+  async getItemForUpc(body: any) {
+   
+    let { salesCategoryId, search, priceClassId } = body;
+
+    if(!search) throw new AppError("Search is required", 400);
+
+    let whereClause: any = {
+      I_Inactive: false,
+      ShortOrderForm: true,
+    };
+
+
+     
+      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Both filters exist → use OR condition
+        whereClause[Op.or] = [
+          { Sales_Category: { [Op.in]: salesCategoryId } },
+          { Price_Class: { [Op.in]: priceClassId } }
+        ];
+      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+        // Only Sales_Category filter
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Only Price_Class filter
+        whereClause.Price_Class = { [Op.in]: priceClassId };
+      }
+
+      if (search) {
+       
+          const searchValue = `%${search}%`;
+          whereClause[Op.or] = [
+            { Item_Number: { [Op.like]: searchValue } },
+            { Description: { [Op.like]: `%${search}%` } },
+            { ALT_Description2: { [Op.like]: `%${search}%` } }
+          ];
+        
+      }
+      
+
+    const product = await Inventory.findAll({
+      attributes: [
+        'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
+        'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
+        'OTP_Number', 'Price_Subclass', 'UnitOunces'
+      ],
+      where: whereClause,
+      include: [
+        {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Category_Desc'],
+          required: false
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
+          required: false
+        },
+       
+        {
+          model: InventoryUPC,
+          as: 'UPCList',
+          attributes: ['UPC_Number', 'myKey'],
+          required: false
+        },
+      ],
+     
+    });
+
+
+    return {
+      product: product || [],
+    };
+  }
+
 
   async updateUpc(id:number,body:any){
     const result = await InventoryUPC.update(body,{where:{myKey:id}});
