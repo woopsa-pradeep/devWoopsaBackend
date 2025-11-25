@@ -368,6 +368,11 @@ export class SalesController {
         sendResponse(res, 200, true, data, "Order confirmation updated successfully");
     }
 
+
+    async lockOrderConfirmation(req: AuthRequest, res: Response) {
+        const data = await this.salesService.lockOrderConfirmation(Number(req.params.orderNumber), Number(req.user.id));
+        sendResponse(res, 200, true, data, "Order confirmation locked successfully");
+    }
     async deleteOrderConfirmation(req: AuthRequest, res: Response) {
         const data = await this.salesService.deleteOrderConfirmation(Number(req.params.id));
         sendResponse(res, 200, true, data, data.message);

@@ -1,7 +1,6 @@
 // models/recordLocks.model.ts
 import { Model, DataTypes, Optional } from 'sequelize';
-import { postgresSequelize } from '../../db';
-
+import { sequelize } from '../../db';
 // Interface for attributes
 export interface IRecordLock {
   myKey: number;
@@ -25,9 +24,6 @@ export class RecordLock
   public Lock_Number!: number;
   public Lock_User!: number;
   public Lock_Workstation!: number;
-
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
 }
 
 RecordLock.init(
@@ -55,9 +51,9 @@ RecordLock.init(
     },
   },
   {
-    sequelize: postgresSequelize,
-    modelName: 'RecordLock',
-    tableName: 'record_locks',
-    timestamps: true,
+    sequelize: sequelize,
+    modelName: 'Record_Locks',
+    tableName: 'Record_Locks',
+    timestamps: false,
   }
 );

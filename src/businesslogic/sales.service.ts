@@ -4171,6 +4171,14 @@ const newSalesRepArray = salesRepList.map(Number);
   
     // Step 5: Create new order confirmation
     const newOrder = await OrderConfirmation.create(createData);
+
+    const userInfo = await WebUsers.findByPk(sales_id);
+    await RecordLock.create({
+      Lock_Type: 0,
+      Lock_Number: Number(order_Number),
+      Lock_User: Number(userInfo?.userNumber ?? 0),
+      Lock_Workstation: 0
+    });
   
     return newOrder;
   }
@@ -4242,6 +4250,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
       orderDetail: Array<{
         Order_Number: number;
         Line_Number: number;
+        Confirmed?: boolean;
         Quantity_Ordered: number;
         Quantity_Shipped: number;
       }>;
@@ -4249,7 +4258,6 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
   ) {
   
 
-    console.log(updateData, 'updateData-->')
     try {
       // 1) Load order confirmation inside the transaction
       const orderConfirmation = await OrderConfirmation.findOne({where:{order_Number:id}});
@@ -4285,7 +4293,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             {
               Quantity_Ordered: item.Quantity_Ordered,
               Quantity_Shipped: item.Quantity_Shipped,
-              Confirmed:true,
+              Confirmed:item.Confirmed,
             },
             {
               where: {
@@ -4305,6 +4313,14 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         },{
           where: { Order_Number: id }
         });
+
+        await OrderDetail.update({
+          Confirmed:true,
+        },{
+          where: { Order_Number: id }
+        });
+
+
         
         
     
@@ -4312,7 +4328,8 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
   
       // 6) Commit transaction
 
-      
+      await RecordLock.destroy({where:{Lock_Number:Number(id),Lock_Type:0}});
+
   
       // Optionally re-fetch if you want latest from DB
       return orderConfirmation;
@@ -4321,6 +4338,26 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     }
   }
 
+  async lockOrderConfirmation(orderNumber: number, salesId: number){
+
+    const fetchOrderLock = await RecordLock.findOne({
+      where: { Lock_Number: orderNumber, Lock_Type: 0 }
+    });
+    if(fetchOrderLock){
+      throw new AppError("Order is already locked", 400);
+    }
+    const userInfo = await WebUsers.findByPk(salesId);
+
+
+    await RecordLock.create({
+      Lock_Type: 0,
+      Lock_Number: Number(orderNumber),
+      Lock_User: Number(userInfo?.userNumber ?? 0),
+      Lock_Workstation: 0
+    });
+
+    return true;
+  }
 
   async deleteOrderConfirmation(id: number) {
     const orderConfirmation = await OrderConfirmation.findByPk(id);
@@ -4370,9 +4407,17 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
   
     const offset = (page - 1) * limit;
   
+    const fetchOrderLock = await RecordLock.findAll({
+      where: { Lock_Type: 0 },
+      attributes: ['Lock_Number'],
+    
+    });
+    const lockOrderNumbers = fetchOrderLock.map((lock: any) => lock.Lock_Number);
+   console.log(lockOrderNumbers, 'lockOrderNumbers-->')
+
     // Build base where condition for MSSQL
     const whereCondition: any = {
-      Order_Updated: false,
+      Order_Updated: false
     };
   
     if (customerNumber) {
@@ -4558,6 +4603,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             return {
               Order_Number: order.Order_Number,
               C_Number: order.C_Number,
+              isLocked: lockOrderNumbers.includes(order.Order_Number) ? true : false,
               status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
               Order_Source: order.Order_Source,
               isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
@@ -4591,6 +4637,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
 
       const whereCondition: any = {
         Order_Updated:false,
+
       };
   
 
@@ -4716,6 +4763,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           return {
             Order_Number: order.Order_Number,
             C_Number: order.C_Number,
+            isLocked: lockOrderNumbers.includes(order.Order_Number) ? true : false,
             status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
             Order_Source: order.Order_Source,
             isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
@@ -4753,7 +4801,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
   async getOrderConfirmationDetailsHistory(orderNumber: number, query: PaginationOptions) {
     let { page = 1, limit = 10 } = query;
    
-
+    
     // Fetch order header
     const orderHeader = await OrderHeader.findByPk(orderNumber, {
       attributes: [

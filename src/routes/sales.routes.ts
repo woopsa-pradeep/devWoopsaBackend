@@ -98,7 +98,7 @@ router.get('/orderHistoryByProductNumber',
   router.post('/restart-order-confirmation',verifyRole(ROLES.SALES),validateRequest(createOrderConfirmationSchema),catchAsync(listController.restartOrderConfirmation.bind(listController)));
 
   router.put('/order-confirmation/:id',verifyRole(ROLES.SALES),catchAsync(listController.updateOrderConfirmation.bind(listController)));
-  
+  router.put('/lock-order-confirmation/:orderNumber',verifyRole(ROLES.SALES),catchAsync(listController.lockOrderConfirmation.bind(listController)));
   router.delete('/order-confirmation/:id',verifyRole(ROLES.SALES),catchAsync(listController.deleteOrderConfirmation.bind(listController)));
 
   router.get('/order-confirmation/sales/:salesId',verifyRole(ROLES.SALES),catchAsync(listController.getOrderConfirmationsBySalesId.bind(listController)));
