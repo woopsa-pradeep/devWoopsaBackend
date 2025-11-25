@@ -132,6 +132,14 @@ export class SalesService {
 
     const { orderPlayload, Delivery_Charge } = orderData;
 
+    const {method} = shippingDetails;
+    let deliveryId = 0;
+    if(method === 'delivery'){
+      deliveryId =0;
+    }
+    if(method === 'pickup'){
+      deliveryId = 99
+    }
 
     // Get customer and route info
 
@@ -161,7 +169,7 @@ export class SalesService {
       Jurisdiction_City: customer.Jurisdiction_City || '',
       Route_Number: customerRoutes?.Route_Number || 0,
       Stop_Number: customerRoutes?.Stop_Number || 0,
-      Delivery_ID: customer.Delivery_ID || 0,
+      Delivery_ID:deliveryId,
       User_ID: Number(req.user.userNumber),
       Reference: `USER-${req.user.userNumber}`,
       Invoice_Type: customer.C_InvoiceFormat || 0,

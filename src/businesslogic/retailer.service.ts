@@ -928,6 +928,15 @@ export class RetailerService {
     const isWeb = isWebOrder === 'true' ? true : false;
 
 
+    const {method} = shippingDetails;
+    let deliveryId = 0;
+    if(method === 'delivery'){
+      deliveryId =0;
+    }
+    if(method === 'pickup'){
+      deliveryId = 99
+    }
+
     let findPersonLimit: any = await Retailer.findOne({ where: { Customer_Number: req.user.id } });
     findPersonLimit = findPersonLimit?.dataValues || null;
 
@@ -977,7 +986,7 @@ export class RetailerService {
       Jurisdiction_City: customer.Jurisdiction_City || '',
       Route_Number: customerRoutes?.Route_Number || 0,
       Stop_Number: customerRoutes?.Stop_Number || 0,
-      Delivery_ID: customer.Delivery_ID || 0,
+      Delivery_ID: deliveryId,
       User_ID: 0,
       Reference: `CUS-${customer.C_Number}`,
       Invoice_Type: customer.C_InvoiceFormat || 0,
