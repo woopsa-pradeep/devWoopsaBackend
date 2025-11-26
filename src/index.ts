@@ -18,6 +18,7 @@ import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { emailQueue, emailNotificationQueue } from './configuration/config';
+import { getNextVendorNumber } from './utils/vendor';
 
 startCronJobs();
 
@@ -73,6 +74,12 @@ app.get('/testPrice',(async(req:Request,res:Response)=>{
   res.json({data});
 }))
 
+
+app.get('/testVendor',(async(req:Request,res:Response)=>{
+  
+  const data = await getNextVendorNumber();
+  res.json({data});
+}))
 
 
 

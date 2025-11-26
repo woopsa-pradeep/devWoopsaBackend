@@ -276,6 +276,7 @@ export class RetailerService {
     };
 
     let searchInUPC = false;
+    let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
@@ -304,9 +305,22 @@ export class RetailerService {
           const searchValue = `%${search}%`;
           whereClause[Op.or] = [
             { Item_Number: { [Op.like]: searchValue } },
-            { Description: { [Op.like]: `%${search}%` } },
-            { ALT_Description2: { [Op.like]: `%${search}%` } }
+            { Description: { [Op.like]: searchValue } },
+            { ALT_Description2: { [Op.like]: searchValue } }
           ];
+         orderClause = [
+              [
+                Sequelize.literal(`
+                  CASE
+                    WHEN Description LIKE '${search}%' THEN 1
+                    WHEN Description LIKE '%${search}%' THEN 2
+                    ELSE 3
+                  END
+                `),
+                'ASC'
+              ],
+              // ['Description', 'ASC'] 
+            ]
         }
       }
 
@@ -325,7 +339,7 @@ export class RetailerService {
     };
 
 
-    let orderClause: Order = [['Date_Created', 'DESC'] as const];
+    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
     if (shortBy && Number(shortBy) === 1) {
       orderClause = [[col('Description'), 'ASC']];

@@ -770,6 +770,8 @@ export class SalesService {
     };
 
     let searchInUPC = false;
+    let orderClause: Order = [['Date_Created', 'DESC'] as const];
+
 
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
@@ -796,9 +798,22 @@ export class SalesService {
           const searchValue = `%${search}%`;
           whereClause[Op.or] = [
             { Item_Number: { [Op.like]: searchValue } },
-            { Description: { [Op.like]: `%${search}%` } },
-            { ALT_Description2: { [Op.like]: `%${search}%` } }
+            { Description: { [Op.like]: searchValue } },
+            { ALT_Description2: { [Op.like]: searchValue } }
           ];
+          orderClause = [ 
+              [
+                Sequelize.literal(`
+                  CASE
+                    WHEN Description LIKE '${search}%' THEN 1
+                    WHEN Description LIKE '%${search}%' THEN 2
+                    ELSE 3
+                  END
+                `),
+                'ASC'
+              ],
+              // ['Description', 'ASC']
+            ];
         }
       }
       
@@ -818,16 +833,16 @@ export class SalesService {
     };
 
 
-    let orderClause: Order = [['Date_Created', 'DESC'] as const];
+    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
-    if (search && !searchInUPC && !masterSearch) {
-      // When searching, sort by description alphabetically to get alphabetical order after common part
-      orderClause = [[col('Description'), 'ASC']];
-    } else if (shortBy && Number(shortBy) === 1) {
-      orderClause = [[col('Description'), 'ASC']];
-    } else if (shortBy && Number(shortBy) === 2) {
-      orderClause = [[col('Description'), 'DESC']];
-    }
+    // if (search && !searchInUPC && !masterSearch) {
+    //   // When searching, sort by description alphabetically to get alphabetical order after common part
+    //   orderClause = [[col('Description'), 'ASC']];
+    // } else if (shortBy && Number(shortBy) === 1) {
+    //   orderClause = [[col('Description'), 'ASC']];
+    // } else if (shortBy && Number(shortBy) === 2) {
+    //   orderClause = [[col('Description'), 'DESC']];
+    // }
     let totalCount = 0;
     if (searchInUPC) {
       const counted = await Inventory.findAll({

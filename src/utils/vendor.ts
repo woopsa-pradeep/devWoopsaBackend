@@ -1,11 +1,19 @@
 // utils/inventoryDefaults.ts
 import moment from 'moment';
 import { Vendor } from '../models/mmsql/vendor.model';
+import { sequelize } from '../db';
+import { Op } from 'sequelize';
 
 export async function getNextVendorNumber() {
-  const maxVendor = await Vendor.max('Primary_Vendor');
-  return (maxVendor as number) + 1;
+  const maxVendor = await Vendor.max('Primary_Vendor', {
+    where: {
+      Primary_Vendor: { [Op.lt]: 90000 },
+    },
+  });
+
+  return Number(maxVendor || 0) + 1;
 }
+
 
 export const getDefaultVendorValues = (UserID: number) => {
 //   const currentDate = moment.utc().format('YYYY-MM-DD HH:mm:ss.SSSSSSS +00:00');
