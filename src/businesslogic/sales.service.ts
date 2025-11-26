@@ -48,7 +48,7 @@ export class SalesService {
 
   async getProfile(id: number) {
     const data = await WebUsers.findByPk(id, {
-      attributes: ['firstName', 'lastName', 'email', 'role', 'salesRepNumber'],
+      attributes: ['firstName', 'lastName', 'email', 'role', 'salesRepNumber', 'id'],
     });
 
     if (!data) return null;
