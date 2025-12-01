@@ -1328,12 +1328,18 @@ export class SalesService {
       const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber,Number(price)+Number(e.Tax_Rate));
       const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
 
+      let prepaidTaxRate = 0
+      if(customerNumber !=null && product.salesCategory){
+        prepaidTaxRate = await getPrepaidTaxRate(customerNumber as number, product?.salesCategory?.Sales_Category);
+      }
 
       return {
 
         isNewItem,
         Description: product.Description,
         isDiscounted,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
         // Description: product.Description,
         Item_Number: e.Item_Number,
         CaseCount: product.CaseCount,
@@ -2861,7 +2867,7 @@ const newSalesRepArray = salesRepList.map(Number);
           "NetCost", "OTP_Number", "Price_Subclass"
         ],
         include: [
-          { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc"], required: false },
+          { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc","Sales_Category"], required: false },
           { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
           // { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
           { model: InventoryUPC, as: "UPCList", attributes: ["UPC_Number"], required: false }
@@ -2889,7 +2895,10 @@ const newSalesRepArray = salesRepList.map(Number);
       const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
       const wareHouseSetting: any = await Setting.findOne({});
       const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
-  
+      let prepaidTaxRate = 0
+      if(userJurisdiction !=null && item.SalesCategory){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
+      }
       const formattedItem = {
         Pack: item.Pack,
         Description: item.Description,
@@ -2902,6 +2911,8 @@ const newSalesRepArray = salesRepList.map(Number);
         OTP_Number: item.OTP_Number,
         price,
         isNewItem: true,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
         priceWithTax: price + taxRate,
         BaseCost: item.BaseCost,
         Invoice_Cost: item.Invoice_Cost,
@@ -4032,12 +4043,18 @@ const newSalesRepArray = salesRepList.map(Number);
       const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber,Number(price)+Number(e.Tax_Rate));
       const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
 
+      let prepaidTaxRate = 0
+      if(customerNumber !=null && product.salesCategory){
+        prepaidTaxRate = await getPrepaidTaxRate(customerNumber as number, product?.salesCategory?.Sales_Category);
+      }
 
       return {
 
         isNewItem,
         Description: product.Description,
         isDiscounted,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
         // Description: product.Description,
         Item_Number: e.Item_Number,
         CaseCount: product.CaseCount,

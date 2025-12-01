@@ -5,7 +5,7 @@ export interface IOverrideRequest {
   id: number;
   orderNumber: number;
   itemNumber: number;
-  userId: number;
+  pickerUserNumber: number;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   note: string | null;
   rejectionReason: string | null;
@@ -13,7 +13,7 @@ export interface IOverrideRequest {
   updatedAt?: Date;
 }
 
-type OverrideRequestCreationAttributes = Optional<IOverrideRequest, 'id' | 'status' | 'note' | 'rejectionReason' >;
+type OverrideRequestCreationAttributes = Optional<IOverrideRequest, 'id' | 'status' | 'note' | 'rejectionReason'>;
 
 export class OverrideRequest
   extends Model<IOverrideRequest, OverrideRequestCreationAttributes>
@@ -22,7 +22,7 @@ export class OverrideRequest
   public id!: number;
   public orderNumber!: number;
   public itemNumber!: number;
-  public userId!: number;
+  public pickerUserNumber!: number;
   public status!: 'pending' | 'approved' | 'rejected' | 'cancelled';
   public note!: string | null;
   public rejectionReason!: string | null;
@@ -48,10 +48,10 @@ OverrideRequest.init(
       allowNull: false,
       field: 'item_number',
     },
-    userId: {
+    pickerUserNumber: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      field: 'user_id',
+      field: 'picker_user_number',
     },
     status: {
       type: DataTypes.ENUM('pending', 'approved', 'rejected', 'cancelled'),
@@ -70,7 +70,7 @@ OverrideRequest.init(
   },
   {
     sequelize: postgresSequelize,
-    tableName: 'overrideRequests',
+    tableName: 'override_request',
     modelName: 'OverrideRequest',
     timestamps: true,
   }

@@ -5,7 +5,7 @@ import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Customer } from "../models/mmsql/customer.model";
 import { SalesRep } from "../models/mmsql/salesrep.model";
 import { Sequelize, Op, col, cast, where } from "sequelize";
-import { checkQtyDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getProductLimit, getTaxRateV1 } from "../utils/helper";
+import { checkQtyDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
 import { ProductImage } from "../models/postgres/product.model";
 import { getDiscount } from "../utils/helper";
 import SalesCategory from "../models/mmsql/salesCategory.model";
@@ -97,7 +97,7 @@ export class DashboardService {
                         {
                             model: SalesCategory,
                             as: 'SalesCategory',
-                            attributes: ['Category_Desc'],
+                            attributes: ['Category_Desc','Sales_Category'],
                             required: false
                         },
                         {
@@ -157,6 +157,14 @@ export class DashboardService {
                     const productLimit = await getProductLimit(e.Item_Number);
 
                     let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, userId, price + taxRate);
+
+                    let prepaidTaxRate = 0
+                    console.log(e,'e.Sales_Category')
+                    if(userJurisdiction !=null && e.salesCategory){
+              
+                      console.log(e,'e.Sales_Category')
+                     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                    }
 
                     return {
                         Pack: e.Pack,
@@ -305,7 +313,7 @@ export class DashboardService {
                                 {
                                     model: SalesCategory,
                                     as: 'SalesCategory',
-                                    attributes: ['Category_Desc'],
+                                    attributes: ['Category_Desc','Sales_Category'],
                                     required: false
                                 },
                                 {
@@ -371,6 +379,14 @@ export class DashboardService {
 
                             let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, userId, price + taxRate);
 
+                            let prepaidTaxRate = 0
+                            console.log(e,'e.Sales_Category')
+                            if(userJurisdiction !=null && e.salesCategory){
+                      
+                              console.log(e,'e.Sales_Category')
+                             prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                            }
+
                             return {
                                 Pack: e.Pack,
                                 Description: e.Description,
@@ -388,6 +404,12 @@ export class DashboardService {
                                 Invoice_Cost: e.Invoice_Cost,
                                 AvgCost: e.AvgCost,
                                 NetCost: e.NetCost,
+
+
+                                
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+
+        prepaidTaxRate: prepaidTaxRate,
 
                                 hasProductLimit: productLimit ? true : false,
                                 productLimit,
@@ -497,7 +519,7 @@ export class DashboardService {
                         {
                             model: SalesCategory,
                             as: 'SalesCategory',
-                            attributes: ['Category_Desc'],
+                            attributes: ['Category_Desc','Sales_Category'],
                             required: false
                         },
                         {
@@ -562,6 +584,16 @@ export class DashboardService {
                     // Find the corresponding order history data for this item
                     const orderHistoryItem: any = top10CustomerOrderHistory.find((item: any) => item.Item_Number === e.Item_Number);
 
+                    let prepaidTaxRate = 0
+                    console.log(e,'e.Sales_Category')
+                    if(userJurisdiction !=null && e.salesCategory){
+              
+                      console.log(e,'e.Sales_Category')
+                     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                    }
+              
+
+
                     return {
                         Pack: e.Pack,
                         Description: e.Description,
@@ -576,6 +608,8 @@ export class DashboardService {
                         price: price,
                         hasProductLimit: productLimit ? true : false,
                         productLimit,
+                        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+                        prepaidTaxRate: prepaidTaxRate,
                         showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
                         showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
                         showPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
@@ -661,7 +695,7 @@ export class DashboardService {
                 {
                     model: SalesCategory,
                     as: 'SalesCategory',
-                    attributes: ['Category_Desc'],
+                    attributes: ['Category_Desc','Sales_Category'],
                     required: false
                 },
                 {
@@ -692,12 +726,15 @@ export class DashboardService {
 
             let taxRate = 0;
             let price = await getFirstValidPrice(item);
+            let prepaidTaxRate = 0
             if (customerNumber) {
                 price = await getDiscount(item.Item_Number, customerNumber) || price;
                 const userJurisdiction = await getJurisdiction(customerNumber);
                 if (userJurisdiction) {
                     taxRate = await getTaxRateV1(item.OTP_Number, userJurisdiction as number, item.Item_Number, price);
                     taxRate = Math.ceil(taxRate * 100) / 100;
+              prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
+            
                 }
             }
             price = Math.ceil(price * 100) / 100;
@@ -731,6 +768,9 @@ export class DashboardService {
                 hasQtyDiscount = await checkQtyDiscount(item.Item_Number, customerNumber, price + taxRate);
             }
 
+           
+
+            
 
             return {
                 Pack: item.Pack,
@@ -746,7 +786,8 @@ export class DashboardService {
                 UnitOunces: item.UnitOunces,
                 hasProductLimit: productLimit ? true : false,
                 productLimit,
-
+                hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+                prepaidTaxRate: prepaidTaxRate,
                 showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
                 showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
                 showPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
@@ -838,7 +879,7 @@ export class DashboardService {
                 {
                     model: SalesCategory,
                     as: 'SalesCategory',
-                    attributes: ['Category_Desc'],
+                    attributes: ['Category_Desc','Sales_Category'],
                     required: false
                 },
                 {
@@ -876,6 +917,9 @@ export class DashboardService {
             let taxRate = 0;
             let price = await getFirstValidPrice(e);
             price = Math.ceil(price * 100) / 100;
+            
+  let prepaidTaxRate = 0
+
             if (role === 'retailer') {
                 const userJurisdiction = await getJurisdiction(customerId);
                 
@@ -884,6 +928,12 @@ export class DashboardService {
                     taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
                     taxRate = Math.ceil(taxRate * 100) / 100;
                 }
+
+
+
+                if(userJurisdiction !=null && e.salesCategory){
+                  prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                }
             } else if (role === 'sales' && customerNumber) {
                 const userJurisdiction = await getJurisdiction(customerNumber);
                 
@@ -891,6 +941,10 @@ export class DashboardService {
                 if (userJurisdiction) {
                     taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
                     taxRate = Math.ceil(taxRate * 100) / 100;
+                }
+                
+                if(userJurisdiction !=null && e.salesCategory){
+                  prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
                 }
             }
             const productLimit = await getProductLimit(e.Item_Number);
@@ -920,6 +974,7 @@ export class DashboardService {
 
             let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, price + taxRate);
 
+         
 
             return {
                 Pack: e.Pack,
@@ -939,7 +994,8 @@ export class DashboardService {
                 hasProductLimit: productLimit ? true : false,
                 productLimit,
                 UnitOunces: e.UnitOunces,
-
+                hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+                prepaidTaxRate: prepaidTaxRate,
                 showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
                 showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
                 showPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
@@ -1522,14 +1578,20 @@ export class DashboardService {
 
             const upcNumbers = upcMap.get(special.Item_Number) || [];
             const salesCategoryDesc = salesCategoryMap.get(special.inventory.Sales_Category) || null;
+            const salesCategory = salesCategoryMap.get(special.inventory.Sales_Category) || null;
             const priceClassDesc = priceClassMap.get(special.inventory.Price_Class) || null;
             let taxRate = 0;
             let price = await getFirstValidPrice(special.inventory);
-
+            let prepaidTaxRate = 0
             let hasQtyDiscount = null;
             if (role === 'retailer') {
                 const userJurisdiction = await getJurisdiction(customerId as number);
                 price = await getDiscount(special.inventory.Item_Number, customerId) || price;
+
+                
+                if(userJurisdiction !=null && salesCategory){
+                  prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, salesCategory);
+                }
                 price = Math.ceil(price * 100) / 100;
                 taxRate = await getTaxRateV1(special.inventory.OTP_Number, userJurisdiction as number, special.inventory.Item_Number, price);
                 taxRate = Math.ceil(taxRate * 100) / 100;
@@ -1542,6 +1604,9 @@ export class DashboardService {
                 taxRate = await getTaxRateV1(special.inventory.OTP_Number, userJurisdiction as number, special.inventory.Item_Number, price);
                 taxRate = Math.ceil(taxRate * 100) / 100;
                 hasQtyDiscount = await checkQtyDiscount(special.inventory.Item_Number, customerNumber, price + taxRate);
+                if(userJurisdiction !=null && salesCategory){
+                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, salesCategory);
+                  }
 
             }
 
@@ -1582,6 +1647,8 @@ export class DashboardService {
                 price: price,
                 UnitOunces: special.inventory.UnitOunces,
 
+                hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+                prepaidTaxRate: prepaidTaxRate,
                 hasProductLimit: productLimit ? true : false,
                 productLimit,
 

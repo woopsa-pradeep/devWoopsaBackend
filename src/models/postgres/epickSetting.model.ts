@@ -20,6 +20,7 @@ EpickSetting.init(
     allowSingleScan: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
+      field: 'allowSingleScan', // Map to database column name
     },
 
   },

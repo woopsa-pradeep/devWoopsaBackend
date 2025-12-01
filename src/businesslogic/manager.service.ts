@@ -4167,11 +4167,15 @@ async getErpUserById(id: number){
   async getInventoryForReport(){
     const inventoryList = await Inventory.findAll({
       order: [['Item_Number', 'ASC']],
+      attributes:['Item_Number','Description','I_Inactive',
+          'Pack','CaseCount','UOM','Price1','Price2','Price3','Price4','Price5','Price6','Retail1','Retail2','Retail3','UnitOunces','OTP_Number','AvgCost','BaseCost','Invoice_Cost',
+          'NetCost','MSA_Category_Code','Section','Location','I_Discontinued'
+      ],
       include: [
         {
           model: InventoryUPC,
           as: 'UPCList',
-          attributes: ['UPC_Number', 'Status','Priority'],
+          attributes: ['myKey','UPC_Number', 'Status','Priority'],
         },
         {
           model: SalesCategory,
@@ -4181,6 +4185,11 @@ async getErpUserById(id: number){
         {
           model: Vendor,
           as: 'primaryVendor',
+          attributes: ['Primary_Vendor','V_Description'],
+        },
+        {
+          model: Vendor,
+          as: 'manufacturerVendor',
           attributes: ['Primary_Vendor','V_Description'],
         },
         {

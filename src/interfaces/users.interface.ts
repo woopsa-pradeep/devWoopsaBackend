@@ -12,7 +12,6 @@ export interface UserAttributes {
   password: string;
   isActive: boolean;
   setUserDiscountLimit: number;
-  allowSingleScan: boolean;
   createdAt: Date;
   updatedAt: Date;
   allowDiscount: boolean;

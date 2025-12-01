@@ -105,12 +105,12 @@ OrderPickScan.belongsTo(OrderPick, {
 
 // OverrideRequest associations
 WebUsers.hasMany(OverrideRequest, {
-  foreignKey: 'userId',
+  foreignKey: 'pickerUserNumber',
   as: 'overrideRequests',
 });
 
 OverrideRequest.belongsTo(WebUsers, {
-  foreignKey: 'userId',
+  foreignKey: 'pickerUserNumber',
   as: 'user',
 });
 

@@ -24,7 +24,6 @@ export class WebUsers
   public password!: string;
   public isActive!: boolean;
   public setUserDiscountLimit!: number;
-  public allowSingleScan!: boolean;
   public allowDiscount!: boolean;
   public allowDeliveryCharge!: boolean;
   public order_type!: string | null;
@@ -95,11 +94,6 @@ WebUsers.init(
       type: DataTypes.SMALLINT,
       allowNull: true,
       defaultValue: 0,
-    },
-    allowSingleScan: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: true,
     },
     allowDiscount: {
       type: DataTypes.BOOLEAN,

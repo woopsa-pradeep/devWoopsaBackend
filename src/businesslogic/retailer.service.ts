@@ -786,7 +786,14 @@ export class RetailerService {
         where: {
           Item_Number: e.Item_Number
         },
-        include: [{
+        include: [
+          {
+            model: SalesCategory,
+            as: 'SalesCategory',
+            attributes: ['Category_Desc','Sales_Category'],
+            required: false
+          },
+          {
           model: InventoryUPC,
           as: 'UPCList',
           attributes: ['UPC_Number'],
@@ -818,7 +825,11 @@ export class RetailerService {
 
       const productLimit = await getProductLimit(e.Item_Number);
       const isDiscounted = await hasDiscountedItem(e.Item_Number, product.Price_Subclass);
-
+      const userJurisdiction = await getJurisdiction(customerNumber);
+      let prepaidTaxRate = 0
+      if(userJurisdiction !=null && product.salesCategory){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.salesCategory?.Sales_Category);
+      }
 
       return {
         isDiscounted,
@@ -835,7 +846,9 @@ export class RetailerService {
         hasProductLimit: productLimit ? true : false,
         productLimit,
 
-
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
+        hasPerpaidTaxChange: prepaidTaxRate != e.prepaidTaxRate,
         Inventory_OnHand: inventoryOnHand || 0,
         allowToOrder,
         showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
@@ -1928,7 +1941,7 @@ export class RetailerService {
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc'],
+          attributes: ['Category_Desc','Sales_Category'],
           required: false
         },
         {
@@ -1966,6 +1979,12 @@ export class RetailerService {
         price = await getFirstValidPrice(e);
       }
 
+      const userJurisdiction = await getJurisdiction(user.id);
+      let prepaidTaxRate = 0
+      if(userJurisdiction !=null && e.salesCategory){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+      }
+
       return {
         Pack: e.Pack,
         Description: e.Description,
@@ -1976,6 +1995,8 @@ export class RetailerService {
         price: price,
         UnitOunces: e.UnitOunces,
         BaseCost: e.BaseCost,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
         Invoice_Cost: e.Invoice_Cost,
         AvgCost: e.AvgCost,
         NetCost: e.NetCost,
@@ -2540,7 +2561,7 @@ export class RetailerService {
         "NetCost", "OTP_Number", "Price_Subclass"
       ],
       include: [
-        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc"], required: false },
+        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc","Sales_Category"], required: false },
         { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
         // { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
         { model: InventoryUPC, as: "UPCList", attributes: ["UPC_Number"], required: false }
@@ -2551,7 +2572,8 @@ export class RetailerService {
       throw new AppError("Item details not found in Inventory", 404);
     }
     const userJurisdiction = await getJurisdiction(userId);
-
+  
+    console.log(item,'item----->')
     // Step 3: Pricing & Tax
     let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
     const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
@@ -2566,8 +2588,15 @@ export class RetailerService {
     });
 
     const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
+
     const wareHouseSetting: any = await Setting.findOne({});
     const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
+
+    let prepaidTaxRate = 0
+    if(userJurisdiction !=null && item.SalesCategory){
+     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
+    }
+
 
     const formattedItem = {
       Pack: item.Pack,
@@ -2576,6 +2605,8 @@ export class RetailerService {
       CaseCount: item.CaseCount,
       UOM: item.UOM,
       isDiscounted,
+      hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+      prepaidTaxRate: prepaidTaxRate,
       Price1: item.Price1,
       Tax_Rate: taxRate,
       OTP_Number: item.OTP_Number,
@@ -2685,6 +2716,8 @@ export class RetailerService {
       if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
+
+      
 
       return {
         ...findItem.toJSON(),

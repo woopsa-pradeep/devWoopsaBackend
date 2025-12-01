@@ -8,7 +8,7 @@ import { Customer } from "../models/mmsql/customer.model";
 import { IOrderPick, IOrderPickBox } from "../interfaces/request.body.interface";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { generateBarcodeAndUpload } from "../utils/barCodeGenerate";
-import { checkQtyDiscount, generateBarcode, getDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getProductLimit, getTaxRateV1, hasDiscountedItem } from "../utils/helper";
+import { checkQtyDiscount, generateBarcode, getDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, hasDiscountedItem } from "../utils/helper";
 import { InventoryUPC } from "../models/mmsql/inventoryUpc.model";
 import { AppError } from "../utils/AppError";
 import { OrderPickScan } from "../models/postgres/epickOrderScan.model";
@@ -323,6 +323,7 @@ export class EpickService {
 
     const isUserExist = await WebUsers.findOne({
       where: { id: id, status: true, role: 'epick', isActive: true, },
+      attributes: { exclude: ['password'] } // Exclude password for security
     })
     if (!isUserExist) {
       throw new AppError('User not found', 404);
@@ -362,7 +363,7 @@ export class EpickService {
     // myKey is auto-generated, so we only insert other fields
     await RecordLock.create({
       Lock_Type: 0,
-      Lock_Number: body.orderNumber,
+      Lock_Number: Number(body.orderNumber),
       Lock_User: Number(isUserExist.userNumber ?? 0),
       Lock_Workstation: 0
     });
@@ -376,15 +377,19 @@ export class EpickService {
         }
 );
 
-        // Get pin from EpickSetting
-        const epickSetting = await EpickSetting.findOne({
+        // Get pin and allowSingleScan from EpickSetting
+        const epickSetting :any = await EpickSetting.findOne({
           order: [['createdAt', 'DESC']] // Get the latest setting
         });
+
+        // Get allowSingleScan value - default to true if not found or null
+        const allowSingleScanValue = epickSetting?.allowSingleScan ?? epickSetting?.dataValues?.allowSingleScan ?? true;
 
         return {
           data: data,
           isUserExist: isUserExist,
-          pin: (epickSetting as any)?.pin || null
+          pin: (epickSetting as any)?.pin || null,
+          allowSingleScan: allowSingleScanValue
         };
     }
 
@@ -537,7 +542,7 @@ export class EpickService {
                     {
                       model: SalesCategory,
                       as: 'SalesCategory',
-                      attributes: ['Category_Desc'],
+                      attributes: ['Category_Desc','Sales_Category'],
                       required: false,
                     },
                     {
@@ -594,7 +599,10 @@ export class EpickService {
                   if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && subInventoryOnHand <= 0) {
                     allowToOrder = false;
                   }
-                  
+                  let prepaidTaxRate = 0
+                  if(userJurisdiction !=null && e.salesCategory){
+                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                  }
                   substituteProduct = {
                     Pack: e.Pack,
                     Description: e.Description,
@@ -614,6 +622,8 @@ export class EpickService {
                     hasProductLimit: !!productLimit,
                     productLimit,
                     UPCList: e.UPCList,
+                    hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+                    prepaidTaxRate: prepaidTaxRate,
                     Inventory_OnHand: subInventoryOnHand,
                     UnitOunces: e.UnitOunces,
                     allowToOrder,
@@ -762,10 +772,11 @@ export class EpickService {
         orderNumber: number,
         passItems?: Array<{ itemNumber: number; note?: string }> // Items to pass (skip) with optional manager note
     }, userId: number) {
-        const { products, orderNumber, passItems = [] } = data;
+        const { products = [], orderNumber, passItems = [] } = data;
 
-        if (!products || products.length === 0) {
-            throw new AppError("No products provided", 400);
+        // Allow empty products if there are passItems (user wants to mark items as passed without scanning)
+        if ((!products || products.length === 0) && (!passItems || passItems.length === 0)) {
+            throw new AppError("No products or passItems provided", 400);
         }
 
         // Validate order exists
@@ -776,39 +787,43 @@ export class EpickService {
             throw new AppError("Order not found", 404);
         }
 
-        // Step 1: Get all UPCs and map to Item_Numbers
-        const upcNumbers = products.map(p => p.UPC_Number);
+        // Step 1: Get all UPCs and map to Item_Numbers (only if products are provided)
+        const upcNumbers = products && products.length > 0 ? products.map(p => p.UPC_Number) : [];
         const upcToItemMap = new Map<string, number>(); // Map<UPC_Number, Item_Number>
         
-        const inventoryUPCs = await InventoryUPC.findAll({
-            where: {
-                UPC_Number: { [Op.in]: upcNumbers }
+        if (upcNumbers.length > 0) {
+            const inventoryUPCs = await InventoryUPC.findAll({
+                where: {
+                    UPC_Number: { [Op.in]: upcNumbers }
+                }
+            });
+
+            for (const upc of inventoryUPCs) {
+                upcToItemMap.set(upc.UPC_Number, upc.Item_Number);
             }
-        });
 
-        for (const upc of inventoryUPCs) {
-            upcToItemMap.set(upc.UPC_Number, upc.Item_Number);
+            // Validate all UPCs exist
+            const foundUPCs = new Set(inventoryUPCs.map(u => u.UPC_Number));
+            const missingUPCs = upcNumbers.filter(upc => !foundUPCs.has(upc));
+            if (missingUPCs.length > 0) {
+                throw new AppError(`Products not found for UPCs: ${missingUPCs.join(', ')}`, 404);
+            }
         }
 
-        // Validate all UPCs exist
-        const foundUPCs = new Set(inventoryUPCs.map(u => u.UPC_Number));
-        const missingUPCs = upcNumbers.filter(upc => !foundUPCs.has(upc));
-        if (missingUPCs.length > 0) {
-            throw new AppError(`Products not found for UPCs: ${missingUPCs.join(', ')}`, 404);
-        }
-
-        // Step 2: Separate substitute and regular items, validate items are in the order
-        const itemNumbers = Array.from(upcToItemMap.values());
+        // Step 2: Separate substitute and regular items, validate items are in the order (only if products exist)
+        const itemNumbers = products && products.length > 0 ? Array.from(upcToItemMap.values()) : [];
         const originalItemNumbers = new Set<number>(); // Items scanned with isSubsitute=true (these are the ORIGINAL items)
         const originalToSubstituteMap = new Map<number, number>(); // Map<originalItemNumber, substituteItemNumber>
         
         // Check which products are marked as substitutes
         // When isSubsitute = true, the scanned item is the ORIGINAL, and we need to find its SUBSTITUTE from the database
-        for (const product of products) {
-            if (product.isSubsitute) {
-                const originalItemNumber = upcToItemMap.get(product.UPC_Number);
-                if (originalItemNumber) {
-                    originalItemNumbers.add(originalItemNumber);
+        if (products && products.length > 0) {
+            for (const product of products) {
+                if (product.isSubsitute) {
+                    const originalItemNumber = upcToItemMap.get(product.UPC_Number);
+                    if (originalItemNumber) {
+                        originalItemNumbers.add(originalItemNumber);
+                    }
                 }
             }
         }
@@ -843,31 +858,38 @@ export class EpickService {
         }
 
         // Get order items - include both regular items and original items (for substitutes, we validate the original is in the order)
-        const itemsToCheck = itemNumbers.filter(itemNum => !originalItemNumbers.has(itemNum));
-        const orderItems = await OrderDetail.findAll({
-            where: {
-                Order_Number: orderNumber,
-                Item_Number: { [Op.in]: itemsToCheck }
-            }
-        });
+        // Only validate if we have products to check
+        if (itemNumbers.length > 0) {
+            const itemsToCheck = itemNumbers.filter(itemNum => !originalItemNumbers.has(itemNum));
+            if (itemsToCheck.length > 0) {
+                const orderItems = await OrderDetail.findAll({
+                    where: {
+                        Order_Number: orderNumber,
+                        Item_Number: { [Op.in]: itemsToCheck }
+                    }
+                });
 
-        const orderItemNumbers = new Set(orderItems.map(oi => oi.Item_Number));
-        const missingItems = itemsToCheck.filter(itemNum => !orderItemNumbers.has(itemNum));
-        if (missingItems.length > 0) {
-            throw new AppError(`Products not found in order: Item Numbers ${missingItems.join(', ')}`, 404);
+                const orderItemNumbers = new Set(orderItems.map(oi => oi.Item_Number));
+                const missingItems = itemsToCheck.filter(itemNum => !orderItemNumbers.has(itemNum));
+                if (missingItems.length > 0) {
+                    throw new AppError(`Products not found in order: Item Numbers ${missingItems.join(', ')}`, 404);
+                }
+            }
         }
 
         // Validate that all original items (that have substitutes) are in the order
-        for (const originalItem of originalItemNumbers) {
-            const originalInOrder = await OrderDetail.findOne({
-                where: {
-                    Order_Number: orderNumber,
-                    Item_Number: originalItem
+        if (originalItemNumbers.size > 0) {
+            for (const originalItem of originalItemNumbers) {
+                const originalInOrder = await OrderDetail.findOne({
+                    where: {
+                        Order_Number: orderNumber,
+                        Item_Number: originalItem
+                    }
+                });
+                if (!originalInOrder) {
+                    const substituteItem = originalToSubstituteMap.get(originalItem);
+                    throw new AppError(`Original item ${originalItem} (substitute: ${substituteItem}) not found in order`, 404);
                 }
-            });
-            if (!originalInOrder) {
-                const substituteItem = originalToSubstituteMap.get(originalItem);
-                throw new AppError(`Original item ${originalItem} (substitute: ${substituteItem}) not found in order`, 404);
             }
         }
 
@@ -876,7 +898,8 @@ export class EpickService {
         const scanMap = new Map<string, { itemNumber: number; qty: number; isSubsitute: boolean }>();
         // Key format: `${itemNumber}_${boxId}`
 
-        for (const product of products) {
+        if (products && products.length > 0) {
+            for (const product of products) {
             const scannedItemNumber = upcToItemMap.get(product.UPC_Number);
             if (!scannedItemNumber) continue;
             
@@ -907,8 +930,8 @@ export class EpickService {
             }
         }
 
-        // Step 4: Process all scans - check existing and create/update
-        const existingScans = await OrderPickScan.findAll({
+        // Step 4: Process all scans - check existing and create/update (only if we have products)
+        const existingScans = scanMap.size > 0 ? await OrderPickScan.findAll({
             where: {
                 orderNumber,
                 [Op.or]: Array.from(scanMap.entries()).map(([key, value]) => ({
@@ -916,7 +939,7 @@ export class EpickService {
                     boxId: Number(key.split('_')[1])
                 }))
             }
-        });
+        }) : [];
 
         const existingScanMap = new Map<string, OrderPickScan>();
         for (const scan of existingScans) {
@@ -1306,7 +1329,7 @@ export class EpickService {
             isComplete
         };
     }
-
+  }
   async addImagesNotes(req: Request, id: number) {
     let pushImage: string[] = [];
 
@@ -1477,6 +1500,21 @@ export class EpickService {
         status: 'in_progress'
       }
     })
+    
+    // If order exists but not in Record_Locks, return null (order was deleted from locks)
+    if (data) {
+      const lockExists = await RecordLock.findOne({
+        where: {
+          Lock_Number: data.orderNumber
+        }
+      });
+      
+      // If order exists in PG but not in Record_Locks, return null
+      if (!lockExists) {
+        return null;
+      }
+    }
+    
     return data;
   }
 
@@ -1713,7 +1751,7 @@ export class EpickService {
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc'],
+          attributes: ['Category_Desc','Sales_Category'],
           required: false,
         },
         {
@@ -1771,6 +1809,11 @@ export class EpickService {
       allowToOrder = false;
     }
 
+    let prepaidTaxRate = 0
+    if(userJurisdiction !=null && e.salesCategory){
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+    }
+
     // Optional: mark new items if you have a similar helper as in list API
     // const topLatestItems = await getTopLatestItems();
     // const isNewItem = topLatestItems.some((it: any) => it.Item_Number === e.Item_Number);
@@ -1794,6 +1837,8 @@ export class EpickService {
       Invoice_Cost: e.Invoice_Cost,
       AvgCost: e.AvgCost,
       NetCost: e.NetCost,
+      hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+      prepaidTaxRate: prepaidTaxRate,
       hasProductLimit: !!productLimit,
       productLimit,
       UPCList: e.UPCList, // comes from includeUPC
@@ -1991,7 +2036,7 @@ export class EpickService {
       where: {
         orderNumber,
         itemNumber,
-        userId,
+        pickerUserNumber: userId,
         status: 'pending',
       },
     });
@@ -2004,7 +2049,7 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
-      userId,
+      pickerUserNumber: userId,
       status: 'pending',
       note: note || null,
     });
@@ -2029,7 +2074,7 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.findOne({
       where: {
         id: requestId,
-        userId, // Ensure user can only check their own requests
+        pickerUserNumber: userId, // Ensure user can only check their own requests
       },
       include: [
         {
@@ -2070,7 +2115,7 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.findOne({
       where: {
         id: requestId,
-        userId, // Ensure user can only cancel their own requests
+        pickerUserNumber: userId, // Ensure user can only cancel their own requests
       },
     });
 
@@ -2132,7 +2177,7 @@ export class EpickService {
         orderNumber: req.orderNumber,
         itemNumber: req.itemNumber,
         itemDescription: inventoryMap.get(req.itemNumber) || null,
-        userId: req.userId,
+        pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
         userEmail: user?.email || null,
         note: req.note,
@@ -2320,7 +2365,7 @@ export class EpickService {
               requestId: overrideRequest.id.toString(),
               orderNumber: overrideRequest.orderNumber.toString(),
               itemNumber: overrideRequest.itemNumber.toString(),
-              userId: overrideRequest.userId.toString(),
+              pickerUserNumber: overrideRequest.pickerUserNumber.toString(),
             },
           });
           console.log(`✅ Notification sent to distributor ${distributor.id} (${deviceTokens.length} devices)`);
