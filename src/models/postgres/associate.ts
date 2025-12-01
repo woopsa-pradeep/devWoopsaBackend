@@ -12,6 +12,7 @@ import { WebLocation } from './webLocation.model';
 import { OrderPickBox } from './epickOrderBox.model';
 import { OrderPick } from './epickOrder.model';
 import { OrderPickScan } from './epickOrderScan.model';
+import { OverrideRequest } from './overrideRequest.model';
 import  CustomerCart  from '../postgres/retailerCart.model';
 import { Inventory } from '../mmsql/inventory.model';
 import  {ProductImage}  from '../postgres/product.model';
@@ -100,6 +101,17 @@ OrderPickScan.belongsTo(OrderPick, {
   as: 'order',
   foreignKey: 'orderNumber',
   targetKey: 'orderNumber',
+});
+
+// OverrideRequest associations
+WebUsers.hasMany(OverrideRequest, {
+  foreignKey: 'userId',
+  as: 'overrideRequests',
+});
+
+OverrideRequest.belongsTo(WebUsers, {
+  foreignKey: 'userId',
+  as: 'user',
 });
 
 

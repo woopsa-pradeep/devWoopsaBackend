@@ -10,7 +10,7 @@ import Banner from "../models/postgres/banner.model";
 import { ProductImage } from "../models/postgres/product.model";
 import CustomerCart from "../models/postgres/retailerCart.model";
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, checkTimeOut, generatePDFFromHTML, generateToken, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP } from "../utils/helper";
+import { checkQtyDiscount, checkTimeOut, generatePDFFromHTML, generateToken, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP } from "../utils/helper";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { Operations } from "../utils/operations";
 import { generateOrderConfirmationEmail, generateDistributorOrderNotificationEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
@@ -259,10 +259,11 @@ export class RetailerService {
   // }
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state, zip, jurisdiction } = query;
 
     const userJurisdiction = await getJurisdiction(user.id);
 
+    
 
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
@@ -274,6 +275,11 @@ export class RetailerService {
       I_Inactive: false,
       ShortOrderForm: true,
     };
+
+    if(state || zip || jurisdiction){
+      const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+      whereClause.Item_Number = { [Op.notIn]: excludeItem };
+    }
 
     let searchInUPC = false;
     let orderClause: Order = [['Date_Created', 'DESC'] as const];
@@ -386,7 +392,7 @@ export class RetailerService {
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc'],
+          attributes: ['Category_Desc','Sales_Category'],
           required: false
         },
         {
@@ -442,6 +448,16 @@ export class RetailerService {
       }
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
+      let prepaidTaxRate = 0
+      console.log(e,'e.Sales_Category')
+      if(userJurisdiction !=null && e.salesCategory){
+
+        console.log(e,'e.Sales_Category')
+       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+      }
+    
+
+
       return {
         Pack: e.Pack,
         Description: e.Description,
@@ -454,6 +470,8 @@ export class RetailerService {
         OTP_Number: e.OTP_Number,
         price,
         isNewItem,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
         priceWithTax: price + taxRate,
         BaseCost: e.BaseCost,
         Invoice_Cost: e.Invoice_Cost,
@@ -465,12 +483,13 @@ export class RetailerService {
         Inventory_OnHand: inventoryOnHand,
         UnitOunces: e.UnitOunces,
         allowToOrder,
+        salesCategory: e.SalesCategory || null,
         hasQtyDiscount: hasQtyDiscount.allowToDiscount,
         qtyDiscount: hasQtyDiscount,
         showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
         showLowStock: wareHouseSetting?.retailer?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
         showWithOutPrice: wareHouseSetting?.retailer?.showWithOutPrice || false,
-        SalesCategory: e.SalesCategory?.Category_Desc || null,
+        // SalesCategory: e.SalesCategory?.Category_Desc || null,
         PriceClass: e.PriceClass?.Class_Desc || null,
         showDistributorImage: productImage?.isAllow ?? false,
         distributorImage: productImage?.img_url || null,
@@ -1075,6 +1094,7 @@ export class RetailerService {
       }
 
       const orderDetail = {
+        PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
         Order_Number: orderHeaderCreated.Order_Number,
         Item_Number: item.Item_Number,
         Line_Number: index + 1,

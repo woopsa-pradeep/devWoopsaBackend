@@ -39,6 +39,7 @@ export interface PlaceOrderRequest {
   Tax_Rate: number;
   Price_With_Tax: number;
   TotalPriceWithTax: number;
+  prepaidTaxRate?: number;
   id: number;
 }
 

@@ -70,6 +70,8 @@ import { getDefaultVendorValues, getNextVendorNumber } from "../utils/vendor";
 import { getDefaultErpUserValues , getNextUserNumber } from "../utils/erpUsers";
 import settings from "../models/postgres/setting.model"
 import { emailNotificationQueue } from "../configuration/config";
+import { markAsUntransferable } from "worker_threads";
+import { PriceSubclass_Defs } from "../models/mmsql/priceSubClassDefs.model";
 
 export class ManagerService {
 
@@ -4162,7 +4164,41 @@ async getErpUserById(id: number){
     return inventoryUPC;
   }
 
-  
+  async getInventoryForReport(){
+    const inventoryList = await Inventory.findAll({
+      order: [['Item_Number', 'ASC']],
+      include: [
+        {
+          model: InventoryUPC,
+          as: 'UPCList',
+          attributes: ['UPC_Number', 'Status','Priority'],
+        },
+        {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Sales_Category','Category_Desc'],
+        },
+        {
+          model: Vendor,
+          as: 'primaryVendor',
+          attributes: ['Primary_Vendor','V_Description'],
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Price_Class','Class_Desc'],
+        },
+        {
+          model: PriceSubclass_Defs,
+          as: 'PriceSubclass',
+          attributes: ['Price_Subclass','Subclass_Def'],
+
+        }
+      ],
+    });
+    return inventoryList;
+  }
+
 
    // EpickSetting CRUD methods
   async createEpickSetting(body: { pin: string; allowSingleScan: boolean }) {

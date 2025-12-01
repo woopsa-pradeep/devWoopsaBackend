@@ -5,6 +5,7 @@ import { InventoryUPC } from "./inventoryUpc.model";
 import { SalesRep } from "./salesrep.model";
 import { SalesCategory } from './salesCategory.model';
 import { PriceClass } from "./priceClass.model";
+import { PriceSubclass_Defs } from "./priceSubClassDefs.model";
 import { CustReceivables } from './custReceivables.model';
 import { ARDefinitions } from './arDefinitions.model';
 import { ARDeposits } from './arDeposits.model';
@@ -53,7 +54,6 @@ export function applyAssociations(): void {
     as: "priceClasses"
   });
   
-  // One PriceClass belongs to one SalesCategory
   PriceClass.belongsTo(SalesCategory, {
     foreignKey: "Sales_Category_Group",
     as: "salesCategory"
@@ -61,8 +61,13 @@ export function applyAssociations(): void {
   
   Inventory.belongsTo(PriceClass, {
     foreignKey: 'Price_Class',
-    as: 'PriceClass', // 👈 Must match your query
+    as: 'PriceClass', 
   });
+
+  Inventory.belongsTo(PriceSubclass_Defs, {
+  foreignKey: 'Price_Subclass',   // make sure this matches your DB column
+  as: 'PriceSubclass'
+});
 
   PriceClass.hasMany(Inventory, {
     foreignKey: 'Price_Class',

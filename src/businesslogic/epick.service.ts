@@ -29,6 +29,11 @@ import { getDefaultOrderDetailValues } from "../utils/order";
 import { PassScanItem } from "../models/postgres/passScanItem.model";
 import EpickSetting from "../models/postgres/epickSetting.model";
 import { WebUsers } from "../models/postgres/users.model";
+import { OverrideRequest } from "../models/postgres/overrideRequest.model";
+import { sendMultiFCMNotification } from "../utils/sentNotification";
+import { RetailerDevice } from "../models/postgres/device.model";
+import { Notifications } from "../models/postgres/notification.model";
+import { RecordLock } from "../models/mmsql/recordLocks.model";
 
 
 export class EpickService {
@@ -100,81 +105,95 @@ export class EpickService {
 
   //      return notAcceptedOrders;
   //    }
-
-       async getOrder() {
-        // 1) Get accepted orders (in_progress | completed) - exclude both from available orders
-        const startDate = moment().subtract(1, 'day').startOf('day').toDate();
-        const acceptedOrdersWhere: any = {
-          status: { [Op.or]: ['in_progress', 'completed'] },
-        };
+       
+       async getOrder(userId: number) {
+        // Step 0: Fetch user preferences (order_type and shortby)
+        const user = await WebUsers.findOne({
+          where: { id: userId },
+          attributes: ['order_type', 'shortby'],
+          raw: true,
+        });
         
-        // Apply start date filter only if provided
-        if (startDate) {
-          acceptedOrdersWhere.createdAt = { [Op.gte]: startDate };
-        }
+        const orderType = (user as any)?.order_type || 'order_number';
+        const shortBy = (user as any)?.shortby || 'Des';
         
-        const acceptedOrders = await OrderPick.findAll({
-          where: acceptedOrdersWhere,
+        console.log(`User ${userId} preferences: order_type=${orderType}, shortby=${shortBy}`);
+        console.log('User object:', user);
+        
+        // Step 1: Get completed order numbers from PostgreSQL first (single query)
+        const completedOrders = await OrderPick.findAll({
+          where: {
+            status: 'completed'
+          },
           attributes: ['orderNumber'],
           raw: true,
         });
-
         
-        // Clean + dedupe array of order numbers
-        const acceptedOrderNumbers = Array.from(
-          new Set(
-            acceptedOrders
-            .map((o: any) => o?.orderNumber)
-            .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
-            .map((v: any) => String(v)) // normalize to string to match your earlier includes check
-          )
-        );
-        console.log(acceptedOrderNumbers, 'acceptedOrderNumbers');
-      
-        // 2) Query OrderHeader for orders, excluding accepted ones via NOT IN
-        // Exclude orders where Invoice_Number > 0 OR P_Number > 0 OR Invoice_Total > 0
-        // Include orders where ALL three are <= 0 or null
+        const completedOrderNumbers = completedOrders
+          .map((o: any) => o?.orderNumber)
+          .filter((v: any) => v !== null && v !== undefined)
+          .map((v: any) => Number(v));
+        
+        console.log(completedOrderNumbers.length, 'completed orders to exclude');
+        
+        // Step 2: Query Order_Header (MSSQL) with all filters in SQL
+        // Filter: Order_Updated = 0 AND Invoice_Number = 0
+        // Exclude locked orders from Record_Locks
+        // Include only orders that HAVE Order_Detail items
+        // Exclude completed orders from PostgreSQL
         const headerWhere: any = {
           [Op.and]: [
-            // Exclude orders where Order_Updated = 1
-            { Order_Updated: { [Op.ne]: true } },
-            // Exclude orders where ANY of the three is > 0 (OR condition)
-            // Include orders where ALL three are <= 0 or null
-            {
-              [Op.and]: [
-                {
-                  [Op.or]: [
-                    { Invoice_Number: { [Op.lte]: 0 } },
-                    { Invoice_Number: null }
-                  ]
-                },
-                {
-                  [Op.or]: [
-                    { P_Number: { [Op.lte]: 0 } },
-                    { P_Number: null }
-                  ]
-                },
-                {
-                  [Op.or]: [
-                    { Invoice_Total: { [Op.lte]: 0 } },
-                    { Invoice_Total: null }
-                  ]
-                }
-              ]
-            }
+            { Order_Updated: false },
+            { Invoice_Number: 0 },
+            // Exclude orders that are locked in Record_Locks table
+            literal(`Order_Number NOT IN (SELECT Lock_Number FROM Record_Locks WHERE Lock_Number IS NOT NULL)`),
+            // Ensure order has Order_Detail items (has at least one detail)
+            literal(`Order_Number IN (SELECT DISTINCT Order_Number FROM Order_Detail)`)
           ]
         };
         
-        // Apply start date filter only if provided
-        if (startDate) {
-          headerWhere[Op.and].push({ Order_Date: { [Op.gte]: startDate } });
+        // Exclude completed orders if any exist
+        if (completedOrderNumbers.length > 0) {
+          headerWhere[Op.and].push({ Order_Number: { [Op.notIn]: completedOrderNumbers } });
         }
         
-        if (acceptedOrderNumbers.length > 0) {
-          headerWhere[Op.and].push({ Order_Number: { [Op.notIn]: acceptedOrderNumbers } });
-        }
         console.log(headerWhere, 'headerWhere');
-        const todayOrder = await OrderHeader.findAll({
+        
+        // Step 2a: Get order numbers that have ANY item with Confirmed != 0 (using SQL subquery - fast)
+        const ordersWithConfirmedNotZero = await sequelize.query(
+          `SELECT DISTINCT Order_Number 
+           FROM Order_Detail 
+           WHERE Confirmed = 1`,
+          {
+            type: QueryTypes.SELECT,
+            raw: true,
+          }
+        ) as any[];
+        
+        const orderNumbersWithConfirmedNotZero = new Set(
+          ordersWithConfirmedNotZero
+            .map((row: any) => row.Order_Number)
+            .filter((v: any) => v !== null && v !== undefined)
+            .map((v: any) => Number(v))
+        );
+        
+        console.log(orderNumbersWithConfirmedNotZero.size, 'orders with Confirmed != 0');
+        
+        // Step 2b: Determine sorting order based on user preferences
+        let orderBy: any[] = [];
+        if (orderType === 'order_number') {
+          // Sort by Order_Number DESC (latest first) - ignore shortby
+          orderBy = [['Order_Number', 'DESC']];
+          console.log('Will sort by Order_Number DESC in SQL query');
+        } else {
+          // For qty_number, we'll sort after fetching and calculating totalQty
+          // Don't sort in SQL - we'll sort in JavaScript after calculating totalQty
+          orderBy = []; // No SQL sorting - will sort by qty in JavaScript
+          console.log('Will sort by totalQty in JavaScript after calculation');
+        }
+        
+        // Step 2c: Fetch orders (NO Order_Detail include - much faster!)
+        const orders = await OrderHeader.findAll({
           where: headerWhere,
           attributes: ['Order_Number', 'Order_Date'],
           include: [
@@ -192,32 +211,103 @@ export class EpickService {
               ],
               required: false,
             },
-            {
-              model: OrderDetail,
-              as: 'orderDetails',
-              attributes: ['Order_Number', 'Line_Number', 'Quantity_Ordered', 'Pack', 'CaseCount'],
-              required: false,
-              include: [
-                {
-                  model: Inventory,
-                  as: 'inventory',
-                  attributes: ['Item_Number', 'Description'],
-                  required: false,
-                },
-              ],
-            },
           ],
-          order: [
-            ['Order_Number', 'ASC'],
-            [{ model: OrderDetail, as: 'orderDetails' }, 'Line_Number', 'ASC'],
-          ],
+          order: orderBy,
         });
       
-        console.log(todayOrder, 'todayOrder');
+        console.log(orders.length, 'final orders fetched');
+        
+        // Step 2d: Calculate totalQty for each order (always calculate for response)
+        const orderNumbers = orders.map((order: any) => order.Order_Number);
+        let totalQtyMap: any = {};
+        
+        if (orderNumbers.length > 0) {
+          // Always calculate totalQty for response
+          const totalQtyResults = await sequelize.query(
+            `SELECT Order_Number, SUM(CAST(Quantity_Ordered AS FLOAT)) as totalQty
+             FROM Order_Detail
+             WHERE Order_Number IN (:orderNumbers)
+             GROUP BY Order_Number`,
+            {
+              replacements: { orderNumbers: orderNumbers },
+              type: QueryTypes.SELECT,
+              raw: true,
+            }
+          ) as any[];
+          
+          totalQtyResults.forEach((row: any) => {
+            totalQtyMap[row.Order_Number] = parseFloat(row.totalQty) || 0;
+          });
+          
+          console.log(`Calculated totalQty for ${totalQtyResults.length} orders`);
+          console.log('Sample totalQty values:', Object.entries(totalQtyMap).slice(0, 5));
+        }
       
-        // keep response shape identical
-        const notAcceptedOrders = todayOrder;
-        return notAcceptedOrders;
+        // Step 3: Format response - add note only if order has Confirmed != 0 items
+        let result = orders.map((order: any) => {
+          const orderData: any = {
+            Order_Number: order.Order_Number,
+            Order_Date: order.Order_Date,
+            totalQty: totalQtyMap[order.Order_Number] || 0,
+            customer: order.customer ? {
+              C_Number: order.customer.C_Number,
+              C_Name: order.customer.C_Name,
+              Routes: order.customer.Routes || []
+            } : null
+          };
+          
+          // Add note only if order has ANY item with Confirmed != 0 (check from Set - O(1) lookup)
+          if (orderNumbersWithConfirmedNotZero.has(order.Order_Number)) {
+            orderData.note = 'pending from erp';
+          }
+          
+          return orderData;
+        });
+        
+        // Step 4: Sort by totalQty if order_type is 'qty_number'
+        if (orderType === 'qty_number') {
+          console.log(`Sorting by totalQty with shortby=${shortBy}`);
+          
+          // Normalize shortby to handle case variations
+          const normalizedShortBy = shortBy?.toLowerCase();
+          
+          if (normalizedShortBy === 'des') {
+            // Sort DESC: highest totalQty first
+            result.sort((a: any, b: any) => {
+              const qtyA = a.totalQty || 0;
+              const qtyB = b.totalQty || 0;
+              return qtyB - qtyA; // DESC: b - a
+            });
+            console.log('Sorted by totalQty DESC (highest quantity first)');
+          } else if (normalizedShortBy === 'asc') {
+            // Sort ASC: lowest totalQty first
+            result.sort((a: any, b: any) => {
+              const qtyA = a.totalQty || 0;
+              const qtyB = b.totalQty || 0;
+              return qtyA - qtyB; // ASC: a - b
+            });
+            console.log('Sorted by totalQty ASC (lowest quantity first)');
+          } else {
+            // Default to DESC if shortby is invalid
+            console.log(`Unknown shortby value: ${shortBy}, defaulting to DESC`);
+            result.sort((a: any, b: any) => {
+              const qtyA = a.totalQty || 0;
+              const qtyB = b.totalQty || 0;
+              return qtyB - qtyA;
+            });
+          }
+          
+          // Log first few orders after sorting for debugging
+          console.log('First 5 orders after sorting by qty:', result.slice(0, 5).map((o: any) => ({
+            Order_Number: o.Order_Number,
+            totalQty: o.totalQty
+          })));
+        } else {
+          console.log(`order_type is '${orderType}', keeping SQL sort order (Order_Number DESC)`);
+        }
+      
+        console.log(result.length, 'final orders to return');
+        return result;
       }
 
   async getOrderHistory(id: number) {
@@ -267,6 +357,16 @@ export class EpickService {
       scannedQty: body.scannedQty,
       pickerUserNumber: id,
     })
+    
+    // Create lock record when order is started
+    // myKey is auto-generated, so we only insert other fields
+    await RecordLock.create({
+      Lock_Type: 0,
+      Lock_Number: body.orderNumber,
+      Lock_User: Number(isUserExist.userNumber ?? 0),
+      Lock_Workstation: 0
+    });
+    
     await OrderDetail.update(
       { Quantity_Shipped: 0 },
       {
@@ -341,6 +441,14 @@ export class EpickService {
           [Op.and]: [
             // Ensure Quantity_Ordered is greater than Quantity_Shipped
             { Quantity_Ordered: { [Op.gt]: sequelize.col("Quantity_Shipped") } },
+            // Only show items where Confirmed = 0 (pending from ERP)
+            {
+              [Op.or]: [
+                { Confirmed: false },
+                { Confirmed: 0 },
+                { Confirmed: null }
+              ]
+            }
           ],
         },
         attributes: [
@@ -351,6 +459,7 @@ export class EpickService {
           "CaseCount",
           "Quantity_Shipped",
           "Item_Number",
+          "Confirmed",
         ],
         include: [
           {
@@ -363,6 +472,12 @@ export class EpickService {
                 as: "UPCList",
                 attributes: ["UPC_Number"],
                 required: false, // optional relation, it will work even if there are no matching records
+              },
+              {
+                model: SalesCategory,
+                as: "SalesCategory",
+                attributes: ["Category_Desc"],
+                required: false,
               },
             ],
           },
@@ -530,7 +645,8 @@ export class EpickService {
                 masterImage: `${process.env.AZUREIMAGESERVER}${item?.inventory?.UPCList?.[0]?.UPC_Number || ''}.jpg`,
                 isDistributorImageShow: productImage?.isAllow ?? false,
                 distributorImage: productImage?.img_url || null,
-                substituteProduct: substituteProduct
+                substituteProduct: substituteProduct,
+                SalesCategory: item?.inventory?.SalesCategory?.Category_Desc || null
             }
 
         }))
@@ -1202,6 +1318,7 @@ export class EpickService {
         )
       );
 
+
       // Collect only successful uploads
       pushImage = uploadResults
         .filter(result => result.success)
@@ -1303,6 +1420,13 @@ export class EpickService {
         }
       }
     );
+
+    // Destroy lock record when order is completed
+    await RecordLock.destroy({
+      where: {
+        Lock_Number: id
+      }
+    });
 
     console.log(data, 'data--->');
     console.log(`Bundles: ${bundlesCount}, Totes: ${totesCount}`);
@@ -1838,6 +1962,376 @@ export class EpickService {
     }
     return epickSetting;
 
+  }
+
+  /**
+   * Create a new override request
+   */
+  async createOverrideRequest(data: {
+    orderNumber: number;
+    itemNumber: number;
+    note?: string;
+  }, userId: number) {
+    const { orderNumber, itemNumber, note } = data;
+
+    // Validate order exists and item is in order
+    const orderDetail = await OrderDetail.findOne({
+      where: {
+        Order_Number: orderNumber,
+        Item_Number: itemNumber,
+      },
+    });
+
+    if (!orderDetail) {
+      throw new AppError(`Item ${itemNumber} not found in order ${orderNumber}`, 404);
+    }
+
+    // Check if there's already a pending request for this item
+    const existingRequest = await OverrideRequest.findOne({
+      where: {
+        orderNumber,
+        itemNumber,
+        userId,
+        status: 'pending',
+      },
+    });
+
+    if (existingRequest) {
+      throw new AppError('A pending override request already exists for this item', 400);
+    }
+
+    // Create the request
+    const overrideRequest = await OverrideRequest.create({
+      orderNumber,
+      itemNumber,
+      userId,
+      status: 'pending',
+      note: note || null,
+    });
+
+    // Send notification to all distributors
+    await this.sendNotificationToDistributors(overrideRequest);
+
+    return {
+      requestId: overrideRequest.id,
+      status: overrideRequest.status,
+      orderNumber: overrideRequest.orderNumber,
+      itemNumber: overrideRequest.itemNumber,
+      note: overrideRequest.note,
+      createdAt: overrideRequest.createdAt,
+    };
+  }
+
+  /**
+   * Check override request status (for polling)
+   */
+  async checkOverrideRequest(requestId: number, userId: number) {
+    const overrideRequest = await OverrideRequest.findOne({
+      where: {
+        id: requestId,
+        userId, // Ensure user can only check their own requests
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+    });
+
+    if (!overrideRequest) {
+      throw new AppError('Override request not found', 404);
+    }
+
+    // Get item description
+    const inventory = await Inventory.findOne({
+      where: { Item_Number: overrideRequest.itemNumber },
+      attributes: ['Description'],
+    });
+
+    return {
+      requestId: overrideRequest.id,
+      status: overrideRequest.status,
+      orderNumber: overrideRequest.orderNumber,
+      itemNumber: overrideRequest.itemNumber,
+      itemDescription: inventory?.Description || null,
+      note: overrideRequest.note,
+      rejectionReason: overrideRequest.rejectionReason,
+      createdAt: overrideRequest.createdAt,
+      updatedAt: overrideRequest.updatedAt,
+    };
+  }
+
+  /**
+   * Cancel override request (Epick user)
+   */
+  async cancelOverrideRequest(requestId: number, userId: number) {
+    const overrideRequest = await OverrideRequest.findOne({
+      where: {
+        id: requestId,
+        userId, // Ensure user can only cancel their own requests
+      },
+    });
+
+    if (!overrideRequest) {
+      throw new AppError('Override request not found', 404);
+    }
+
+    // Only allow cancellation if status is pending
+    if (overrideRequest.status !== 'pending') {
+      throw new AppError(`Cannot cancel request with status: ${overrideRequest.status}. Only pending requests can be cancelled.`, 400);
+    }
+
+    // Update status to cancelled
+    overrideRequest.status = 'cancelled';
+    await overrideRequest.save();
+
+    return {
+      requestId: overrideRequest.id,
+      status: overrideRequest.status,
+      orderNumber: overrideRequest.orderNumber,
+      itemNumber: overrideRequest.itemNumber,
+      updatedAt: overrideRequest.updatedAt,
+    };
+  }
+
+  /**
+   * Get all pending override requests (for distributor)
+   */
+  async getPendingOverrideRequests() {
+    const pendingRequests = await OverrideRequest.findAll({
+      where: {
+        status: 'pending',
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Get item descriptions for all requests
+    const itemNumbers = pendingRequests.map(req => req.itemNumber);
+    const inventories = await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: itemNumbers },
+      },
+      attributes: ['Item_Number', 'Description'],
+    });
+
+    const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
+
+    return pendingRequests.map((req: any) => {
+      const user = req.user as WebUsers | undefined;
+      return {
+        requestId: req.id,
+        orderNumber: req.orderNumber,
+        itemNumber: req.itemNumber,
+        itemDescription: inventoryMap.get(req.itemNumber) || null,
+        userId: req.userId,
+        userName: user ? `${user.firstName} ${user.lastName}` : null,
+        userEmail: user?.email || null,
+        note: req.note,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+      };
+    });
+  }
+
+  /**
+   * Approve override request
+   */
+  async approveOverrideRequest(requestId: number) {
+    const overrideRequest = await OverrideRequest.findOne({
+      where: {
+        id: requestId,
+        status: 'pending',
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+    });
+
+    if (!overrideRequest) {
+      throw new AppError('Pending override request not found', 404);
+    }
+
+    // Update status
+    overrideRequest.status = 'approved';
+    await overrideRequest.save();
+
+    // Note: Epick user will check status via polling API (checkOverrideRequest) every 5 seconds
+    // No push notification needed
+
+    return {
+      requestId: overrideRequest.id,
+      status: overrideRequest.status,
+      orderNumber: overrideRequest.orderNumber,
+      itemNumber: overrideRequest.itemNumber,
+      updatedAt: overrideRequest.updatedAt,
+    };
+  }
+
+  /**
+   * Cancel override request (Distributor)
+   */
+  async cancelOverrideRequestByDistributor(requestId: number) {
+    const overrideRequest = await OverrideRequest.findOne({
+      where: {
+        id: requestId,
+        status: 'pending',
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+    });
+
+    if (!overrideRequest) {
+      throw new AppError('Pending override request not found', 404);
+    }
+
+    // Update status to cancelled
+    overrideRequest.status = 'cancelled';
+    await overrideRequest.save();
+
+    return {
+      requestId: overrideRequest.id,
+      status: overrideRequest.status,
+      orderNumber: overrideRequest.orderNumber,
+      itemNumber: overrideRequest.itemNumber,
+      updatedAt: overrideRequest.updatedAt,
+    };
+  }
+
+  /**
+   * Reject override request
+   */
+  async rejectOverrideRequest(requestId: number, rejectionReason: string) {
+    const overrideRequest = await OverrideRequest.findOne({
+      where: {
+        id: requestId,
+        status: 'pending',
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+    });
+
+    if (!overrideRequest) {
+      throw new AppError('Pending override request not found', 404);
+    }
+
+    // Update status
+    overrideRequest.status = 'rejected';
+    overrideRequest.rejectionReason = rejectionReason;
+    await overrideRequest.save();
+
+    // Note: Epick user will check status via polling API (checkOverrideRequest) every 5 seconds
+    // No push notification needed
+
+    return {
+      requestId: overrideRequest.id,
+      status: overrideRequest.status,
+      orderNumber: overrideRequest.orderNumber,
+      itemNumber: overrideRequest.itemNumber,
+      rejectionReason: overrideRequest.rejectionReason,
+      updatedAt: overrideRequest.updatedAt,
+    };
+  }
+
+  /**
+   * Send notification to all distributors (same way as web notifications)
+   */
+  private async sendNotificationToDistributors(overrideRequest: OverrideRequest) {
+    try {
+      // Get all active distributor users
+      const distributors = await WebUsers.findAll({
+        where: {
+          role: 'distributor',
+          isActive: true,
+        },
+        attributes: ['id'],
+      });
+
+      if (distributors.length === 0) {
+        console.log('⚠️ No active distributors found for notification');
+        return;
+      }
+
+      // Get item description
+      const inventory = await Inventory.findOne({
+        where: { Item_Number: overrideRequest.itemNumber },
+        attributes: ['Description'],
+      });
+
+      const itemDescription = inventory?.Description || `Item ${overrideRequest.itemNumber}`;
+      const title = 'Override Request';
+      const description = `Order #${overrideRequest.orderNumber} - ${itemDescription} pass request`;
+
+      // Send notification to each distributor (same pattern as web notifications)
+      for (const distributor of distributors) {
+        // Step 1: Create notification in database (same as web)
+        await Notifications.create({
+          userNumber: distributor.id.toString(),
+          title: title,
+          description: description,
+          isActive: true,
+        });
+
+        // Step 2: Get device tokens (same as web)
+        const findDeviceToken = await RetailerDevice.findAll({
+          where: {
+            customerNumber: distributor.id,
+            isActive: true,
+            sessionActive: true,
+            isAllow: true,
+          },
+          attributes: ['deviceToken'],
+        });
+
+        const deviceTokens = findDeviceToken
+          .map((e: any) => e.deviceToken)
+          .filter((token: string) => token && token.trim() !== '');
+
+        // Step 3: Send Firebase notification (same as web)
+        if (deviceTokens.length > 0) {
+          await sendMultiFCMNotification({
+            tokens: deviceTokens,
+            title: title,
+            body: description,
+            data: {
+              type: 'override_request',
+              requestId: overrideRequest.id.toString(),
+              orderNumber: overrideRequest.orderNumber.toString(),
+              itemNumber: overrideRequest.itemNumber.toString(),
+              userId: overrideRequest.userId.toString(),
+            },
+          });
+          console.log(`✅ Notification sent to distributor ${distributor.id} (${deviceTokens.length} devices)`);
+        } else {
+          console.log(`⚠️ No device tokens found for distributor ${distributor.id}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error sending notification to distributors:', error);
+      // Don't throw - notification failure shouldn't break the request creation
+    }
   }
 }
 

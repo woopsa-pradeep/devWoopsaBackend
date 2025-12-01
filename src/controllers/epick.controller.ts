@@ -33,8 +33,9 @@ export class EpickController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
-    async getOrder(req: Request, res: Response) {
-        const data = await this.epickService.getOrder();
+    async getOrder(req: AuthRequest, res: Response) {
+        const userId = Number(req.user?.id);
+        const data = await this.epickService.getOrder(userId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -115,4 +116,114 @@ export class EpickController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
  
+    /**
+     * Create override request (Epick user)
+     */
+    async createOverrideRequest(req: AuthRequest, res: Response) {
+        const userId = req.user?.id;
+        if (!userId) {
+            return sendResponse(res, 401, false, null, "User not authenticated");
+        }
+
+        const { orderNumber, itemNumber, note } = req.body;
+
+        if (!orderNumber || !itemNumber) {
+            return sendResponse(res, 400, false, null, "orderNumber and itemNumber are required");
+        }
+
+        const data = await this.epickService.createOverrideRequest(
+            { orderNumber, itemNumber, note },
+            userId
+        );
+
+        sendResponse(res, 201, true, data, "Override request created successfully");
+    }
+
+    /**
+     * Check override request status (Epick user - for polling)
+     */
+    async checkOverrideRequest(req: AuthRequest, res: Response) {
+        const userId = req.user?.id;
+        if (!userId) {
+            return sendResponse(res, 401, false, null, "User not authenticated");
+        }
+
+        const requestId = Number(req.params.requestId);
+        if (!requestId || isNaN(requestId)) {
+            return sendResponse(res, 400, false, null, "Invalid request ID");
+        }
+
+        const data = await this.epickService.checkOverrideRequest(requestId, userId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Get pending override requests (Distributor)
+     */
+    async getPendingOverrideRequests(req: Request, res: Response) {
+        const data = await this.epickService.getPendingOverrideRequests();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Approve override request (Distributor)
+     */
+    async approveOverrideRequest(req: Request, res: Response) {
+        const requestId = Number(req.params.requestId);
+        if (!requestId || isNaN(requestId)) {
+            return sendResponse(res, 400, false, null, "Invalid request ID");
+        }
+
+        const data = await this.epickService.approveOverrideRequest(requestId);
+        sendResponse(res, 200, true, data, "Override request approved successfully");
+    }
+
+    /**
+     * Cancel override request (Distributor)
+     */
+    async cancelOverrideRequestByDistributor(req: Request, res: Response) {
+        const requestId = Number(req.params.requestId);
+        if (!requestId || isNaN(requestId)) {
+            return sendResponse(res, 400, false, null, "Invalid request ID");
+        }
+
+        const data = await this.epickService.cancelOverrideRequestByDistributor(requestId);
+        sendResponse(res, 200, true, data, "Override request cancelled successfully");
+    }
+
+    /**
+     * Reject override request (Distributor)
+     */
+    async rejectOverrideRequest(req: Request, res: Response) {
+        const requestId = Number(req.params.requestId);
+        if (!requestId || isNaN(requestId)) {
+            return sendResponse(res, 400, false, null, "Invalid request ID");
+        }
+
+        const { rejectionReason } = req.body;
+        if (!rejectionReason || rejectionReason.trim() === '') {
+            return sendResponse(res, 400, false, null, "rejectionReason is required");
+        }
+
+        const data = await this.epickService.rejectOverrideRequest(requestId, rejectionReason);
+        sendResponse(res, 200, true, data, "Override request rejected successfully");
+    }
+
+    /**
+     * Cancel override request (Epick user)
+     */
+    async cancelOverrideRequest(req: AuthRequest, res: Response) {
+        const userId = req.user?.id;
+        if (!userId) {
+            return sendResponse(res, 401, false, null, "User not authenticated");
+        }
+
+        const requestId = Number(req.params.requestId);
+        if (!requestId || isNaN(requestId)) {
+            return sendResponse(res, 400, false, null, "Invalid request ID");
+        }
+
+        const data = await this.epickService.cancelOverrideRequest(requestId, userId);
+        sendResponse(res, 200, true, data, "Override request cancelled successfully");
+    }
 }

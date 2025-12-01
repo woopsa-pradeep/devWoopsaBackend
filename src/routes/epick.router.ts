@@ -34,4 +34,10 @@ router.get('/getOrderSummary/:orderNumber',verifyRole(ROLES.EPIK),catchAsync(epi
  router.post('/addSubsituteProduct',verifyRole(ROLES.EPIK),catchAsync(epickController.addSubsituteProduct.bind(epickController)));
  router.post('/putPassScanItem',verifyRole(ROLES.EPIK),catchAsync(epickController.putPassScanItem.bind(epickController)));
  router.post('/checkPin',verifyRole(ROLES.EPIK),catchAsync(epickController.checkPin.bind(epickController)));
+
+// Override Request routes
+router.post('/createOverrideRequest',verifyRole(ROLES.EPIK),catchAsync(epickController.createOverrideRequest.bind(epickController)));
+router.get('/checkOverrideRequest/:requestId',verifyRole(ROLES.EPIK),catchAsync(epickController.checkOverrideRequest.bind(epickController)));
+router.post('/cancelOverrideRequest/:requestId',verifyRole(ROLES.EPIK),catchAsync(epickController.cancelOverrideRequest.bind(epickController)));
+
 export default router;

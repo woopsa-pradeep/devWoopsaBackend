@@ -22,6 +22,9 @@ import InventoryQtyDiscount from "../models/mmsql/inventoryQtyDiscount.model";
 import { sendDistributorEmail, sendEmail } from "./sendMail";
 import { EmailMarketing } from "../models/postgres/emailMarketing.model";
 import { Console } from "console";
+import { SalesCategoryTaxRate } from "../models/mmsql/salesCategoryTaxes.model";
+import { TaxRates } from "../models/mmsql/taxRates.model";
+import { Inventory_ExcludeState } from "../models/mmsql/inventoryExcludeState.model";
 
 type PriceFields = {
   Price1?: number | null;
@@ -282,7 +285,6 @@ function calculateAdjustedPrice(priceAdjustment: any, inventory: any): number {
   const result = (Math.round((basePrice + adjValue) * 100) / 100).toFixed(2);
 
 
-  console.log(result, "result--->>>>")
   return Number(result);
 }
 
@@ -495,6 +497,24 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
 
     //check with query
 
+
+  let customerPricingAccount : any = await Customer.findOne({
+    where:{
+      C_Number: C_Number,
+    },
+    attributes: ['C_PricingAccount'],
+  })
+
+  customerPricingAccount = customerPricingAccount?.dataValues;
+
+
+  console.log(customerPricingAccount,'customerPricingAccount')
+  if(customerPricingAccount.C_PricingAccount){
+    C_Number = customerPricingAccount.C_PricingAccount;
+  }
+
+
+    
     console.log('GOES ELSE-->')
     let InventoryItem: any = await Inventory.findOne({
       where: {
@@ -503,6 +523,7 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     })
 
     InventoryItem = InventoryItem?.dataValues;
+
 
     let productPrice = 0;
     let myFinalPrice: any = null;
@@ -515,9 +536,29 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     let findCustomerPricing: any = await CustPricing.findOne({
       where: {
         C_Number: C_Number,
-        Price_Class: InventoryItem.Price_Class
+        Price_Class: InventoryItem.Price_Class,
+
       }
     })
+
+
+    if(!findCustomerPricing){
+      let tempSalesCategory = InventoryItem.Sales_Category;
+      tempSalesCategory = 1000+tempSalesCategory;
+      findCustomerPricing = await CustPricing.findOne({
+        where: {
+          C_Number: C_Number,
+          Price_Class: tempSalesCategory,
+  
+        }
+      })
+    }
+
+
+
+
+
+
     let findCustomerAuthorization: any = await CustAuthorized.findOne({
       where: {
         C_Number: C_Number,
@@ -533,7 +574,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
       hasCustomerAuthorization = true;
 
       const price = calculateItemPrice(findCustomerAuthorization, InventoryItem);
-      console.log('Price new -->', price)
       myFinalPrice = price;
 
     }
@@ -544,13 +584,11 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     }
 
     if (!findCustomerAuthorization && !findCustomerPricing) {
-      console.log('GOES ELSE-->--->', InventoryItem.Price1)
       myFinalPrice = InventoryItem.Price1;
     }
     if (findCustomerAuthorization && findCustomerPricing) {
       hasCustomerAuthorization = true;
       const price = calculateItemPrice(findCustomerAuthorization, InventoryItem);
-      console.log('Price new -->11', price)
       myFinalPrice = price;
     }
 
@@ -573,7 +611,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
 
    
     if (!findCustomerAuthorization && !findCustomerPricing) {
-      console.log('GOES ELSE-->--->', InventoryItem.Price1)
       productPrice = InventoryItem.Price1;
     }
 
@@ -610,7 +647,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
         productPrice = letSpecailPrice;
         hasSpecailPriceApply = true;
       } else {
-        console.log('ELSE-->', myFinalPrice)
         productPrice = myFinalPrice;
       }
 
@@ -620,7 +656,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     }
 
 
-    console.log(productPrice, 'productPrice--------------->')
 
     /// check Allowance
 
@@ -639,7 +674,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     });
     
     findAllowance = findAllowance?.dataValues;
-    console.log(findAllowance, 'findAllowance',hasSpecailPriceApply,'hasSpecailPriceApply')
     if (!hasSpecailPriceApply) {
       if (findAllowance) {
         if (findAllowance.Perpetual) {
@@ -683,7 +717,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
 
 
     isInventorySubclass = isInventorySubclass?.dataValues;
-    console.log(hasSpecailPriceApply, 'hasSpecailPriceApply------->')
     // check subclass discount
     if (!hasSpecailPriceApply) {
       if (isInventorySubclass) {
@@ -728,7 +761,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
 
 export async function getFirstValidPrice(data: PriceFields): Promise<number> {
 
-  console.log(data, 'data------------------->')
   for (let i = 1; i <= 12; i++) {
     const key = `Price${i}` as keyof PriceFields;
     const value = data[key];
@@ -1707,7 +1739,6 @@ export async function getTopLatestItems() {
   });
   
 
-  console.log(productList, 'productList--->')
   return productList;
 }
 
@@ -1756,4 +1787,54 @@ export function pgArrayToJsArray(value: any): string[] {
     .replace("}", "")
     .split(",")
     .map((v: any) => v.replace(/"/g, ""));
+}
+
+
+
+export async function getPrepaidTaxRate(userJurisdiction:number,salesId:number){
+ 
+  const taxRate = await SalesCategoryTaxRate.findOne({
+    where: {
+      Jurisdiction_State: userJurisdiction,
+      Sales_Category: salesId,
+    },
+  });
+
+  if(!taxRate){
+    return 0;
+  }else{
+
+
+    const taxRateValue = await TaxRates.findOne({
+      where:{
+        Jurisdiction_State: userJurisdiction,
+      },
+      attributes: ['TaxRate'],
+    })
+
+    return taxRateValue?.dataValues?.TaxRate || 0;
+  }
+
+}
+
+
+export async function getCustomerExcludeItem(
+  state: string,
+  zip: string,
+  jurisdiction: number
+) {
+  const rows = await Inventory_ExcludeState.findAll({
+    where: {
+      [Op.or]: [
+        { C_State: state },
+        { C_Zip: zip },
+        { Jurisdiction_State: jurisdiction }
+      ]
+    },
+    attributes: ["Item_Number"],   // return only Item_Number
+    raw: true                      // return plain objects
+  });
+
+  // convert array of objects → array of Item_Number
+  return rows.map((r :any)=> Number(r.Item_Number));
 }

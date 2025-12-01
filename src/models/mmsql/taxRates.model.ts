@@ -34,6 +34,7 @@ TaxRates.init(
   {
     Jurisdiction_State: {
       type: DataTypes.INTEGER,
+      primaryKey: true, 
       allowNull: true,
     },
     TaxDescription: {

@@ -79,8 +79,8 @@ async loginWithPassword(req: Request, res: Response) {
     sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
   }
 
-  async loginChecker(req: Request, res: Response) {
-      const data = await this.authService.loginChecker(req.body);
+  async checkerLogin(req: Request, res: Response) {
+      const data = await this.authService.checkerLogin(req.body);
       sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
   }
   

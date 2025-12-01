@@ -218,6 +218,7 @@ router.put('/updateErpUser/:id', validateRequest(updateErpUserSchema),catchAsync
 // InventoryUPC CRUD routes
 router.post('/inventory-upc', verifyRole(ROLES.MANAGER), validateRequest(createInventoryUPCSchema), catchAsync(managerController.createInventoryUPC.bind(managerController)));
 router.get('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryUPCById.bind(managerController)));
+router.get('/inventoryForReport',  catchAsync(managerController.getInventoryForReport.bind(managerController)));
 router.put('/inventory-upc/:id', verifyRole(ROLES.MANAGER), validateRequest(updateInventoryUPCSchema), catchAsync(managerController.updateInventoryUPC.bind(managerController)));
 router.delete('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteInventoryUPC.bind(managerController)));
 router.get('/inventory-upc/item-number/:itemNumber', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryUPCByItemNumber.bind(managerController)));
@@ -232,6 +233,13 @@ router.delete('/epick-settings/:id', verifyRole(ROLES.MANAGER), catchAsync(manag
 // router.post('/pass-scan-items', verifyRole(ROLES.MANAGER), catchAsync(managerController.putPassScanItem.bind(managerController)));
 router.post('/createCustomer', verifyRole(ROLES.MANAGER), catchAsync(managerController.createCustomer.bind(managerController)));
 router.put('/updateUserAllowDiscount/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUserAllowDiscount.bind(managerController)));
+
+// Override Request routes (Distributor)
+import { EpickController } from '../controllers/epick.controller';
+const epickController = new EpickController();
+router.get('/pendingOverrideRequests', verifyRole(ROLES.MANAGER), catchAsync(epickController.getPendingOverrideRequests.bind(epickController)));
+router.post('/approveOverrideRequest/:requestId', verifyRole(ROLES.MANAGER), catchAsync(epickController.approveOverrideRequest.bind(epickController)));
+router.post('/cancelOverrideRequest/:requestId', verifyRole(ROLES.MANAGER), catchAsync(epickController.cancelOverrideRequestByDistributor.bind(epickController)));
 router.put('/updateCustomer/:id' , verifyRole(ROLES.MANAGER), catchAsync(managerController.updateCustomer.bind(managerController)));
 
 export default router; 

@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting } from './seeder/wareHouseSetting.seeder';
 import { startCronJobs } from './cron'; // adjust path if needed
-import { getDiscount } from './utils/helper';
+import { getDiscount, getPrepaidTaxRate } from './utils/helper';
 import moment from 'moment';
 import './workers/emailWorker'; // Start the email worker
 import './workers/emailNotificationWorker'; // Start the email notification worker
@@ -44,9 +44,11 @@ createBullBoard({
 
 app.use('/admin/queues', serverAdapter.getRouter());
 
-app.get('/', (req: Request, res: Response) => {
-  res.send('Hello TypeScript with Node.js!');
-});
+app.get('/',(async(req:Request,res:Response)=>{
+  const data = await getPrepaidTaxRate(1,1);
+  console.log(data,'the data')
+  res.json({data});
+}))
 
 
 app.get('/checkServerDate',(async(req:Request,res:Response)=>{
@@ -67,6 +69,12 @@ app.post('/checkUrl',(req:Request,res:Response)=>{
    }
 })
 
+app.get('/testPrepaidTaxRate',(async(req:Request,res:Response)=>{
+  const data = await getPrepaidTaxRate(1,1);
+  console.log(data,'the data')
+  res.json({data});
+}))
+
 app.use('/api', router);
 
 app.get('/testPrice',(async(req:Request,res:Response)=>{
@@ -80,6 +88,7 @@ app.get('/testVendor',(async(req:Request,res:Response)=>{
   const data = await getNextVendorNumber();
   res.json({data});
 }))
+
 
 
 
@@ -139,10 +148,10 @@ testConnections()
 
     await safeMssqlSync();
     console.log('✅ MSSQL models synchronized (excluding views)');
-    await seedWarehouseSetting();
-    await seedHomeSetting();
-    await seedEpickSetting();
-    await seedPolicies();
+    // await seedWarehouseSetting();
+    // await seedHomeSetting();
+    // await seedEpickSetting();
+    // await seedPolicies();
     console.log('✅ Policies seeded');
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
@@ -151,7 +160,7 @@ testConnections()
     });
   })
   .catch((error: Error) => {
-    console.error('❌ Database connection error:', error.message);
+    console.error('❌ Database connection error:', error);
     process.exit(1);
   });
 

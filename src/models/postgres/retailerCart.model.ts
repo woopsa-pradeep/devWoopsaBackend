@@ -14,6 +14,7 @@ interface CustomerItemAttributes {
   isActive?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+  prepaidTaxRate?: number;
   type?: string;
   placedBySalesPerson?: boolean;
   salesPersonNumber?: number;
@@ -39,6 +40,7 @@ class CustomerCart extends Model<CustomerItemAttributes, CustomerItemCreationAtt
   public originalPrice!: number;
   public isActive!: boolean;
   public discount!: number;
+  public prepaidTaxRate!: number;
   public type!: string;
   // timestamps
   public readonly createdAt!: Date;
@@ -86,6 +88,12 @@ CustomerCart.init(
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
     },
+    prepaidTaxRate: {
+      type: DataTypes.DECIMAL(10, 4),
+      allowNull: true,
+      defaultValue: 0,
+    },
+    
     Price_With_Tax: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,

@@ -111,7 +111,7 @@ export class SalesController {
             ...req.body,
             Customer_Number: req.params.customerId,
             Tax_Rate: req.body.Tax_Rate,
-            Price_With_Tax: req.body.Price_With_Tax,
+            Price_With_Tax: req.body.Price_With_Tax || 0,
             placedBySalesPerson: true,
             salesPersonNumber: Number(req.user.id),
             originalPrice: req.body.originalPrice || 0,

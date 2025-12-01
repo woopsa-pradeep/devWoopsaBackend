@@ -2,7 +2,7 @@ import { IChangePassword } from "../interfaces/request.body.interface";
 import { SalesRep } from "../models/mmsql/salesrep.model"
 import { WebUsers } from "../models/postgres/users.model"
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, comparePassword, generatePDFFromHTML, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP } from "../utils/helper";
+import { checkQtyDiscount, comparePassword, generatePDFFromHTML, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP } from "../utils/helper";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { col, literal, Op, Order, Sequelize } from "sequelize";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
@@ -250,6 +250,7 @@ export class SalesService {
 
       let adjprice = hasDiscount == true? Number(item.discountPrice || 0): Number(item.Price);
       const orderDetail = {
+        PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
         Order_Number: orderHeaderCreated.Order_Number,
         Item_Number: item.Item_Number,
         Line_Number: index + 1,
@@ -756,7 +757,7 @@ export class SalesService {
   // }
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state, zip, jurisdiction } = query;
 
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
@@ -768,6 +769,11 @@ export class SalesService {
       I_Inactive: false,
       ShortOrderForm: true,
     };
+
+    if(state || zip || jurisdiction){
+      const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+      whereClause.Item_Number = { [Op.notIn]: excludeItem };
+    }
 
     let searchInUPC = false;
     let orderClause: Order = [['Date_Created', 'DESC'] as const];
@@ -872,7 +878,7 @@ export class SalesService {
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces','Sales_Category'
       ],
       where: whereClause,
       include: [
@@ -941,12 +947,22 @@ export class SalesService {
 
       const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId,price + taxRate);
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+
+      console.log(e,'e.Sales_Category',userJurisdiction,'userJurisdiction')
+     let prepaidTaxRate = 0
+      if(userJurisdiction !=null){
+       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.Sales_Category);
+      }
+    
+     
       return {
         Pack: e.Pack,
         Description: e.Description,
         Item_Number: e.Item_Number,
         CaseCount: e.CaseCount,
         UOM: e.UOM,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
         isDiscounted,
         Price1: e.Price1,
         Tax_Rate: taxRate,

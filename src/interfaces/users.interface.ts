@@ -17,4 +17,6 @@ export interface UserAttributes {
   updatedAt: Date;
   allowDiscount: boolean;
   allowDeliveryCharge: boolean;
+  order_type: string | null;
+  shortby: string | null;
 }

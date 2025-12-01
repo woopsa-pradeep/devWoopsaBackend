@@ -422,7 +422,8 @@ export class AuthService {
               "C_Phone",
               "C_Email",
               "LastBalance",
-              "C_Number",
+              'Jurisdiction_State',
+              'C_Zip',
               "C_OrderDay",
             ],
             include: [
@@ -827,7 +828,7 @@ export class AuthService {
 
   }
 
-   async loginChecker(body: any){
+   async checkerLogin(body: any){
     // 1️⃣ Find user with role = "checker"
     const isUserExist = await WebUsers.findOne({
       where: {

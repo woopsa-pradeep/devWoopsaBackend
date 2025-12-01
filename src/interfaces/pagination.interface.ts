@@ -52,5 +52,8 @@ export interface PaginationOptions {
     startDate?:string;
     endDate?:string;
     salesRepNumber?:any;
+    state?:string;
+    zip?:string;
+    jurisdiction?:number;
   }
   
