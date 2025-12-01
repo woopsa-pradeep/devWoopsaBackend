@@ -822,7 +822,8 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
 
   async getInventoryForReport(req: AuthRequest, res: Response) {
     const data = await this.managerService.getInventoryForReport();
-    sendResponse(res, 200, true, data, 'InventoryUPC retrieved successfully');
+    res.end(JSON.stringify(data));
+    // sendResponse(res, 200, true, data, 'InventoryUPC retrieved successfully');
   }
 
   

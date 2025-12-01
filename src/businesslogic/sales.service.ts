@@ -3026,12 +3026,19 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
   async addToCartMultiScanner(body: any, userId: number) {
-    const { upcNumbers, isMultiple, arrayOfUpc } = body;
+    const { upcNumbers, isMultiple, arrayOfUpc ,state, zip, jurisdiction} = body;
+    let excludeItem: any = []
+    if(state || zip || jurisdiction){
+      excludeItem  = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+    }
   
     // Common helper to get product details by UPC
     const getProductDetailByUPC = async (UPC: string) => {
       const isUpcAvailable = await InventoryUPC.findOne({
-        where: { UPC_Number: UPC }
+        where: { UPC_Number: UPC ,
+
+          Item_Number: { [Op.notIn]: excludeItem }
+        }
       });
   
       if (!isUpcAvailable) {
@@ -3046,7 +3053,7 @@ const newSalesRepArray = salesRepList.map(Number);
           'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created', 'OTP_Number'
         ],
         include: [
-          { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc'], required: false },
+          { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc','Sales_Category'], required: false },
           { model: PriceClass, as: 'PriceClass', attributes: ['Class_Desc'], required: false },
           { model: InventoryStatus, as: 'inventoryStatus', attributes: ['Inventory_OnHand'], required: false },
           { model: InventoryUPC, as: 'UPCList', attributes: ['UPC_Number'], required: false }
@@ -3071,10 +3078,16 @@ const newSalesRepArray = salesRepList.map(Number);
   
       const inventoryOnHand = await getInventoryOnHand(findItem.Item_Number);
       let taxRate = 0;
+      let prepaidTaxRate = 0
       if (findItem.OTP_Number) {
         const userJurisdiction = await getJurisdiction(userId);
         taxRate = await getTaxRateV1(findItem.OTP_Number,userJurisdiction as number,findItem.Item_Number,price);
+        if(userJurisdiction !=null && findItem?.SalesCategory){
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category);
+        }
       }
+
+     
   
       const wareHouseSetting: any = await Setting.findOne({});
       let allowToOrder = true;
@@ -3088,7 +3101,9 @@ const newSalesRepArray = salesRepList.map(Number);
         productImage,
         inventoryOnHand,
         taxRate,
-        allowToOrder
+        allowToOrder,
+        prepaidTaxRate: prepaidTaxRate,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
       };
     };
   
