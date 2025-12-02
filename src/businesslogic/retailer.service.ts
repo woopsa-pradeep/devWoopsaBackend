@@ -1719,7 +1719,7 @@ export class RetailerService {
     }
 
     // Get order headers with pagination
-    const { count: totalCount, rows: orderHeaders } = await OrderHeader.findAndCountAll({
+    const orderHeaders = await OrderHeader.findAll({
       where: whereClause,
       attributes: [
         'Order_Number',
@@ -1727,9 +1727,32 @@ export class RetailerService {
         'User_ID',
         'Order_Source'
       ],
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails',
+          required: true,
+          attributes: []
+        }
+      ],
       order: [['Order_Number', 'DESC']],
       limit,
       offset
+    });
+    
+    // 2) Separate total count query
+    const totalCount = await OrderHeader.count({
+      where: whereClause,
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails',
+          required: true,
+          attributes: []
+        }
+      ],
+      // IMPORTANT: avoid overcount due to join
+      distinct: true,
     });
 
     // Get order details with quantity sums for each order
@@ -2041,7 +2064,7 @@ export class RetailerService {
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
     }
   ) {
-    let { page = 1, limit = 10, search, filter } = query;
+    let { page = 1, limit = 10, search, filter ,state, zip, jurisdiction} = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -2106,11 +2129,20 @@ export class RetailerService {
     }
 
     // First, get all order numbers that match the date filter and customer
+    // Join OrderHeader to OrderDetail and only include OrderHeaders where OrderDetail exists
     const allMatchingOrderHeaders = await OrderHeader.findAll({
       where: {
         C_Number: customerId,
         ...dateFilter
       },
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails', 
+          required: true, 
+          attributes: []
+        }
+      ],
       attributes: ['Order_Number', 'Order_Date', 'Invoice_Total', 'Order_Source'],
       order: [['Order_Date', 'DESC']],
       raw: true
@@ -2136,10 +2168,29 @@ export class RetailerService {
     // Add search functionality for OrderDetail
     let matchingItemNumbers: number[] | undefined = undefined;
 
+    let allExcludedItems: any[] = [];
+    if (state || zip || jurisdiction) {
+      const customerExcluded = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+      if (customerExcluded && customerExcluded.length > 0) {
+        allExcludedItems = allExcludedItems.concat(customerExcluded);
+      }
+    }
+    let whereClause: any = {};
+    
+    const userExcluded = await excludeItemByUser(Number(customerId));
+    if (userExcluded && userExcluded.length > 0) {
+      allExcludedItems = allExcludedItems.concat(userExcluded);
+    }
+
+    if (allExcludedItems.length > 0) {
+      const uniqueExcluded = [...new Set(allExcludedItems)];
+      whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+    }
     if (search) {
       const matchingInventoryItems = await Inventory.findAll({
         where: {
           I_Inactive: 0,
+          ...whereClause,
           [Op.or]: [
             { Item_Number: { [Op.like]: `%${search}%` } },
 
@@ -2154,7 +2205,8 @@ export class RetailerService {
 
 
     let orderDetailWhereClause: any = {
-      Order_Number: { [Op.in]: allOrderNumbers }
+      Order_Number: { [Op.in]: allOrderNumbers },
+      ...whereClause,
     };
 
     if (matchingItemNumbers && matchingItemNumbers.length > 0) {
@@ -3022,7 +3074,8 @@ export class RetailerService {
       CaseCount: detail.CaseCount || detail.inventory?.CaseCount || 1,
       Quantity_Ordered: detail.Quantity_Ordered || 0,
       Item_Number: detail.Item_Number || detail.inventory?.Item_Number || 'N/A',
-      Price: detail.Price + detail.OTP_Amount_State || 0
+      Price: detail.Price + detail.OTP_Amount_State || 0,
+      Size: detail.inventory?.UOM || 'N/A'
     }));
 
     if (hasPrice) {
@@ -3031,6 +3084,7 @@ export class RetailerService {
         showMoney: true,
         getPrice: (row: any) => row.Price || 0
       }, orderNumber, customerInfo, warehouseInfo);
+
 
       // Generate PDF from HTML with specified orientation
       const pdfBuffer = await generatePDFFromHTML(html, orientation);

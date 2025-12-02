@@ -389,7 +389,7 @@ export class SalesService {
     }
 
     // Get order headers with pagination
-    const { count: totalCount, rows: orderHeaders } = await OrderHeader.findAndCountAll({
+    const orderHeaders = await OrderHeader.findAll({
       where: whereClause,
       attributes: [
         'Order_Number',
@@ -397,9 +397,32 @@ export class SalesService {
         'User_ID',
         'Order_Source'
       ],
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails',
+          required: true,
+          attributes: []
+        }
+      ],
       order: [['Order_Number', 'DESC']],
       limit,
       offset
+    });
+    
+    // 2) Separate total count query
+    const totalCount = await OrderHeader.count({
+      where: whereClause,
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails',
+          required: true,
+          attributes: []
+        }
+      ],
+      // IMPORTANT: avoid overcount due to join
+      distinct: true,
     });
 
     // Get order details with quantity sums for each order
@@ -1019,6 +1042,9 @@ export class SalesService {
       priceClassId,
       masterSearch,
       shortBy,
+      state,
+      zip,
+      jurisdiction,
     } = query;
   
     if (!search)
@@ -1044,7 +1070,23 @@ export class SalesService {
       const masterArray = masterSearch.split(",").map((i) => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
     }
-  
+    let allExcludedItems: any[] = [];
+
+    if (state || zip || jurisdiction) {
+      const customerExcluded = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+      if (customerExcluded && customerExcluded.length > 0) {
+        allExcludedItems = allExcludedItems.concat(customerExcluded);
+      }
+    }
+    const userExcluded = await excludeItemByUser(Number(customerId));
+    if (userExcluded && userExcluded.length > 0) {
+      allExcludedItems = allExcludedItems.concat(userExcluded);
+    }
+
+    if (allExcludedItems.length > 0) {
+      const uniqueExcluded = [...new Set(allExcludedItems)];
+      whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+    }
     if (search) {
       const searchValue = `%${search}%`;
   
@@ -1928,7 +1970,7 @@ const newSalesRepArray = salesRepList.map(Number);
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
     }
   ) {
-    let { page = 1, limit = 10, search, filter } = query;
+    let { page = 1, limit = 10, search, filter ,state, zip, jurisdiction} = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -1998,6 +2040,14 @@ const newSalesRepArray = salesRepList.map(Number);
         C_Number: customerId,
         ...dateFilter
       },
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails', 
+          required: true, 
+          attributes: []
+        }
+      ],
       attributes: ['Order_Number', 'Order_Date', 'Invoice_Total', 'Order_Source'],
       order: [['Order_Date', 'DESC']],
       raw: true
@@ -2023,11 +2073,29 @@ const newSalesRepArray = salesRepList.map(Number);
     // Add search functionality for OrderDetail
     let matchingItemNumbers: number[] | undefined = undefined;
 
+    let allExcludedItems: any[] = [];
+    let whereClause: any = {};
+    if (state || zip || jurisdiction) {
+      const customerExcluded = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+      if (customerExcluded && customerExcluded.length > 0) {
+        allExcludedItems = allExcludedItems.concat(customerExcluded);
+      }
+    }
+    const userExcluded = await excludeItemByUser(Number(customerId));
+    if (userExcluded && userExcluded.length > 0) {
+      allExcludedItems = allExcludedItems.concat(userExcluded);
+    }
+
+    if (allExcludedItems.length > 0) {
+      const uniqueExcluded = [...new Set(allExcludedItems)];
+      whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+    }
     if (search) {
       const matchingInventoryItems = await Inventory.findAll({
 
         where: {
           I_Inactive: 0,
+          ...whereClause,
           [Op.or]: [
             { Item_Number: { [Op.like]: `%${search}%` } },
            
@@ -2042,7 +2110,8 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
     let orderDetailWhereClause: any = {
-      Order_Number: { [Op.in]: allOrderNumbers }
+      Order_Number: { [Op.in]: allOrderNumbers },
+      ...whereClause,
     };
 
     if (matchingItemNumbers && matchingItemNumbers.length > 0) {

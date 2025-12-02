@@ -1459,7 +1459,7 @@ export function renderOrderTableFromERP(rows: any, opts: any = {}, orderNumber: 
          
           <div class="product-details">
             <div class="product-name">${esc(name)}</div>
-            <div class="product-meta">Pack: ${esc(pack)} &nbsp; Case: ${esc(caseQty)} &nbsp; Size: EACH</div>
+            <div class="product-meta">Pack: ${esc(pack)} &nbsp; Case: ${esc(caseQty)} &nbsp; Size: ${esc(row.Size)}</div>
           </div>
         </div>
       </td>
