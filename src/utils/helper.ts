@@ -1838,3 +1838,17 @@ export async function getCustomerExcludeItem(
   // convert array of objects → array of Item_Number
   return rows.map((r :any)=> Number(r.Item_Number));
 }
+
+export async function excludeItemByUser(userId: number){
+  const excludeItem = await CustAuthorized.findAll({
+    where: {
+      C_Number: userId,
+      Item_Option: 99
+    },
+    attributes: ['Item_Number'],
+  })
+  if(excludeItem.length > 0){
+    return excludeItem.map((item: any) => Number(item.Item_Number));
+  }
+  return [];
+}

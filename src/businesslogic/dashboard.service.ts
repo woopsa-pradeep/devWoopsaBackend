@@ -5,7 +5,7 @@ import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Customer } from "../models/mmsql/customer.model";
 import { SalesRep } from "../models/mmsql/salesrep.model";
 import { Sequelize, Op, col, cast, where } from "sequelize";
-import { checkQtyDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
+import { checkQtyDiscount, excludeItemByUser, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
 import { ProductImage } from "../models/postgres/product.model";
 import { getDiscount } from "../utils/helper";
 import SalesCategory from "../models/mmsql/salesCategory.model";
@@ -32,9 +32,20 @@ export class DashboardService {
         let wareHouseSetting: any = await Setting.findOne({});
         wareHouseSetting = wareHouseSetting?.dataValues || null;
 
+        const excludeItem = await excludeItemByUser(userId);
+        let whereClause: any = {
+            Item_Number: { [Op.notIn]: excludeItem },
+        };
+       
         if (homeSetting?.showMostSale) {
             // Get most sold inventory items in the current year
             const allMostSaleData = await OrderDetail.findAll({
+                where: {
+                    ...whereClause,
+                    Quantity_Shipped: {
+                        [Op.gt]: 0 // Only include items that were actually shipped
+                    }
+                },
                 attributes: [
                     'Item_Number',
                     [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantitySold'],
@@ -53,11 +64,7 @@ export class DashboardService {
                         required: true
                     }
                 ],
-                where: {
-                    Quantity_Shipped: {
-                        [Op.gt]: 0 // Only include items that were actually shipped
-                    }
-                },
+               
                 group: ['OrderDetail.Item_Number'],
                 order: [[Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'DESC']],
                 raw: true
@@ -270,6 +277,7 @@ export class DashboardService {
                             }
                         ],
                         where: {
+                            ...whereClause,
                             Quantity_Shipped: {
                                 [Op.gt]: 0 // Only include items that were actually shipped
                             }
@@ -473,6 +481,7 @@ export class DashboardService {
                     }
                 ],
                 where: {
+                    ...whereClause,
                     Quantity_Shipped: {
                         [Op.gt]: 0 // Only include items that were actually shipped
                     }
@@ -678,15 +687,15 @@ export class DashboardService {
         const homeSetting: any = await HomeSettings.findOne({});
         const promotedItems = homeSetting?.promotedItems || [];
 
-        if (!promotedItems || promotedItems.length === 0) {
-            return {
-                totalCount: 0,
-                promotedItemsList: []
-            };
-        }
+        const excludeItem = await excludeItemByUser(Number(customerNumber));
+        let excludeItemClause: any = {
+            Item_Number: { [Op.notIn]: excludeItem },
+        };
+        
 
         const { count: totalCount, rows: productList } = await Inventory.findAndCountAll({
             where: {
+                ...excludeItemClause,
                 Item_Number: { [Op.in]: promotedItems },
                 ShortOrderForm: true,
                 I_Inactive: false,
@@ -844,6 +853,10 @@ export class DashboardService {
             ShortOrderForm: true,
         };
 
+        const excludeItem = await excludeItemByUser(customerId);
+        if(excludeItem.length > 0){
+            whereClause.Item_Number = { [Op.notIn]: excludeItem };
+        }
 
         if (search) {
             const searchValue = `%${search}%`;
@@ -1477,6 +1490,10 @@ export class DashboardService {
             ],
         };
 
+        const excludeItem = await excludeItemByUser(customerId);
+        if(excludeItem.length > 0){
+            whereClause.Item_Number = { [Op.notIn]: excludeItem };
+        }
 
         // Add search functionality if needed
         if (search) {

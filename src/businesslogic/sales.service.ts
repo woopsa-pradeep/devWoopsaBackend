@@ -2,7 +2,7 @@ import { IChangePassword } from "../interfaces/request.body.interface";
 import { SalesRep } from "../models/mmsql/salesrep.model"
 import { WebUsers } from "../models/postgres/users.model"
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, comparePassword, generatePDFFromHTML, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP } from "../utils/helper";
+import { checkQtyDiscount, comparePassword, excludeItemByUser, generatePDFFromHTML, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP } from "../utils/helper";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { col, literal, Op, Order, Sequelize } from "sequelize";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
@@ -769,6 +769,11 @@ export class SalesService {
       I_Inactive: false,
       ShortOrderForm: true,
     };
+
+    const excludeItem = await excludeItemByUser(customerId);
+    if(excludeItem.length > 0){
+      whereClause.Item_Number = { [Op.notIn]: excludeItem };
+    }
 
     if(state || zip || jurisdiction){
       const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
@@ -3032,6 +3037,10 @@ const newSalesRepArray = salesRepList.map(Number);
       excludeItem  = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
     }
   
+    const excludeItemForCustomer = await excludeItemByUser(userId);
+    if(excludeItemForCustomer.length > 0){
+      excludeItem = [...excludeItem, ...excludeItemForCustomer];
+    }
     // Common helper to get product details by UPC
     const getProductDetailByUPC = async (UPC: string) => {
       const isUpcAvailable = await InventoryUPC.findOne({

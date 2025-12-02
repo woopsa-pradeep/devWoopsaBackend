@@ -10,7 +10,7 @@ import Banner from "../models/postgres/banner.model";
 import { ProductImage } from "../models/postgres/product.model";
 import CustomerCart from "../models/postgres/retailerCart.model";
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, checkTimeOut, generatePDFFromHTML, generateToken, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP } from "../utils/helper";
+import { checkQtyDiscount, checkTimeOut, excludeItemByUser, generatePDFFromHTML, generateToken, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP } from "../utils/helper";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { Operations } from "../utils/operations";
 import { generateOrderConfirmationEmail, generateDistributorOrderNotificationEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
@@ -276,10 +276,16 @@ export class RetailerService {
       ShortOrderForm: true,
     };
 
+    const excludeItem = await excludeItemByUser(user.id);
+    if(excludeItem.length > 0){
+      whereClause.Item_Number = { [Op.notIn]: excludeItem };
+    }
     if(state || zip || jurisdiction){
       const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
       whereClause.Item_Number = { [Op.notIn]: excludeItem };
     }
+
+
 
     let searchInUPC = false;
     let orderClause: Order = [['Date_Created', 'DESC'] as const];
@@ -2667,6 +2673,10 @@ export class RetailerService {
       excludeItem  = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
     }
 
+    const excludeItemForCustomer = await excludeItemByUser(userId);
+    if(excludeItemForCustomer.length > 0){
+      excludeItem = [...excludeItem, ...excludeItemForCustomer];
+    }
     // Common helper to get product details by UPC
     const getProductDetailByUPC = async (UPC: string) => {
       const isUpcAvailable = await InventoryUPC.findOne({
