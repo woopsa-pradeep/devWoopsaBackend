@@ -148,10 +148,10 @@ testConnections()
 
     await safeMssqlSync();
     console.log('✅ MSSQL models synchronized (excluding views)');
-    // await seedWarehouseSetting();
-    // await seedHomeSetting();
-    // await seedEpickSetting();
-    // await seedPolicies();
+    await seedWarehouseSetting();
+    await seedHomeSetting();
+    await seedEpickSetting();
+    await seedPolicies();
     console.log('✅ Policies seeded');
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);

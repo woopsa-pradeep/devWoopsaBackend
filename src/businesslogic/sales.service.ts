@@ -3139,7 +3139,9 @@ const newSalesRepArray = salesRepList.map(Number);
         Customer_Number: userId,
         Item_Number: finalItem.Item_Number,
         Price_With_Tax: Number(finalItem.price) + Number(finalItem.taxRate),
-        isActive: true
+        isActive: true,
+        TotalprepaidTaxRate: finalItem.prepaidTaxRate || 0,
+        prepaidTaxRate: finalItem.prepaidTaxRate || 0,
       };
       
   
