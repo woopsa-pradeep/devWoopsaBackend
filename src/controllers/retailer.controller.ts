@@ -56,6 +56,8 @@ export class RetailerController {
       Customer_Number: req.user.id,
       Tax_Rate: req.body.Tax_Rate,
       Price_With_Tax: req.body.Price_With_Tax || 0,
+      TotalprepaidTaxRate: req.body.TotalprepaidTaxRate || 0,
+      prepaidTaxRate: req.body.prepaidTaxRate || 0,
     };
     const data = await this.retailerService.addToCart(cartData);
     sendResponse(res, 201, true, data, "Item added to cart successfully");

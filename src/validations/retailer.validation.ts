@@ -52,6 +52,18 @@ export const addToCartValidation = Joi.object({
     'number.positive': 'Original price must be positive',
     'number.precision': 'Original price can have maximum 2 decimal places',
     'any.required': 'Original price is required'
+  }),
+  TotalprepaidTaxRate:Joi.number().optional().allow('',null,0).messages({
+    'number.base': 'Total prepaid tax rate must be a number',
+    'number.positive': 'Total prepaid tax rate must be positive',
+    'number.precision': 'Total prepaid tax rate can have maximum 2 decimal places',
+    'any.required': 'Total prepaid tax rate is required'
+  }),
+  prepaidTaxRate:Joi.number().optional().allow('',null,0).messages({
+    'number.base': 'Prepaid tax rate must be a number',
+    'number.positive': 'Prepaid tax rate must be positive',
+    'number.precision': 'Prepaid tax rate can have maximum 2 decimal places',
+    'any.required': 'Prepaid tax rate is required'
   })
 });
 

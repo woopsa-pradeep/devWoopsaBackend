@@ -20,6 +20,7 @@ interface CustomerItemAttributes {
   salesPersonNumber?: number;
   discount?: number;
   originalPrice?: number;
+  TotalprepaidTaxRate?: number;
 }
 
 type CustomerItemCreationAttributes = Optional<CustomerItemAttributes, 'id' | 'isActive'>;
@@ -41,6 +42,7 @@ class CustomerCart extends Model<CustomerItemAttributes, CustomerItemCreationAtt
   public isActive!: boolean;
   public discount!: number;
   public prepaidTaxRate!: number;
+  public TotalprepaidTaxRate!: number;
   public type!: string;
   // timestamps
   public readonly createdAt!: Date;
@@ -70,6 +72,11 @@ CustomerCart.init(
     Price: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
+    },
+    TotalprepaidTaxRate: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
     },
     originalPrice: {
       type: DataTypes.DECIMAL(10, 2),

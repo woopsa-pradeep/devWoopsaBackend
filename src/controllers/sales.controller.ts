@@ -115,7 +115,9 @@ export class SalesController {
             placedBySalesPerson: true,
             salesPersonNumber: Number(req.user.id),
             originalPrice: req.body.originalPrice || 0,
-            discount: req.body.discount || 0
+            discount: req.body.discount || 0,
+            TotalprepaidTaxRate: req.body.TotalprepaidTaxRate || 0,
+            prepaidTaxRate: req.body.prepaidTaxRate || 0,
         };
         const data = await this.salesService.addToCart(cartData, Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -132,7 +134,9 @@ export class SalesController {
             placedBySalesPerson: true,
             salesPersonNumber: Number(req.user.id),
             originalPrice: req.body.originalPrice || 0,
-            discount: req.body.discount || 0
+            discount: req.body.discount || 0,
+            TotalprepaidTaxRate: req.body.TotalprepaidTaxRate || 0,
+            prepaidTaxRate: req.body.prepaidTaxRate || 0,
         };
         const data = await this.salesService.addToReturnCart(cartData, Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);

@@ -20,6 +20,8 @@ export interface AddToCartRequest {
   TotalPriceWithTax: number;
   discount?: number;
   originalPrice?: number;
+  TotalprepaidTaxRate?: number;
+  prepaidTaxRate?: number;
 }
 
 export interface UpdateCartItemRequest {

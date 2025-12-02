@@ -1,7 +1,11 @@
 import { Model, DataTypes } from "sequelize";
 import { sequelize } from "../../db";
 
-export class OrderHeader extends Model {}
+export class OrderHeader extends Model {
+  Order_Number: any;
+  Order_Date: any;
+  C_Number: any;
+}
 
 OrderHeader.init(
   {

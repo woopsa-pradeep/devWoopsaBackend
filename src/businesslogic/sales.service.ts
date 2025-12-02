@@ -1253,7 +1253,9 @@ export class SalesService {
         TotalPrice: newTotalPrice,
         TotalPriceWithTax: newTotalPriceWithTax,
         discount: cartData.discount || 0,
-        originalPrice: cartData.originalPrice || 0
+        originalPrice: cartData.originalPrice || 0,
+        TotalprepaidTaxRate: cartData.TotalprepaidTaxRate || 0,
+        prepaidTaxRate: cartData.prepaidTaxRate || 0,
       });
 
       return existingCartItem;
@@ -2990,11 +2992,14 @@ const newSalesRepArray = salesRepList.map(Number);
   
         const updatedPrice = price * newQty;
         const updatedPriceWithTax = Price_With_Tax * newQty;
+
   
         await existingCartItem.update({
           Qty: newQty,
           TotalPrice: updatedPrice,
           TotalPriceWithTax: updatedPriceWithTax,
+          TotalprepaidTaxRate: item.TotalprepaidTaxRate || 0,
+          prepaidTaxRate: item.prepaidTaxRate || 0,
         });
   
         cartItemsData.push(existingCartItem);
@@ -3016,6 +3021,8 @@ const newSalesRepArray = salesRepList.map(Number);
           discount: 0,
           originalPrice: price,
           isActive: true,
+          TotalprepaidTaxRate: item.TotalprepaidTaxRate || 0,
+          prepaidTaxRate: item.prepaidTaxRate || 0,
         };
       console.log(price, 'price>>>>>>>>>>>>>>>>')
   
@@ -4155,7 +4162,9 @@ const newSalesRepArray = salesRepList.map(Number);
         TotalPrice: newTotalPrice,
         TotalPriceWithTax: newTotalPriceWithTax,
         discount: cartData.discount || 0,
-        originalPrice: cartData.originalPrice || 0
+        originalPrice: cartData.originalPrice || 0,
+        TotalprepaidTaxRate: cartData.TotalprepaidTaxRate || 0,
+        prepaidTaxRate: cartData.prepaidTaxRate || 0,
       });
 
       return existingCartItem;

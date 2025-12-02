@@ -671,6 +671,8 @@ export class RetailerService {
         Qty: newQty,
         TotalPrice: newTotalPrice,
         TotalPriceWithTax: newTotalPriceWithTax,
+        TotalprepaidTaxRate: cartData.TotalprepaidTaxRate || 0,
+        prepaidTaxRate: cartData.prepaidTaxRate || 0,
         discount: cartData.discount || 0,
         originalPrice: cartData.originalPrice || 0
       });
@@ -1215,91 +1217,101 @@ export class RetailerService {
   }
 
   async getOrderHistoryByProductNumber(productNumber: number, retailerId: number) {
-    // Find order details for the specific product with order header information
-    const orderDetails = await OrderDetail.findAll({
-      where: {
-        Item_Number: productNumber,
-      },
-      attributes: [
-        'Order_Number',
-        'Line_Number',
-        'Item_Number',
-        'Sales_Category',
-        'OTP_Number',
-        'Quantity_Ordered',
-        'Quantity_Shipped',
-        'Pack',
-        'Price',
-        'Price_Reference',
-        'Retail',
-        'NetCost',
-        'BaseCost',
-        'Invoice_Cost',
-        'AvgCost',
-        'OTP_Amount_State',
-        'OTP_Amount_County',
-        'OTP_Amount_City',
-        'DepositAmount',
-        'Price_Subclass',
-        'OffInvoice_Amount',
-        'Taxable',
-        'ItemDescription',
-        'CaseWeight',
-        'CaseCount',
 
-      ],
-      include: [
-        {
-          model: OrderHeader,
-          as: 'orderHeader',
-          where: { C_Number: retailerId },
-          attributes: ['Order_Number', 'Order_Date', 'C_Number'],
-          required: true
-        },
-        {
-          model: Inventory,
-          as: 'inventory',
-          attributes: [
-            'Item_Number',
-            'Description',
-          ],
-          include: [
-            {
-              model: InventoryUPC,
-              as: 'UPCList',
-              attributes: ['UPC_Number'],
-              where: {
-                Status: 0,
-              },
-              required: false
-            }
-          ]
-        }
-      ],
-      order: [['Order_Number', 'DESC']],
-      limit: 30
-    });
+      const orderHeaders = await OrderHeader.findAll({
+        where: { C_Number: retailerId },
+        attributes: ['Order_Number', 'Order_Date', 'C_Number'],
 
-    // Add product image to each order detail
-    const result = await Promise.all(orderDetails.map(async (detail: any) => {
-      // Get product image
-      const productImage = await ProductImage.findOne({
-        where: {
-          product_number: detail.Item_Number.toString(),
-          isAllow: true
-        },
+        include: [
+          {
+            model: OrderDetail,
+            as: 'orderDetails',
+            where: { Item_Number: productNumber },
+            required: true,
+            attributes: [
+              'Order_Number',
+              'Line_Number',
+              'Item_Number',
+              'Sales_Category',
+              'OTP_Number',
+              'Quantity_Ordered',
+              'Quantity_Shipped',
+              'Pack',
+              'Price',
+              'Price_Reference',
+              'Retail',
+              'NetCost',
+              'BaseCost',
+              'Invoice_Cost',
+              'AvgCost',
+              'OTP_Amount_State',
+              'OTP_Amount_County',
+              'OTP_Amount_City',
+              'DepositAmount',
+              'Price_Subclass',
+              'OffInvoice_Amount',
+              'Taxable',
+              'ItemDescription',
+              'CaseWeight',
+              'CaseCount',
+            ],
+            include: [
+              {
+                model: Inventory,
+                as: 'inventory',
+                attributes: ['Item_Number', 'Description'],
+                include: [
+                  {
+                    model: InventoryUPC,
+                    as: 'UPCList',
+                    where: { Status: 0 },
+                    attributes: ['UPC_Number'],
+                    required: false
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+
+        order: [['Order_Number', 'DESC']],
+        limit: 30,
       });
 
-      return {
-        ...detail.toJSON(),
-        isDistributorImageShow: productImage?.isAllow ?? false,
-        distributorImage: productImage?.img_url || null,
-        masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory.UPCList?.[0]?.UPC_Number}.jpg`,
-      };
-    }));
+      // Build final normalised output
+      const response: any[] = [];
 
-    return result;
-  }
+      for (const header of orderHeaders) {
+        const details = (header as any).orderDetails;
+
+        for (const detail of details) {
+          const productImage = await ProductImage.findOne({
+            where: {
+              product_number: detail.Item_Number.toString(),
+              isAllow: true,
+            },
+          });
+
+          response.push({
+            ...detail.toJSON(),
+            orderHeader: {
+              Order_Number: header.Order_Number,
+              Order_Date: header.Order_Date,
+              C_Number: header.C_Number,
+            },
+
+            isDistributorImageShow: productImage?.isAllow ?? false,
+            distributorImage: productImage?.img_url ?? null,
+            masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory?.UPCList?.[0]?.UPC_Number}.jpg`
+          });
+        }
+      }
+
+      return response;
+    }
+
+
+
 
   async getAccountReceivablesList(
     query: PaginationOptions & { tab?: string; search?: string },
@@ -1742,21 +1754,22 @@ export class RetailerService {
 
     // Combine order headers with their total quantities
     const result = orderHeaders.map((header: any) => {
+      const headerData = header.toJSON ? header.toJSON() : header;
       // Map Order_Source to readable names
       let orderSourceName = 'ERP';
-      if (header.Order_Source === 13) {
+      if (headerData.Order_Source === 13) {
         orderSourceName = 'Web';
-      } else if (header.Order_Source === 12) {
+      } else if (headerData.Order_Source === 12) {
         orderSourceName = 'App';
       }
 
       return {
-        Order_Number: header.Order_Number,
-        Order_Date: header.Order_Date,
-        User_ID: header.User_ID,
-        Order_Source: header.Order_Source,
+        Order_Number: headerData.Order_Number,
+        Order_Date: headerData.Order_Date,
+        User_ID: headerData.User_ID,
+        Order_Source: headerData.Order_Source,
         Order_Source_Name: orderSourceName,
-        totalQuantity: quantityMap.get(header.Order_Number) || 0
+        totalQuantity: quantityMap.get(headerData.Order_Number) || 0
       };
     });
 
