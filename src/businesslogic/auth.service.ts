@@ -710,7 +710,7 @@ export class AuthService {
     let storeDetail: any = null;
     if (isSessionActive) {
       const store = await Customer.findOne({
-        where: { C_Number: isSessionActive.currentCustomerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Phone', 'C_Name', 'LastBalance', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
+        where: { C_Number: isSessionActive.currentCustomerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'Jurisdiction_State','C_Phone', 'LastBalance', 'C_Name', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
         include: [
           {
             model: CustomerRoute,

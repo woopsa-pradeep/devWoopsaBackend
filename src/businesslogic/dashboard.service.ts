@@ -5,7 +5,7 @@ import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Customer } from "../models/mmsql/customer.model";
 import { SalesRep } from "../models/mmsql/salesrep.model";
 import { Sequelize, Op, col, cast, where } from "sequelize";
-import { checkQtyDiscount, excludeItemByUser, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
+import { checkQtyDiscount, excludeItemByUser, getCustomerExcludeItem, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
 import { ProductImage } from "../models/postgres/product.model";
 import { getDiscount } from "../utils/helper";
 import SalesCategory from "../models/mmsql/salesCategory.model";
@@ -20,7 +20,8 @@ import { OrderHistory } from "../models/postgres/orderHistory.model";
 
 export class DashboardService {
 
-    async getPopularItems(userId: number) {
+    async getPopularItems(userId: number,query: any) {
+        let { state, zip, jurisdiction } = query;
         console.log(userId, 'userId')
         const homeSetting = await HomeSettings.findOne();
         const currentYear = new Date().getFullYear();
@@ -32,11 +33,32 @@ export class DashboardService {
         let wareHouseSetting: any = await Setting.findOne({});
         wareHouseSetting = wareHouseSetting?.dataValues || null;
 
-        const excludeItem = await excludeItemByUser(userId);
-        let whereClause: any = {
-            Item_Number: { [Op.notIn]: excludeItem },
-        };
-       
+        let allExcludedItems: any[] = [];
+
+
+        let whereClause: any = {};
+        if (state || zip || jurisdiction) {
+            const customerExcluded = await getCustomerExcludeItem(
+              state as string,
+              zip as string,
+              jurisdiction as number
+            );
+          
+            if (customerExcluded && customerExcluded.length > 0) {
+              allExcludedItems = allExcludedItems.concat(customerExcluded);
+            }
+          }
+          const userExcluded = await excludeItemByUser(userId);
+          if (userExcluded && userExcluded.length > 0) {
+            allExcludedItems = allExcludedItems.concat(userExcluded);
+          }
+
+          if (allExcludedItems.length > 0) {
+            const uniqueExcluded = [...new Set(allExcludedItems)];
+            whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+          }
+
+
         if (homeSetting?.showMostSale) {
             // Get most sold inventory items in the current year
             const allMostSaleData = await OrderDetail.findAll({
@@ -64,7 +86,7 @@ export class DashboardService {
                         required: true
                     }
                 ],
-               
+
                 group: ['OrderDetail.Item_Number'],
                 order: [[Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'DESC']],
                 raw: true
@@ -104,7 +126,7 @@ export class DashboardService {
                         {
                             model: SalesCategory,
                             as: 'SalesCategory',
-                            attributes: ['Category_Desc','Sales_Category'],
+                            attributes: ['Category_Desc', 'Sales_Category'],
                             required: false
                         },
                         {
@@ -135,9 +157,9 @@ export class DashboardService {
                     });
                     let taxRate = 0;
                     const userJurisdiction = await getJurisdiction(userId);
-                   
 
-                    let price = await getDiscount(e.Item_Number, userId) 
+
+                    let price = await getDiscount(e.Item_Number, userId)
                     if (!price) {
                         price = await getFirstValidPrice(e);
                     }
@@ -166,11 +188,11 @@ export class DashboardService {
                     let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, userId, price + taxRate);
 
                     let prepaidTaxRate = 0
-                    console.log(e,'e.Sales_Category')
-                    if(userJurisdiction !=null && e.salesCategory){
-              
-                      console.log(e,'e.Sales_Category')
-                     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                    console.log(e, 'e.Sales_Category')
+                    if (userJurisdiction != null && e.salesCategory) {
+
+                        console.log(e, 'e.Sales_Category')
+                        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
                     }
 
                     return {
@@ -252,6 +274,23 @@ export class DashboardService {
                 if (sameCityCustomers.length > 0) {
                     const customerIds = sameCityCustomers.map(customer => customer.C_Number);
 
+                    let whereClause: any = {};
+                    if (state || zip || jurisdiction) {
+                        const customerExcluded = await getCustomerExcludeItem(
+                          state as string,
+                          zip as string,
+                          jurisdiction as number
+                        );
+                      }
+                
+                    const userExcluded = await excludeItemByUser(Number(userId));
+                    if (userExcluded && userExcluded.length > 0) {
+                      allExcludedItems = allExcludedItems.concat(userExcluded);
+                    }
+                    if (allExcludedItems.length > 0) {
+                        const uniqueExcluded = [...new Set(allExcludedItems)];
+                        whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+                      }
                     // Get products that other customers in the same city buy
                     const allAsPerCustomerData = await OrderDetail.findAll({
                         attributes: [
@@ -321,7 +360,7 @@ export class DashboardService {
                                 {
                                     model: SalesCategory,
                                     as: 'SalesCategory',
-                                    attributes: ['Category_Desc','Sales_Category'],
+                                    attributes: ['Category_Desc', 'Sales_Category'],
                                     required: false
                                 },
                                 {
@@ -352,7 +391,7 @@ export class DashboardService {
                             });
                             let taxRate = 0;
                             const userJurisdiction = await getJurisdiction(Number(userId));
-                           
+
                             let price = await getDiscount(Number(e.Item_Number), Number(userId));
                             if (!price) {
                                 price = await getFirstValidPrice(e);
@@ -388,11 +427,11 @@ export class DashboardService {
                             let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, userId, price + taxRate);
 
                             let prepaidTaxRate = 0
-                            console.log(e,'e.Sales_Category')
-                            if(userJurisdiction !=null && e.salesCategory){
-                      
-                              console.log(e,'e.Sales_Category')
-                             prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                            console.log(e, 'e.Sales_Category')
+                            if (userJurisdiction != null && e.salesCategory) {
+
+                                console.log(e, 'e.Sales_Category')
+                                prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
                             }
 
                             return {
@@ -414,10 +453,10 @@ export class DashboardService {
                                 NetCost: e.NetCost,
 
 
-                                
-        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
 
-        prepaidTaxRate: prepaidTaxRate,
+                                hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+
+                                prepaidTaxRate: prepaidTaxRate,
 
                                 hasProductLimit: productLimit ? true : false,
                                 productLimit,
@@ -459,6 +498,26 @@ export class DashboardService {
         }
 
         if (homeSetting?.showCustomerHistory) {
+
+            let whereClause: any = {};
+            if (state || zip || jurisdiction) {
+                const customerExcluded = await getCustomerExcludeItem(
+                  state as string,
+                  zip as string,
+                  jurisdiction as number
+                );
+              }
+
+              const userExcluded = await excludeItemByUser(Number(userId));
+              if (userExcluded && userExcluded.length > 0) {
+                allExcludedItems = allExcludedItems.concat(userExcluded);
+              }
+             
+              if (allExcludedItems.length > 0) {
+                const uniqueExcluded = [...new Set(allExcludedItems)];
+                whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+              }
+
             // Get customer's most bought products for the current year
             const customerOrderHistory = await OrderDetail.findAll({
                 attributes: [
@@ -528,7 +587,7 @@ export class DashboardService {
                         {
                             model: SalesCategory,
                             as: 'SalesCategory',
-                            attributes: ['Category_Desc','Sales_Category'],
+                            attributes: ['Category_Desc', 'Sales_Category'],
                             required: false
                         },
                         {
@@ -558,11 +617,11 @@ export class DashboardService {
                         }
                     });
                     let taxRate = 0;
-                    let price = await getDiscount(e.Item_Number, userId) 
+                    let price = await getDiscount(e.Item_Number, userId)
                     if (!price) {
                         price = await getFirstValidPrice(e);
                     }
-                    price = Math.ceil(price * 100) / 100;   
+                    price = Math.ceil(price * 100) / 100;
                     const userJurisdiction = await getJurisdiction(Number(userId));
                     if (userJurisdiction) {
                         taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
@@ -594,13 +653,13 @@ export class DashboardService {
                     const orderHistoryItem: any = top10CustomerOrderHistory.find((item: any) => item.Item_Number === e.Item_Number);
 
                     let prepaidTaxRate = 0
-                    console.log(e,'e.Sales_Category')
-                    if(userJurisdiction !=null && e.salesCategory){
-              
-                      console.log(e,'e.Sales_Category')
-                     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                    console.log(e, 'e.Sales_Category')
+                    if (userJurisdiction != null && e.salesCategory) {
+
+                        console.log(e, 'e.Sales_Category')
+                        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
                     }
-              
+
 
 
                     return {
@@ -683,19 +742,38 @@ export class DashboardService {
     }
 
     async getPromotedItems(query: PaginationOptions) {
-        const { customerNumber } = query
+        let { customerNumber,state, zip, jurisdiction } = query
         const homeSetting: any = await HomeSettings.findOne({});
         const promotedItems = homeSetting?.promotedItems || [];
 
-        const excludeItem = await excludeItemByUser(Number(customerNumber));
-        let excludeItemClause: any = {
-            Item_Number: { [Op.notIn]: excludeItem },
-        };
-        
+        let allExcludedItems: any[] = [];
+        let whereClause: any = {};
+        if (state || zip || jurisdiction) {
+            const customerExcluded = await getCustomerExcludeItem(
+              state as string,
+              zip as string,
+              jurisdiction as number
+            );
+          
+            if (customerExcluded && customerExcluded.length > 0) {
+              allExcludedItems = allExcludedItems.concat(customerExcluded);
+            }
+          }
+
+          const userExcluded = await excludeItemByUser(Number(customerNumber));
+          if (userExcluded && userExcluded.length > 0) {
+            allExcludedItems = allExcludedItems.concat(userExcluded);
+          }
+
+        if (allExcludedItems.length > 0) {
+            const uniqueExcluded = [...new Set(allExcludedItems)];
+            whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+          }
+
 
         const { count: totalCount, rows: productList } = await Inventory.findAndCountAll({
             where: {
-                ...excludeItemClause,
+                ...whereClause,
                 Item_Number: { [Op.in]: promotedItems },
                 ShortOrderForm: true,
                 I_Inactive: false,
@@ -704,7 +782,7 @@ export class DashboardService {
                 {
                     model: SalesCategory,
                     as: 'SalesCategory',
-                    attributes: ['Category_Desc','Sales_Category'],
+                    attributes: ['Category_Desc', 'Sales_Category'],
                     required: false
                 },
                 {
@@ -742,8 +820,8 @@ export class DashboardService {
                 if (userJurisdiction) {
                     taxRate = await getTaxRateV1(item.OTP_Number, userJurisdiction as number, item.Item_Number, price);
                     taxRate = Math.ceil(taxRate * 100) / 100;
-              prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
-            
+                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
+
                 }
             }
             price = Math.ceil(price * 100) / 100;
@@ -777,9 +855,9 @@ export class DashboardService {
                 hasQtyDiscount = await checkQtyDiscount(item.Item_Number, customerNumber, price + taxRate);
             }
 
-           
 
-            
+
+
 
             return {
                 Pack: item.Pack,
@@ -844,7 +922,7 @@ export class DashboardService {
     }
 
     async getNewItem(query: PaginationOptions, customerId: number) {
-        let { page = 1, limit = 30, search, role, customerNumber } = query;
+        let { page = 1, limit = 30, search, role, customerNumber, state, zip, jurisdiction } = query;
         page = Number(page);
         limit = Number(limit);
 
@@ -853,10 +931,33 @@ export class DashboardService {
             ShortOrderForm: true,
         };
 
-        const excludeItem = await excludeItemByUser(customerId);
-        if(excludeItem.length > 0){
-            whereClause.Item_Number = { [Op.notIn]: excludeItem };
+        let allExcludedItems: any[] = [];
+
+
+
+        if (state || zip || jurisdiction) {
+            const customerExcluded = await getCustomerExcludeItem(
+                state as string,
+                zip as string,
+                jurisdiction as number
+            );
+
+            if (customerExcluded && customerExcluded.length > 0) {
+                allExcludedItems = allExcludedItems.concat(customerExcluded);
+            }
         }
+
+
+        const userExcluded = await excludeItemByUser(customerId);
+        if (userExcluded && userExcluded.length > 0) {
+            allExcludedItems = allExcludedItems.concat(userExcluded);
+        }
+
+
+        if (allExcludedItems.length > 0) {
+            const uniqueExcluded = [...new Set(allExcludedItems)];
+            whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+          }
 
         if (search) {
             const searchValue = `%${search}%`;
@@ -892,7 +993,7 @@ export class DashboardService {
                 {
                     model: SalesCategory,
                     as: 'SalesCategory',
-                    attributes: ['Category_Desc','Sales_Category'],
+                    attributes: ['Category_Desc', 'Sales_Category'],
                     required: false
                 },
                 {
@@ -930,12 +1031,12 @@ export class DashboardService {
             let taxRate = 0;
             let price = await getFirstValidPrice(e);
             price = Math.ceil(price * 100) / 100;
-            
-  let prepaidTaxRate = 0
+
+            let prepaidTaxRate = 0
 
             if (role === 'retailer') {
                 const userJurisdiction = await getJurisdiction(customerId);
-                
+
                 price = await getDiscount(e.Item_Number, customerId) || price;
                 if (userJurisdiction) {
                     taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
@@ -944,20 +1045,20 @@ export class DashboardService {
 
 
 
-                if(userJurisdiction !=null && e.salesCategory){
-                  prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                if (userJurisdiction != null && e.salesCategory) {
+                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
                 }
             } else if (role === 'sales' && customerNumber) {
                 const userJurisdiction = await getJurisdiction(customerNumber);
-                
+
                 price = await getDiscount(e.Item_Number, customerNumber) || price;
                 if (userJurisdiction) {
                     taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
                     taxRate = Math.ceil(taxRate * 100) / 100;
                 }
-                
-                if(userJurisdiction !=null && e.salesCategory){
-                  prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+
+                if (userJurisdiction != null && e.salesCategory) {
+                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
                 }
             }
             const productLimit = await getProductLimit(e.Item_Number);
@@ -987,7 +1088,7 @@ export class DashboardService {
 
             let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, price + taxRate);
 
-         
+
 
             return {
                 Pack: e.Pack,
@@ -1365,7 +1466,7 @@ export class DashboardService {
                 [
                     Sequelize.literal('SUM([OrderDetail].[Price] + ISNULL([OrderDetail].[OTP_Amount_State], 0))'),
                     'totalSales'
-                  ],                  
+                ],
                 [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('orderHeader.Order_Number'))), 'orderCount'],
                 [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
             ],
@@ -1386,11 +1487,11 @@ export class DashboardService {
             raw: true
         });
 
-        
-          
-          
-          
-          
+
+
+
+
+
 
         // Get sales rep details for each sales person
         const salesPersonWithDetails = await Promise.all(
@@ -1463,7 +1564,7 @@ export class DashboardService {
     }
 
     async getDiscountedItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-        let { search, masterSearch, role, customerNumber } = query;
+        let { search, masterSearch, role, customerNumber ,state, zip, jurisdiction} = query;
         let wareHouseSetting: any = await Setting.findOne({});
         wareHouseSetting = wareHouseSetting?.dataValues || null;
 
@@ -1490,10 +1591,31 @@ export class DashboardService {
             ],
         };
 
-        const excludeItem = await excludeItemByUser(customerId);
-        if(excludeItem.length > 0){
-            whereClause.Item_Number = { [Op.notIn]: excludeItem };
-        }
+        let allExcludedItems: any[] = [];
+
+        if (state || zip || jurisdiction) {
+            const customerExcluded = await getCustomerExcludeItem(
+              state as string,
+              zip as string,
+              jurisdiction as number
+            );
+          
+            if (customerExcluded && customerExcluded.length > 0) {
+              allExcludedItems = allExcludedItems.concat(customerExcluded);
+            }
+          }
+
+          const userExcluded = await excludeItemByUser(customerId);
+          if (userExcluded && userExcluded.length > 0) {
+            allExcludedItems = allExcludedItems.concat(userExcluded);
+          }
+
+          if (allExcludedItems.length > 0) {
+            const uniqueExcluded = [...new Set(allExcludedItems)];
+            whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+          }
+
+        
 
         // Add search functionality if needed
         if (search) {
@@ -1593,9 +1715,15 @@ export class DashboardService {
                 },
             });
 
+            console.log(special.inventory, 'special.inventory.Sales_Category')
+
             const upcNumbers = upcMap.get(special.Item_Number) || [];
             const salesCategoryDesc = salesCategoryMap.get(special.inventory.Sales_Category) || null;
-            const salesCategory = salesCategoryMap.get(special.inventory.Sales_Category) || null;
+
+            console.log(salesCategoryDesc, 'salesCategoryDesc')
+            const salesCategory = special.inventory.Sales_Category || null;
+
+            console.log(salesCategory, 'salesCategory----->')
             const priceClassDesc = priceClassMap.get(special.inventory.Price_Class) || null;
             let taxRate = 0;
             let price = await getFirstValidPrice(special.inventory);
@@ -1605,9 +1733,9 @@ export class DashboardService {
                 const userJurisdiction = await getJurisdiction(customerId as number);
                 price = await getDiscount(special.inventory.Item_Number, customerId) || price;
 
-                
-                if(userJurisdiction !=null && salesCategory){
-                  prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, salesCategory);
+
+                if (userJurisdiction != null && salesCategory) {
+                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, salesCategory);
                 }
                 price = Math.ceil(price * 100) / 100;
                 taxRate = await getTaxRateV1(special.inventory.OTP_Number, userJurisdiction as number, special.inventory.Item_Number, price);
@@ -1621,9 +1749,9 @@ export class DashboardService {
                 taxRate = await getTaxRateV1(special.inventory.OTP_Number, userJurisdiction as number, special.inventory.Item_Number, price);
                 taxRate = Math.ceil(taxRate * 100) / 100;
                 hasQtyDiscount = await checkQtyDiscount(special.inventory.Item_Number, customerNumber, price + taxRate);
-                if(userJurisdiction !=null && salesCategory){
+                if (userJurisdiction != null && salesCategory) {
                     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, salesCategory);
-                  }
+                }
 
             }
 

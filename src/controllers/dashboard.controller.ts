@@ -40,7 +40,7 @@ export class DashboardController {
 
       async getPopularItems(req: AuthRequest, res: Response) {
         const {c_number} = req.query;
-        const data = await this.dashboardService.getPopularItems(Number(c_number));
+        const data = await this.dashboardService.getPopularItems(Number(c_number),req.query as any);
         sendResponse(res, 200, true, data, General.SUCCESS);
       }
       
