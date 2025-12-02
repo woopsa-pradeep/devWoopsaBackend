@@ -189,10 +189,10 @@ export class DashboardService {
 
                     let prepaidTaxRate = 0
                     console.log(e, 'e.Sales_Category')
-                    if (userJurisdiction != null && e.salesCategory) {
+                    if (userJurisdiction != null && e.SalesCategory) {
 
                         console.log(e, 'e.Sales_Category')
-                        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
                     }
 
                     return {
@@ -428,10 +428,10 @@ export class DashboardService {
 
                             let prepaidTaxRate = 0
                             console.log(e, 'e.Sales_Category')
-                            if (userJurisdiction != null && e.salesCategory) {
+                            if (userJurisdiction != null && e.SalesCategory) {
 
                                 console.log(e, 'e.Sales_Category')
-                                prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                                prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
                             }
 
                             return {
@@ -654,10 +654,10 @@ export class DashboardService {
 
                     let prepaidTaxRate = 0
                     console.log(e, 'e.Sales_Category')
-                    if (userJurisdiction != null && e.salesCategory) {
+                    if (userJurisdiction != null && e.SalesCategory) {
 
                         console.log(e, 'e.Sales_Category')
-                        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
                     }
 
 
@@ -1045,8 +1045,8 @@ export class DashboardService {
 
 
 
-                if (userJurisdiction != null && e.salesCategory) {
-                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                if (userJurisdiction != null && e.SalesCategory) {
+                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
                 }
             } else if (role === 'sales' && customerNumber) {
                 const userJurisdiction = await getJurisdiction(customerNumber);
@@ -1057,8 +1057,8 @@ export class DashboardService {
                     taxRate = Math.ceil(taxRate * 100) / 100;
                 }
 
-                if (userJurisdiction != null && e.salesCategory) {
-                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+                if (userJurisdiction != null && e.SalesCategory) {
+                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
                 }
             }
             const productLimit = await getProductLimit(e.Item_Number);

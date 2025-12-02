@@ -455,11 +455,10 @@ export class RetailerService {
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
       let prepaidTaxRate = 0
-      console.log(e,'e.Sales_Category')
-      if(userJurisdiction !=null && e.salesCategory){
+      if(userJurisdiction !=null && e.SalesCategory){
 
-        console.log(e,'e.Sales_Category')
-       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+        console.log(e?.SalesCategory,'e.Sales_Category')
+       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
       }
     
 
@@ -2023,8 +2022,8 @@ export class RetailerService {
 
       const userJurisdiction = await getJurisdiction(user.id);
       let prepaidTaxRate = 0
-      if(userJurisdiction !=null && e.salesCategory){
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+      if(userJurisdiction !=null && e.SalesCategory){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
       }
 
       return {
