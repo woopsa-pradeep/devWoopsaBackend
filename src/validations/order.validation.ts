@@ -10,6 +10,7 @@ const placeOrderRequestSchema = Joi.object({
   Tax_Rate: Joi.number().required(),
   Price_With_Tax: Joi.number().required(),
   TotalPriceWithTax: Joi.number().required(),
+  prepaidTaxRate: Joi.number().optional().allow('',null,0),
 });
 
 const shippingDetailsSchema = Joi.object({
