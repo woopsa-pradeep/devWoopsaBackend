@@ -101,7 +101,8 @@ router.post('/orderedProducts',
 router.get('/orderDeliveryStatus/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getOrderDeliveryStatus.bind(retailerController)));
 router.get('/scanItemByBarcode/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.scanItemByBarcode.bind(retailerController)));
 router.post('/cart/addMultipleItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.addMultipleItems.bind(retailerController)));
-router.post('/addCartMultiScanner',validateRequest(addToCartMultiScannerValidation),verifyRole(ROLES.RETAILER),catchAsync(retailerController.addToCartMultiScanner.bind(retailerController)));
+router.post('/addCartByScanner/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.addToCartByScanner.bind(retailerController)));
+router.get('/addCartMultiScanner',validateRequest(addToCartMultiScannerValidation),verifyRole(ROLES.RETAILER),catchAsync(retailerController.addToCartMultiScanner.bind(retailerController)));
 
 // PDF generation
 router.get('/orderPdf',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getPdfOfOrderDetails.bind(retailerController)));

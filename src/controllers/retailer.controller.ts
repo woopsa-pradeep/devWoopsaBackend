@@ -145,6 +145,10 @@ export class RetailerController {
   }
 }
 
+  async addToCartByScanner(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.addToCartByScanner(req.params.id, req.user.id);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
   
   async addToCartMultiScanner(req: AuthRequest, res: Response) {

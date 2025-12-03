@@ -1386,8 +1386,12 @@ export class SalesService {
       const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
 
       let prepaidTaxRate = 0
-      if(customerNumber !=null && product.salesCategory){
-        prepaidTaxRate = await getPrepaidTaxRate(customerNumber as number, product?.salesCategory?.Sales_Category);
+      const userJurisdiction = await getJurisdiction(customerNumber);
+
+
+      console.log(product,'product.salesCategory')
+      if(userJurisdiction !=null && product.Sales_Category){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
       }
 
       return {
@@ -1438,7 +1442,6 @@ export class SalesService {
     const totalAmountWithTax = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
     return {
       finalCartItems,
-      items: finalCartItems,
       totalItems,
       totalAmountWithTax,
       userItemLimitQty: findTheLimit?.maxOrderLimit,
@@ -2180,7 +2183,21 @@ const newSalesRepArray = salesRepList.map(Number);
       const itemStr = detail.Item_Number.toString();
       const productImage = imageMap.get(itemStr) || null;
       const inventoryOnHand = await getInventoryOnHand(detail.Item_Number) || 0;
-      let price = discountMap[detail.Item_Number] ?? await getFirstValidPrice(detail);
+      let price = await getDiscount(detail.Item_Number, customerId) ?? await getFirstValidPrice(detail);
+
+      if(!price){
+        let tempDetail :any = await Inventory.findOne({
+          where: {
+            Item_Number: detail.Item_Number
+          },
+        });
+        price = await getFirstValidPrice(tempDetail);
+      }
+
+
+
+    
+
 
       const taxRate = await getTaxRateV1(detail.inventory.OTP_Number, userJurisdiction as number, detail.Item_Number, price);
 
@@ -2197,6 +2214,13 @@ const newSalesRepArray = salesRepList.map(Number);
 
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === detail.Item_Number);
 
+      let prepaidTaxRate = 0
+      if(userJurisdiction !=null && detail.inventory.Sales_Category){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
+      }
+
+       
+
       return {
         isNewItem,
         // Order information
@@ -2206,6 +2230,8 @@ const newSalesRepArray = salesRepList.map(Number);
 
         price,
         priceWithTax: price + taxRate,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
         isDiscounted,
         Tax_Rate: taxRate,
         ProductInActive: detail.inventory.I_Inactive,
@@ -4139,6 +4165,7 @@ const newSalesRepArray = salesRepList.map(Number);
       let allowToOrder = true;
       console.log(wareHouseSetting?.salesRep)
 
+      let userJurisdiction = await getJurisdiction(customerNumber);
       if (wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible) {
         allowToOrder = true;
       }
@@ -4154,8 +4181,9 @@ const newSalesRepArray = salesRepList.map(Number);
       const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
 
       let prepaidTaxRate = 0
-      if(customerNumber !=null && product.salesCategory){
-        prepaidTaxRate = await getPrepaidTaxRate(customerNumber as number, product?.salesCategory?.Sales_Category);
+      console.log(product.Sales_Category,'product.Sales_Category')
+      if(userJurisdiction !=null && product.Sales_Category){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
       }
 
       return {

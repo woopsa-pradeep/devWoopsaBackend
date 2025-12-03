@@ -834,8 +834,8 @@ export class RetailerService {
       const isDiscounted = await hasDiscountedItem(e.Item_Number, product.Price_Subclass);
       const userJurisdiction = await getJurisdiction(customerNumber);
       let prepaidTaxRate = 0
-      if(userJurisdiction !=null && product.salesCategory){
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.salesCategory?.Sales_Category);
+      if(userJurisdiction !=null && product.SalesCategory){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category);
       }
 
       return {
@@ -2276,7 +2276,17 @@ export class RetailerService {
       const inventoryOnHand = await getInventoryOnHand(detail.Item_Number) || 0;
       const itemStr = detail.Item_Number.toString();
       const productImage = imageMap.get(itemStr) || null;
-      let price = discountMap[detail?.Item_Number] ?? await getFirstValidPrice(detail);
+      let price = await getDiscount(detail.Item_Number, customerId);
+      if (!price) {
+        const tempDetail :any = await Inventory.findOne({
+          where: {
+            Item_Number: detail.Item_Number
+          },
+        });
+        price = await getFirstValidPrice(tempDetail);
+      }
+      
+
       const taxRate = await getTaxRateV1(detail?.inventory?.OTP_Number, userJurisdiction as number, detail?.Item_Number, price);
 
       const isDiscounted = detail?.inventory?.Price_Subclass ? await hasDiscountedItem(detail?.Item_Number, detail?.inventory?.Price_Subclass) : false;
@@ -2291,6 +2301,13 @@ export class RetailerService {
 
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === detail.Item_Number);
 
+      let prepaidTaxRate = 0
+      console.log(detail?.inventory,'detail?.inventory?.Sales_Category')
+      if(userJurisdiction !=null && detail?.inventory?.Sales_Category){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
+      }
+
+
       return {
         isNewItem,
         // Order information
@@ -2298,6 +2315,8 @@ export class RetailerService {
         Order_Date: (orderHeader as any)?.Order_Date,
         Invoice_Total: (orderHeader as any)?.Invoice_Total,
 
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
         price,
         priceWithTax: price + taxRate,
         isDiscounted,
