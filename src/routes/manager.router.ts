@@ -34,6 +34,8 @@ router.put('/updateRetailerSignUp/:id', verifyRole(ROLES.MANAGER), catchAsync(ma
 router.get('/userList', verifyRole(ROLES.MANAGER), catchAsync(managerController.getUserList.bind(managerController)));
 router.post('/createUser', verifyRole(ROLES.MANAGER),validateRequest(createUserSchema), catchAsync(managerController.createUser.bind(managerController)));
 router.put('/updateUser/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUser.bind(managerController)));
+router.get('/epickUsers', verifyRole(ROLES.MANAGER), catchAsync(managerController.getEpickUserDetails.bind(managerController)));
+router.put('/users/:userId/orderPreferences', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUserOrderPreferences.bind(managerController)));
 router.post('/createRolePermissions', verifyRole(ROLES.MANAGER), validateRequest(rolePermissionRequestSchema), catchAsync(managerController.createRolePermissions.bind(managerController)));
 router.put('/updateRolePermissions', verifyRole(ROLES.MANAGER), validateRequest(roleUdatePermissionRequestSchema), catchAsync(managerController.updateRolePermissions.bind(managerController)));
 router.get('/getUserRolePermissions/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getUserRolePermissions.bind(managerController)));
@@ -238,8 +240,14 @@ router.put('/updateUserAllowDiscount/:id', verifyRole(ROLES.MANAGER), catchAsync
 import { EpickController } from '../controllers/epick.controller';
 const epickController = new EpickController();
 router.get('/pendingOverrideRequests', verifyRole(ROLES.MANAGER), catchAsync(epickController.getPendingOverrideRequests.bind(epickController)));
+router.get('/approvedOverrideRequests', verifyRole(ROLES.MANAGER), catchAsync(epickController.getApprovedOverrideRequests.bind(epickController)));
+router.get('/cancelledOverrideRequests', verifyRole(ROLES.MANAGER), catchAsync(epickController.getCancelledOverrideRequests.bind(epickController)));
 router.post('/approveOverrideRequest/:requestId', verifyRole(ROLES.MANAGER), catchAsync(epickController.approveOverrideRequest.bind(epickController)));
 router.post('/cancelOverrideRequest/:requestId', verifyRole(ROLES.MANAGER), catchAsync(epickController.cancelOverrideRequestByDistributor.bind(epickController)));
+
+// Ongoing Orders routes (Distributor/Admin)
+router.get('/ongoingOrders', verifyRole(ROLES.MANAGER), catchAsync(epickController.getOngoingOrders.bind(epickController)));
+router.delete('/ongoingOrders/:orderNumber', verifyRole(ROLES.MANAGER), catchAsync(epickController.removeOngoingOrder.bind(epickController)));
 router.put('/updateCustomer/:id' , verifyRole(ROLES.MANAGER), catchAsync(managerController.updateCustomer.bind(managerController)));
 
 export default router; 

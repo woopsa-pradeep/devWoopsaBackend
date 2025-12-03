@@ -166,6 +166,22 @@ export class EpickController {
     }
 
     /**
+     * Get approved override requests (Distributor)
+     */
+    async getApprovedOverrideRequests(req: Request, res: Response) {
+        const data = await this.epickService.getApprovedOverrideRequests();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Get cancelled override requests (Distributor)
+     */
+    async getCancelledOverrideRequests(req: Request, res: Response) {
+        const data = await this.epickService.getCancelledOverrideRequests();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
      * Approve override request (Distributor)
      */
     async approveOverrideRequest(req: Request, res: Response) {
@@ -225,5 +241,26 @@ export class EpickController {
 
         const data = await this.epickService.cancelOverrideRequest(requestId, userId);
         sendResponse(res, 200, true, data, "Override request cancelled successfully");
+    }
+
+    /**
+     * Get all ongoing orders (Distributor/Admin)
+     */
+    async getOngoingOrders(req: Request, res: Response) {
+        const data = await this.epickService.getOngoingOrders();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Remove/delete an ongoing order (Distributor/Admin)
+     */
+    async removeOngoingOrder(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        const data = await this.epickService.removeOngoingOrder(orderNumber);
+        sendResponse(res, 200, true, data, "Ongoing order removed successfully");
     }
 }

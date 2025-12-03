@@ -358,122 +358,126 @@ export class SalesService {
   }
 
 
-  async getOrderHistory(customerNumber: number, query: PaginationOptions & { search?: string, startDate?: string, endDate?: string }) {
-    let { page = 1, limit = 10, search, startDate, endDate } = query;
-    page = Number(query.page || (query as any)['page ']) || 1;
-    limit = Number(query.limit || (query as any)['limit ']) || 10;
-    const offset = (page - 1) * limit;
+ async getOrderHistory(customerNumber: number, query: PaginationOptions & { search?: string, startDate?: string, endDate?: string }) {
+  let { page = 1, limit = 10, search, startDate, endDate } = query;
+  page = Number(query.page || (query as any)['page ']) || 1;
+  limit = Number(query.limit || (query as any)['limit ']) || 10;
+  const offset = (page - 1) * limit;
 
-    // Build where clause for OrderHeader
-    let whereClause: any = { C_Number: customerNumber };
+  // Build where clause for OrderHeader
+  let whereClause: any = { C_Number: customerNumber };
 
-    // Add search functionality if provided
-    if (search) {
-      whereClause[Op.or] = [
-        { Order_Number: { [Op.like]: `%${search}%` } },
-        { Reference: { [Op.like]: `%${search}%` } }
-      ];
+  // Add search functionality if provided
+  if (search) {
+    whereClause[Op.or] = [
+      { Order_Number: { [Op.like]: `%${search}%` } },
+      { Reference: { [Op.like]: `%${search}%` } }
+    ];
+  }
+
+  // Add date filtering if provided
+  if (startDate || endDate) {
+    whereClause.Order_Date = {};
+
+    if (startDate) {
+      whereClause.Order_Date[Op.gte] = startDate;
     }
 
-    // Add date filtering if provided
-    if (startDate || endDate) {
-      whereClause.Order_Date = {};
-
-      if (startDate) {
-        whereClause.Order_Date[Op.gte] = startDate;
-      }
-
-      if (endDate) {
-        whereClause.Order_Date[Op.lte] = endDate;
-      }
+    if (endDate) {
+      whereClause.Order_Date[Op.lte] = endDate;
     }
+  }
 
-    // Get order headers with pagination
-    const orderHeaders = await OrderHeader.findAll({
-      where: whereClause,
-      attributes: [
-        'Order_Number',
-        'Order_Date',
-        'User_ID',
-        'Order_Source'
-      ],
-      include: [
-        {
-          model: OrderDetail,
-          as: 'orderDetails',
-          required: true,
-          attributes: []
-        }
-      ],
-      order: [['Order_Number', 'DESC']],
-      limit,
-      offset
-    });
-    
-    // 2) Separate total count query
-    const totalCount = await OrderHeader.count({
-      where: whereClause,
-      include: [
-        {
-          model: OrderDetail,
-          as: 'orderDetails',
-          required: true,
-          attributes: []
-        }
-      ],
-      // IMPORTANT: avoid overcount due to join
-      distinct: true,
-    });
+  // 🔥 EXCLUDE ORDERS WHERE TOTAL QUANTITY = 0
+  whereClause.Order_Number = {
+    [Op.in]: Sequelize.literal(`(
+      SELECT od."Order_Number"
+      FROM "Order_Detail" od
+      GROUP BY od."Order_Number"
+      HAVING SUM(od."Quantity_Ordered") > 0
+    )`)
+  };
 
-    // Get order details with quantity sums for each order
-    const orderNumbers = orderHeaders.map((header: any) => header.Order_Number);
-
-    const orderDetailsWithSums = await OrderDetail.findAll({
-      where: {
-        Order_Number: { [Op.in]: orderNumbers }
-      },
-      attributes: [
-        'Order_Number',
-        [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
-      ],
-      group: ['Order_Number'],
-      raw: true
-    });
-
-    // Create a map for quick lookup
-    const quantityMap = new Map(
-      orderDetailsWithSums.map((detail: any) => [detail.Order_Number, detail.totalQuantity])
-    );
-
-    // Combine order headers with their total quantities
-    const result = orderHeaders.map((header: any) => {
-      let source = 'WEB';
-      if (header.Order_Source === 13) {
-        source = 'WEB';
-      } else if (header.Order_Source === 12) {
-        source = 'APP';
-      } else {
-        source = 'ERP';
+  // Get order headers with pagination
+  const orderHeaders = await OrderHeader.findAll({
+    where: whereClause,
+    attributes: [
+      'Order_Number',
+      'Order_Date',
+      'User_ID',
+      'Order_Source'
+    ],
+    include: [
+      {
+        model: OrderDetail,
+        as: 'orderDetails',
+        required: true,
+        attributes: []
       }
+    ],
+    order: [['Order_Number', 'DESC']],
+    limit,
+    offset
+  });
 
-      return {
-        Order_Number: header.Order_Number,
-        Order_Date: header.Order_Date,
-        User_ID: header.User_ID,
-        Order_Source: source, // use the resolved source value
-        totalQuantity: quantityMap.get(header.Order_Number) || 0,
-      };
-    });
+  // Count total records
+  const totalCount = await OrderHeader.count({
+    where: whereClause,
+    include: [
+      {
+        model: OrderDetail,
+        as: 'orderDetails',
+        required: true,
+        attributes: []
+      }
+    ],
+    distinct: true
+  });
 
+  // Get total quantity per order
+  const orderNumbers = orderHeaders.map((h: any) => h.Order_Number);
+
+  const orderDetailsWithSums = await OrderDetail.findAll({
+    where: {
+      Order_Number: { [Op.in]: orderNumbers }
+    },
+    attributes: [
+      'Order_Number',
+      [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+    ],
+    group: ['Order_Number'],
+    raw: true
+  });
+
+  const quantityMap = new Map(
+    orderDetailsWithSums.map((d: any) => [d.Order_Number, d.totalQuantity])
+  );
+
+  // Build final output
+  const result = orderHeaders.map((header: any) => {
+    let source = 'WEB';
+    if (header.Order_Source === 13) source = 'WEB';
+    else if (header.Order_Source === 12) source = 'APP';
+    else source = 'ERP';
 
     return {
-      totalCount,
-      page,
-      limit,
-      totalPages: Math.ceil(totalCount / limit),
-      data: result
+      Order_Number: header.Order_Number,
+      Order_Date: header.Order_Date,
+      User_ID: header.User_ID,
+      Order_Source: source,
+      totalQuantity: quantityMap.get(header.Order_Number) || 0
     };
-  }
+  });
+
+  return {
+    totalCount,
+    page,
+    limit,
+    totalPages: Math.ceil(totalCount / limit),
+    data: result
+  };
+}
+
 
   async getOrderHistoryByOrderNumber(orderNumber: number, query: PaginationOptions) {
     let { page = 1, limit = 10 } = query;

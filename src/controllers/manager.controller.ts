@@ -107,6 +107,27 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async updateUserOrderPreferences(req: AuthRequest, res: Response) {
+    const userId = Number(req.params.userId);
+    if (!userId || isNaN(userId)) {
+      return sendResponse(res, 400, false, null, "Invalid user ID");
+    }
+
+    const { order_type, shortby } = req.body;
+    
+    if (!order_type && !shortby) {
+      return sendResponse(res, 400, false, null, "At least one preference (order_type or shortby) must be provided");
+    }
+
+    const data = await this.managerService.updateUserOrderPreferences(userId, { order_type, shortby });
+    sendResponse(res, 200, true, data, "User order preferences updated successfully");
+  }
+
+  async getEpickUserDetails(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getEpickUserDetails();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async createRolePermissions(req: AuthRequest, res: Response) {
     const data = await this.managerService.createRolePermissions(req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);

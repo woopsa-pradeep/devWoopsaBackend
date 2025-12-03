@@ -2188,6 +2188,100 @@ export class EpickService {
   }
 
   /**
+   * Get all approved override requests (for distributor)
+   */
+  async getApprovedOverrideRequests() {
+    const approvedRequests = await OverrideRequest.findAll({
+      where: {
+        status: 'approved',
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+      order: [['updatedAt', 'DESC']],
+    });
+
+    // Get item descriptions for all requests
+    const itemNumbers = approvedRequests.map(req => req.itemNumber);
+    const inventories = await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: itemNumbers },
+      },
+      attributes: ['Item_Number', 'Description'],
+    });
+
+    const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
+
+    return approvedRequests.map((req: any) => {
+      const user = req.user as WebUsers | undefined;
+      return {
+        requestId: req.id,
+        orderNumber: req.orderNumber,
+        itemNumber: req.itemNumber,
+        itemDescription: inventoryMap.get(req.itemNumber) || null,
+        pickerUserNumber: req.pickerUserNumber,
+        userName: user ? `${user.firstName} ${user.lastName}` : null,
+        userEmail: user?.email || null,
+        note: req.note,
+        status: req.status,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+      };
+    });
+  }
+
+  /**
+   * Get all cancelled override requests (for distributor)
+   */
+  async getCancelledOverrideRequests() {
+    const cancelledRequests = await OverrideRequest.findAll({
+      where: {
+        status: 'cancelled',
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+      order: [['updatedAt', 'DESC']],
+    });
+
+    // Get item descriptions for all requests
+    const itemNumbers = cancelledRequests.map(req => req.itemNumber);
+    const inventories = await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: itemNumbers },
+      },
+      attributes: ['Item_Number', 'Description'],
+    });
+
+    const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
+
+    return cancelledRequests.map((req: any) => {
+      const user = req.user as WebUsers | undefined;
+      return {
+        requestId: req.id,
+        orderNumber: req.orderNumber,
+        itemNumber: req.itemNumber,
+        itemDescription: inventoryMap.get(req.itemNumber) || null,
+        pickerUserNumber: req.pickerUserNumber,
+        userName: user ? `${user.firstName} ${user.lastName}` : null,
+        userEmail: user?.email || null,
+        note: req.note,
+        status: req.status,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+      };
+    });
+  }
+
+  /**
    * Approve override request
    */
   async approveOverrideRequest(requestId: number) {
@@ -2377,6 +2471,199 @@ export class EpickService {
       console.error('❌ Error sending notification to distributors:', error);
       // Don't throw - notification failure shouldn't break the request creation
     }
+  }
+
+  /**
+   * Get all ongoing orders (for distributor/admin)
+   * Returns orders with status 'in_progress' with user and order details
+   */
+  async getOngoingOrders() {
+    const ongoingOrders = await OrderPick.findAll({
+      where: {
+        status: 'in_progress',
+      },
+      order: [['startedAt', 'DESC']],
+      raw: true,
+    });
+
+    if (ongoingOrders.length === 0) {
+      return {
+        total: 0,
+        orders: [],
+      };
+    }
+
+    // Get unique picker user IDs and order numbers
+    const pickerUserIds = Array.from(
+      new Set(
+        ongoingOrders
+          .map((order: any) => order.pickerUserNumber)
+          .filter((id: any) => id !== null && id !== undefined)
+      )
+    );
+    const orderNumbers = ongoingOrders.map((order: any) => order.orderNumber);
+
+    // Fetch picker user information
+    const pickers = await WebUsers.findAll({
+      where: {
+        id: { [Op.in]: pickerUserIds },
+      },
+      attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
+      raw: true,
+    });
+
+    // Create picker map
+    const pickerMap: any = {};
+    pickers.forEach((picker: any) => {
+      pickerMap[picker.id] = picker;
+    });
+
+    // Fetch order headers and customer details
+    let orderHeaderMap: any = {};
+
+    if (orderNumbers.length > 0) {
+      const orderHeaders = await OrderHeader.findAll({
+        where: {
+          Order_Number: { [Op.in]: orderNumbers },
+        },
+        attributes: ['Order_Number', 'Order_Date'],
+        include: [
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: ['C_Number', 'C_Name'],
+            include: [
+              {
+                model: CustomerRoute,
+                as: 'Routes',
+                attributes: ['Route_Number', 'Stop_Number'],
+                required: false,
+              },
+            ],
+            required: false,
+          },
+        ],
+      });
+
+      // Create maps for quick lookup
+      orderHeaders.forEach((header: any) => {
+        orderHeaderMap[header.Order_Number] = {
+          orderDate: header.Order_Date,
+          customer: header.customer ? {
+            customerNumber: header.customer.C_Number,
+            customerName: header.customer.C_Name,
+            routes: header.customer.Routes || [],
+          } : null,
+        };
+      });
+    }
+
+    // Format response
+    const result = ongoingOrders.map((order: any) => {
+      const picker = pickerMap[order.pickerUserNumber];
+      const orderInfo = orderHeaderMap[order.orderNumber] || {};
+      
+      return {
+        orderNumber: order.orderNumber,
+        customerNumber: order.customerNumber,
+        customerName: orderInfo.customer?.customerName || null,
+        routes: orderInfo.customer?.routes || [],
+        orderDate: orderInfo.orderDate || null,
+        pickerId: picker?.id || null,
+        pickerName: picker ? `${picker.firstName || ''} ${picker.lastName || ''}`.trim() : null,
+        pickerEmail: picker?.email || null,
+        pickerUserNumber: picker?.userNumber || null,
+        startedAt: order.startedAt,
+        totalLines: order.totalLines,
+        totalQty: parseFloat(order.totalQty) || 0,
+        scannedLines: order.scannedLines,
+        scannedQty: parseFloat(order.scannedQty) || 0,
+        outOfStockItems: order.OutOfStockItem,
+        notes: order.notes,
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
+      };
+    });
+
+    return {
+      total: result.length,
+      orders: result,
+    };
+  }
+
+  /**
+   * Remove/delete an ongoing order (for distributor/admin)
+   * This will:
+   * 1. Delete from Order_Pick (PostgreSQL) - also removes from getUserCurrentOrder
+   * 2. Delete from Order_Pick_Box (PostgreSQL)
+   * 3. Delete from Order_Pick_Scan (PostgreSQL)
+   * 4. Delete from passScanItems (PostgreSQL)
+   * 5. Delete from Record_Locks (MSSQL)
+   * This makes the order available again in getOrder API and removes it from current order
+   */
+  async removeOngoingOrder(orderNumber: number) {
+    // Check if order exists and is in progress
+    const orderPick = await OrderPick.findOne({
+      where: {
+        orderNumber: orderNumber,
+        status: 'in_progress',
+      },
+    });
+
+    if (!orderPick) {
+      throw new AppError('Ongoing order not found', 404);
+    }
+
+    // Delete all related data in PostgreSQL (cascade delete should handle this, but being explicit)
+    
+    // 1. Delete all scans for this order
+    await OrderPickScan.destroy({
+      where: {
+        orderNumber: orderNumber,
+      },
+    });
+
+    // 2. Delete all boxes for this order
+    await OrderPickBox.destroy({
+      where: {
+        orderNumber: orderNumber,
+      },
+    });
+
+    // 3. Delete all pass scan items for this order
+    await PassScanItem.destroy({
+      where: {
+        orderNumber: orderNumber,
+      },
+    });
+
+    // 4. Delete the order pick record
+    // This also removes it from getUserCurrentOrder API (which queries Order_Pick with status='in_progress')
+    await orderPick.destroy();
+
+    // 5. Delete from Record_Locks (MSSQL) - this is what makes the order visible again in getOrder
+    await RecordLock.destroy({
+      where: {
+        Lock_Type: 0,
+        Lock_Number: orderNumber,
+      },
+    });
+
+    // 6. Optionally reset Quantity_Shipped in Order_Detail (reset to 0)
+    // This ensures clean state if order is accepted again
+    await OrderDetail.update(
+      { Quantity_Shipped: 0 },
+      {
+        where: {
+          Order_Number: orderNumber,
+        },
+      }
+    );
+
+    return {
+      message: 'Ongoing order removed successfully',
+      orderNumber: orderNumber,
+    };
   }
 }
 

@@ -16,5 +16,6 @@ router.post("/createContainerAndMoveItems", verifyRole(ROLES.CHECKER), catchAsyn
 router.post("/readyForDelivery/:orderNumber", verifyRole(ROLES.CHECKER), catchAsync(checkerController.readyForDelivery.bind(checkerController)));
 router.post("/capturePhotos/:id", verifyRole(ROLES.CHECKER), multerUpload.array('images'), catchAsync(checkerController.capturePhotos.bind(checkerController)));
 router.post("/printLabels", verifyRole(ROLES.CHECKER), catchAsync(checkerController.printLabels.bind(checkerController)));
+router.get("/testLabels", verifyRole(ROLES.CHECKER), catchAsync(checkerController.generateTestLabels.bind(checkerController)));
 
 export default router;

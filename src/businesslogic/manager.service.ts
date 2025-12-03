@@ -1293,6 +1293,83 @@ export class ManagerService {
     return updateUser;
   }
 
+  /**
+   * Update user order preferences (order_type and shortby)
+   * order_type: 'order_number' | 'qty_number'
+   * shortby: 'asc' | 'des' (case insensitive)
+   */
+  async updateUserOrderPreferences(userId: number, preferences: { order_type?: string; shortby?: string }) {
+    // Validate user exists
+    const user = await WebUsers.findByPk(userId);
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+
+    // Validate order_type if provided
+    if (preferences.order_type !== undefined) {
+      const validOrderTypes = ['order_number', 'qty_number'];
+      if (!validOrderTypes.includes(preferences.order_type)) {
+        throw new AppError(`Invalid order_type. Must be one of: ${validOrderTypes.join(', ')}`, 400);
+      }
+    }
+
+    // Validate shortby if provided
+    if (preferences.shortby !== undefined) {
+      const normalizedShortby = preferences.shortby.toLowerCase();
+      if (normalizedShortby !== 'asc' && normalizedShortby !== 'des') {
+        throw new AppError("Invalid shortby. Must be 'asc' or 'des' (case insensitive)", 400);
+      }
+      // Normalize to 'Asc' or 'Des' for consistency
+      preferences.shortby = normalizedShortby === 'asc' ? 'Asc' : 'Des';
+    }
+
+    // Update user preferences
+    const updateData: any = {};
+    if (preferences.order_type !== undefined) {
+      updateData.order_type = preferences.order_type;
+    }
+    if (preferences.shortby !== undefined) {
+      updateData.shortby = preferences.shortby;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      throw new AppError('No preferences provided to update', 400);
+    }
+
+    await WebUsers.update(updateData, {
+      where: { id: userId }
+    });
+
+    // Return updated user
+    const updatedUser = await WebUsers.findByPk(userId, {
+      attributes: ['id', 'email', 'firstName', 'lastName', 'order_type', 'shortby'],
+    });
+
+    return {
+      message: 'User order preferences updated successfully',
+      user: updatedUser,
+    };
+  }
+
+  /**
+   * Get all epick users with order preferences
+   * Returns list of all epick users including order_type and shortby
+   */
+  async getEpickUserDetails() {
+    const users = await WebUsers.findAll({
+      where: {
+        role: 'epick', // Only return epick users
+        isActive: true, // Only return active users
+      },
+      attributes: ['id', 'email', 'firstName', 'lastName', 'order_type', 'shortby', 'userNumber', 'isActive', 'status'],
+      order: [['firstName', 'ASC'], ['lastName', 'ASC']],
+    });
+
+    return {
+      users: users,
+    };
+  }
+
   // async getUserList(query: PaginationOptions) {
   //   const page = parseInt(query.page as any) || 1;
   //   const limit = parseInt(query.limit as any) || 10;

@@ -168,4 +168,10 @@ export class CheckerController {
         const data = await this.checkerService.readyForDelivery(orderNumber);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async generateTestLabels(req: Request, res: Response) {
+        const size = req.query.size as '4x3' | '4x6' | '3x6' | '3x2' | '4x4' | '2x2' | '2x3' | 'A4' | undefined;
+        const data = await this.checkerService.generateTestLabels(size);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

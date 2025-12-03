@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, QueryTypes } from "sequelize";
 import { Request } from "express";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { OrderPick } from "../models/postgres/epickOrder.model";
@@ -18,6 +18,7 @@ import { generateBarcodeAndUpload } from "../utils/barCodeGenerate";
 import { getDefaultOrderDetailValues } from "../utils/order";
 import puppeteer from 'puppeteer';
 import moment from 'moment';
+import { sequelize } from "../db";
 
 export class CheckerService {
 
@@ -77,7 +78,7 @@ export class CheckerService {
     
     const completedOrdersList = await OrderHeader.findAll({
       where: headerWhere,
-      attributes: ['Order_Number', 'Order_Date', 'Invoice_Number', 'Checker_ID'],
+      attributes: ['Order_Number', 'Order_Date', 'Invoice_Number', 'Picker_ID'],
       include: [
         {
           model: Customer,
@@ -109,28 +110,79 @@ export class CheckerService {
     // Get all order numbers from the completed orders list
     const orderNumbers = completedOrdersList.map((order: any) => order.Order_Number);
     
-    // Get unique checker IDs and fetch checker names
-    const checkerIds = Array.from(
+    // Validation: Check that ALL products in OrderDetail have Confirmed = 1
+    // Only include orders where every item is confirmed
+    let validatedOrderNumbers = orderNumbers;
+    if (orderNumbers.length > 0) {
+      // Query to find orders where ALL items have Confirmed = 1
+      // This query returns orders where total items = confirmed items
+      // Only orders where every single item has Confirmed = 1 will pass this validation
+      const confirmedOrdersQuery = await sequelize.query(
+        `SELECT Order_Number
+         FROM Order_Detail
+         WHERE Order_Number IN (:orderNumbers)
+         GROUP BY Order_Number
+         HAVING COUNT(*) = SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END)`,
+        {
+          replacements: { orderNumbers: orderNumbers },
+          type: QueryTypes.SELECT,
+          raw: true,
+        }
+      ) as any[];
+      
+      const validatedOrderNumbersSet = new Set(
+        confirmedOrdersQuery
+          .map((row: any) => row.Order_Number)
+          .filter((v: any) => v !== null && v !== undefined)
+          .map((v: any) => Number(v))
+      );
+      
+      console.log(`Orders with all items confirmed: ${validatedOrderNumbersSet.size} out of ${orderNumbers.length}`);
+      
+      // Filter completedOrdersList to only include orders where all items are confirmed
+      validatedOrderNumbers = Array.from(validatedOrderNumbersSet);
+      
+      // If no orders pass validation, return empty array
+      if (validatedOrderNumbers.length === 0) {
+        return [];
+      }
+      
+      // Filter completedOrdersList to only include validated orders
+      const filteredOrders = completedOrdersList.filter((order: any) => 
+        validatedOrderNumbers.includes(order.Order_Number)
+      );
+      
+      // Update completedOrdersList to only include validated orders
+      completedOrdersList.length = 0;
+      completedOrdersList.push(...filteredOrders);
+      
+      // Update orderNumbers to only include validated orders
+      orderNumbers.length = 0;
+      orderNumbers.push(...validatedOrderNumbers);
+    }
+    
+    // Get unique picker IDs and fetch picker names
+    const pickerIds = Array.from(
       new Set(
         completedOrdersList
-          .map((order: any) => order.Checker_ID)
+          .map((order: any) => order.Picker_ID)
           .filter((id: any) => id !== null && id !== undefined)
       )
     );
     
-    // Fetch checker names from Users table
-    const checkers = await Users.findAll({
+    // Fetch picker names from Users table
+    const pickers = await Users.findAll({
       where: {
-        UserNumber: { [Op.in]: checkerIds },
+        UserNumber: { [Op.in]: pickerIds },
       },
       attributes: ['UserNumber', 'UserName'],
       raw: true,
     });
     
-    // Create a map of checker ID to checker name
-    const checkerMap: any = {};
-    checkers.forEach((checker: any) => {
-      checkerMap[checker.UserNumber] = checker.UserName;
+    // Create a map of picker ID to picker name
+    const pickerMap: any = {};
+    pickers.forEach((picker: any) => {
+      pickerMap[picker.UserNumber] = picker.UserName;
     });
     
     // Query all OrderPickBox records for these orders
@@ -176,8 +228,8 @@ export class CheckerService {
       const invoiceNumber = order.Invoice_Number || 0;
       const invoiced = invoiceNumber !== 0;
       
-      // Get checker name from checker map
-      const checkerName = order.Checker_ID ? (checkerMap[order.Checker_ID] || null) : null;
+      // Get picker name from picker map
+      const pickerName = order.Picker_ID ? (pickerMap[order.Picker_ID] || null) : null;
       
       return {
         orderNumber: orderNum,
@@ -185,13 +237,13 @@ export class CheckerService {
         stop: stop,
         customerName: order.customer?.C_Name || null,
         time: order.Order_Date,
-        box: boxIds.box,
+        box: boxIds.box, 
         tote: boxIds.tote,
         drink: boxIds.drink,
         startedAt: orderPickData.startedAt,
         completedAt: orderPickData.completedAt,
         invoiced: invoiced,
-        checkerName: checkerName
+        pickerName: pickerName
       };
     });
   
@@ -527,14 +579,15 @@ export class CheckerService {
   }) {
     const { orderNumber, size, boxIds } = data;
 
-    // Get order information
+    // Get order information with customer address details
     const orderHeader = await OrderHeader.findOne({
       where: { Order_Number: orderNumber },
+      attributes: ['Order_Number', 'Order_Date', 'Delivery_Date'],
       include: [
         {
           model: Customer,
           as: 'customer',
-          attributes: ['C_Number', 'C_Name'],
+          attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip'],
           include: [
             {
               model: CustomerRoute,
@@ -577,7 +630,14 @@ export class CheckerService {
     const stop = customer?.Routes?.[0]?.Stop_Number || null;
     const accountNumber = customer?.C_Number || null;
     const customerName = customer?.C_Name || null;
+    const customerAddress = customer?.C_Address || null;
+    const city = customer?.C_City || null;
+    const state = customer?.C_State || null;
+    const zip = customer?.C_Zip || null;
     const orderDate = moment((orderHeader as any).Order_Date).format('MM/DD/YYYY');
+    const deliveryDate = (orderHeader as any).Delivery_Date 
+      ? moment((orderHeader as any).Delivery_Date).format('MM/DD/YYYY')
+      : null;
 
     // Generate PDFs for each box
     const pdfUrls: string[] = [];
@@ -600,24 +660,29 @@ export class CheckerService {
         throw new AppError(`Failed to generate barcode for box ${box.id}`, 500);
       }
 
-      // Get box items if A4 size
-      let boxItems: any[] = [];
-      if (size === 'A4') {
-        boxItems = await this.getBoxItem(box.id);
-      }
+      // Get box items to count them
+      const boxItems = await this.getBoxItem(box.id);
+      const itemCount = boxItems.length;
 
-      // Generate HTML for label
-      const html = this.generateLabelHTML({
+      // Generate HTML for label using size-specific method
+      const html = this.generateLabelHTMLBySize({
         size,
-        date: orderDate,
-        accountNumber: accountNumber?.toString() || 'N/A',
-        customerName: customerName || 'N/A',
         route: route?.toString() || 'N/A',
         stop: stop?.toString() || 'N/A',
-        xOfY,
         barcodeUrl: barcodeResult.url,
         boxId: box.id,
-        boxItems: boxItems,
+        customerName: customerName || 'N/A',
+        customerAddress: customerAddress || undefined,
+        city: city || undefined,
+        state: state || undefined,
+        zip: zip || undefined,
+        custNumber: accountNumber?.toString() || undefined,
+        accountNumber: accountNumber?.toString() || 'N/A',
+        deliveryDate: deliveryDate || undefined,
+        itemCount: itemCount,
+        xOfY,
+        date: orderDate,
+        boxItems: size === 'A4' ? boxItems : undefined,
       });
 
       // Generate PDF
@@ -648,6 +713,1428 @@ export class CheckerService {
       totalBoxes,
       printedBoxes: boxesToPrint.length,
     };
+  }
+
+  /**
+   * Generate label HTML based on size - routes to size-specific layouts
+   */
+  private generateLabelHTMLBySize(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+    date: string;
+    boxItems?: any[];
+  }): string {
+    // Route to size-specific layout methods
+    if (data.size === 'A4') {
+      return this.generateA4LabelHTML({
+        date: data.date,
+        accountNumber: data.accountNumber,
+        customerName: data.customerName,
+        route: data.route,
+        stop: data.stop,
+        xOfY: data.xOfY,
+        barcodeUrl: data.barcodeUrl,
+        boxId: data.boxId,
+        boxItems: data.boxItems || [],
+        customerAddress: data.customerAddress,
+        city: data.city,
+        state: data.state,
+        zip: data.zip,
+        custNumber: data.custNumber,
+        deliveryDate: data.deliveryDate,
+        itemCount: data.itemCount,
+      });
+    }
+    
+    // Size-specific layouts
+    switch (data.size) {
+      case '4x3':
+        return this.generate4x3LabelHTML(data);
+      case '4x6':
+        return this.generate4x6LabelHTML(data);
+      case '3x6':
+        return this.generate3x6LabelHTML(data);
+      case '3x2':
+        return this.generate3x2LabelHTML(data);
+      case '4x4':
+        return this.generate4x4LabelHTML(data);
+      case '2x2':
+        return this.generate2x2LabelHTML(data);
+      case '2x3':
+        return this.generate2x3LabelHTML(data);
+      default:
+        // Fallback to enhanced layout for unknown sizes
+        return this.generateEnhancedLabelHTML(data);
+    }
+  }
+
+  /**
+   * Generate 4x3 label HTML - Compact layout optimized for 4x3 inch labels
+   */
+  private generate4x3LabelHTML(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: 4in 3in;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 4in;
+      height: 3in;
+      font-family: Arial, sans-serif;
+      padding: 0.1in;
+      position: relative;
+    }
+    
+    .label-container {
+      width: 100%;
+      height: 100%;
+      border: 2px solid black;
+      padding: 0.08in;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header-section {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.06in;
+    }
+    
+    .route-stop {
+      font-size: 16pt;
+      font-weight: bold;
+      display: flex;
+      gap: 0.15in;
+    }
+    
+    .route-box, .stop-box {
+      border: 2px solid black;
+      padding: 0.03in 0.1in;
+    }
+    
+    .barcode-section {
+      text-align: center;
+      margin: 0.06in 0;
+    }
+    
+    .barcode-section img {
+      max-width: 85%;
+      height: auto;
+      max-height: 0.5in;
+    }
+    
+    .customer-section {
+      border: 2px solid black;
+      padding: 0.05in;
+      margin-bottom: 0.05in;
+      font-size: 9pt;
+    }
+    
+    .customer-name {
+      font-size: 11pt;
+      font-weight: bold;
+      margin-bottom: 0.03in;
+    }
+    
+    .address-line {
+      font-size: 8pt;
+      margin-bottom: 0.01in;
+    }
+    
+    .cust-number {
+      text-align: right;
+      font-size: 8pt;
+      margin-top: 0.03in;
+    }
+    
+    .bottom-section {
+      margin-top: auto;
+      padding-top: 0.05in;
+    }
+    
+    .info-row {
+      font-size: 8pt;
+      margin-bottom: 0.02in;
+    }
+    
+    .delivery-date {
+      font-size: 9pt;
+      font-weight: bold;
+      margin-bottom: 0.02in;
+    }
+    
+    .item-count {
+      font-size: 8pt;
+    }
+    
+    .box-indicator {
+      text-align: center;
+      font-size: 14pt;
+      font-weight: bold;
+      margin-top: 0.05in;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- Header with Route/Stop -->
+    <div class="header-section">
+      <div class="route-stop">
+        <div class="route-box">ROUTE: ${data.route}</div>
+        <div class="stop-box">STOP: ${data.stop}</div>
+      </div>
+    </div>
+    
+    <!-- Main Barcode -->
+    <div class="barcode-section">
+      <img src="${data.barcodeUrl}" alt="Barcode ${data.boxId}" />
+    </div>
+    
+    <!-- Customer Info Box -->
+    <div class="customer-section">
+      <div class="customer-name">${data.customerName}</div>
+      ${data.customerAddress ? `<div class="address-line">${data.customerAddress}</div>` : ''}
+      ${data.city || data.state || data.zip ? `
+        <div class="address-line">
+          ${data.city || ''}${data.city && data.state ? ', ' : ''}${data.state || ''} ${data.zip || ''}
+        </div>
+      ` : ''}
+      ${data.custNumber ? `<div class="cust-number">Cust #${data.custNumber}</div>` : ''}
+    </div>
+    
+    <!-- Bottom Section -->
+    <div class="bottom-section">
+      <div class="info-row">${data.accountNumber}</div>
+      ${data.deliveryDate ? `<div class="delivery-date">Delivery: ${data.deliveryDate}</div>` : ''}
+      ${data.itemCount !== undefined ? `<div class="item-count">Items: ${data.itemCount}</div>` : ''}
+    </div>
+    
+    <!-- Box Indicator -->
+    <div class="box-indicator">
+      ${data.xOfY}
+    </div>
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Generate 4x6 label HTML - Standard layout for 4x6 inch labels
+   */
+  private generate4x6LabelHTML(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+  }): string {
+    // For now, use enhanced layout - will customize later
+    return this.generateEnhancedLabelHTML(data);
+  }
+
+  /**
+   * Generate 3x6 label HTML - Vertical layout optimized for 3x6 inch labels
+   */
+  private generate3x6LabelHTML(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: 3in 6in;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 3in;
+      height: 6in;
+      font-family: Arial, sans-serif;
+      padding: 0.1in;
+      position: relative;
+    }
+    
+    .label-container {
+      width: 100%;
+      height: 100%;
+      border: 2px solid black;
+      padding: 0.08in;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header-section {
+      margin-bottom: 0.1in;
+    }
+    
+    .route-stop {
+      font-size: 18pt;
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      gap: 0.08in;
+    }
+    
+    .route-box, .stop-box {
+      border: 2px solid black;
+      padding: 0.04in 0.12in;
+      text-align: center;
+    }
+    
+    .barcode-section {
+      text-align: center;
+      margin: 0.1in 0;
+    }
+    
+    .barcode-section img {
+      max-width: 90%;
+      height: auto;
+      max-height: 0.6in;
+    }
+    
+    .box-id {
+      text-align: center;
+      font-size: 12pt;
+      font-weight: bold;
+      margin-top: 0.05in;
+    }
+    
+    .customer-section {
+      border: 2px solid black;
+      padding: 0.06in;
+      margin-bottom: 0.08in;
+      font-size: 10pt;
+    }
+    
+    .customer-name {
+      font-size: 12pt;
+      font-weight: bold;
+      margin-bottom: 0.04in;
+    }
+    
+    .address-line {
+      font-size: 9pt;
+      margin-bottom: 0.02in;
+      line-height: 1.2;
+    }
+    
+    .cust-number {
+      text-align: right;
+      font-size: 9pt;
+      margin-top: 0.04in;
+    }
+    
+    .bottom-section {
+      margin-top: auto;
+      padding-top: 0.08in;
+    }
+    
+    .info-row {
+      font-size: 9pt;
+      margin-bottom: 0.03in;
+    }
+    
+    .delivery-date {
+      font-size: 10pt;
+      font-weight: bold;
+      margin-bottom: 0.03in;
+    }
+    
+    .item-count {
+      font-size: 9pt;
+      margin-bottom: 0.05in;
+    }
+    
+    .box-indicator {
+      text-align: center;
+      font-size: 16pt;
+      font-weight: bold;
+      margin-top: 0.08in;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- Header with Route/Stop (stacked vertically) -->
+    <div class="header-section">
+      <div class="route-stop">
+        <div class="route-box">ROUTE: ${data.route}</div>
+        <div class="stop-box">STOP: ${data.stop}</div>
+      </div>
+    </div>
+    
+    <!-- Main Barcode -->
+    <div class="barcode-section">
+      <img src="${data.barcodeUrl}" alt="Barcode ${data.boxId}" />
+      <div class="box-id">${data.boxId}</div>
+    </div>
+    
+    <!-- Customer Info Box -->
+    <div class="customer-section">
+      <div class="customer-name">${data.customerName}</div>
+      ${data.customerAddress ? `<div class="address-line">${data.customerAddress}</div>` : ''}
+      ${data.city || data.state || data.zip ? `
+        <div class="address-line">
+          ${data.city || ''}${data.city && data.state ? ', ' : ''}${data.state || ''} ${data.zip || ''}
+        </div>
+      ` : ''}
+      ${data.custNumber ? `<div class="cust-number">Cust #${data.custNumber}</div>` : ''}
+    </div>
+    
+    <!-- Bottom Section -->
+    <div class="bottom-section">
+      <div class="info-row">Account: ${data.accountNumber}</div>
+      ${data.deliveryDate ? `<div class="delivery-date">Delivery Date: ${data.deliveryDate}</div>` : ''}
+      ${data.itemCount !== undefined ? `<div class="item-count">Items in Container: ${data.itemCount}</div>` : ''}
+    </div>
+    
+    <!-- Box Indicator -->
+    <div class="box-indicator">
+      ${data.xOfY}
+    </div>
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Generate 3x2 label HTML - Very compact layout optimized for 3x2 inch labels
+   */
+  private generate3x2LabelHTML(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: 3in 2in;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 3in;
+      height: 2in;
+      font-family: Arial, sans-serif;
+      padding: 0.06in;
+      position: relative;
+    }
+    
+    .label-container {
+      width: 100%;
+      height: 100%;
+      border: 2px solid black;
+      padding: 0.05in;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.04in;
+    }
+    
+    .route-stop {
+      font-size: 12pt;
+      font-weight: bold;
+      display: flex;
+      gap: 0.1in;
+    }
+    
+    .route-box, .stop-box {
+      border: 1.5px solid black;
+      padding: 0.02in 0.08in;
+      font-size: 11pt;
+    }
+    
+    .box-indicator-top {
+      font-size: 14pt;
+      font-weight: bold;
+    }
+    
+    .barcode-section {
+      text-align: center;
+      margin: 0.03in 0;
+    }
+    
+    .barcode-section img {
+      max-width: 80%;
+      height: auto;
+      max-height: 0.35in;
+    }
+    
+    .box-id {
+      text-align: center;
+      font-size: 9pt;
+      font-weight: bold;
+      margin-top: 0.02in;
+    }
+    
+    .customer-section {
+      border: 1.5px solid black;
+      padding: 0.03in;
+      margin-bottom: 0.03in;
+      font-size: 7pt;
+    }
+    
+    .customer-name {
+      font-size: 9pt;
+      font-weight: bold;
+      margin-bottom: 0.02in;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .address-line {
+      font-size: 7pt;
+      margin-bottom: 0.01in;
+      line-height: 1.1;
+    }
+    
+    .bottom-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 7pt;
+      margin-top: auto;
+    }
+    
+    .left-info {
+      flex: 1;
+    }
+    
+    .account-number {
+      font-weight: bold;
+      margin-bottom: 0.01in;
+    }
+    
+    .delivery-date {
+      font-size: 7pt;
+      margin-bottom: 0.01in;
+    }
+    
+    .item-count {
+      font-size: 7pt;
+    }
+    
+    .cust-number {
+      font-size: 7pt;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- Top Row: Route/Stop and Box Indicator -->
+    <div class="top-row">
+      <div class="route-stop">
+        <div class="route-box">R:${data.route}</div>
+        <div class="stop-box">S:${data.stop}</div>
+      </div>
+      <div class="box-indicator-top">${data.xOfY}</div>
+    </div>
+    
+    <!-- Barcode -->
+    <div class="barcode-section">
+      <img src="${data.barcodeUrl}" alt="Barcode ${data.boxId}" />
+      <div class="box-id">${data.boxId}</div>
+    </div>
+    
+    <!-- Customer Info Box -->
+    <div class="customer-section">
+      <div class="customer-name">${data.customerName}</div>
+      ${data.customerAddress ? `<div class="address-line">${data.customerAddress}</div>` : ''}
+      ${data.city || data.state || data.zip ? `
+        <div class="address-line">
+          ${data.city || ''}${data.city && data.state ? ', ' : ''}${data.state || ''} ${data.zip || ''}
+        </div>
+      ` : ''}
+    </div>
+    
+    <!-- Bottom Row: Account, Delivery, Items, Cust# -->
+    <div class="bottom-row">
+      <div class="left-info">
+        <div class="account-number">${data.accountNumber}</div>
+        ${data.deliveryDate ? `<div class="delivery-date">Del: ${data.deliveryDate}</div>` : ''}
+        ${data.itemCount !== undefined ? `<div class="item-count">Items: ${data.itemCount}</div>` : ''}
+      </div>
+      ${data.custNumber ? `<div class="cust-number">C#${data.custNumber}</div>` : ''}
+    </div>
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Generate 4x4 label HTML - Square layout optimized for 4x4 inch labels
+   */
+  private generate4x4LabelHTML(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: 4in 4in;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 4in;
+      height: 4in;
+      font-family: Arial, sans-serif;
+      padding: 0.12in;
+      position: relative;
+    }
+    
+    .label-container {
+      width: 100%;
+      height: 100%;
+      border: 2px solid black;
+      padding: 0.1in;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header-section {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.08in;
+    }
+    
+    .route-stop {
+      font-size: 20pt;
+      font-weight: bold;
+      display: flex;
+      gap: 0.18in;
+    }
+    
+    .route-box, .stop-box {
+      border: 2px solid black;
+      padding: 0.04in 0.12in;
+    }
+    
+    .barcode-section {
+      text-align: center;
+      margin: 0.08in 0;
+    }
+    
+    .barcode-section img {
+      max-width: 88%;
+      height: auto;
+      max-height: 0.55in;
+    }
+    
+    .box-id {
+      text-align: center;
+      font-size: 11pt;
+      font-weight: bold;
+      margin-top: 0.04in;
+    }
+    
+    .customer-section {
+      border: 2px solid black;
+      padding: 0.06in;
+      margin-bottom: 0.06in;
+      font-size: 10pt;
+    }
+    
+    .customer-name {
+      font-size: 13pt;
+      font-weight: bold;
+      margin-bottom: 0.04in;
+    }
+    
+    .address-line {
+      font-size: 9pt;
+      margin-bottom: 0.02in;
+      line-height: 1.2;
+    }
+    
+    .cust-number {
+      text-align: right;
+      font-size: 9pt;
+      margin-top: 0.04in;
+    }
+    
+    .bottom-section {
+      margin-top: auto;
+      padding-top: 0.06in;
+    }
+    
+    .info-row {
+      font-size: 9pt;
+      margin-bottom: 0.03in;
+    }
+    
+    .delivery-date {
+      font-size: 10pt;
+      font-weight: bold;
+      margin-bottom: 0.03in;
+    }
+    
+    .item-count {
+      font-size: 9pt;
+      margin-bottom: 0.05in;
+    }
+    
+    .box-indicator {
+      text-align: center;
+      font-size: 16pt;
+      font-weight: bold;
+      margin-top: 0.06in;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- Header with Route/Stop -->
+    <div class="header-section">
+      <div class="route-stop">
+        <div class="route-box">ROUTE: ${data.route}</div>
+        <div class="stop-box">STOP: ${data.stop}</div>
+      </div>
+    </div>
+    
+    <!-- Main Barcode -->
+    <div class="barcode-section">
+      <img src="${data.barcodeUrl}" alt="Barcode ${data.boxId}" />
+      <div class="box-id">${data.boxId}</div>
+    </div>
+    
+    <!-- Customer Info Box -->
+    <div class="customer-section">
+      <div class="customer-name">${data.customerName}</div>
+      ${data.customerAddress ? `<div class="address-line">${data.customerAddress}</div>` : ''}
+      ${data.city || data.state || data.zip ? `
+        <div class="address-line">
+          ${data.city || ''}${data.city && data.state ? ', ' : ''}${data.state || ''} ${data.zip || ''}
+        </div>
+      ` : ''}
+      ${data.custNumber ? `<div class="cust-number">Cust #${data.custNumber}</div>` : ''}
+    </div>
+    
+    <!-- Bottom Section -->
+    <div class="bottom-section">
+      <div class="info-row">${data.accountNumber}</div>
+      ${data.deliveryDate ? `<div class="delivery-date">Delivery Date: ${data.deliveryDate}</div>` : ''}
+      ${data.itemCount !== undefined ? `<div class="item-count">Number of Items in Container: ${data.itemCount}</div>` : ''}
+    </div>
+    
+    <!-- Box Indicator -->
+    <div class="box-indicator">
+      ${data.xOfY}
+    </div>
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Generate 2x2 label HTML - Very compact square layout optimized for 2x2 inch labels
+   */
+  private generate2x2LabelHTML(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+  }): string {
+    // Split customer name into words for better fit
+    const nameWords = data.customerName.split(' ');
+    
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: 2in 2in;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 2in;
+      height: 2in;
+      font-family: Arial, sans-serif;
+      padding: 0.05in;
+      position: relative;
+    }
+    
+    .label-container {
+      width: 100%;
+      height: 100%;
+      border: 2px solid black;
+      padding: 0.04in;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.03in;
+    }
+    
+    .route-stop {
+      font-size: 10pt;
+      font-weight: bold;
+      display: flex;
+      gap: 0.08in;
+    }
+    
+    .route-box, .stop-box {
+      border: 1.5px solid black;
+      padding: 0.015in 0.06in;
+      font-size: 9pt;
+    }
+    
+    .box-indicator-top {
+      font-size: 12pt;
+      font-weight: bold;
+    }
+    
+    .barcode-section {
+      text-align: center;
+      margin: 0.025in 0;
+    }
+    
+    .barcode-section img {
+      max-width: 75%;
+      height: auto;
+      max-height: 0.3in;
+    }
+    
+    .box-id {
+      text-align: center;
+      font-size: 8pt;
+      font-weight: bold;
+      margin-top: 0.015in;
+    }
+    
+    .customer-section {
+      border: 1.5px solid black;
+      padding: 0.025in;
+      margin-bottom: 0.025in;
+      font-size: 6pt;
+    }
+    
+    .customer-name {
+      font-size: 8pt;
+      font-weight: bold;
+      margin-bottom: 0.015in;
+      line-height: 1.1;
+    }
+    
+    .address-line {
+      font-size: 6pt;
+      margin-bottom: 0.01in;
+      line-height: 1.1;
+    }
+    
+    .bottom-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      font-size: 6pt;
+      margin-top: auto;
+    }
+    
+    .left-info {
+      flex: 1;
+    }
+    
+    .account-number {
+      font-weight: bold;
+      margin-bottom: 0.01in;
+    }
+    
+    .delivery-date {
+      font-size: 6pt;
+      margin-bottom: 0.01in;
+    }
+    
+    .item-count {
+      font-size: 6pt;
+    }
+    
+    .cust-number {
+      font-size: 6pt;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- Top Row: Route/Stop and Box Indicator -->
+    <div class="top-row">
+      <div class="route-stop">
+        <div class="route-box">R:${data.route}</div>
+        <div class="stop-box">S:${data.stop}</div>
+      </div>
+      <div class="box-indicator-top">${data.xOfY}</div>
+    </div>
+    
+    <!-- Barcode -->
+    <div class="barcode-section">
+      <img src="${data.barcodeUrl}" alt="Barcode ${data.boxId}" />
+      <div class="box-id">${data.boxId}</div>
+    </div>
+    
+    <!-- Customer Info Box -->
+    <div class="customer-section">
+      <div class="customer-name">${nameWords.map(word => word).join(' ')}</div>
+      ${data.customerAddress ? `<div class="address-line">${data.customerAddress}</div>` : ''}
+      ${data.city || data.state || data.zip ? `
+        <div class="address-line">
+          ${data.city || ''}${data.city && data.state ? ', ' : ''}${data.state || ''} ${data.zip || ''}
+        </div>
+      ` : ''}
+    </div>
+    
+    <!-- Bottom Row: Account, Delivery, Items, Cust# -->
+    <div class="bottom-row">
+      <div class="left-info">
+        <div class="account-number">${data.accountNumber}</div>
+        ${data.deliveryDate ? `<div class="delivery-date">Del: ${data.deliveryDate}</div>` : ''}
+        ${data.itemCount !== undefined ? `<div class="item-count">Items: ${data.itemCount}</div>` : ''}
+      </div>
+      ${data.custNumber ? `<div class="cust-number">C#${data.custNumber}</div>` : ''}
+    </div>
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Generate 2x3 label HTML - Compact vertical layout optimized for 2x3 inch labels
+   */
+  private generate2x3LabelHTML(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+  }): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: 2in 3in;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 2in;
+      height: 3in;
+      font-family: Arial, sans-serif;
+      padding: 0.06in;
+      position: relative;
+    }
+    
+    .label-container {
+      width: 100%;
+      height: 100%;
+      border: 2px solid black;
+      padding: 0.05in;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header-section {
+      margin-bottom: 0.06in;
+    }
+    
+    .route-stop {
+      font-size: 12pt;
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      gap: 0.05in;
+    }
+    
+    .route-box, .stop-box {
+      border: 1.5px solid black;
+      padding: 0.025in 0.08in;
+      text-align: center;
+      font-size: 10pt;
+    }
+    
+    .barcode-section {
+      text-align: center;
+      margin: 0.05in 0;
+    }
+    
+    .barcode-section img {
+      max-width: 85%;
+      height: auto;
+      max-height: 0.4in;
+    }
+    
+    .box-id {
+      text-align: center;
+      font-size: 9pt;
+      font-weight: bold;
+      margin-top: 0.03in;
+    }
+    
+    .customer-section {
+      border: 1.5px solid black;
+      padding: 0.04in;
+      margin-bottom: 0.05in;
+      font-size: 7pt;
+    }
+    
+    .customer-name {
+      font-size: 9pt;
+      font-weight: bold;
+      margin-bottom: 0.025in;
+      line-height: 1.2;
+    }
+    
+    .address-line {
+      font-size: 7pt;
+      margin-bottom: 0.015in;
+      line-height: 1.1;
+    }
+    
+    .cust-number {
+      text-align: right;
+      font-size: 7pt;
+      margin-top: 0.025in;
+    }
+    
+    .bottom-section {
+      margin-top: auto;
+      padding-top: 0.05in;
+    }
+    
+    .info-row {
+      font-size: 7pt;
+      margin-bottom: 0.02in;
+    }
+    
+    .delivery-date {
+      font-size: 8pt;
+      font-weight: bold;
+      margin-bottom: 0.02in;
+    }
+    
+    .item-count {
+      font-size: 7pt;
+      margin-bottom: 0.04in;
+    }
+    
+    .box-indicator {
+      text-align: center;
+      font-size: 13pt;
+      font-weight: bold;
+      margin-top: 0.05in;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- Header with Route/Stop (stacked vertically) -->
+    <div class="header-section">
+      <div class="route-stop">
+        <div class="route-box">ROUTE: ${data.route}</div>
+        <div class="stop-box">STOP: ${data.stop}</div>
+      </div>
+    </div>
+    
+    <!-- Main Barcode -->
+    <div class="barcode-section">
+      <img src="${data.barcodeUrl}" alt="Barcode ${data.boxId}" />
+      <div class="box-id">${data.boxId}</div>
+    </div>
+    
+    <!-- Customer Info Box -->
+    <div class="customer-section">
+      <div class="customer-name">${data.customerName}</div>
+      ${data.customerAddress ? `<div class="address-line">${data.customerAddress}</div>` : ''}
+      ${data.city || data.state || data.zip ? `
+        <div class="address-line">
+          ${data.city || ''}${data.city && data.state ? ', ' : ''}${data.state || ''} ${data.zip || ''}
+        </div>
+      ` : ''}
+      ${data.custNumber ? `<div class="cust-number">Cust #${data.custNumber}</div>` : ''}
+    </div>
+    
+    <!-- Bottom Section -->
+    <div class="bottom-section">
+      <div class="info-row">${data.accountNumber}</div>
+      ${data.deliveryDate ? `<div class="delivery-date">Delivery Date: ${data.deliveryDate}</div>` : ''}
+      ${data.itemCount !== undefined ? `<div class="item-count">Number of Items In Container: ${data.itemCount}</div>` : ''}
+    </div>
+    
+    <!-- Box Indicator -->
+    <div class="box-indicator">
+      ${data.xOfY}
+    </div>
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Generate enhanced HTML for label with improved layout
+   */
+  private generateEnhancedLabelHTML(data: {
+    size: string;
+    route: string;
+    stop: string;
+    barcodeUrl: string;
+    boxId: number;
+    customerName: string;
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    accountNumber: string;
+    deliveryDate?: string;
+    itemCount?: number;
+    xOfY: string;
+  }): string {
+    const dimensions = this.getLabelDimensions(data.size);
+    const width = dimensions.width;
+    const height = dimensions.height;
+
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: ${width}in ${height}in;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: ${width}in;
+      height: ${height}in;
+      font-family: Arial, sans-serif;
+      padding: 0.15in;
+      position: relative;
+    }
+    
+    .label-container {
+      width: 100%;
+      height: 100%;
+      border: 2px solid black;
+      padding: 0.1in;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header-section {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.1in;
+    }
+    
+    .route-stop {
+      font-size: 24pt;
+      font-weight: bold;
+      display: flex;
+      gap: 0.2in;
+    }
+    
+    .route-box, .stop-box {
+      border: 2px solid black;
+      padding: 0.05in 0.15in;
+    }
+    
+    .barcode-section {
+      text-align: center;
+      margin: 0.1in 0;
+    }
+    
+    .barcode-section img {
+      max-width: 90%;
+      height: auto;
+    }
+    
+    .customer-section {
+      border: 2px solid black;
+      padding: 0.08in;
+      margin-bottom: 0.08in;
+      font-size: 11pt;
+      font-weight: bold;
+    }
+    
+    .customer-name {
+      font-size: 14pt;
+      margin-bottom: 0.05in;
+    }
+    
+    .address-line {
+      font-size: 10pt;
+      margin-bottom: 0.02in;
+    }
+    
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.05in;
+      font-size: 10pt;
+    }
+    
+    .cust-number {
+      text-align: right;
+      font-size: 10pt;
+      margin-top: 0.05in;
+    }
+    
+    .bottom-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: auto;
+      padding-top: 0.1in;
+    }
+    
+    .left-info {
+      flex: 1;
+    }
+    
+    .delivery-date {
+      font-size: 11pt;
+      font-weight: bold;
+      margin-bottom: 0.05in;
+    }
+    
+    .item-count {
+      font-size: 10pt;
+    }
+    
+    .box-indicator {
+      text-align: center;
+      font-size: 18pt;
+      font-weight: bold;
+      margin-top: 0.1in;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- Header with Route/Stop -->
+    <div class="header-section">
+      <div class="route-stop">
+        <div class="route-box">ROUTE: ${data.route}</div>
+        <div class="stop-box">STOP: ${data.stop}</div>
+      </div>
+    </div>
+    
+    <!-- Main Barcode -->
+    <div class="barcode-section">
+      <img src="${data.barcodeUrl}" alt="Barcode ${data.boxId}" />
+    </div>
+    
+    <!-- Customer Info Box -->
+    <div class="customer-section">
+      <div class="customer-name">${data.customerName}</div>
+      ${data.customerAddress ? `<div class="address-line">${data.customerAddress}</div>` : ''}
+      ${data.city || data.state || data.zip ? `
+        <div class="address-line">
+          ${data.city || ''}${data.city && data.state ? ', ' : ''}${data.state || ''} ${data.zip || ''}
+        </div>
+      ` : ''}
+      ${data.custNumber ? `<div class="cust-number">Cust #${data.custNumber}</div>` : ''}
+    </div>
+    
+    <!-- Bottom Section -->
+    <div class="bottom-section">
+      <div class="left-info">
+        <div class="info-row">
+          <span>${data.accountNumber}</span>
+        </div>
+        ${data.deliveryDate ? `<div class="delivery-date">Delivery Date: ${data.deliveryDate}</div>` : ''}
+        ${data.itemCount !== undefined ? `<div class="item-count">Number of Items in Container: ${data.itemCount}</div>` : ''}
+      </div>
+    </div>
+    
+    <!-- Box Indicator -->
+    <div class="box-indicator">
+      ${data.xOfY}
+    </div>
+  </div>
+</body>
+</html>
+    `;
   }
 
   /**
@@ -815,8 +2302,32 @@ export class CheckerService {
     barcodeUrl: string;
     boxId: number;
     boxItems?: any[];
+    customerAddress?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    custNumber?: string;
+    deliveryDate?: string;
+    itemCount?: number;
   }): string {
-    const { date, accountNumber, customerName, route, stop, xOfY, barcodeUrl, boxId, boxItems = [] } = data;
+    const { 
+      date, 
+      accountNumber, 
+      customerName, 
+      route, 
+      stop, 
+      xOfY, 
+      barcodeUrl, 
+      boxId, 
+      boxItems = [],
+      customerAddress,
+      city,
+      state,
+      zip,
+      custNumber,
+      deliveryDate,
+      itemCount
+    } = data;
 
     const itemsRows = boxItems.map((item: any) => `
       <tr>
@@ -827,158 +2338,229 @@ export class CheckerService {
     `).join('');
 
     return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-          body {
-            font-family: Arial, sans-serif;
-            padding: 15px;
-            margin: 0;
-          }
-          .top-section {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-          }
-          .date-left {
-            font-size: 14px;
-            font-weight: bold;
-            line-height: 1.5;
-          }
-          .account-customer {
-            text-align: right;
-          }
-          .account-label {
-            font-size: 10px;
-            display: block;
-          }
-          .account-value {
-            font-size: 16px;
-            font-weight: bold;
-            display: block;
-            margin-bottom: 5px;
-          }
-          .customer-name {
-            font-size: 14px;
-            display: block;
-          }
-          .route-stop {
-            font-size: 12px;
-            text-align: center;
-            margin: 10px 0;
-            padding: 5px 0;
-          }
-          .barcode-section {
-            text-align: center;
-            margin: 20px 0;
-            padding: 15px 0;
-          }
-          .barcode-img {
-            max-width: 300px;
-            height: auto;
-            margin-bottom: 10px;
-          }
-          .box-id-large {
-            text-align: center;
-            font-size: 32px;
-            font-weight: bold;
-            margin: 10px 0;
-          }
-          .box-id-medium {
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            margin: 5px 0;
-          }
-          .x-of-y {
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-            margin: 15px 0;
-            padding: 10px 0;
-          }
-          .box-id-label {
-            text-align: center;
-            font-size: 12px;
-            margin-bottom: 15px;
-          }
-          .items-section {
-            margin-top: 20px;
-          }
-          .items-title {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            text-align: center;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-            font-size: 11px;
-          }
-          th {
-            background-color: #f5f5f5;
-            font-weight: bold;
-            text-align: center;
-            padding: 10px 8px;
-          }
-          td {
-            padding: 8px;
-          }
-          .no-items {
-            text-align: center;
-            padding: 20px;
-            color: #666;
-            font-style: italic;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="top-section">
-          <div class="date-left">${date}</div>
-          <div class="account-customer">
-            <span class="account-label">Account</span>
-            <span class="account-value">#: ${accountNumber}</span>
-            <span class="customer-name" style="margin-left: 8px;">${customerName}</span>
-          </div>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: A4;
+      margin: 15mm;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      padding: 15px;
+      margin: 0;
+    }
+    
+    .label-container {
+      width: 100%;
+      min-height: 100%;
+      border: 2px solid black;
+      padding: 0.2in;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header-section {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.15in;
+    }
+    
+    .route-stop {
+      font-size: 24pt;
+      font-weight: bold;
+      display: flex;
+      gap: 0.2in;
+    }
+    
+    .route-box, .stop-box {
+      border: 2px solid black;
+      padding: 0.05in 0.15in;
+    }
+    
+    .barcode-section {
+      text-align: center;
+      margin: 0.15in 0;
+    }
+    
+    .barcode-img {
+      max-width: 400px;
+      height: auto;
+      margin-bottom: 10px;
+    }
+    
+    .box-id {
+      text-align: center;
+      font-size: 14pt;
+      font-weight: bold;
+      margin-top: 0.05in;
+    }
+    
+    .customer-section {
+      border: 2px solid black;
+      padding: 0.1in;
+      margin-bottom: 0.15in;
+      font-size: 12pt;
+    }
+    
+    .customer-name {
+      font-size: 16pt;
+      font-weight: bold;
+      margin-bottom: 0.06in;
+    }
+    
+    .address-line {
+      font-size: 11pt;
+      margin-bottom: 0.03in;
+      line-height: 1.3;
+    }
+    
+    .cust-number {
+      text-align: right;
+      font-size: 11pt;
+      margin-top: 0.06in;
+    }
+    
+    .info-section {
+      margin-bottom: 0.15in;
+      font-size: 11pt;
+    }
+    
+    .info-row {
+      margin-bottom: 0.05in;
+    }
+    
+    .delivery-date {
+      font-size: 12pt;
+      font-weight: bold;
+      margin-bottom: 0.05in;
+    }
+    
+    .item-count {
+      font-size: 11pt;
+      margin-bottom: 0.1in;
+    }
+    
+    .box-indicator {
+      text-align: center;
+      font-size: 20pt;
+      font-weight: bold;
+      margin-bottom: 0.15in;
+    }
+    
+    .items-section {
+      margin-top: 0.2in;
+    }
+    
+    .items-title {
+      font-size: 18pt;
+      font-weight: bold;
+      margin-bottom: 0.1in;
+      text-align: center;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.1in;
+      font-size: 11pt;
+      border: 1px solid black;
+    }
+    
+    th {
+      background-color: #f5f5f5;
+      font-weight: bold;
+      text-align: center;
+      padding: 12px 10px;
+      border: 1px solid black;
+    }
+    
+    td {
+      padding: 10px;
+      border: 1px solid black;
+    }
+    
+    .no-items {
+      text-align: center;
+      padding: 30px;
+      color: #666;
+      font-style: italic;
+      font-size: 12pt;
+    }
+  </style>
+</head>
+<body>
+  <div class="label-container">
+    <!-- Header with Route/Stop -->
+    <div class="header-section">
+      <div class="route-stop">
+        <div class="route-box">ROUTE: ${route}</div>
+        <div class="stop-box">STOP: ${stop}</div>
+      </div>
+    </div>
+    
+    <!-- Main Barcode -->
+    <div class="barcode-section">
+      <img src="${barcodeUrl}" alt="Barcode ${boxId}" class="barcode-img" />
+      <div class="box-id">${boxId}</div>
+    </div>
+    
+    <!-- Customer Info Box -->
+    <div class="customer-section">
+      <div class="customer-name">${customerName}</div>
+      ${customerAddress ? `<div class="address-line">${customerAddress}</div>` : ''}
+      ${city || state || zip ? `
+        <div class="address-line">
+          ${city || ''}${city && state ? ', ' : ''}${state || ''} ${zip || ''}
         </div>
-        <div class="route-stop">Route: ${route} | Stop: ${stop}</div>
-        <div class="barcode-section">
-          <img src="${barcodeUrl}" alt="Barcode" class="barcode-img" />
-        </div>
-        <div class="x-of-y">${xOfY}</div>
-      
-        
-        <div class="items-section">
-          <div class="items-title">Box Items</div>
-          ${boxItems.length > 0 ? `
-            <table>
-              <thead>
-                <tr>
-                  <th>Item Number</th>
-                  <th>Description</th>
-                  <th>Qty</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${itemsRows}
-              </tbody>
-            </table>
-          ` : `
-            <div class="no-items">No items found in this box</div>
-          `}
-        </div>
-      </body>
-      </html>
+      ` : ''}
+      ${custNumber ? `<div class="cust-number">Cust #${custNumber}</div>` : ''}
+    </div>
+    
+    <!-- Info Section -->
+    <div class="info-section">
+      <div class="info-row">Account: ${accountNumber}</div>
+      ${deliveryDate ? `<div class="delivery-date">Delivery Date: ${deliveryDate}</div>` : ''}
+      ${itemCount !== undefined ? `<div class="item-count">Number of Items in Container: ${itemCount}</div>` : ''}
+    </div>
+    
+    <!-- Box Indicator -->
+    <div class="box-indicator">
+      ${xOfY}
+    </div>
+    
+    <!-- Items Table Section -->
+    <div class="items-section">
+      <div class="items-title">Box Items</div>
+      ${boxItems.length > 0 ? `
+        <table>
+          <thead>
+            <tr>
+              <th>Item Number</th>
+              <th>Description</th>
+              <th>Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRows}
+          </tbody>
+        </table>
+      ` : `
+        <div class="no-items">No items found in this box</div>
+      `}
+    </div>
+  </div>
+</body>
+</html>
     `;
   }
 
@@ -1397,6 +2979,127 @@ export class CheckerService {
     } finally {
       await browser.close();
     }
+  }
+
+  /**
+   * Generate test label for a specific size or all sizes
+   * Returns PDF URL(s) for sample label(s)
+   * Useful for previewing label layouts
+   * @param size - Optional. If provided, generates only that size. If not, generates all sizes.
+   */
+  async generateTestLabels(size?: '4x3' | '4x6' | '3x6' | '3x2' | '4x4' | '2x2' | '2x3' | 'A4') {
+    const allSizes: Array<'4x3' | '4x6' | '3x6' | '3x2' | '4x4' | '2x2' | '2x3' | 'A4'> = [
+      '4x3', '4x6', '3x6', '3x2', '4x4', '2x2', '2x3', 'A4'
+    ];
+    
+    // If size is provided, only generate that size
+    const sizesToGenerate = size ? [size] : allSizes;
+
+    // Sample data for testing
+    const sampleData = {
+      date: moment().format('MM/DD/YYYY'),
+      accountNumber: '12345',
+      customerName: 'Test Customer Name',
+      route: '10',
+      stop: '5',
+      xOfY: '1 of 3',
+      boxId: 999,
+      boxItems: [
+        { itemNumber: 1001, description: 'Sample Item 1', qty: 5 },
+        { itemNumber: 1002, description: 'Sample Item 2', qty: 3 },
+        { itemNumber: 1003, description: 'Sample Item 3', qty: 2 },
+      ]
+    };
+
+    const results: any[] = [];
+
+    for (const size of sizesToGenerate) {
+      try {
+        // Generate barcode for test box
+        const barcodeResult = await generateBarcodeAndUpload(sampleData.boxId.toString(), {
+          folderName: 'checker/barcodes',
+          type: 'code128',
+          includeText: true,
+          scale: 3,
+          height: 12,
+        });
+
+        if (!barcodeResult.success || !barcodeResult.url) {
+          results.push({
+            size,
+            success: false,
+            error: 'Failed to generate barcode'
+          });
+          continue;
+        }
+
+        // Generate HTML for label using size-specific method
+        const html = this.generateLabelHTMLBySize({
+          size,
+          route: sampleData.route,
+          stop: sampleData.stop,
+          barcodeUrl: barcodeResult.url,
+          boxId: sampleData.boxId,
+          customerName: sampleData.customerName,
+          customerAddress: '123 Test Street',
+          city: 'Test City',
+          state: 'TS',
+          zip: '12345',
+          custNumber: sampleData.accountNumber,
+          accountNumber: sampleData.accountNumber,
+          deliveryDate: sampleData.date,
+          itemCount: sampleData.boxItems.length,
+          xOfY: sampleData.xOfY,
+          date: sampleData.date,
+          boxItems: size === 'A4' ? sampleData.boxItems : undefined,
+        });
+
+        // Generate PDF
+        const pdfBuffer = await this.generateLabelPDF(html, size);
+
+        // Upload to Azure
+        const fileName = `test-label-${size}-${Date.now()}.pdf`;
+        const uploadResult = await uploadFileToAzure(
+          pdfBuffer,
+          fileName,
+          'application/pdf',
+          'checker/labels'
+        );
+
+        if (uploadResult.success && uploadResult.url) {
+          results.push({
+            size,
+            success: true,
+            pdfUrl: uploadResult.url,
+            dimensions: this.getLabelDimensions(size),
+            description: size === 'A4' 
+              ? 'A4 paper size with items table'
+              : `${this.getLabelDimensions(size).width}" × ${this.getLabelDimensions(size).height}" label`
+          });
+        } else {
+          results.push({
+            size,
+            success: false,
+            error: 'Failed to upload PDF'
+          });
+        }
+      } catch (error: any) {
+        results.push({
+          size,
+          success: false,
+          error: error.message || 'Unknown error'
+        });
+      }
+    }
+
+    return {
+      success: true,
+      message: size ? `Test label generated for size ${size}` : 'Test labels generated for all sizes',
+      labels: results,
+      totalSizes: sizesToGenerate.length,
+      successful: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length
+    };
   }
 
   /**
