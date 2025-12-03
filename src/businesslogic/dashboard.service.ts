@@ -188,7 +188,7 @@ export class DashboardService {
                     let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, userId, price + taxRate);
 
                     let prepaidTaxRate = 0
-                    console.log(e, 'e.Sales_Category')
+                    console.log(e, 'e.Sales_Category_______DASHBOARD')
                     if (userJurisdiction != null && e.SalesCategory) {
 
                         console.log(e, 'e.Sales_Category')
@@ -214,7 +214,8 @@ export class DashboardService {
                         NetCost: e.NetCost,
                         hasProductLimit: productLimit ? true : false,
                         productLimit,
-
+                        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+                        prepaidTaxRate: prepaidTaxRate,
 
                         showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
                         showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
@@ -653,7 +654,7 @@ export class DashboardService {
                     const orderHistoryItem: any = top10CustomerOrderHistory.find((item: any) => item.Item_Number === e.Item_Number);
 
                     let prepaidTaxRate = 0
-                    console.log(e, 'e.Sales_Category')
+                    console.log(e, 'e.Sales_Category--->')
                     if (userJurisdiction != null && e.SalesCategory) {
 
                         console.log(e, 'e.Sales_Category')
@@ -683,8 +684,7 @@ export class DashboardService {
                         showPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
                         allowToOrderSalesRep: allowToOrderSalesRep || null,
                         showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
-
-
+                       
                         hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
                         qtyDiscount: hasQtyDiscount,
 
@@ -1046,6 +1046,8 @@ export class DashboardService {
 
 
                 if (userJurisdiction != null && e.SalesCategory) {
+
+                    console.log(e,'the e',e?.SalesCategory?.Sales_Category,'e?.SalesCategory?.Sales_Category')
                     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
                 }
             } else if (role === 'sales' && customerNumber) {
