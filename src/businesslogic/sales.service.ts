@@ -913,7 +913,7 @@ export class SalesService {
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc'],
+          attributes: ['Category_Desc','Sales_Category'],
           required: false
         },
         {
@@ -976,10 +976,10 @@ export class SalesService {
       const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId,price + taxRate);
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
-      console.log(e,'e.Sales_Category',userJurisdiction,'userJurisdiction')
+      console.log(e.SalesCategory?.Sales_Category,'e.Sales_Category',userJurisdiction,'userJurisdiction')
      let prepaidTaxRate = 0
-      if(userJurisdiction !=null){
-       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.Sales_Category);
+      if(userJurisdiction !=null && e.SalesCategory?.Sales_Category){
+       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number);
       }
     
      
@@ -1165,7 +1165,7 @@ export class SalesService {
       ],
       where: whereClause,
       include: [
-        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc"], required: false },
+        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc","Sales_Category"], required: false },
         { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
         { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
         includeUPC,
@@ -1219,6 +1219,12 @@ export class SalesService {
         }
   
         const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+
+        let prepaidTaxRate = 0
+        console.log(e.SalesCategory?.Sales_Category,'e.SalesCategory?.Sales_Category----->SALES',userJurisdiction,'userJurisdiction')
+        if(userJurisdiction !=null && e.SalesCategory){
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number);
+        }
   
         return {
           Pack: e.Pack,
@@ -1228,6 +1234,8 @@ export class SalesService {
           UOM: e.UOM,
           isDiscounted,
           Price1: e.Price1,
+          hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+          prepaidTaxRate: prepaidTaxRate,
           Tax_Rate: taxRate,
           OTP_Number: e.OTP_Number,
           price,
