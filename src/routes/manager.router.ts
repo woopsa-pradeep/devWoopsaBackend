@@ -211,6 +211,8 @@ router.put('/edit-upc-number/:key', verifyRole(ROLES.MANAGER), catchAsync(manage
 //vendor CRUD routes
 router.post('/create-vendor', verifyRole(ROLES.MANAGER), catchAsync(managerController.createVendor.bind(managerController)));
 router.put('/updateVendor/:id', verifyRole(ROLES.MANAGER),  catchAsync(managerController.updateVendor.bind(managerController)));
+router.get('/vendor/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getVendorById.bind(managerController)));
+router.get('/customer/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getCustomerDetailsById.bind(managerController)));
 
 //ERPUser CRUD routes
 router.post('/createErpUser' ,validateRequest(createErpUserSchema),catchAsync(managerController.createErpUser.bind(managerController)));

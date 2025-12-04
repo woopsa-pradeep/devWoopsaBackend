@@ -67,7 +67,7 @@ WebUsers.init(
       allowNull: false,
       defaultValue: "user",
       validate: {
-        isIn: [["epick", "sales", "driver"]],
+        isIn: [["epick", "sales", "driver","checker"]],
       },
     },
     userNumber: {

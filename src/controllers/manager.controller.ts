@@ -939,4 +939,15 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Vendor updated successfully')
   }
 
+  async getVendorById(req: AuthRequest, res: Response){
+    const data = await this.managerService.getVendorById(Number(req.params.id))
+    sendResponse(res, 200, true, data, 'Vendor retrieved successfully')
+  }
+  async getCustomerDetailsById(req: AuthRequest, res: Response){
+    const data = await this.managerService.getCustomerDetailsById(Number(req.params.id))
+    sendResponse(res, 200, true, data, 'Customer details retrieved successfully')
+  }
+
+
+
 }

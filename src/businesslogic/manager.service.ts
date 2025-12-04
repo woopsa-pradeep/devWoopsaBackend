@@ -4520,5 +4520,20 @@ async getAllEpickSettings(query: PaginationOptions) {
   }
 
   
+  async getVendorById(id: number) {
+    const vendor = await Vendor.findOne({where:{Primary_Vendor:id}});
+    if (!vendor) {
+      throw new AppError('Vendor not found', 404);
+    }
+    return vendor;
+  }
+
+  async getCustomerDetailsById(id: number) {
+    const customer = await Customer.findOne({where:{C_Number:id}});
+    if (!customer) {
+      throw new AppError('Customer not found', 404);
+    }
+    return customer;
+  }
 
 } 
