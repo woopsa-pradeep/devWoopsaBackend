@@ -48,6 +48,8 @@ import { sendMultiFCMNotification } from "../utils/sentNotification";
 import Policies from "../models/postgres/policies.model";
 import { WebUsers } from "../models/postgres/users.model";
 import { ContactUs } from "../models/postgres/contactUs.model";
+import { postgresSequelize } from "../db";
+import { QueryTypes } from "sequelize";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { Users } from "../models/mmsql/user.model";
 import { sendResponse } from "../utils/sendResponse";
@@ -1931,6 +1933,24 @@ export class RetailerService {
       };
     }));
 
+    // Get checker images from OrderPickBox using raw SQL query for better performance
+    const checkerImagesResult = await postgresSequelize.query(
+      `SELECT jsonb_array_elements_text(images) as image_url
+       FROM "Order_Pick_Box"
+       WHERE "orderNumber" = :orderNumber
+         AND images IS NOT NULL
+         AND jsonb_typeof(images) = 'array'`,
+      {
+        replacements: { orderNumber },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // Extract image URLs from query result
+    const checkerImages: string[] = (checkerImagesResult as any[])
+      .map((row: any) => row?.image_url)
+      .filter((url: any) => url && typeof url === 'string');
+
     return {
       orderHeader: {
         ...orderHeader?.toJSON(),
@@ -1942,7 +1962,8 @@ export class RetailerService {
       page,
       limit,
       totalPages: Math.ceil(totalCount / limit),
-      data: orderDetailsWithImages
+      data: orderDetailsWithImages,
+      checkerImages: checkerImages
     };
   }
 

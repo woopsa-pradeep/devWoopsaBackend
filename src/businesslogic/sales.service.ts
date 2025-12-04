@@ -40,9 +40,10 @@ import SalesCallTime from "../models/postgres/salesCallTime.model";
 import SalesNote from "../models/postgres/salesNotes";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { OrderConfirmation } from "../models/postgres/orderConfirmation.model";
-import { sequelize } from "../db";
+import { sequelize, postgresSequelize } from "../db";
 import { Users } from "../models/mmsql/user.model";
 import { RecordLock } from "../models/mmsql/recordLocks.model";
+import { QueryTypes } from "sequelize";
 
 export class SalesService {
 
@@ -616,6 +617,24 @@ export class SalesService {
       };
     }));
 
+    // Get checker images from OrderPickBox using raw SQL query for better performance
+    const checkerImagesResult = await postgresSequelize.query(
+      `SELECT jsonb_array_elements_text(images) as image_url
+       FROM "Order_Pick_Box"
+       WHERE "orderNumber" = :orderNumber
+         AND images IS NOT NULL
+         AND jsonb_typeof(images) = 'array'`,
+      {
+        replacements: { orderNumber },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // Extract image URLs from query result
+    const checkerImages: string[] = (checkerImagesResult as any[])
+      .map((row: any) => row?.image_url)
+      .filter((url: any) => url && typeof url === 'string');
+
     return {
       orderHeader: {
         ...orderHeader?.toJSON(),
@@ -627,7 +646,8 @@ export class SalesService {
       page,
       limit,
       totalPages: Math.ceil(totalCount / limit),
-      data: orderDetailsWithImages
+      data: orderDetailsWithImages,
+      checkerImages: checkerImages
     };
   }
   // async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {

@@ -820,6 +820,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, "ERP Users fetched successfully");
   }
 
+  async getAllCheckerUsers(req: AuthRequest, res: Response){
+    const data = await this.managerService.getAllCheckerUsers();
+    sendResponse(res, 200, true, data, "Checker users fetched successfully");
+  }
+
    async getErpUserById(req: AuthRequest, res: Response){
     const data = await this.managerService.getErpUserById(Number(req.params.id))
     sendResponse(res, 200, true, data, "ERP User fetched successfully");

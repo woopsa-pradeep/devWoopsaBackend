@@ -217,6 +217,9 @@ router.get('/erp-users' , verifyRole(ROLES.MANAGER), catchAsync(managerControlle
 router.get('/erpuser/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getErpUserById.bind(managerController)))
 router.put('/updateErpUser/:id', validateRequest(updateErpUserSchema),catchAsync(managerController.updateErpUser.bind(managerController)));
 
+//Checker Users routes
+router.get('/checker-users', verifyRole(ROLES.MANAGER), catchAsync(managerController.getAllCheckerUsers.bind(managerController)));
+
 // InventoryUPC CRUD routes
 router.post('/inventory-upc', verifyRole(ROLES.MANAGER), validateRequest(createInventoryUPCSchema), catchAsync(managerController.createInventoryUPC.bind(managerController)));
 router.get('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryUPCById.bind(managerController)));

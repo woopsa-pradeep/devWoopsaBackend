@@ -72,6 +72,9 @@ import settings from "../models/postgres/setting.model"
 import { emailNotificationQueue } from "../configuration/config";
 import { markAsUntransferable } from "worker_threads";
 import { PriceSubclass_Defs } from "../models/mmsql/priceSubClassDefs.model";
+import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
+import { postgresSequelize } from "../db";
+import { QueryTypes } from "sequelize";
 
 export class ManagerService {
 
@@ -1808,6 +1811,24 @@ export class ManagerService {
       };
     }));
 
+    // Get checker images from OrderPickBox using raw SQL query for better performance
+    const checkerImagesResult = await postgresSequelize.query(
+      `SELECT jsonb_array_elements_text(images) as image_url
+       FROM "Order_Pick_Box"
+       WHERE "orderNumber" = :orderNumber
+         AND images IS NOT NULL
+         AND jsonb_typeof(images) = 'array'`,
+      {
+        replacements: { orderNumber },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    // Extract image URLs from query result
+    const checkerImages: string[] = (checkerImagesResult as any[])
+      .map((row: any) => row?.image_url)
+      .filter((url: any) => url && typeof url === 'string');
+
     return {
       orderHeader: {
         ...orderHeader?.toJSON(),
@@ -1819,7 +1840,8 @@ export class ManagerService {
       page,
       limit,
       totalPages: Math.ceil(totalCount / limit),
-      data: orderDetailsWithImages
+      data: orderDetailsWithImages,
+      checkerImages: checkerImages
     };
   }
 
@@ -4204,6 +4226,19 @@ export class ManagerService {
 
     return userList;
 }       
+
+  async getAllCheckerUsers() {
+    const checkerUsers = await WebUsers.findAll({
+      where: {
+        role: "checker",
+        isActive: true,
+      },
+      attributes: ["email", "firstName", "lastName", "userNumber"],
+      order: [["userNumber", "ASC"]],
+    });
+
+    return checkerUsers;
+  }
 
 async getErpUserById(id: number){
     const erpUser  = await Users.findByPk(id)
