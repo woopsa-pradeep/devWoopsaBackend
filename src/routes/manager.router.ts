@@ -204,8 +204,9 @@ router.post('/uploadAttachment', verifyRole(ROLES.MANAGER), multerUpload.single(
 router.post('/email-marketing/:id/send', verifyRole(ROLES.MANAGER), catchAsync(managerController.sendEmailToCampaign.bind(managerController)));
 
 // Inventory CRUD routes
-router.post('/create-inventory', catchAsync(managerController.createInventory.bind(managerController)));
-router.put('/edit-inventory/:id', catchAsync(managerController.editInventory.bind(managerController)));
+router.post('/create-inventory',verifyRole(ROLES.MANAGER), catchAsync(managerController.createInventory.bind(managerController)));
+router.put('/edit-inventory/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.editInventory.bind(managerController)));
+router.put('/edit-upc-number/:key', verifyRole(ROLES.MANAGER), catchAsync(managerController.editUpcNumber.bind(managerController)));
 
 //vendor CRUD routes
 router.post('/create-vendor', verifyRole(ROLES.MANAGER), catchAsync(managerController.createVendor.bind(managerController)));
@@ -223,6 +224,7 @@ router.get('/checker-users', verifyRole(ROLES.MANAGER), catchAsync(managerContro
 // InventoryUPC CRUD routes
 router.post('/inventory-upc', verifyRole(ROLES.MANAGER), validateRequest(createInventoryUPCSchema), catchAsync(managerController.createInventoryUPC.bind(managerController)));
 router.get('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryUPCById.bind(managerController)));
+router.get('/inventory/:itemNumber', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryByItemNumber.bind(managerController)));
 router.get('/inventoryForReport',  catchAsync(managerController.getInventoryForReport.bind(managerController)));
 router.put('/inventory-upc/:id', verifyRole(ROLES.MANAGER), validateRequest(updateInventoryUPCSchema), catchAsync(managerController.updateInventoryUPC.bind(managerController)));
 router.delete('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteInventoryUPC.bind(managerController)));

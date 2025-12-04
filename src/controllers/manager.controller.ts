@@ -835,10 +835,20 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Inventory edited successfully');
   }
 
+  async editUpcNumber(req: AuthRequest, res: Response) {
+    const data = await this.managerService.editUpcNumber(Number(req.params.key), req.body.upcNumber);
+    sendResponse(res, 200, true, data, 'UPC number edited successfully');
+  }
+
   // InventoryUPC CRUD controller methods
   async createInventoryUPC(req: AuthRequest, res: Response) {
     const data = await this.managerService.createInventoryUPC(req.body);
     sendResponse(res, 201, true, data, 'InventoryUPC created successfully');
+  }
+
+  async getInventoryByItemNumber(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryByItemNumber(Number(req.params.itemNumber));
+    sendResponse(res, 200, true, data, 'Inventory retrieved successfully');
   }
 
   async getInventoryUPCById(req: AuthRequest, res: Response) {

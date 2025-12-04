@@ -4268,6 +4268,34 @@ async getErpUserById(id: number){
     return inventory;
   }
 
+  async editUpcNumber(key: number, upcNumber: string) {
+    const inventoryUPC = await InventoryUPC.findOne({
+      where: { myKey: key, UPC_Number: upcNumber },
+    });
+    if (!inventoryUPC) {
+      throw new AppError('InventoryUPC not found', 404);
+    }
+    await inventoryUPC.update({ UPC_Number: upcNumber });
+        return inventoryUPC;
+  }
+
+  async getInventoryByItemNumber(itemNumber: number) {
+    const inventory = await Inventory.findOne({
+      where: { Item_Number: itemNumber },
+      include: [
+        {
+          model: InventoryUPC,
+          as: 'UPCList',
+          attributes: ['UPC_Number'],
+        },
+      ],
+    });
+    if (!inventory) {
+      throw new AppError('Inventory not found', 404);
+    }
+    return inventory;
+  }
+
   // InventoryUPC CRUD service methods
   async createInventoryUPC(body: any) {
     const inventoryUPC = await InventoryUPC.create(body);
