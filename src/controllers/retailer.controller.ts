@@ -36,6 +36,17 @@ export class RetailerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async createInventoryLocation(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.createInventoryLocation(req.body);
+    sendResponse(res, 201, true, data, 'Inventory location created successfully');
+  }
+
+  async updateInventoryLocation(req: AuthRequest, res: Response) {
+    const id = Number(req.params.id);
+    const data = await this.retailerService.updateInventoryLocation(id, req.body);
+    sendResponse(res, 200, true, data, 'Inventory location updated successfully');
+  }
+
   async getBannerData(req: AuthRequest, res: Response) {
     const data = await this.retailerService.getBannerData();
     sendResponse(res, 200, true, data, General.SUCCESS);

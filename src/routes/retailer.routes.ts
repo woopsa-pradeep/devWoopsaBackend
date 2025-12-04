@@ -17,6 +17,7 @@ import {
 } from '../validations/retailer.validation';
 import { placeOrderSchema } from '../validations/order.validation';
 import { multerUpload } from '../middlewares/upload.middleware';
+import { createInventoryLocationSchema, updateInventoryLocationSchema } from '../validations/manager.validation';
 
 
 const  router = Router();
@@ -104,6 +105,10 @@ router.post('/cart/addMultipleItems',verifyRole(ROLES.RETAILER),catchAsync(retai
 router.post('/addCartByScanner/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.addToCartByScanner.bind(retailerController)));
 router.get('/addCartMultiScanner',validateRequest(addToCartMultiScannerValidation),verifyRole(ROLES.RETAILER),catchAsync(retailerController.addToCartMultiScanner.bind(retailerController)));
 
+// InventoryLocation CRUD routes for retailers
+router.post('/inventory-location', verifyRole(ROLES.RETAILER), validateRequest(createInventoryLocationSchema), catchAsync(retailerController.createInventoryLocation.bind(retailerController)));
+router.put('/inventory-location/:id', verifyRole(ROLES.RETAILER), validateRequest(updateInventoryLocationSchema), catchAsync(retailerController.updateInventoryLocation.bind(retailerController)));
+
 // PDF generation
 router.get('/orderPdf',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getPdfOfOrderDetails.bind(retailerController)));
 
@@ -176,5 +181,6 @@ router.get('/hasmultipleStore',catchAsync(retailerController.hasmultipleStore.bi
 
 // switch store
 router.put('/switchStore/:storeId',verifyRole(ROLES.RETAILER),catchAsync(retailerController.switchStore.bind(retailerController)));
+
 
 export default router; 

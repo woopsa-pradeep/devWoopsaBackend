@@ -55,6 +55,7 @@ import { Users } from "../models/mmsql/user.model";
 import { sendResponse } from "../utils/sendResponse";
 import e, { Request, Response } from "express"
 import { Token } from "../models/postgres/token.model";
+import InventoryLocation from '../models/postgres/inventoryLocation';
 
 
 
@@ -595,6 +596,21 @@ export class RetailerService {
     const inventory = await Inventory.findAll();
     return inventory;
   }
+
+  async createInventoryLocation(body: any) {
+    const inventoryLocation = await InventoryLocation.create(body);
+    return inventoryLocation;
+  }
+
+  async updateInventoryLocation(id: number, body: any) {
+    const inventoryLocation = await InventoryLocation.findByPk(id);
+    if (!inventoryLocation) {
+      throw new AppError('InventoryLocation not found', 404);
+    }
+    await inventoryLocation.update(body);
+    return inventoryLocation;
+  }
+  
   async getBannerList() {
 
     const { count: totalCount, rows: bannerList } = await Banner.findAndCountAll({

@@ -1088,6 +1088,59 @@ export const createInventoryUPCSchema = Joi.object({
   })
 });
 
+// InventoryLocation validation schemas
+export const createInventoryLocationSchema = Joi.object({
+  C_Number: Joi.number().integer().required().messages({
+    'number.base': 'C_Number must be a number.',
+    'number.integer': 'C_Number must be an integer.',
+    'any.required': 'C_Number is required.'
+  }),
+  Item_Number: Joi.number().integer().required().messages({
+    'number.base': 'Item_Number must be a number.',
+    'number.integer': 'Item_Number must be an integer.',
+    'any.required': 'Item_Number is required.'
+  }),
+  Location: Joi.string().trim().required().messages({
+    'string.base': 'Location must be a string.',
+    'string.empty': 'Location is required.',
+    'any.required': 'Location is required.'
+  }),
+  Section: Joi.string().trim().optional().allow('').messages({
+    'string.base': 'Section must be a string.'
+  }),
+  Status: Joi.boolean().optional().default(true).messages({
+    'boolean.base': 'Status must be a boolean.'
+  }),
+  isActive: Joi.boolean().optional().default(true).messages({
+    'boolean.base': 'isActive must be a boolean.'
+  })
+});
+
+export const updateInventoryLocationSchema = Joi.object({
+  C_Number: Joi.number().integer().optional().messages({
+    'number.base': 'C_Number must be a number.',
+    'number.integer': 'C_Number must be an integer.'
+  }),
+  Item_Number: Joi.number().integer().optional().messages({
+    'number.base': 'Item_Number must be a number.',
+    'number.integer': 'Item_Number must be an integer.'
+  }),
+  Location: Joi.string().trim().optional().messages({
+    'string.base': 'Location must be a string.'
+  }),
+  Section: Joi.string().trim().optional().allow('').messages({
+    'string.base': 'Section must be a string.'
+  }),
+  Status: Joi.boolean().optional().messages({
+    'boolean.base': 'Status must be a boolean.'
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean.'
+  })
+}).min(1).messages({
+  'object.min': 'At least one field must be provided for update'
+});
+
 export const createVendorSchema = Joi.object({
   V_Description: Joi.string().required().messages({
     "any.required": "Vendor description is required"
