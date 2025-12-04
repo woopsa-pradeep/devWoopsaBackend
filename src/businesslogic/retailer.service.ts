@@ -315,27 +315,50 @@ export class RetailerService {
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
-        } else {
-          const searchValue = `%${search}%`;
-          whereClause[Op.or] = [
-            { Item_Number: { [Op.like]: searchValue } },
-            { Description: { [Op.like]: searchValue } },
-            { ALT_Description2: { [Op.like]: searchValue } }
-          ];
-         orderClause = [
-              [
-                Sequelize.literal(`
-                  CASE
-                    WHEN Description LIKE '${search}%' THEN 1
-                    WHEN Description LIKE '%${search}%' THEN 2
-                    ELSE 3
-                  END
-                `),
-                'ASC'
-              ],
-              // ['Description', 'ASC'] 
-            ]
-        }
+        } 
+        else {
+        
+          const term = search.toLowerCase();
+          const anywhere = `%${term}%`;
+          const starts = `${term}%`
+
+          
+  whereClause[Op.or] = [
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("Description")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+      { [Op.like]: anywhere }
+    )
+  ];
+
+  // ORDER RULE:
+  // 1. Items starting with search term first
+  // 2. Then items containing it anywhere
+  // 3. Finally alphabetical
+  orderClause = [
+    [
+      Sequelize.literal(`
+        CASE 
+          WHEN LOWER("Description") LIKE '${starts}' THEN 0
+          WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
+          ELSE 2
+        END
+      `),
+      'ASC'
+    ],
+    ['Description', 'ASC']
+  ];
+}
+
+
+        
       }
 
     }
@@ -1836,9 +1859,10 @@ export class RetailerService {
     let totalDiscount = 0;
     let totalDeposit = 0;
     for (const detail of allOrderDetails) {
-      const price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
+      let price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
       const quantity = Number(detail.Quantity_Ordered || 0);
 
+      price += Number(detail.PrepaidTax_Amount || 0);
       totalPrice += (price) * quantity;
       totalPrice+= Number(detail.PrepaidTax_Amount || 0);
       totalDiscount += Number(detail.OffInvoice_Amount || 0);

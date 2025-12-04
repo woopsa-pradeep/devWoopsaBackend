@@ -1691,7 +1691,7 @@ export class ManagerService {
         'Order_Date',
         'User_ID',
         'Order_Source',
-        'Delivery_Charge'
+        'Delivery_Charge',
       ]
     });
 
@@ -1730,7 +1730,9 @@ export class ManagerService {
         'STAMP_Qty',
         'ItemDescription',
         'CaseWeight',
-        'CaseCount'
+        'CaseCount',
+        "PrepaidTax_Amount"
+
       ],
       include: [
         {
@@ -1769,14 +1771,15 @@ export class ManagerService {
         'OTP_Amount_State',
         'Quantity_Ordered',
         'OffInvoice_Amount',
-        'DepositAmount'
+        'DepositAmount',
+        'PrepaidTax_Amount'
       ]
     });
     // Calculate total price, discount, and deposit
     let totalPrice = 0;
     let totalDiscount = 0;
     let totalDeposit = 0;
-
+    let totalPrepaidTax = 0;
     const orderDiscount = await OrderDiscount.findOne({
       where: { orderNumber: orderNumber }
     });
@@ -1784,11 +1787,14 @@ export class ManagerService {
       totalDiscount = orderDiscount.discount;
     }
     for (const detail of allOrderDetails) {
-      const price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
+
+      let price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
+      price += Number(detail.PrepaidTax_Amount || 0);
       const otpAmount = Number(detail.OTP_Amount_State || 0);
       const quantity = Number(detail.Quantity_Ordered || 0);
-
+      
       totalPrice += (price + otpAmount) * quantity;
+      totalPrice += Number(detail.PrepaidTax_Amount || 0);
       totalDiscount += Number(detail.OffInvoice_Amount || 0);
       totalDeposit += Number(detail.DepositAmount || 0);
     }
