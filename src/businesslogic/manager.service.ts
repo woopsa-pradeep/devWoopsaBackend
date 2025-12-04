@@ -4270,8 +4270,7 @@ async getErpUserById(id: number){
 
   async editUpcNumber(key: number, upcNumber: string) {
     const inventoryUPC = await InventoryUPC.findOne({
-      where: { myKey: key, UPC_Number: upcNumber },
-    });
+      where: { myKey: key }});
     if (!inventoryUPC) {
       throw new AppError('InventoryUPC not found', 404);
     }
@@ -4286,7 +4285,7 @@ async getErpUserById(id: number){
         {
           model: InventoryUPC,
           as: 'UPCList',
-          attributes: ['UPC_Number'],
+        
         },
       ],
     });
@@ -4505,7 +4504,6 @@ async getAllEpickSettings(query: PaginationOptions) {
   async updateCustomer(data: any,id: number){
 
     const finalData = {
-      ...getDefaultCustomerValues(0),
       ...data
     }
     const customer = await Customer.update(finalData,{where:{C_Number:id}});
@@ -4515,9 +4513,8 @@ async getAllEpickSettings(query: PaginationOptions) {
   
 
   async updateVendor(body: any ,id: number) {
-    const defaultValues = getDefaultVendorValues(0);
     body.Last_Modified = new Date();
-    const finalBody = { ...defaultValues, ...body };
+    const finalBody = {  ...body };
     const vendor = await Vendor.update(finalBody,{where:{Primary_Vendor:id}});
     return vendor;
   }
