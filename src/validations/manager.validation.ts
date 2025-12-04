@@ -82,7 +82,7 @@ export const createUserSchema = Joi.object({
     'string.empty': 'lastName cannot be empty',
   }),
 
-  role: Joi.string().required().valid('epick', 'sales', 'driver').messages({
+  role: Joi.string().required().valid('epick', 'sales', 'driver', 'checker').messages({
     'any.required': 'role is required',
     'string.empty': 'role cannot be empty',
   }),
