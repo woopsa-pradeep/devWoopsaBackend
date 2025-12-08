@@ -373,12 +373,12 @@ export class AuthService {
 
       token = generateToken({
         id: storeDetail?.C_Number,
-        deviceId: '14',
+        deviceId: '1',
         role: "retailer",
       })
       await Token.create({
         token: token,
-        deviceId: 14,
+        deviceId: 1,
         retailerId: storeDetail?.C_Number,
 
       })
