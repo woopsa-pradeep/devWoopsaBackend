@@ -143,8 +143,8 @@ export class Inventory extends Model {
   public AddOnDeposit_Item_Number!: number;
   public IsIncludeDeposit_QB!: boolean;
   public MinimumStockAvailability!: number;
-  // public ItemExpiryDate?: string;
-  public Item_ExpiryDate?: string;
+  public ItemExpiryDate?: string;
+  // public Item_ExpiryDate?: string;
   public UPCList?: InventoryUPC[];
   public SalesCategory?: SalesCategory;
   public PriceClass?: PriceClass;
@@ -300,7 +300,7 @@ Description: {
     AddOnDeposit_Item_Number: DataTypes.INTEGER,
     IsIncludeDeposit_QB: DataTypes.BOOLEAN,
     MinimumStockAvailability: DataTypes.DECIMAL,
-    Item_ExpiryDate: DataTypes.STRING,
+    ItemExpiryDate: DataTypes.STRING,
   },
   {
     sequelize,
