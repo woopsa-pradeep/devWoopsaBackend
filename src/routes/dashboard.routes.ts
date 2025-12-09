@@ -15,6 +15,6 @@ router.get('/discountedItems',verifyToken,catchAsync(dashboardController.getDisc
 router.get('/newItem',verifyToken,catchAsync(dashboardController.getNewItem.bind(dashboardController)));
 router.get('/popularItems',verifyToken,catchAsync(dashboardController.getPopularItems.bind(dashboardController)));
 router.get('/promotedItems',verifyToken,catchAsync(dashboardController.getPromotedItems.bind(dashboardController)));
-router.get('/topProductForSales',verifyRole(ROLES.SALES),catchAsync(dashboardController.getTopProductForSales.bind(dashboardController)));
+router.get('/topProductForSales',verifyRole(ROLES.SALES,ROLES.CHECKER),catchAsync(dashboardController.getTopProductForSales.bind(dashboardController)));
  
 export default router; 

@@ -1,4 +1,4 @@
-import { Op, QueryTypes } from "sequelize";
+import { Op, QueryTypes, literal } from "sequelize";
 import { Request } from "express";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { OrderPick } from "../models/postgres/epickOrder.model";
@@ -11,6 +11,8 @@ import { Inventory } from "../models/mmsql/inventory.model";
 import { InventoryUPC } from "../models/mmsql/inventoryUpc.model";
 import { ProductImage } from "../models/postgres/product.model";
 import { Users } from "../models/mmsql/user.model";
+import { OverrideRequest } from "../models/postgres/overrideRequest.model";
+import { WebUsers } from "../models/postgres/users.model";
 import { getInventoryOnHand, generatePDFFromHTML } from "../utils/helper";
 import { AppError } from "../utils/AppError";
 import { uploadFileToAzure } from "../utils/azureUploader";
@@ -255,10 +257,10 @@ export class CheckerService {
    * - Returns item details with qty from Quantity_Shipped
    */
   async getBoxItem(boxId: number) {
-    // Get all scans for this box
+    // Get all scans for this box with actual qty values
     const scans = await OrderPickScan.findAll({
       where: { boxId },
-      attributes: ['orderNumber', 'itemNumber', 'isSubsitute'],
+      attributes: ['orderNumber', 'itemNumber', 'qty', 'isSubsitute'],
       raw: true,
     });
 
@@ -269,23 +271,6 @@ export class CheckerService {
     // Get unique order numbers and item numbers
     const orderNumbers = Array.from(new Set(scans.map((s: any) => s.orderNumber)));
     const itemNumbers = Array.from(new Set(scans.map((s: any) => s.itemNumber)));
-
-    // Get OrderDetail records to get Quantity_Shipped
-    const orderDetails = await OrderDetail.findAll({
-      where: {
-        Order_Number: { [Op.in]: orderNumbers },
-        Item_Number: { [Op.in]: itemNumbers }
-      },
-      attributes: ['Order_Number', 'Item_Number', 'Quantity_Shipped', 'Line_Number'],
-      raw: true,
-    });
-
-    // Create a map of (orderNumber, itemNumber) -> Quantity_Shipped
-    const qtyShippedMap: any = {};
-    orderDetails.forEach((detail: any) => {
-      const key = `${detail.Order_Number}_${detail.Item_Number}`;
-      qtyShippedMap[key] = detail.Quantity_Shipped || 0;
-    });
 
     // Get Inventory details for all items
     const inventories = await Inventory.findAll({
@@ -336,10 +321,9 @@ export class CheckerService {
       scans.map(async (scan: any) => {
         const itemNumber = scan.itemNumber;
         const orderNumber = scan.orderNumber;
-        const key = `${orderNumber}_${itemNumber}`;
         
-        // Get Quantity_Shipped as qty
-        const qty = qtyShippedMap[key] || 0;
+        // Use actual scan qty from OrderPickScan (box-specific)
+        const qty = scan.qty || 0;
         
         // Get inventory details
         const inventory = inventoryMap[itemNumber] || null;
@@ -375,6 +359,403 @@ export class CheckerService {
       })
     );
 
+    return finalData;
+  }
+
+  /**
+   * Get order details with all items
+   * - Order information (without box/tote/drink arrays)
+   * - All order items with Quantity_Ordered and Quantity_Shipped
+   * - Complete item details
+   */
+  async getOrderDetails(orderNumber: number) {
+    // Validate order exists
+    const orderPick = await OrderPick.findOne({
+      where: { orderNumber }
+    });
+
+    if (!orderPick) {
+      throw new AppError("Order not found", 404);
+    }
+
+    // Get order header with customer information
+    const orderHeader = await OrderHeader.findOne({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Order_Number',
+        'Order_Date',
+        'C_Number',
+        'Route_Number',
+        'Stop_Number',
+        'Invoice_Number',
+        'Bundles',
+        'Totes',
+        'Picker_ID',
+        'Confirmed',
+        'Invoice_Total'
+      ],
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip'],
+          required: false,
+          include: [
+            {
+              model: CustomerRoute,
+              as: 'Routes',
+              attributes: ['Route_Number', 'Stop_Number'],
+              required: false,
+            }
+          ]
+        }
+      ]
+    });
+
+    if (!orderHeader) {
+      throw new AppError("Order header not found", 404);
+    }
+
+    // Get all order details with items
+    const orderDetails = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Order_Number',
+        'Line_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Pack',
+        'CaseCount',
+        'ItemDescription',
+        'Price',
+        'NetCost',
+        'Invoice_Cost',
+        'Confirmed'
+      ],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [
+            'Item_Number',
+            'Description',
+            'Pack',
+            'CaseCount',
+            'UOM',
+            'Section',
+            'Location'
+          ],
+          required: false,
+          include: [
+            {
+              model: InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              where: { Status: 0 },
+              required: false,
+            }
+          ]
+        }
+      ],
+      order: [['Line_Number', 'ASC']],
+    });
+
+    // Get product images for all items
+    const itemNumbers = orderDetails.map((detail: any) => detail.Item_Number);
+    const productImages = await ProductImage.findAll({
+      where: {
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
+      },
+      attributes: ['product_number', 'img_url', 'isAllow']
+    });
+
+    const imageMap: any = {};
+    productImages.forEach((img: any) => {
+      imageMap[img.product_number] = img;
+    });
+
+    // Format order details with images
+    const orderDetailsWithImages = await Promise.all(
+      orderDetails.map(async (detail: any) => {
+        const itemNumber = detail.Item_Number;
+        const inventory = detail.inventory;
+        const productImage = imageMap[itemNumber.toString()] || null;
+
+        // Build master image if UPC exists
+        const masterImage = inventory?.UPCList?.[0]?.UPC_Number
+          ? `${process.env.AZUREIMAGESERVER}${inventory.UPCList[0].UPC_Number}.jpg`
+          : null;
+
+        return {
+          lineNumber: detail.Line_Number,
+          itemNumber: detail.Item_Number,
+          itemDescription: detail.ItemDescription || inventory?.Description || null,
+          quantityOrdered: detail.Quantity_Ordered || 0,
+          quantityShipped: detail.Quantity_Shipped || 0,
+          pack: detail.Pack || inventory?.Pack || null,
+          caseCount: detail.CaseCount || inventory?.CaseCount || null,
+          uom: inventory?.UOM || null,
+          section: inventory?.Section || null,
+          location: inventory?.Location || null,
+          price: detail.Price || null,
+          netCost: detail.NetCost || null,
+          invoiceCost: detail.Invoice_Cost || null,
+          confirmed: detail.Confirmed || false,
+          upcList: inventory?.UPCList?.map((upc: any) => ({ UPC_Number: upc.UPC_Number })) || [],
+          masterImage: masterImage,
+          distributorImage: productImage?.img_url || null,
+          isDistributorImageShow: productImage?.isAllow ?? false
+        };
+      })
+    );
+
+    // Get all override requests for this order (all statuses)
+    const overrideRequests = await OverrideRequest.findAll({
+      where: { orderNumber: orderNumber },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
+          required: false,
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Get item descriptions for override requests
+    const overrideItemNumbers = overrideRequests.map(req => req.itemNumber);
+    const overrideInventories = overrideItemNumbers.length > 0 ? await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: overrideItemNumbers },
+      },
+      attributes: ['Item_Number', 'Description'],
+    }) : [];
+
+    const inventoryMap = new Map(overrideInventories.map(inv => [inv.Item_Number, inv.Description]));
+
+    // Format override requests
+    const formattedOverrideRequests = overrideRequests.map((req: any) => {
+      const user = req.user as WebUsers | undefined;
+      return {
+        requestId: req.id,
+        orderNumber: req.orderNumber,
+        itemNumber: req.itemNumber,
+        itemDescription: inventoryMap.get(req.itemNumber) || null,
+        pickerUserNumber: req.pickerUserNumber,
+        userName: user ? `${user.firstName} ${user.lastName}` : null,
+        userEmail: user?.email || null,
+        status: req.status,
+        note: req.note,
+        rejectionReason: req.rejectionReason,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+      };
+    });
+
+    // Format customer information
+    const orderHeaderData = orderHeader as any;
+    const customer = orderHeaderData.customer;
+    const customerRoute = customer?.Routes?.[0];
+
+    // Get picker name if available
+    let pickerName = null;
+    if (orderHeaderData.Picker_ID) {
+      const picker = await Users.findOne({
+        where: { UserNumber: orderHeaderData.Picker_ID },
+        attributes: ['UserName'],
+        raw: true
+      });
+      pickerName = (picker as any)?.UserName || null;
+    }
+
+    return {
+      orderInfo: {
+        orderNumber: orderHeaderData.Order_Number,
+        orderDate: orderHeaderData.Order_Date,
+        invoiceNumber: orderHeaderData.Invoice_Number || 0,
+        bundles: orderHeaderData.Bundles || 0,
+        totes: orderHeaderData.Totes || 0,
+        pickerId: orderHeaderData.Picker_ID || null,
+        pickerName: pickerName,
+        confirmed: orderHeaderData.Confirmed || false,
+        invoiceTotal: orderHeaderData.Invoice_Total || null,
+        customer: customer ? {
+          customerNumber: customer.C_Number,
+          customerName: customer.C_Name,
+          address: customer.C_Address,
+          city: customer.C_City,
+          state: customer.C_State,
+          zip: customer.C_Zip,
+          route: customerRoute?.Route_Number || orderHeaderData.Route_Number || null,
+          stop: customerRoute?.Stop_Number || orderHeaderData.Stop_Number || null
+        } : null,
+        startedAt: orderPick.startedAt,
+        completedAt: orderPick.completedAt
+      },
+      orderItems: orderDetailsWithImages,
+      overrideRequests: formattedOverrideRequests,
+      summary: {
+        totalItemsOrdered: orderDetails.reduce((sum, detail: any) => sum + (detail.Quantity_Ordered || 0), 0),
+        totalItemsShipped: orderDetails.reduce((sum, detail: any) => sum + (detail.Quantity_Shipped || 0), 0),
+        totalItems: orderDetails.length
+      }
+    };
+  }
+
+  /**
+   * Get all items in an order (across all boxes)
+   * Returns items grouped by box or as a flat list
+   */
+  async getOrderItems(orderNumber: number, groupByBox: boolean = false) {
+    // Validate order exists
+    const orderPick = await OrderPick.findOne({
+      where: { orderNumber }
+    });
+
+    if (!orderPick) {
+      throw new AppError("Order not found", 404);
+    }
+
+    // Get all scans for this order across all boxes
+    const scans = await OrderPickScan.findAll({
+      where: { orderNumber },
+      attributes: ['orderNumber', 'itemNumber', 'qty', 'isSubsitute', 'boxId'],
+      raw: true,
+    });
+
+    if (!scans || scans.length === 0) {
+      return groupByBox ? {} : [];
+    }
+
+    // Get all boxes for this order
+    const boxes = await OrderPickBox.findAll({
+      where: { orderNumber },
+      attributes: ['id', 'type', 'orderNumber'],
+      raw: true,
+    });
+
+    // Create box map
+    const boxMap: any = {};
+    boxes.forEach((box: any) => {
+      boxMap[box.id] = box;
+    });
+
+    // Get unique item numbers
+    const itemNumbers = Array.from(new Set(scans.map((s: any) => s.itemNumber)));
+
+    // Get Inventory details for all items
+    const inventories = await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: itemNumbers }
+      },
+      attributes: [
+        'Item_Number',
+        'Description',
+        'Location',
+        'Section',
+        'Pack',
+        'CaseCount',
+        'UOM'
+      ],
+      include: [
+        {
+          model: InventoryUPC,
+          as: 'UPCList',
+          attributes: ['UPC_Number'],
+          required: false
+        }
+      ]
+    });
+
+    // Create inventory map
+    const inventoryMap: any = {};
+    inventories.forEach((inv: any) => {
+      inventoryMap[inv.Item_Number] = inv.get({ plain: true });
+    });
+
+    // Get product images
+    const productImages = await ProductImage.findAll({
+      where: {
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
+      },
+      attributes: ['product_number', 'img_url', 'isAllow']
+    });
+
+    const imageMap: any = {};
+    productImages.forEach((img: any) => {
+      imageMap[img.product_number] = img;
+    });
+
+    // Build final response
+    const finalData = await Promise.all(
+      scans.map(async (scan: any) => {
+        const itemNumber = scan.itemNumber;
+        const box = boxMap[scan.boxId] || null;
+
+        // Use actual scan qty from OrderPickScan
+        const qty = scan.qty || 0;
+
+        // Get inventory details
+        const inventory = inventoryMap[itemNumber] || null;
+
+        // Get product image
+        const productImage = imageMap[itemNumber.toString()] || null;
+
+        // Get inventory on hand
+        const inventoryOnHand = inventory ? await getInventoryOnHand(itemNumber) : null;
+
+        // Build master image if UPC exists
+        const masterImage = inventory?.UPCList?.[0]?.UPC_Number
+          ? `${process.env.AZUREIMAGESERVER}${inventory.UPCList[0].UPC_Number}.jpg`
+          : null;
+
+        return {
+          orderNumber: scan.orderNumber,
+          itemNumber: itemNumber,
+          qty: qty,
+          isSubsitute: scan.isSubsitute || false,
+          boxId: scan.boxId,
+          boxType: box?.type || null,
+          description: inventory?.Description || null,
+          location: inventory?.Location || null,
+          section: inventory?.Section || null,
+          pack: inventory?.Pack || null,
+          caseCount: inventory?.CaseCount || null,
+          uom: inventory?.UOM || null,
+          inventoryOnHand: inventoryOnHand,
+          masterImage: masterImage,
+          isDistributorImageShow: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url || null,
+          upcList: inventory?.UPCList || []
+        };
+      })
+    );
+
+    // If groupByBox is true, group items by box
+    if (groupByBox) {
+      const groupedData: any = {};
+      finalData.forEach((item: any) => {
+        const boxId = item.boxId;
+        if (!groupedData[boxId]) {
+          const box = boxMap[boxId];
+          groupedData[boxId] = {
+            boxId: boxId,
+            boxType: box?.type || null,
+            items: []
+          };
+        }
+        // Remove boxId and boxType from item (already in group)
+        const { boxId: _, boxType: __, ...itemWithoutBox } = item;
+        groupedData[boxId].items.push(itemWithoutBox);
+      });
+      return groupedData;
+    }
+
+    // Return flat list
     return finalData;
   }
 
@@ -464,11 +845,18 @@ export class CheckerService {
         totalMovedQty += moveQty;
         
         if (existingDestinationScan) {
-          // Update existing destination scan
-          await existingDestinationScan.update({
-            qty: existingDestinationScan.qty + moveQty
-          });
-          // Reload to get updated value
+          // Update existing destination scan using database-level increment to avoid stale values
+          await OrderPickScan.update(
+            {
+              qty: literal(`qty + ${moveQty}`)
+            },
+            {
+              where: {
+                id: existingDestinationScan.id
+              }
+            }
+          );
+          // Re-fetch to get updated value for potential subsequent operations
           await existingDestinationScan.reload();
         } else {
           // Create new scan in destination
@@ -495,10 +883,19 @@ export class CheckerService {
         });
 
         if (existingDestinationScan) {
-          // Update existing destination scan
-          await existingDestinationScan.update({
-            qty: existingDestinationScan.qty + moveQty
-          });
+          // Update existing destination scan using database-level increment to avoid stale values
+          await OrderPickScan.update(
+            {
+              qty: literal(`qty + ${moveQty}`)
+            },
+            {
+              where: {
+                id: existingDestinationScan.id
+              }
+            }
+          );
+          // Re-fetch to get updated value for potential subsequent operations
+          await existingDestinationScan.reload();
         } else {
           // Create new scan in destination
           existingDestinationScan = await OrderPickScan.create({
@@ -525,12 +922,39 @@ export class CheckerService {
   }
 
   /**
-   * Capture photos and add notes to a box
-   * - Uploads images to Azure storage
-   * - Updates OrderPickBox with images and notes
+   * Capture photos for an order and distribute across all containers
+   * - Gets all containers (boxes, totes, drinks) for the order
+   * - Validates: min = container count, max = 2 * container count
+   * - Distributes images evenly across containers (1-2 images per container)
+   * - Updates each container with assigned images
    */
-  async capturePhotos(req: Request, id: number) {
-    let pushImage: string[] = [];
+  async capturePhotos(req: Request, orderNumber: number) {
+    // Validate order exists
+    const orderPick = await OrderPick.findOne({
+      where: { orderNumber }
+    });
+
+    if (!orderPick) {
+      throw new AppError("Order not found", 404);
+    }
+
+    // Get all containers (boxes, totes, drinks) for this order
+    const containers = await OrderPickBox.findAll({
+      where: { orderNumber },
+      attributes: ['id', 'type', 'orderNumber'],
+      order: [['id', 'ASC']] // Consistent ordering for distribution
+    });
+
+    if (!containers || containers.length === 0) {
+      throw new AppError("No containers found for this order", 404);
+    }
+
+    const containerCount = containers.length;
+    const minImages = containerCount; // 1 image per container minimum
+    const maxImages = containerCount * 2; // 2 images per container maximum
+
+    // Upload images
+    let uploadedImages: string[] = [];
 
     if (req.files && (req.files as any).length > 0) {
       // Upload all files in parallel
@@ -541,26 +965,80 @@ export class CheckerService {
       );
 
       // Collect only successful uploads
-      pushImage = uploadResults
+      uploadedImages = uploadResults
         .filter(result => result.success)
-        .map(result => result.url || "");
+        .map(result => result.url || "")
+        .filter(url => url && url.trim() !== "");
     }
 
-    // ✅ Now update after uploads are done
-    await OrderPickBox.update(
-      {
-        images: pushImage,
-        notes: req.body.notes || " ",
-      },
-      {
-        where: { id },
-      }
+    // Validate image count
+    if (uploadedImages.length < minImages) {
+      throw new AppError(
+        `Insufficient images. Minimum ${minImages} images required (1 per container), received ${uploadedImages.length}`,
+        400
+      );
+    }
+
+    if (uploadedImages.length > maxImages) {
+      throw new AppError(
+        `Too many images. Maximum ${maxImages} images allowed (2 per container), received ${uploadedImages.length}`,
+        400
+      );
+    }
+
+    // Distribute images across containers
+    // Strategy: Each container gets at least 1 image, remaining images distributed evenly (max 2 per container)
+    const imagesPerContainer = Math.floor(uploadedImages.length / containerCount); // Base images per container
+    const remainingImages = uploadedImages.length % containerCount; // Extra images to distribute
+
+    let imageIndex = 0;
+    const containerUpdates: Array<{ id: number; images: string[] }> = [];
+
+    for (let i = 0; i < containers.length; i++) {
+      const container = containers[i];
+      // Each container gets base amount, first 'remainingImages' containers get 1 extra
+      const imagesForThisContainer = imagesPerContainer + (i < remainingImages ? 1 : 0);
+      
+      const containerImages = uploadedImages.slice(imageIndex, imageIndex + imagesForThisContainer);
+      imageIndex += imagesForThisContainer;
+
+      containerUpdates.push({
+        id: container.id,
+        images: containerImages
+      });
+    }
+
+    // Update all containers with their assigned images
+    await Promise.all(
+      containerUpdates.map((update) =>
+        OrderPickBox.update(
+          {
+            images: update.images,
+            notes: req.body.notes || " ",
+          },
+          {
+            where: { id: update.id },
+          }
+        )
+      )
     );
 
     return {
       success: true,
-      message: "Photos captured successfully",
-      images: pushImage,
+      message: `Photos captured and distributed across ${containerCount} containers successfully`,
+      orderNumber,
+      totalContainers: containerCount,
+      totalImages: uploadedImages.length,
+      imagesPerContainer: {
+        base: imagesPerContainer,
+        extra: remainingImages,
+        distribution: containerUpdates.map(c => ({
+          containerId: c.id,
+          containerType: containers.find(ct => ct.id === c.id)?.type,
+          imageCount: c.images.length,
+          images: c.images
+        }))
+      },
       notes: req.body.notes || " "
     };
   }
@@ -2600,18 +3078,19 @@ export class CheckerService {
   }
 
   /**
-   * Update item quantity (Quantity_Shipped)
+   * Update item quantity in a specific box
    * Only allowed if invoice is not created (Invoice_Number = 0)
    */
   async updateItemQty(data: {
     orderNumber: number;
     itemNumber: number;
+    boxId: number;
     qty: number;
   }) {
-    const { orderNumber, itemNumber, qty } = data;
+    const { orderNumber, itemNumber, boxId, qty } = data;
 
     // Validate inputs
-    if (!orderNumber || !itemNumber || !qty || qty <= 0) {
+    if (!orderNumber || !itemNumber || !boxId || !qty || qty <= 0) {
       throw new AppError("Invalid input parameters", 400);
     }
 
@@ -2621,99 +3100,49 @@ export class CheckerService {
       throw new AppError("Cannot update quantity. Invoice has already been created for this order.", 400);
     }
 
-    // Check if item exists in OrderDetail
-    let orderDetail = await OrderDetail.findOne({
+    // Validate box exists
+    const box = await OrderPickBox.findByPk(boxId);
+    if (!box) {
+      throw new AppError("Box not found", 404);
+    }
+
+    // Verify box belongs to the order
+    if (box.orderNumber !== orderNumber) {
+      throw new AppError("Box does not belong to the specified order", 400);
+    }
+
+    // Find the specific scan record in this box
+    const scan = await OrderPickScan.findOne({
       where: {
-        Order_Number: orderNumber,
-        Item_Number: itemNumber
+        orderNumber: orderNumber,
+        itemNumber: itemNumber,
+        boxId: boxId
       }
     });
 
-    // If item doesn't exist in OrderDetail, check if it exists in scans
-    // This handles cases where items were scanned but OrderDetail entry is missing
-    if (!orderDetail) {
-      const scanExists = await OrderPickScan.findOne({
-        where: {
-          orderNumber: orderNumber,
-          itemNumber: itemNumber
-        }
-      });
-
-      if (!scanExists) {
-        throw new AppError("Item not found in order", 404);
-      }
-
-      // Item exists in scans but not in OrderDetail - this shouldn't normally happen
-      // But we'll allow the update by creating/updating the OrderDetail entry
-      // First, try to find if there's a similar item or get default values
-      const orderHeader = await OrderHeader.findOne({
-        where: { Order_Number: orderNumber },
-        attributes: ['Order_Number']
-      });
-
-      if (!orderHeader) {
-        throw new AppError("Order not found", 404);
-      }
-
-      // Get inventory details to create OrderDetail entry
-      const inventory = await Inventory.findOne({
-        where: { Item_Number: itemNumber }
-      });
-
-      if (!inventory) {
-        throw new AppError("Item not found in inventory", 404);
-      }
-
-      // Get the next Line_Number for this order
-      const maxLineNumber = await OrderDetail.max('Line_Number', {
-        where: { Order_Number: orderNumber }
-      }) || 0;
-
-      // Create OrderDetail entry with default values
-      const defaultValues = getDefaultOrderDetailValues();
-      await OrderDetail.create({
-        ...defaultValues,
-        Order_Number: orderNumber,
-        Item_Number: itemNumber,
-        Line_Number: (maxLineNumber as number) + 1,
-        Quantity_Ordered: qty,
-        Quantity_Shipped: qty,
-        Sales_Category: inventory.Sales_Category || 0,
-        OTP_Number: inventory.OTP_Number || 0,
-        Pack: inventory.Pack || 0,
-        Price: inventory.Price1 || 0,
-        Price_Reference: inventory.Price1 || 0,
-        Retail: inventory.Retail1 || 0,
-        NetCost: inventory.NetCost || 0,
-        BaseCost: inventory.BaseCost || 0,
-        Invoice_Cost: inventory.Invoice_Cost || 0,
-        AvgCost: inventory.AvgCost || 0,
-        ItemDescription: inventory.Description || '',
-        CaseWeight: inventory.CaseWeight || 0,
-        CaseCount: inventory.CaseCount || 0,
-        Item_Message: inventory.Item_Message || null,
-        DepositAmount: inventory.DepositAmount || 0,
-        Price_Subclass: inventory.Price_Subclass || 0,
-        EBT: inventory.EBT || false,
-        Points: inventory.Points || 0,
-        STAMP_Qty: 0,
-        OTP_Amount_State: 0,
-        OTP_Amount_County: 0,
-        OTP_Amount_City: 0
-      } as any);
-
-      return {
-        success: true,
-        message: `Successfully created and updated quantity for item ${itemNumber} to ${qty}`,
-        orderNumber,
-        itemNumber,
-        qty
-      };
+    if (!scan) {
+      throw new AppError("Item not found in the specified box", 404);
     }
 
-    // Update Quantity_Shipped for existing OrderDetail entry
+    // Update the scan quantity
+    await scan.update({
+      qty: qty
+    });
+
+    // Recalculate total Quantity_Shipped for this item across all boxes
+    const allScansForItem = await OrderPickScan.findAll({
+      where: {
+        orderNumber: orderNumber,
+        itemNumber: itemNumber
+      },
+      attributes: ['qty']
+    });
+
+    const totalQtyShipped = allScansForItem.reduce((sum, s) => sum + (s.qty || 0), 0);
+
+    // Update OrderDetail.Quantity_Shipped to match total from all scans
     await OrderDetail.update(
-      { Quantity_Shipped: qty },
+      { Quantity_Shipped: totalQtyShipped },
       {
         where: {
           Order_Number: orderNumber,
@@ -2724,10 +3153,12 @@ export class CheckerService {
 
     return {
       success: true,
-      message: `Successfully updated quantity for item ${itemNumber} to ${qty}`,
+      message: `Successfully updated quantity for item ${itemNumber} in box ${boxId} to ${qty}`,
       orderNumber,
       itemNumber,
-      qty
+      boxId,
+      qty,
+      totalQtyShipped
     };
   }
 
@@ -2753,10 +3184,10 @@ export class CheckerService {
     }
 
     // Check if invoice is not created
-    const invoiceNotCreated = await this.isInvoiceNotCreated(orderNumber);
-    if (!invoiceNotCreated) {
-      throw new AppError("Cannot create container. Invoice has already been created for this order.", 400);
-    }
+    // const invoiceNotCreated = await this.isInvoiceNotCreated(orderNumber);
+    // if (!invoiceNotCreated) {
+    //   throw new AppError("Cannot create container. Invoice has already been created for this order.", 400);
+    // }
 
     // Validate source box exists and belongs to order
     const sourceBox = await OrderPickBox.findByPk(sourceBoxId);
@@ -2835,10 +3266,18 @@ export class CheckerService {
           remainingQty -= moveQty;
 
           if (existingDestinationScan) {
-            // Update existing destination scan
-            await existingDestinationScan.update({
-              qty: existingDestinationScan.qty + moveQty
-            });
+            // Update existing destination scan using database-level increment to avoid stale values
+            await OrderPickScan.update(
+              {
+                qty: literal(`qty + ${moveQty}`)
+              },
+              {
+                where: {
+                  id: existingDestinationScan.id
+                }
+              }
+            );
+            // Re-fetch to get updated value for potential subsequent operations
             await existingDestinationScan.reload();
           } else {
             // Create new scan in destination
@@ -2864,10 +3303,19 @@ export class CheckerService {
           });
 
           if (existingDestinationScan) {
-            // Update existing destination scan
-            await existingDestinationScan.update({
-              qty: existingDestinationScan.qty + moveQty
-            });
+            // Update existing destination scan using database-level increment to avoid stale values
+            await OrderPickScan.update(
+              {
+                qty: literal(`qty + ${moveQty}`)
+              },
+              {
+                where: {
+                  id: existingDestinationScan.id
+                }
+              }
+            );
+            // Re-fetch to get updated value for potential subsequent operations
+            await existingDestinationScan.reload();
           } else {
             // Create new scan in destination
             existingDestinationScan = await OrderPickScan.create({

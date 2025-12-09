@@ -8,7 +8,7 @@ import { testConnections } from './db';
 import { syncPostgresModels } from './models/postgres';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting } from './seeder/wareHouseSetting.seeder';
+import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting, seedInvoiceSetting } from './seeder/wareHouseSetting.seeder';
 import { startCronJobs } from './cron'; // adjust path if needed
 import { getDiscount, getPrepaidTaxRate } from './utils/helper';
 import moment from 'moment';
@@ -151,6 +151,7 @@ testConnections()
     await seedWarehouseSetting();
     await seedHomeSetting();
     await seedEpickSetting();
+    await seedInvoiceSetting();
     await seedPolicies();
     console.log('✅ Policies seeded');
     app.listen(PORT, () => {

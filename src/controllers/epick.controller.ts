@@ -28,6 +28,11 @@ export class EpickController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getOrderItemFirst(req: Request, res: Response) {
+        const data = await this.epickService.getOrderItemFirst(Number(req.params.orderNumber));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async addOrderBox(req: Request, res: Response) {
         const data = await this.epickService.addOrderBox(req.body);
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -158,10 +163,44 @@ export class EpickController {
     }
 
     /**
+     * Get list of all complete orders ready for checker
+     */
+    async getCompleteOrder(req: Request, res: Response) {
+        const data = await this.epickService.getCompleteOrder();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Get complete order details with items, override requests, and checker status
+     */
+    async getCompleteOrderDetails(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        const data = await this.epickService.getCompleteOrderDetails(orderNumber);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
      * Get pending override requests (Distributor)
      */
     async getPendingOverrideRequests(req: Request, res: Response) {
         const data = await this.epickService.getPendingOverrideRequests();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Get pending override requests by order number (Distributor)
+     */
+    async getPendingOverrideRequestsByOrder(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        const data = await this.epickService.getPendingOverrideRequestsByOrder(orderNumber);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 

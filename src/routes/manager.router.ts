@@ -6,7 +6,7 @@ import { ROLES } from '../interfaces/request.body.interface';
 import { multerUpload } from '../middlewares/upload.middleware';
 import { uploadProductImageSchema } from '../validations/test.validation';
 import { validateRequest } from '../middlewares/validation.middleware';
-import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, roleUdatePermissionRequestSchema , updateWarehouseSettingSchema, createItemLimitSchema, updateItemLimitSchema, createNotificationSchedulerSchema, updateNotificationSchedulerSchema, getNotificationSchedulerSchema, createLinkSchema, updateLinkSchema, getLinksQuerySchema, createStorySchema, updateStorySchema, getStoriesQuerySchema, createWebViewSchema, updateWebViewSchema, getWebViewsQuerySchema, createRetailerRequestSchema, createPoliciesSchema, updatePoliciesSchema, updateRefundPoliciesSchema, createWebCategorySchema, updateWebCategorySchema, createWebQuickLinkSchema, updateWebQuickLinkSchema, createWebLocationSchema, updateWebLocationSchema, getWebLocationsQuerySchema, createContactUsSchema, updateContactUsSchema, getContactUsQuerySchema, createEmailConfigSchema, updateEmailConfigSchema, createEmailMarketingSchema, getEmailMarketingQuerySchema, createInventoryUPCSchema, updateInventoryUPCSchema, createEpickSettingSchema, getEpickSettingsQuerySchema, updateEpickSettingSchema, createErpUserSchema, updateErpUserSchema } from '../validations/manager.validation';
+import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, roleUdatePermissionRequestSchema , updateWarehouseSettingSchema, createItemLimitSchema, updateItemLimitSchema, createNotificationSchedulerSchema, updateNotificationSchedulerSchema, getNotificationSchedulerSchema, createLinkSchema, updateLinkSchema, getLinksQuerySchema, createStorySchema, updateStorySchema, getStoriesQuerySchema, createWebViewSchema, updateWebViewSchema, getWebViewsQuerySchema, createRetailerRequestSchema, createPoliciesSchema, updatePoliciesSchema, updateRefundPoliciesSchema, createWebCategorySchema, updateWebCategorySchema, createWebQuickLinkSchema, updateWebQuickLinkSchema, createWebLocationSchema, updateWebLocationSchema, getWebLocationsQuerySchema, createContactUsSchema, updateContactUsSchema, getContactUsQuerySchema, createEmailConfigSchema, updateEmailConfigSchema, createEmailMarketingSchema, getEmailMarketingQuerySchema, createInventoryUPCSchema, updateInventoryUPCSchema, createEpickSettingSchema, getEpickSettingsQuerySchema, updateEpickSettingSchema, createInvoiceSettingSchema, updateInvoiceSettingSchema, createErpUserSchema, updateErpUserSchema } from '../validations/manager.validation';
 import { itemGlobalSchema, retailerSchema, salesRepSchema, warehouseProfileSchema } from '../validations/setting.validation';
 import { createRetailerProductCatalogSchema, updateRetailerProductCatalogSchema } from '../validations/retailer.validation';
 
@@ -35,6 +35,7 @@ router.get('/userList', verifyRole(ROLES.MANAGER), catchAsync(managerController.
 router.post('/createUser', verifyRole(ROLES.MANAGER),validateRequest(createUserSchema), catchAsync(managerController.createUser.bind(managerController)));
 router.put('/updateUser/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUser.bind(managerController)));
 router.get('/epickUsers', verifyRole(ROLES.MANAGER), catchAsync(managerController.getEpickUserDetails.bind(managerController)));
+router.get('/epickReports', verifyRole(ROLES.MANAGER), catchAsync(managerController.getEpickReports.bind(managerController)));
 router.put('/users/:userId/orderPreferences', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUserOrderPreferences.bind(managerController)));
 router.post('/createRolePermissions', verifyRole(ROLES.MANAGER), validateRequest(rolePermissionRequestSchema), catchAsync(managerController.createRolePermissions.bind(managerController)));
 router.put('/updateRolePermissions', verifyRole(ROLES.MANAGER), validateRequest(roleUdatePermissionRequestSchema), catchAsync(managerController.updateRolePermissions.bind(managerController)));
@@ -44,6 +45,12 @@ router.get('/summary',verifyRole(ROLES.MANAGER),catchAsync(managerController.get
 router.get('/warehouseContactDetails', verifyRole(ROLES.MANAGER), catchAsync(managerController.getWarehouseContactDetails.bind(managerController)));
 router.get('/orderHistory', verifyRole(ROLES.MANAGER), catchAsync(managerController.getOrderHistory.bind(managerController)));
 router.get('/orderHistoryByOrderNumber/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getOrderHistoryByOrderNumber.bind(managerController)));
+router.get('/orderDetailByOrderNumberForInvoice/:id',verifyRole(ROLES.MANAGER), catchAsync(managerController.getOrderDetailByOrderNumberForInvoice.bind(managerController)));
+
+
+
+
+
 
 router.get('/homeSetting', verifyRole(ROLES.MANAGER), catchAsync(managerController.getHomeSetting.bind(managerController)));
 router.put('/updateHomeSetting', verifyRole(ROLES.MANAGER), validateRequest(homeSettingsSchema), catchAsync(managerController.updateHomeSetting.bind(managerController)));
@@ -226,6 +233,9 @@ router.get('/checker-users', verifyRole(ROLES.MANAGER), catchAsync(managerContro
 // InventoryUPC CRUD routes
 router.post('/inventory-upc', verifyRole(ROLES.MANAGER), validateRequest(createInventoryUPCSchema), catchAsync(managerController.createInventoryUPC.bind(managerController)));
 router.get('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryUPCById.bind(managerController)));
+router.get('/inventoryForReport',  verifyRole(ROLES.MANAGER),catchAsync(managerController.getInventoryForReport.bind(managerController)));
+router.get('/customerForReport',  verifyRole(ROLES.MANAGER), catchAsync(managerController.getCustomerForReport.bind(managerController)));
+
 router.get('/inventory/:itemNumber', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryByItemNumber.bind(managerController)));
 router.get('/inventoryForReport',  catchAsync(managerController.getInventoryForReport.bind(managerController)));
 router.put('/inventory-upc/:id', verifyRole(ROLES.MANAGER), validateRequest(updateInventoryUPCSchema), catchAsync(managerController.updateInventoryUPC.bind(managerController)));
@@ -239,6 +249,9 @@ router.get('/epick-settings', verifyRole(ROLES.MANAGER), validateRequest(getEpic
 router.get('/epick-settings/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getEpickSettingById.bind(managerController)));
 router.put('/epick-settings/:id', verifyRole(ROLES.MANAGER), validateRequest(updateEpickSettingSchema), catchAsync(managerController.updateEpickSetting.bind(managerController)));
 router.delete('/epick-settings/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteEpickSetting.bind(managerController)));
+// InvoiceSetting CRUD routes (create & update)
+router.post('/invoice-setting', verifyRole(ROLES.MANAGER), validateRequest(createInvoiceSettingSchema), catchAsync(managerController.createInvoiceSetting.bind(managerController)));
+router.put('/invoice-setting/:id', verifyRole(ROLES.MANAGER), validateRequest(updateInvoiceSettingSchema), catchAsync(managerController.updateInvoiceSetting.bind(managerController)));
 // router.post('/pass-scan-items', verifyRole(ROLES.MANAGER), catchAsync(managerController.putPassScanItem.bind(managerController)));
 router.post('/createCustomer', verifyRole(ROLES.MANAGER), catchAsync(managerController.createCustomer.bind(managerController)));
 router.put('/updateUserAllowDiscount/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.updateUserAllowDiscount.bind(managerController)));
@@ -247,6 +260,7 @@ router.put('/updateUserAllowDiscount/:id', verifyRole(ROLES.MANAGER), catchAsync
 import { EpickController } from '../controllers/epick.controller';
 const epickController = new EpickController();
 router.get('/pendingOverrideRequests', verifyRole(ROLES.MANAGER), catchAsync(epickController.getPendingOverrideRequests.bind(epickController)));
+router.get('/pendingOverrideRequests/:orderNumber', verifyRole(ROLES.MANAGER), catchAsync(epickController.getPendingOverrideRequestsByOrder.bind(epickController)));
 router.get('/approvedOverrideRequests', verifyRole(ROLES.MANAGER), catchAsync(epickController.getApprovedOverrideRequests.bind(epickController)));
 router.get('/cancelledOverrideRequests', verifyRole(ROLES.MANAGER), catchAsync(epickController.getCancelledOverrideRequests.bind(epickController)));
 router.post('/approveOverrideRequest/:requestId', verifyRole(ROLES.MANAGER), catchAsync(epickController.approveOverrideRequest.bind(epickController)));

@@ -2,6 +2,7 @@ import { Customer } from "./customer.model";
 import { CustomerRoute } from "./customerRoutes.model";
 import { Inventory } from "./inventory.model";
 import { InventoryUPC } from "./inventoryUpc.model";
+import InventoryHistory from './inventoryHistory.model';
 import { SalesRep } from "./salesrep.model";
 import { SalesCategory } from './salesCategory.model';
 import { PriceClass } from "./priceClass.model";
@@ -14,11 +15,14 @@ import { OrderDetail } from './orderDetail.model';
 import { OrderHeader } from "./orderHeader.model";
 import InventorySpecials from "./inventorySpecail.model";
 import { TaxRatesOTP } from "./taxRatesOtp.model";
+import { TaxRates_City } from "./taxRateCity.model";
+import { TaxRates_County } from "./taxRateCounty.model";
+import { TaxRates } from "./taxRates.model";
 import InventoryStatus from "./inventoryStatus.model";
 import { Terms } from "./invoiceTerm.model";
 import InventoryQtyDiscount from "./inventoryQtyDiscount.model";
 import { Vendor } from "./vendor.model";
-
+import { ClassOfTrade } from "./classOfTrade.model";
 
 
 
@@ -26,7 +30,32 @@ export function applyAssociations(): void {
 
   Customer.belongsTo(SalesRep, {
     foreignKey: 'C_Salesman',
+    targetKey: 'S_Number',
     as: 'salesRep',
+  });
+
+  Customer.belongsTo(ClassOfTrade, {
+    foreignKey: 'C_ClassOfTrade',
+    targetKey: 'Trade_Code',
+    as: 'classOfTrade',
+  });
+
+  Customer.belongsTo(TaxRates, {
+    foreignKey: 'Jurisdiction_State',
+    targetKey: 'Jurisdiction_State',
+    as: 'taxRate',
+  });
+
+  Customer.belongsTo(TaxRates_City, {
+    foreignKey: 'Jurisdiction_City',
+    targetKey: 'Jurisdiction_City',
+    as: 'taxRateCity',
+  });
+
+  Customer.belongsTo(TaxRates_County, {
+    foreignKey: 'Jurisdiction_County',
+    targetKey: 'Jurisdiction_County',
+    as: 'taxRateCounty',
   });
 
   CustomerRoute.belongsTo(Customer, { foreignKey: 'C_Number', as: 'Customer' });
@@ -160,6 +189,13 @@ Vendor.hasMany(Inventory, {
     as: 'terms',
   });
 
+
+
+  SalesRep.hasMany(Customer, {
+    foreignKey: 'C_Salesman',
+    as: 'customers',
+  });
+
   Terms.hasMany(Customer, {
     foreignKey: 'TermsCode',
     as: 'customers',
@@ -229,6 +265,17 @@ InventoryStatus.belongsTo(Inventory, {
 Inventory.hasMany(InventoryStatus, {
   foreignKey: 'Item_Number',
   as: 'inventoryStatus',
+});
+
+// InventoryHistory association
+Inventory.hasMany(InventoryHistory, {
+  foreignKey: 'Item_Number',
+  as: 'InventoryHistory',
+});
+
+InventoryHistory.belongsTo(Inventory, {
+  foreignKey: 'Item_Number',
+  as: 'Inventory',
 });
 
 

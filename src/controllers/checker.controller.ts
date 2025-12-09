@@ -26,6 +26,25 @@ export class CheckerController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getOrderDetails(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+        const data = await this.checkerService.getOrderDetails(orderNumber);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getOrderItems(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+        const groupByBox = req.query.groupByBox === 'true' || req.query.groupByBox === '1';
+        const data = await this.checkerService.getOrderItems(orderNumber, groupByBox);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async moveItemsToBox(req: Request, res: Response) {
         const { sourceBoxId, destinationBoxId, itemNumber, qty } = req.body;
         
@@ -54,11 +73,11 @@ export class CheckerController {
     }
 
     async capturePhotos(req: AuthRequest, res: Response) {
-        const boxId = Number(req.params.id);
-        if (!boxId || isNaN(boxId)) {
-            return sendResponse(res, 400, false, null, "Invalid box ID");
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
         }
-        const data = await this.checkerService.capturePhotos(req, boxId);
+        const data = await this.checkerService.capturePhotos(req, orderNumber);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -94,16 +113,16 @@ export class CheckerController {
     }
 
     async updateItemQty(req: Request, res: Response) {
-        const { orderNumber, itemNumber, qty } = req.body;
+        const { orderNumber, itemNumber, boxId, qty } = req.body;
 
         // Validate required fields
-        if (!orderNumber || !itemNumber || qty === undefined) {
-            return sendResponse(res, 400, false, null, "Missing required fields: orderNumber, itemNumber, qty");
+        if (!orderNumber || !itemNumber || !boxId || qty === undefined) {
+            return sendResponse(res, 400, false, null, "Missing required fields: orderNumber, itemNumber, boxId, qty");
         }
 
         // Validate types
-        if (typeof orderNumber !== 'number' || typeof itemNumber !== 'number' || typeof qty !== 'number') {
-            return sendResponse(res, 400, false, null, "orderNumber, itemNumber, and qty must be numbers");
+        if (typeof orderNumber !== 'number' || typeof itemNumber !== 'number' || typeof boxId !== 'number' || typeof qty !== 'number') {
+            return sendResponse(res, 400, false, null, "orderNumber, itemNumber, boxId, and qty must be numbers");
         }
 
         if (qty <= 0) {
@@ -113,6 +132,7 @@ export class CheckerController {
         const data = await this.checkerService.updateItemQty({
             orderNumber,
             itemNumber,
+            boxId,
             qty
         });
         sendResponse(res, 200, true, data, General.SUCCESS);

@@ -128,6 +128,15 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getEpickReports(req: AuthRequest, res: Response) {
+    const userId = req.query.userId ? Number(req.query.userId) : null;
+    if (userId && isNaN(userId)) {
+      return sendResponse(res, 400, false, null, "Invalid userId parameter");
+    }
+    const data = await this.managerService.getEpickReports(userId, req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async createRolePermissions(req: AuthRequest, res: Response) {
     const data = await this.managerService.createRolePermissions(req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -193,6 +202,11 @@ async getOrderHistory(req: AuthRequest, res: Response) {
 
 async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
   const data = await this.managerService.getOrderHistoryByOrderNumber(Number(req.params.id), req.query as PaginationOptions);
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async getOrderDetailByOrderNumberForInvoice(req: AuthRequest, res: Response) {
+  const data = await this.managerService.getOrderDetailByOrderNumberForInvoice(Number(req.params.id));
   sendResponse(res, 200, true, data, General.SUCCESS);
 }
 
@@ -862,6 +876,12 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     // sendResponse(res, 200, true, data, 'InventoryUPC retrieved successfully');
   }
 
+  async getCustomerForReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerForReport();
+    // res.end(JSON.stringify(data));
+    sendResponse(res, 200, true, data, 'Customer details retrieved successfully');
+  }
+
   
   async updateInventoryUPC(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateInventoryUPC(Number(req.params.id), req.body);
@@ -898,6 +918,17 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async createEpickSetting(req: AuthRequest, res: Response) {
     const data = await this.managerService.createEpickSetting(req.body);
     sendResponse(res, 201, true, data, 'Epick setting created successfully');
+  }
+
+  // InvoiceSetting controller methods
+  async createInvoiceSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createInvoiceSetting(req.body);
+    sendResponse(res, 201, true, data, 'Invoice setting created successfully');
+  }
+
+  async updateInvoiceSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateInvoiceSetting(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Invoice setting updated successfully');
   }
 
   async getEpickSettingById(req: AuthRequest, res: Response) {

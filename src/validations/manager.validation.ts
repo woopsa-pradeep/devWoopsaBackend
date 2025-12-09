@@ -1090,11 +1090,6 @@ export const createInventoryUPCSchema = Joi.object({
 
 // InventoryLocation validation schemas
 export const createInventoryLocationSchema = Joi.object({
-  C_Number: Joi.number().integer().required().messages({
-    'number.base': 'C_Number must be a number.',
-    'number.integer': 'C_Number must be an integer.',
-    'any.required': 'C_Number is required.'
-  }),
   Item_Number: Joi.number().integer().required().messages({
     'number.base': 'Item_Number must be a number.',
     'number.integer': 'Item_Number must be an integer.',
@@ -1294,6 +1289,45 @@ export const updateEpickSettingSchema = Joi.object({
     'boolean.base': 'Allow single scan must be a boolean'
   })
 });
+
+export const createInvoiceSettingSchema = Joi.object({
+  Name: Joi.string().required().messages({
+    'string.base': 'Name must be a string',
+    'any.required': 'Name is required'
+  }),
+  Email: Joi.string().email().optional().allow(null, '').messages({
+    'string.base': 'Email must be a string',
+    'string.email': 'Email must be a valid email address'
+  }),
+  Address_line_1: Joi.string().required().messages({
+    'string.base': 'Address_line_1 must be a string',
+    'any.required': 'Address_line_1 is required'
+  }),
+  Full_address: Joi.required().messages({
+    'any.required': 'Full Address is required'  
+  }),
+  header_line_1: Joi.string().allow('', null).optional().messages({ 'string.base': 'header_line_1 must be a string' }),
+  invoice_Upc_Type: Joi.optional().allow(null).messages({ 'string.base': 'invoice_Upc_Type must be a required' }),
+  invoice_Upc_Value: Joi.string().optional().allow(null).messages({ 'string.base': 'invoice_Upc_Value must be a string' })
+}).unknown(true);
+
+export const updateInvoiceSettingSchema = Joi.object({
+  Name: Joi.string().required().messages({
+    'string.base': 'Name must be a string',
+    'any.required': 'Name is required'
+  }),
+  
+  Address_line_1: Joi.string().required().messages({
+    'string.base': 'Address_line_1 must be a string',
+    'any.required': 'Address_line_1 is required'
+  }),
+  Full_address: Joi.required().messages({
+    'any.required': 'Full Address is required'  
+  }),
+  header_line_1: Joi.string().allow('', null).optional().messages({ 'string.base': 'header_line_1 must be a string' }),
+  invoice_Upc_Type: Joi.optional().allow(null).messages({ 'string.base': 'invoice_Upc_Type must be a required' }),
+  invoice_Upc_Value: Joi.string().optional().allow(null).messages({ 'string.base': 'invoice_Upc_Value must be a string' })
+}).unknown(true);
 
 export const getEpickSettingsQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).optional().default(1).messages({

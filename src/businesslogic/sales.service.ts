@@ -3898,7 +3898,7 @@ const newSalesRepArray = salesRepList.map(Number);
 
       if (search) {
        
-          const searchValue = `%${search}%`;
+          const searchValue = `${search}%`;
           whereClause[Op.or] = [
             { Item_Number: { [Op.like]: searchValue } },
             { Description: { [Op.like]: `%${search}%` } },

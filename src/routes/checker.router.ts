@@ -8,14 +8,16 @@ import { multerUpload } from "../middlewares/upload.middleware";
 const router = Router();
 const checkerController = new CheckerController();
 
-router.get("/getOrder", verifyRole(ROLES.CHECKER), catchAsync(checkerController.getOrder.bind(checkerController)));
-router.get("/getBoxItem/:boxId", verifyRole(ROLES.CHECKER), catchAsync(checkerController.getBoxItem.bind(checkerController)));
-router.post("/moveItemsToBox", verifyRole(ROLES.CHECKER), catchAsync(checkerController.moveItemsToBox.bind(checkerController)));
-router.post("/updateItemQty", verifyRole(ROLES.CHECKER), catchAsync(checkerController.updateItemQty.bind(checkerController)));
-router.post("/createContainerAndMoveItems", verifyRole(ROLES.CHECKER), catchAsync(checkerController.createContainerAndMoveItems.bind(checkerController)));
-router.post("/readyForDelivery/:orderNumber", verifyRole(ROLES.CHECKER), catchAsync(checkerController.readyForDelivery.bind(checkerController)));
-router.post("/capturePhotos/:id", verifyRole(ROLES.CHECKER), multerUpload.array('images'), catchAsync(checkerController.capturePhotos.bind(checkerController)));
-router.post("/printLabels", verifyRole(ROLES.CHECKER), catchAsync(checkerController.printLabels.bind(checkerController)));
-router.get("/testLabels", verifyRole(ROLES.CHECKER), catchAsync(checkerController.generateTestLabels.bind(checkerController)));
+router.get("/getOrder", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.getOrder.bind(checkerController)));
+router.get("/getOrderDetails/:orderNumber", verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(checkerController.getOrderDetails.bind(checkerController)));
+router.get("/getBoxItem/:boxId", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.getBoxItem.bind(checkerController)));
+router.get("/getOrderItems/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.getOrderItems.bind(checkerController)));
+router.post("/moveItemsToBox", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.moveItemsToBox.bind(checkerController)));
+router.post("/updateItemQty", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.updateItemQty.bind(checkerController)));
+router.post("/createContainerAndMoveItems", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.createContainerAndMoveItems.bind(checkerController)));
+router.post("/readyForDelivery/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.readyForDelivery.bind(checkerController)));
+router.post("/capturePhotos/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES), multerUpload.array('images'), catchAsync(checkerController.capturePhotos.bind(checkerController)));
+router.post("/printLabels", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.printLabels.bind(checkerController)));
+router.get("/testLabels", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.generateTestLabels.bind(checkerController)));
 
 export default router;

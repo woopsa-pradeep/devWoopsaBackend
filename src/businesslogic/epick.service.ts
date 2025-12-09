@@ -200,7 +200,7 @@ export class EpickService {
             {
               model: Customer,
               as: 'customer',
-              attributes: ['C_Number', 'C_Name'],
+              attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip'],
               include: [
                 {
                   model: CustomerRoute,
@@ -252,6 +252,10 @@ export class EpickService {
             customer: order.customer ? {
               C_Number: order.customer.C_Number,
               C_Name: order.customer.C_Name,
+              C_Address: order.customer.C_Address || null,
+              C_City: order.customer.C_City || null,
+              C_State: order.customer.C_State || null,
+              C_Zip: order.customer.C_Zip || null,
               Routes: order.customer.Routes || []
             } : null
           };
@@ -322,7 +326,7 @@ export class EpickService {
   async acceptOrder(body: IOrderPick, id: number) {
 
     const isUserExist = await WebUsers.findOne({
-      where: { id: id, status: true, role: 'epick', isActive: true, },
+      where: { id: id, status: true, role: { [Op.in]: ['epick', 'sales'] }, isActive: true, },
       attributes: { exclude: ['password'] } // Exclude password for security
     })
     if (!isUserExist) {
@@ -663,7 +667,241 @@ export class EpickService {
         return finalData;
     }
 
+    async getOrderItemFirst(orderNumber: number) {
+      // Get customer number from order header
+      const orderHeader = await OrderHeader.findOne({
+        where: {
+          Order_Number: orderNumber
+        },
+        attributes: ['C_Number']
+      });
 
+      const customerNumber = (orderHeader as any)?.C_Number || null;
+
+      // Get only the first item (lowest Line_Number)
+      const data = await OrderDetail.findAll({
+        where: {
+          Order_Number: orderNumber,
+          [Op.and]: [
+            // Ensure Quantity_Ordered is greater than Quantity_Shipped
+            { Quantity_Ordered: { [Op.gt]: sequelize.col("Quantity_Shipped") } },
+            // Only show items where Confirmed = 0 (pending from ERP)
+            {
+              [Op.or]: [
+                { Confirmed: false },
+                { Confirmed: 0 },
+                { Confirmed: null }
+              ]
+            }
+          ],
+        },
+        attributes: [
+          "Order_Number",
+          "Line_Number",
+          "Quantity_Ordered",
+          "Pack",
+          "CaseCount",
+          "Quantity_Shipped",
+          "Item_Number",
+          "Confirmed",
+        ],
+        include: [
+          {
+            model: Inventory,
+            as: "inventory",
+            attributes: ["Item_Number", "Description", "Section", "Location"],
+            include: [
+              {
+                model: InventoryUPC,
+                as: "UPCList",
+                attributes: ["UPC_Number"],
+                required: false,
+              },
+              {
+                model: SalesCategory,
+                as: "SalesCategory",
+                attributes: ["Category_Desc"],
+                required: false,
+              },
+            ],
+          },
+        ],
+        order: [["Line_Number", "ASC"]],
+        limit: 1, // Only get the first item
+      });
+
+      if (!data || data.length === 0) {
+        return [];
+      }
+
+      const finalData = await Promise.all(data.map(async (e: any) => {
+        let item = e.dataValues || null;
+
+        const productImage = await ProductImage.findOne({
+          where: {
+            product_number: item.Item_Number.toString(),
+            isAllow: true
+          },
+        });
+
+        const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
+
+        // Check if item has a substitute product
+        let substituteProduct = null;
+        const substitute = await InventorySubstitutes.findOne({
+          where: { Item_Number: item.Item_Number },
+          attributes: ['Item_Number_Substitute', 'Item_Number', 'Substitute_Rule', 'Substitute_Text'],
+          logging: false,
+        });
+
+        if (substitute && customerNumber) {
+          try {
+            const subItemNumber = substitute.get('Item_Number_Substitute') as number;
+            
+            // Get user jurisdiction
+            const userJurisdiction = await getJurisdiction(customerNumber);
+            
+            // Get warehouse settings
+            let wareHouseSetting: any = await Setting.findOne({});
+            wareHouseSetting = wareHouseSetting?.dataValues || null;
+            
+            // Get substitute product details
+            const subProduct = await Inventory.findOne({
+              attributes: [
+                'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+                'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
+                'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
+                'OTP_Number', 'Price_Subclass', 'UnitOunces'
+              ],
+              where: {
+                I_Inactive: false,
+                ShortOrderForm: true,
+                Item_Number: subItemNumber,
+              },
+              include: [
+                {
+                  model: SalesCategory,
+                  as: 'SalesCategory',
+                  attributes: ['Category_Desc','Sales_Category'],
+                  required: false,
+                },
+                {
+                  model: PriceClass,
+                  as: 'PriceClass',
+                  attributes: ['Class_Desc'],
+                  required: false,
+                },
+                {
+                  model: InventoryStatus,
+                  as: 'inventoryStatus',
+                  attributes: ['Inventory_OnHand'],
+                  required: false,
+                },
+                {
+                  model: InventoryUPC,
+                  as: 'UPCList',
+                  attributes: ['UPC_Number'],
+                  where: { Status: 0 },
+                  required: false,
+                },
+              ],
+              logging: false,
+            });
+
+            if (subProduct) {
+              const e = subProduct as any;
+              
+              // Get pricing
+              let price = await getDiscount(subItemNumber, customerNumber);
+              if (!price) {
+                price = await getFirstValidPrice(e);
+              }
+              
+              const subInventoryOnHand = (await getInventoryOnHand(subItemNumber)) || 0;
+              
+              let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
+              taxRate = Math.ceil(taxRate * 100) / 100;
+              
+              const productImages = await ProductImage.findAll({
+                where: {
+                  product_number: e.Item_Number.toString(),
+                  isAllow: true,
+                },
+                logging: false,
+              });
+              
+              const productImage = productImages?.[0] ?? null;
+              
+              const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
+              const productLimit = await getProductLimit(e.Item_Number);
+              
+              let allowToOrder = true;
+              if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && subInventoryOnHand <= 0) {
+                allowToOrder = false;
+              }
+              let prepaidTaxRate = 0
+              if(userJurisdiction !=null && e.salesCategory){
+                prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+              }
+              substituteProduct = {
+                Pack: e.Pack,
+                Description: e.Description,
+                Item_Number: e.Item_Number,
+                CaseCount: e.CaseCount,
+                UOM: e.UOM,
+                isDiscounted,
+                Price1: e.Price1,
+                Tax_Rate: taxRate,
+                OTP_Number: e.OTP_Number,
+                price: Math.ceil(price * 100) / 100,
+                priceWithTax: Math.ceil((price + taxRate) * 100) / 100,
+                BaseCost: e.BaseCost,
+                Invoice_Cost: e.Invoice_Cost,
+                AvgCost: e.AvgCost,
+                NetCost: e.NetCost,
+                hasProductLimit: !!productLimit,
+                productLimit,
+                UPCList: e.UPCList,
+                hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+                prepaidTaxRate: prepaidTaxRate,
+                Inventory_OnHand: subInventoryOnHand,
+                UnitOunces: e.UnitOunces,
+                allowToOrder,
+                showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
+                showLowStock: wareHouseSetting?.retailer?.showStock
+                  ? false
+                  : subInventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+                showWithOutPrice: wareHouseSetting?.retailer?.showWithOutPrice || false,
+                SalesCategory: e.SalesCategory?.Category_Desc || null,
+                PriceClass: e.PriceClass?.Class_Desc || null,
+                showDistributorImage: productImage?.isAllow ?? false,
+                distributorImage: productImage?.img_url || null,
+                masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number ?? ''}.jpg`,
+                SubstituteFrom: substitute.get('Item_Number'),
+                SubstituteTo: subItemNumber,
+                Substitute_Rule: substitute.get('Substitute_Rule') ?? null,
+                Substitute_Text: substitute.get('Substitute_Text') ?? null,
+              };
+            }
+          } catch (error) {
+            // If substitute product fetch fails, just continue without it
+            console.error('Error fetching substitute product:', error);
+          }
+        }
+
+        return {
+          ...item,
+          inventoryOnHand: inventoryOnHand,
+          masterImage: `${process.env.AZUREIMAGESERVER}${item?.inventory?.UPCList?.[0]?.UPC_Number || ''}.jpg`,
+          isDistributorImageShow: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url || null,
+          substituteProduct: substituteProduct,
+          SalesCategory: item?.inventory?.SalesCategory?.Category_Desc || null
+        };
+      }));
+
+      return finalData;
+    }
 
   async addProductInBox(data: any) {
 
@@ -2188,6 +2426,429 @@ export class EpickService {
   }
 
   /**
+   * Get list of all complete orders ready for checker
+   * - Only returns orders that are completed by epick but NOT completed by checker
+   * - Returns order information (no details)
+   * - Includes override request counts
+   */
+  async getCompleteOrder() {
+    // Get all completed orders from OrderPick (epick completed)
+    const completedOrders = await OrderPick.findAll({
+      where: {
+        status: 'completed' // Only get completed orders (already picked by epick)
+      },
+      attributes: ['orderNumber', 'startedAt', 'completedAt'],
+      raw: false,
+    });
+
+    // Get unique order numbers
+    const completedOrderNumbers = Array.from(
+      new Set(
+        completedOrders
+          .map((o: any) => o?.orderNumber)
+          .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
+          .map((v: any) => Number(v))
+      )
+    );
+
+    if (completedOrderNumbers.length === 0) {
+      return [];
+    }
+
+    // Query OrderHeader for completed orders with same conditions as checker
+    const headerWhere: any = {
+      // Exclude orders where Order_Updated = 1
+      Order_Updated: { [Op.ne]: true },
+      // Only get orders that are completed (already picked)
+      Order_Number: { [Op.in]: completedOrderNumbers },
+      // Only orders not invoiced (checker not completed)
+      Invoice_Number: 0
+    };
+
+    const orderHeaders = await OrderHeader.findAll({
+      where: headerWhere,
+      attributes: [
+        'Order_Number',
+        'Order_Date',
+        'C_Number',
+        'Route_Number',
+        'Stop_Number',
+        'Invoice_Number',
+        'Bundles',
+        'Totes',
+        'Picker_ID',
+        'Confirmed',
+        'Invoice_Total'
+      ],
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip'],
+          required: false,
+          include: [
+            {
+              model: CustomerRoute,
+              as: 'Routes',
+              attributes: ['Route_Number', 'Stop_Number'],
+              required: false,
+            }
+          ]
+        }
+      ],
+      order: [['Order_Number', 'ASC']],
+    });
+
+    if (orderHeaders.length === 0) {
+      return [];
+    }
+
+    // Get all order numbers from the completed orders list
+    const orderNumbers = orderHeaders.map((order: any) => order.Order_Number);
+
+    // Validation: Check that ALL products in OrderDetail have Confirmed = 1
+    // Only include orders where every item is confirmed (same as checker)
+    let validatedOrderNumbers = orderNumbers;
+    if (orderNumbers.length > 0) {
+      // Query to find orders where ALL items have Confirmed = 1
+      // This query returns orders where total items = confirmed items
+      // Only orders where every single item has Confirmed = 1 will pass this validation
+      const confirmedOrdersQuery = await sequelize.query(
+        `SELECT Order_Number
+         FROM Order_Detail
+         WHERE Order_Number IN (:orderNumbers)
+         GROUP BY Order_Number
+         HAVING COUNT(*) = SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END)`,
+        {
+          replacements: { orderNumbers: orderNumbers },
+          type: QueryTypes.SELECT,
+          raw: true,
+        }
+      ) as any[];
+
+      const validatedOrderNumbersSet = new Set(
+        confirmedOrdersQuery
+          .map((row: any) => row.Order_Number)
+          .filter((v: any) => v !== null && v !== undefined)
+          .map((v: any) => Number(v))
+      );
+
+      // Filter orderHeaders to only include orders where all items are confirmed
+      validatedOrderNumbers = Array.from(validatedOrderNumbersSet);
+
+      // If no orders pass validation, return empty array
+      if (validatedOrderNumbers.length === 0) {
+        return [];
+      }
+
+      // Filter orderHeaders to only include validated orders
+      const filteredOrders = orderHeaders.filter((order: any) =>
+        validatedOrderNumbers.includes(order.Order_Number)
+      );
+
+      // Update orderHeaders to only include validated orders
+      orderHeaders.length = 0;
+      orderHeaders.push(...filteredOrders);
+
+      // Update orderNumbers to only include validated orders
+      orderNumbers.length = 0;
+      orderNumbers.push(...validatedOrderNumbers);
+    }
+
+    // Get override request counts for each order
+    const overrideRequests = await OverrideRequest.findAll({
+      where: {
+        orderNumber: { [Op.in]: orderNumbers }
+      },
+      attributes: ['orderNumber', 'status'],
+      raw: true,
+    });
+
+    // Count override requests by order and status
+    const overrideCounts: any = {};
+    overrideRequests.forEach((req: any) => {
+      const orderNum = req.orderNumber;
+      if (!overrideCounts[orderNum]) {
+        overrideCounts[orderNum] = {
+          pending: 0,
+          approved: 0,
+          rejected: 0,
+          cancelled: 0,
+          total: 0
+        };
+      }
+      overrideCounts[orderNum][req.status] = (overrideCounts[orderNum][req.status] || 0) + 1;
+      overrideCounts[orderNum].total += 1;
+    });
+
+    // Create map of orderNumber to OrderPick data
+    const orderPickMap: any = {};
+    completedOrders.forEach((order: any) => {
+      if (order.orderNumber) {
+        orderPickMap[order.orderNumber] = {
+          startedAt: order.startedAt,
+          completedAt: order.completedAt
+        };
+      }
+    });
+
+    // Format response
+    return orderHeaders.map((order: any) => {
+      const orderNum = order.Order_Number;
+      const customer = order.customer;
+      const customerRoute = customer?.Routes?.[0];
+      const orderPickData = orderPickMap[orderNum] || { startedAt: null, completedAt: null };
+      const overrideCount = overrideCounts[orderNum] || {
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+        cancelled: 0,
+        total: 0
+      };
+
+      return {
+        orderNumber: orderNum,
+        orderDate: order.Order_Date,
+        invoiceNumber: order.Invoice_Number || 0,
+        bundles: order.Bundles || 0,
+        totes: order.Totes || 0,
+        pickerId: order.Picker_ID || null,
+        confirmed: order.Confirmed || false,
+        invoiceTotal: order.Invoice_Total || null,
+        customer: customer ? {
+          customerNumber: customer.C_Number,
+          customerName: customer.C_Name,
+          address: customer.C_Address,
+          city: customer.C_City,
+          state: customer.C_State,
+          zip: customer.C_Zip,
+          route: customerRoute?.Route_Number || order.Route_Number || null,
+          stop: customerRoute?.Stop_Number || order.Stop_Number || null
+        } : null,
+        overrideRequests: overrideCount,
+        checkerStatus: {
+          isReadyForChecker: true,
+          status: 'completed',
+          startedAt: orderPickData.startedAt,
+          completedAt: orderPickData.completedAt
+        }
+      };
+    });
+  }
+
+  /**
+   * Get complete order information (order info only, no details)
+   * - Only returns orders that are completed by epick but NOT completed by checker
+   * - Order header information
+   * - All override requests for this order (all statuses)
+   * - Checker status (should be ready for checker but not completed)
+   */
+  async getCompleteOrderDetails(orderNumber: number) {
+    // Validate order number
+    if (!orderNumber || isNaN(orderNumber)) {
+      throw new AppError('Invalid order number', 400);
+    }
+
+    // Check if order is completed by epick but NOT completed by checker
+    const orderPick = await OrderPick.findOne({
+      where: { 
+        orderNumber: orderNumber,
+        status: 'completed' // Epick must be completed
+      },
+      attributes: ['orderNumber', 'status', 'startedAt', 'completedAt']
+    });
+
+    if (!orderPick) {
+      throw new AppError('Order not found or epick is not completed yet.', 404);
+    }
+
+    // Check if checker has already completed (invoice created or status is ready_for_delivery)
+    const orderHeader = await OrderHeader.findOne({
+      where: { Order_Number: orderNumber },
+      attributes: ['Invoice_Number']
+    });
+
+    if (!orderHeader) {
+      throw new AppError('Order header not found', 404);
+    }
+
+    // If invoice is created (Invoice_Number > 0), checker has completed - don't show
+    const invoiceNumber = (orderHeader as any).Invoice_Number || 0;
+    if (invoiceNumber > 0) {
+      throw new AppError('Order has already been completed by checker (invoiced).', 404);
+    }
+
+    // Get order header with customer information
+    const fullOrderHeader = await OrderHeader.findOne({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Order_Number',
+        'Order_Date',
+        'C_Number',
+        'Route_Number',
+        'Stop_Number',
+        'Invoice_Number',
+        'Bundles',
+        'Totes',
+        'Picker_ID',
+        'Confirmed',
+        'Invoice_Total'
+      ],
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip'],
+          required: false,
+          include: [
+            {
+              model: CustomerRoute,
+              as: 'Routes',
+              attributes: ['Route_Number', 'Stop_Number'],
+              required: false,
+            }
+          ]
+        }
+      ]
+    });
+
+    if (!fullOrderHeader) {
+      throw new AppError('Order not found', 404);
+    }
+
+    // Get all override requests for this order (all statuses)
+    const overrideRequests = await OverrideRequest.findAll({
+      where: { orderNumber: orderNumber },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
+          required: false,
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Get item descriptions for override requests
+    const itemNumbers = overrideRequests.map(req => req.itemNumber);
+    const inventories = await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: itemNumbers },
+      },
+      attributes: ['Item_Number', 'Description'],
+    });
+
+    const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
+
+    // Format override requests
+    const formattedOverrideRequests = overrideRequests.map((req: any) => {
+      const user = req.user as WebUsers | undefined;
+      return {
+        requestId: req.id,
+        orderNumber: req.orderNumber,
+        itemNumber: req.itemNumber,
+        itemDescription: inventoryMap.get(req.itemNumber) || null,
+        pickerUserNumber: req.pickerUserNumber,
+        userName: user ? `${user.firstName} ${user.lastName}` : null,
+        userEmail: user?.email || null,
+        status: req.status,
+        note: req.note,
+        rejectionReason: req.rejectionReason,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+      };
+    });
+
+    // Format customer information
+    const orderHeaderData = fullOrderHeader as any;
+    const customer = orderHeaderData.customer;
+    const customerRoute = customer?.Routes?.[0];
+
+    return {
+      orderInfo: {
+        orderNumber: orderHeaderData.Order_Number,
+        orderDate: orderHeaderData.Order_Date,
+        invoiceNumber: orderHeaderData.Invoice_Number || null,
+        bundles: orderHeaderData.Bundles || 0,
+        totes: orderHeaderData.Totes || 0,
+        pickerId: orderHeaderData.Picker_ID || null,
+        confirmed: orderHeaderData.Confirmed || false,
+        invoiceTotal: orderHeaderData.Invoice_Total || null,
+        customer: customer ? {
+          customerNumber: customer.C_Number,
+          customerName: customer.C_Name,
+          address: customer.C_Address,
+          city: customer.C_City,
+          state: customer.C_State,
+          zip: customer.C_Zip,
+          route: customerRoute?.Route_Number || orderHeaderData.Route_Number || null,
+          stop: customerRoute?.Stop_Number || orderHeaderData.Stop_Number || null
+        } : null
+      },
+      overrideRequests: formattedOverrideRequests,
+      checkerStatus: {
+        isReadyForChecker: true,
+        status: 'completed',
+        startedAt: orderPick?.startedAt || null,
+        completedAt: orderPick?.completedAt || null
+      }
+    };
+  }
+
+  /**
+   * Get pending override requests by order number (for distributor)
+   */
+  async getPendingOverrideRequestsByOrder(orderNumber: number) {
+    // Validate order number
+    if (!orderNumber || isNaN(orderNumber)) {
+      throw new AppError('Invalid order number', 400);
+    }
+
+    const pendingRequests = await OverrideRequest.findAll({
+      where: {
+        status: 'pending',
+        orderNumber: orderNumber,
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Get item descriptions for all requests
+    const itemNumbers = pendingRequests.map(req => req.itemNumber);
+    const inventories = await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: itemNumbers },
+      },
+      attributes: ['Item_Number', 'Description'],
+    });
+
+    const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
+
+    return pendingRequests.map((req: any) => {
+      const user = req.user as WebUsers | undefined;
+      return {
+        requestId: req.id,
+        orderNumber: req.orderNumber,
+        itemNumber: req.itemNumber,
+        itemDescription: inventoryMap.get(req.itemNumber) || null,
+        pickerUserNumber: req.pickerUserNumber,
+        userName: user ? `${user.firstName} ${user.lastName}` : null,
+        userEmail: user?.email || null,
+        note: req.note,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+      };
+    });
+  }
+
+  /**
    * Get all approved override requests (for distributor)
    */
   async getApprovedOverrideRequests() {
@@ -2637,11 +3298,18 @@ export class EpickService {
       },
     });
 
-    // 4. Delete the order pick record
+    // 4. Delete all override requests for this order
+    await OverrideRequest.destroy({
+      where: {
+        orderNumber: orderNumber,
+      },
+    });
+
+    // 5. Delete the order pick record
     // This also removes it from getUserCurrentOrder API (which queries Order_Pick with status='in_progress')
     await orderPick.destroy();
 
-    // 5. Delete from Record_Locks (MSSQL) - this is what makes the order visible again in getOrder
+    // 6. Delete from Record_Locks (MSSQL) - this is what makes the order visible again in getOrder
     await RecordLock.destroy({
       where: {
         Lock_Type: 0,
@@ -2649,7 +3317,7 @@ export class EpickService {
       },
     });
 
-    // 6. Optionally reset Quantity_Shipped in Order_Detail (reset to 0)
+    // 7. Optionally reset Quantity_Shipped in Order_Detail (reset to 0)
     // This ensures clean state if order is accepted again
     await OrderDetail.update(
       { Quantity_Shipped: 0 },

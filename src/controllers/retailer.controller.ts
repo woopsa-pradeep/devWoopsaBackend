@@ -37,13 +37,15 @@ export class RetailerController {
   }
 
   async createInventoryLocation(req: AuthRequest, res: Response) {
-    const data = await this.retailerService.createInventoryLocation(req.body);
+    const body = { ...req.body, C_Number: req.user.id };
+    const data = await this.retailerService.createInventoryLocation(body);
     sendResponse(res, 201, true, data, 'Inventory location created successfully');
   }
 
   async updateInventoryLocation(req: AuthRequest, res: Response) {
+    const body = { ...req.body, C_Number: req.user.id };
     const id = Number(req.params.id);
-    const data = await this.retailerService.updateInventoryLocation(id, req.body);
+    const data = await this.retailerService.updateInventoryLocation(id, body);
     sendResponse(res, 200, true, data, 'Inventory location updated successfully');
   }
 

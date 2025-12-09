@@ -9,6 +9,7 @@ import { Retailer } from "../models/postgres/retailer.model";
 import Setting from "../models/postgres/setting.model";
 import { WarehouseSetting } from "../models/postgres/wareHouseSetting.model";
 import { generateRandomSixDigitNumber } from "../utils/helper";
+import { InvoiceSetting } from "../models/postgres/invoiceSetting.model";
 
 export async function seedWarehouseSetting() {
   const existing = await Setting.findOne();
@@ -111,4 +112,27 @@ export async function seedAppUpdate() {
     });
   }
 
+}
+
+export async function seedInvoiceSetting() {
+  const existing = await InvoiceSetting.findOne({});
+  const distributor = await Distributor.findOne();
+
+  if (!existing) {
+    await InvoiceSetting.create({
+      Name: distributor?.D_Name,
+      Email: distributor?.D_Email,
+      Address_line_1: distributor?.D_Addr1,
+      Address_line_2: distributor?.D_Addr2,
+      Full_address: ({
+        City: distributor?.D_City,
+        State: distributor?.D_State,
+        Zip: distributor?.D_Zip
+      }),
+      Phone: distributor?.D_Phone,
+      Fax: distributor?.D_Fax,
+    });
+    
+
+  } 
 }

@@ -6,7 +6,7 @@ export class TaxRates_County extends Model {}
 
 TaxRates_County.init(
   {
-    Jurisdiction_County: { type: DataTypes.INTEGER, allowNull: true },
+    Jurisdiction_County: { type: DataTypes.INTEGER,primaryKey:true, allowNull: true },
     TaxDescription: { type: DataTypes.STRING, allowNull: true },
     TaxRate: { type: DataTypes.DECIMAL(18, 4), allowNull: true },
     Jurisdiction_State: { type: DataTypes.INTEGER, allowNull: true },
