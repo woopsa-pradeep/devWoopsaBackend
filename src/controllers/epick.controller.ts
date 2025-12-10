@@ -80,7 +80,7 @@ export class EpickController {
      * Returns complete order details with override requests, order items, and picking time
      * Same structure as getUserReportWithDateRange but for a single order
      * 
-     * Example Response:
+     * Full Example Response:
      * {
      *   "success": true,
      *   "message": "Success",
@@ -97,7 +97,7 @@ export class EpickController {
      *     "scannedLines": 25,
      *     "scannedQty": 150.5000,
      *     "OutOfStockItem": 2,
-     *     "notes": null,
+     *     "notes": "Handle with care",
      *     "picker": {
      *       "id": 10,
      *       "firstName": "John",
@@ -127,6 +127,28 @@ export class EpickController {
      *         "rejectionReason": null,
      *         "createdAt": "2024-01-15T09:00:00.000Z",
      *         "updatedAt": "2024-01-15T09:05:00.000Z"
+     *       },
+     *       {
+     *         "id": 2,
+     *         "orderNumber": 132698,
+     *         "itemNumber": 234787,
+     *         "pickerUserNumber": 10,
+     *         "status": "pending",
+     *         "note": "Need manager approval",
+     *         "rejectionReason": null,
+     *         "createdAt": "2024-01-15T09:10:00.000Z",
+     *         "updatedAt": "2024-01-15T09:10:00.000Z"
+     *       },
+     *       {
+     *         "id": 3,
+     *         "orderNumber": 132698,
+     *         "itemNumber": 234788,
+     *         "pickerUserNumber": 10,
+     *         "status": "rejected",
+     *         "note": "Requesting override",
+     *         "rejectionReason": "Not approved by manager",
+     *         "createdAt": "2024-01-15T09:15:00.000Z",
+     *         "updatedAt": "2024-01-15T09:20:00.000Z"
      *       }
      *     ],
      *     "orderItems": [
@@ -149,10 +171,61 @@ export class EpickController {
      *             "Sales_Category": 1
      *           }
      *         }
+     *       },
+     *       {
+     *         "Order_Number": 132698,
+     *         "Line_Number": 2,
+     *         "Item_Number": 234787,
+     *         "Quantity_Ordered": 2,
+     *         "Quantity_Shipped": 0,
+     *         "Pack": 10,
+     *         "CaseCount": 20,
+     *         "Confirmed": true,
+     *         "inventory": {
+     *           "Item_Number": 234787,
+     *           "Description": "Product Name 2",
+     *           "Section": "B2",
+     *           "Location": 15,
+     *           "SalesCategory": {
+     *             "Category_Desc": "Tobacco",
+     *             "Sales_Category": 2
+     *           }
+     *         }
+     *       },
+     *       {
+     *         "Order_Number": 132698,
+     *         "Line_Number": 3,
+     *         "Item_Number": 234788,
+     *         "Quantity_Ordered": 3,
+     *         "Quantity_Shipped": 3,
+     *         "Pack": 12,
+     *         "CaseCount": 24,
+     *         "Confirmed": true,
+     *         "inventory": {
+     *           "Item_Number": 234788,
+     *           "Description": "Product Name 3",
+     *           "Section": "C3",
+     *           "Location": 20,
+     *           "SalesCategory": {
+     *             "Category_Desc": "Beverages",
+     *             "Sales_Category": 3
+     *           }
+     *         }
      *       }
      *     ],
      *     "pickingTimeSeconds": 8100,
-     *     "pickingTimeFormatted": "02:15:00"
+     *     "pickingTimeFormatted": "02:15:00",
+     *     "distributor": {
+     *       "D_Name": "ABC Distributors",
+     *       "D_Addr1": "123 Main Street",
+     *       "D_Addr2": "Suite 100",
+     *       "D_City": "New York",
+     *       "D_State": "NY",
+     *       "D_Zip": "10001",
+     *       "D_Phone": "555-1234",
+     *       "D_Email": "info@abcdist.com"
+     *     },
+     *     "logo": "https://woopsacdn.blob.core.windows.net/warehouse-images/logo.jpg"
      *   }
      * }
      */

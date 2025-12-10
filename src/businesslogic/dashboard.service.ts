@@ -16,6 +16,8 @@ import InventorySpecials from "../models/mmsql/inventorySpecail.model";
 import { WarehouseSetting } from "../models/postgres/wareHouseSetting.model";
 import Setting from "../models/postgres/setting.model";
 import { OrderHistory } from "../models/postgres/orderHistory.model";
+import { OrderPick } from "../models/postgres/epickOrder.model";
+import { WebUsers } from "../models/postgres/users.model";
 
 
 export class DashboardService {
@@ -1925,5 +1927,186 @@ export class DashboardService {
         return top10HighDemandProducts;
     }
 
+    async getEpickDashboard(query: PaginationOptions & { fromDate?: string; toDate?: string }) {
+        const { fromDate, toDate } = query;
+
+        // Parse dates and create date range - using proper date parsing
+        let startDate, endDate;
+
+        if (fromDate) {
+            // Parse date string like "2023-12-17" to Date object
+            const [year, month, day] = fromDate.split('-').map(Number);
+            startDate = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
+        } else {
+            startDate = new Date(new Date().getFullYear(), 0, 1); // January 1st of current year
+        }
+
+        if (toDate) {
+            // Parse date string like "2024-12-17" to Date object
+            const [year, month, day] = toDate.split('-').map(Number);
+            endDate = new Date(year, month - 1, day, 23, 59, 59, 999); // month is 0-indexed
+        } else {
+            endDate = new Date();
+        }
+
+        console.log('Epick Dashboard Date range:', { startDate, endDate, fromDate, toDate });
+
+        // Date filter condition for OrderHeader
+        const dateFilter = {
+            Order_Date: {
+                [Op.between]: [startDate, endDate]
+            },
+            Order_Deleted: false
+        };
+
+        // Get all OrderPick records and join with OrderHeader to filter by date
+        // First, get all order numbers within date range
+        const ordersInDateRange = await OrderHeader.findAll({
+            where: dateFilter,
+            attributes: ['Order_Number'],
+            raw: true
+        });
+
+        const orderNumbers = ordersInDateRange.map((order: any) => order.Order_Number);
+
+        if (orderNumbers.length === 0) {
+            return {
+                orderStatistics: {
+                    totalOrders: 0,
+                    completedByEpick: 0,
+                    pendingFromEpick: 0
+                },
+                pickerWiseOrders: [],
+                averageOrderTime: {
+                    averageTimeSeconds: 0,
+                    averageTimeFormatted: '00:00:00'
+                },
+                dateRange: {
+                    fromDate: startDate.toISOString().split('T')[0],
+                    toDate: endDate.toISOString().split('T')[0]
+                }
+            };
+        }
+
+        // Get all OrderPick records for these orders (orders assigned to epick)
+        const allOrderPicks = await OrderPick.findAll({
+            where: {
+                orderNumber: { [Op.in]: orderNumbers }
+            },
+            attributes: ['orderNumber', 'status', 'pickerUserNumber', 'startedAt', 'completedAt'],
+            raw: true
+        });
+
+        // 1. Order Statistics: Total orders assigned to epick, Completed by epick, Pending from epick
+        const totalOrders = allOrderPicks.length; // Total orders assigned to epick
+        const completedByEpick = allOrderPicks.filter((pick: any) => pick.status === 'completed').length;
+        const pendingFromEpick = allOrderPicks.filter((pick: any) => 
+            pick.status === 'pending' || pick.status === 'in_progress'
+        ).length;
+
+        // 2. Picker-wise total orders and average time (completed orders only)
+        const completedOrderPicks = allOrderPicks.filter((pick: any) => pick.status === 'completed');
+        
+        // Group by pickerUserNumber - count orders and calculate time
+        const pickerOrderCount: { [key: number]: number } = {};
+        const pickerTimeData: { [key: number]: { totalTime: number; orderCount: number } } = {};
+
+        completedOrderPicks.forEach((pick: any) => {
+            const pickerId = pick.pickerUserNumber;
+            pickerOrderCount[pickerId] = (pickerOrderCount[pickerId] || 0) + 1;
+            
+            // Calculate time for this order
+            if (pick.startedAt && pick.completedAt) {
+                const startTime = new Date(pick.startedAt).getTime();
+                const endTime = new Date(pick.completedAt).getTime();
+                const timeDiff = (endTime - startTime) / 1000; // Convert to seconds
+                if (timeDiff > 0) {
+                    if (!pickerTimeData[pickerId]) {
+                        pickerTimeData[pickerId] = { totalTime: 0, orderCount: 0 };
+                    }
+                    pickerTimeData[pickerId].totalTime += timeDiff;
+                    pickerTimeData[pickerId].orderCount += 1;
+                }
+            }
+        });
+
+        // Get user details for all pickers
+        const pickerUserIds = Object.keys(pickerOrderCount).map(Number);
+        const pickerUsers = await WebUsers.findAll({
+            where: {
+                id: { [Op.in]: pickerUserIds }
+            },
+            attributes: ['id', 'firstName', 'lastName', 'userNumber'],
+            raw: true
+        });
+
+        // Helper function to format time
+        const formatTime = (seconds: number) => {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        };
+
+        // Create picker-wise order list with average time
+        const pickerWiseOrders = pickerUsers.map((user: any) => {
+            const fullName = `${user.firstName} ${user.lastName}`.trim();
+            const timeData = pickerTimeData[user.id];
+            const averageTimeSeconds = timeData && timeData.orderCount > 0 
+                ? Math.round(timeData.totalTime / timeData.orderCount) 
+                : 0;
+            
+            return {
+                pickerId: user.id,
+                pickerName: fullName || user.userNumber || `User ${user.id}`,
+                totalCompletedOrders: pickerOrderCount[user.id] || 0,
+                averageOrderTime: {
+                    averageTimeSeconds: averageTimeSeconds,
+                    averageTimeFormatted: formatTime(averageTimeSeconds)
+                }
+            };
+        }).sort((a, b) => b.totalCompletedOrders - a.totalCompletedOrders);
+
+        // 3. Overall average time of orders for all epick users
+        let totalTimeSeconds = 0;
+        let ordersWithTime = 0;
+
+        completedOrderPicks.forEach((pick: any) => {
+            if (pick.startedAt && pick.completedAt) {
+                const startTime = new Date(pick.startedAt).getTime();
+                const endTime = new Date(pick.completedAt).getTime();
+                const timeDiff = (endTime - startTime) / 1000; // Convert to seconds
+                if (timeDiff > 0) {
+                    totalTimeSeconds += timeDiff;
+                    ordersWithTime++;
+                }
+            }
+        });
+
+        const averageTimeSeconds = ordersWithTime > 0 ? Math.round(totalTimeSeconds / ordersWithTime) : 0;
+        
+        // Format average time as HH:MM:SS
+        const hours = Math.floor(averageTimeSeconds / 3600);
+        const minutes = Math.floor((averageTimeSeconds % 3600) / 60);
+        const seconds = averageTimeSeconds % 60;
+        const averageTimeFormatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+        return {
+            orderStatistics: {
+                totalOrders,
+                completedByEpick,
+                pendingFromEpick
+            },
+            pickerWiseOrders,
+            averageOrderTime: {
+                averageTimeSeconds,
+                averageTimeFormatted
+            },
+            dateRange: {
+                fromDate: startDate.toISOString().split('T')[0],
+                toDate: endDate.toISOString().split('T')[0]
+            }
+        };
+    }
 
 }

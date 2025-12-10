@@ -1704,135 +1704,123 @@ export class RetailerService {
   // }
 
 
+
   async getOrderHistory(customerNumber: number, query: PaginationOptions & { search?: string, startDate?: string, endDate?: string }) {
-  let { page = 1, limit = 10, search, startDate, endDate } = query;
-  page = parseInt(page as any) || 1;
-  limit = parseInt(limit as any) || 10;
-  const offset = (page - 1) * limit;
+    let { page = 1, limit = 10, search, startDate, endDate } = query;
+    page = parseInt(page as any) || 1;
+    limit = parseInt(limit as any) || 10;
+    const offset = (page - 1) * limit;
 
-  // Build where clause for OrderHeader
-  let whereClause: any = { C_Number: customerNumber, Order_Deleted: false };
+    // Build where clause for OrderHeader
+    let whereClause: any = { C_Number: customerNumber, Order_Deleted: false };
 
-  // SEARCH LOGIC (unchanged)
-  if (search) {
-    const searchLower = search.toLowerCase();
+    // Add search functionality if provided
+    if (search) {
+      const searchLower = search.toLowerCase();
 
-    let orderSourceCondition = null;
-    if (searchLower === 'web' || searchLower === 'app' || searchLower === 'erp') {
-      if (searchLower === 'web') orderSourceCondition = 13;
-      else if (searchLower === 'app') orderSourceCondition = 12;
-      else if (searchLower === 'erp') {
-        whereClause[Op.and] = [
-          { Order_Source: { [Op.notIn]: [12, 13] } }
+      // Check if search is for order source names
+      let orderSourceCondition = null;
+      if (searchLower === 'web' || searchLower === 'app' || searchLower === 'erp') {
+        if (searchLower === 'web') {
+          orderSourceCondition = 13;
+        } else if (searchLower === 'app') {
+          orderSourceCondition = 12;
+        } else if (searchLower === 'erp') {
+          // ERP is everything else (not 12 or 13)
+          whereClause[Op.and] = [
+            { Order_Source: { [Op.notIn]: [12, 13] } }
+          ];
+        }
+      }
+
+      if (orderSourceCondition) {
+        whereClause[Op.or] = [
+          { Order_Number: { [Op.like]: `%${search}%` } },
+          { Order_Source: orderSourceCondition }
+        ];
+      } else {
+        whereClause[Op.or] = [
+          { Order_Number: { [Op.like]: `%${search}%` } },
+          { Order_Source: { [Op.like]: `%${search}%` } }
         ];
       }
     }
 
-    if (orderSourceCondition) {
-      whereClause[Op.or] = [
-        { Order_Number: { [Op.like]: `%${search}%` } },
-        { Order_Source: orderSourceCondition }
-      ];
-    } else {
-      whereClause[Op.or] = [
-        { Order_Number: { [Op.like]: `%${search}%` } },
-        { Order_Source: { [Op.like]: `%${search}%` } }
-      ];
+    // Add date filtering if provided
+    if (startDate || endDate) {
+      whereClause.Order_Date = {};
+
+      if (startDate) {
+        whereClause.Order_Date[Op.gte] = startDate;
+      }
+
+      if (endDate) {
+        whereClause.Order_Date[Op.lte] = endDate;
+      }
     }
-  }
 
-  // DATE FILTERS (unchanged)
-  if (startDate || endDate) {
-    whereClause.Order_Date = {};
-    if (startDate) whereClause.Order_Date[Op.gte] = startDate;
-    if (endDate) whereClause.Order_Date[Op.lte] = endDate;
-  }
+    // Get order headers with pagination
+    const { count: totalCount, rows: orderHeaders } = await OrderHeader.findAndCountAll({
+      where: whereClause,
+      attributes: [
+        'Order_Number',
+        'Order_Date',
+        'User_ID',
+        'Order_Source'
+      ],
+      order: [['Order_Number', 'DESC']],
+      limit,
+      offset
+    });
 
-  // -----------------------------------------------------------
-  // ✅ SUPER OPTIMIZATION: VALID ORDERS USING SUBQUERY
-  // -----------------------------------------------------------
-  whereClause.Order_Number = {
-    [Op.in]: Sequelize.literal(`(
-        SELECT od.Order_Number
-        FROM "Order_Detail" od
-        GROUP BY od.Order_Number
-        HAVING SUM(od."Quantity_Ordered") > 0
-    )`)
-  };
+    // Get order details with quantity sums for each order
+    const orderNumbers = orderHeaders.map((header: any) => header.Order_Number);
 
-  // -----------------------------------------------------------
-  // FETCH PAGED ORDER HEADERS
-  // -----------------------------------------------------------
-  const orderHeaders = await OrderHeader.findAll({
-    where: whereClause,
-    attributes: [
-      'Order_Number',
-      'Order_Date',
-      'User_ID',
-      'Order_Source',
-      [Sequelize.literal(`(
-        SELECT SUM(od."Quantity_Ordered")
-        FROM "Order_Detail" od
-        WHERE od."Order_Number" = "OrderHeader"."Order_Number"
-      )`), 'totalQuantity']
-    ],
-    include: [
-      {
-        model: OrderDetail,
-        as: 'orderDetails',
-        required: true,
-        attributes: []
+    const orderDetailsWithSums = await OrderDetail.findAll({
+      where: {
+        Order_Number: { [Op.in]: orderNumbers }
+      },
+      attributes: [
+        'Order_Number',
+        [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+      ],
+      group: ['Order_Number'],
+      raw: true
+    });
+
+    // Create a map for quick lookup
+    const quantityMap = new Map(
+      orderDetailsWithSums.map((detail: any) => [detail.Order_Number, detail.totalQuantity])
+    );
+
+    // Combine order headers with their total quantities
+    const result = orderHeaders.map((header: any) => {
+      // Map Order_Source to readable names
+      let orderSourceName = 'ERP';
+      if (header.Order_Source === 13) {
+        orderSourceName = 'Web';
+      } else if (header.Order_Source === 12) {
+        orderSourceName = 'App';
       }
-    ],
-    order: [['Order_Number', 'DESC']],
-    limit,
-    offset,
-    raw: true
-  });
 
-  // -----------------------------------------------------------
-  // COUNT TOTAL RECORDS
-  // -----------------------------------------------------------
-  const totalCount = await OrderHeader.count({
-    where: whereClause,
-    include: [
-      {
-        model: OrderDetail,
-        as: 'orderDetails',
-        required: true,
-        attributes: []
-      }
-    ],
-    distinct: true,
-    col: 'Order_Number'
-  });
-
-  // -----------------------------------------------------------
-  // FINAL RESULT MAPPING (unchanged)
-  // -----------------------------------------------------------
-  const result = orderHeaders.map((header: any) => {
-    let orderSourceName = 'ERP';
-    if (header.Order_Source === 13) orderSourceName = 'Web';
-    else if (header.Order_Source === 12) orderSourceName = 'App';
+      return {
+        Order_Number: header.Order_Number,
+        Order_Date: header.Order_Date,
+        User_ID: header.User_ID,
+        Order_Source: header.Order_Source,
+        Order_Source_Name: orderSourceName,
+        totalQuantity: quantityMap.get(header.Order_Number) || 0
+      };
+    });
 
     return {
-      Order_Number: header.Order_Number,
-      Order_Date: header.Order_Date,
-      User_ID: header.User_ID,
-      Order_Source: header.Order_Source,
-      Order_Source_Name: orderSourceName,
-      totalQuantity: Number(header.totalQuantity) || 0
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      data: result
     };
-  });
-
-  return {
-    totalCount,
-    page,
-    limit,
-    totalPages: Math.ceil(totalCount / limit),
-    data: result
-  };
-}
+  }
 
 
   async getOrderHistoryByOrderNumber(orderNumber: number, query: PaginationOptions) {

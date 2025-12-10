@@ -11,7 +11,7 @@ import { ProductImage } from "../models/postgres/product.model";
 import { AppError } from "../utils/AppError";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
-import { cast, col, literal, Op, Sequelize, where } from 'sequelize';
+import { cast, col, literal, Op, Order, Sequelize, where } from 'sequelize';
 import { PriceClass } from "../models/mmsql/priceClass.model";
 import Banner from "../models/postgres/banner.model";
 import { SalesCategory } from "../models/mmsql/salesCategory.model";
@@ -522,48 +522,88 @@ export class ManagerService {
     page = Number(page);
     limit = Number(limit);
 
-
-
     let whereClause: any = {
       I_Inactive: false,
       ShortOrderForm: true,
     };
+
+
+
+
+
     let searchInUPC = false;
+    let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
+   
+ 
 
-
-    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
-      // Both filters exist → use OR condition
-      whereClause[Op.or] = [
-        { Sales_Category: { [Op.in]: salesCategoryId } },
-        { Price_Class: { [Op.in]: priceClassId } }
-      ];
-    } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
-      // Only Sales_Category filter
-      whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-    } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
-      // Only Price_Class filter
-      whereClause.Price_Class = { [Op.in]: priceClassId };
-    }
-
-
-
-
-    if (search) {
-      const searchValue = `%${search}%`;
-
-      if (/^\d{8,}$/.test(search)) {
-        searchInUPC = true;
-      } else {
+      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Both filters exist → use OR condition
         whereClause[Op.or] = [
-          { Item_Number: { [Op.like]: searchValue } },
-          { Description: { [Op.like]: `%${search}%` } },
-          { ALT_Description2: { [Op.like]: `%${search}%` } }
+          { Sales_Category: { [Op.in]: salesCategoryId } },
+          { Price_Class: { [Op.in]: priceClassId } }
         ];
+      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+        // Only Sales_Category filter
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Only Price_Class filter
+        whereClause.Price_Class = { [Op.in]: priceClassId };
       }
-    }
 
 
+      if (search) {
+        if (/^\d{8,}$/.test(search)) {
+          searchInUPC = true;
+        } 
+        else {
+        
+          const term = search.toLowerCase();
+          const anywhere = `%${term}%`;
+          const starts = `${term}%`
+
+          
+  whereClause[Op.or] = [
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("Description")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+      { [Op.like]: anywhere }
+    )
+  ];
+
+  // ORDER RULE:
+  // 1. Items starting with search term first
+  // 2. Then items containing it anywhere
+  // 3. Finally alphabetical
+  orderClause = [
+    [
+      Sequelize.literal(`
+        CASE 
+          WHEN LOWER("Description") LIKE '${starts}' THEN 0
+          WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
+          ELSE 2
+        END
+      `),
+      'ASC'
+    ],
+    ['Description', 'ASC']
+  ];
+}
+
+
+        
+      }
+
+    
+
+    // === UPC JOIN logic ===
     const includeUPC = {
       model: InventoryUPC,
       as: 'UPCList',
@@ -574,6 +614,11 @@ export class ManagerService {
       },
       required: searchInUPC
     };
+
+
+    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
+
+    
 
     let totalCount = 0;
 
@@ -600,6 +645,7 @@ export class ManagerService {
       });
     }
 
+    
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
@@ -612,7 +658,7 @@ export class ManagerService {
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc'],
+          attributes: ['Category_Desc','Sales_Category'],
           required: false
         },
         {
@@ -629,7 +675,7 @@ export class ManagerService {
         },
         includeUPC
       ],
-      order: [['Date_Created', 'DESC']],
+      order: orderClause,
       limit,
       offset: (page - 1) * limit,
       logging: false
@@ -646,6 +692,7 @@ export class ManagerService {
     });
     const imageMap = new Map(productImages.map(img => [img.product_number, img]));
 
+    // === Final mapping ===
     const finalProductList = await Promise.all(productList.map(async (e: any) => {
       const itemStr = e.Item_Number.toString();
       const productImage = imageMap.get(itemStr) || null;
@@ -656,6 +703,12 @@ export class ManagerService {
       });
 
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
+
+     
+
+
+    
+    
 
 
       return {
@@ -4897,10 +4950,12 @@ export class ManagerService {
 
   async bulkUpdateInventory(updateData: any) {
     const { field, data, excludeItem, hasBulkUpdate, singleUpdateData } = updateData;
+    console.log(hasBulkUpdate, 'hasBulkUpdate');
   
-    if (hasBulkUpdate) {
+    if (hasBulkUpdate ) {
       // -------- BULK UPDATE BRANCH (one big UPDATE with common where) ---------
-  
+      
+      console.log(field, data, 'field and data bulk update');
       if (!field || !data) {
         throw new AppError("field (conditions) and data are required", 400);
       }
@@ -4914,6 +4969,8 @@ export class ManagerService {
       }
   
       const whereClause: any = { ...field };
+
+      console.log(whereClause, 'whereClause--->');
   
       if (Array.isArray(excludeItem) && excludeItem.length > 0) {
         whereClause.Item_Number = { [Op.notIn]: excludeItem };
@@ -4927,6 +4984,7 @@ export class ManagerService {
     } else {
       // -------- PER-ITEM UPDATE BRANCH (loop over singleUpdateData) ---------
   
+      console.log(singleUpdateData, 'singleUpdateData');
       if (!Array.isArray(singleUpdateData) || singleUpdateData.length === 0) {
         throw new AppError("singleUpdateData must be a non-empty array when hasBulkUpdate is false", 400);
       }

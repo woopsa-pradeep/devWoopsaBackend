@@ -49,5 +49,10 @@ export class DashboardController {
         sendResponse(res, 200, true, data, General.SUCCESS);
       }
 
+      async getEpickDashboard(req: AuthRequest, res: Response) {
+        const data = await this.dashboardService.getEpickDashboard(req.body as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+      }
+
 
 }
