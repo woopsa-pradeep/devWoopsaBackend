@@ -4895,10 +4895,72 @@ export class ManagerService {
     return customer;
   }
 
-  async bulkUpdateInventory(data: any[]) {
-
+  async bulkUpdateInventory(updateData: any) {
+    const { field, data, excludeItem, hasBulkUpdate, singleUpdateData } = updateData;
+  
+    if (hasBulkUpdate) {
+      // -------- BULK UPDATE BRANCH (one big UPDATE with common where) ---------
+  
+      if (!field || !data) {
+        throw new AppError("field (conditions) and data are required", 400);
+      }
+  
+      if (Object.keys(field).length === 0) {
+        throw new AppError("field object cannot be empty", 400);
+      }
+  
+      if (Object.keys(data).length === 0) {
+        throw new AppError("data object cannot be empty", 400);
+      }
+  
+      const whereClause: any = { ...field };
+  
+      if (Array.isArray(excludeItem) && excludeItem.length > 0) {
+        whereClause.Item_Number = { [Op.notIn]: excludeItem };
+      }
+  
+      const [affectedRows] = await Inventory.update(data, { where: whereClause });
+  
+      return {
+        updatedCount: affectedRows,
+      };
+    } else {
+      // -------- PER-ITEM UPDATE BRANCH (loop over singleUpdateData) ---------
+  
+      if (!Array.isArray(singleUpdateData) || singleUpdateData.length === 0) {
+        throw new AppError("singleUpdateData must be a non-empty array when hasBulkUpdate is false", 400);
+      }
+  
+      let updatedCount = 0;
+  
+      for (const item of singleUpdateData) {
+        if (!item || typeof item !== "object") {
+          throw new AppError("Each entry in singleUpdateData must be an object", 400);
+        }
+  
+        const { Item_Number, ...updateFields } = item;
+  
+        if (!Item_Number) {
+          throw new AppError("Item_Number is required for individual update", 400);
+        }
+  
+        if (Object.keys(updateFields).length === 0) {
+          throw new AppError(`No fields to update for Item_Number ${Item_Number}`, 400);
+        }
+  
+        const [count] = await Inventory.update(
+          updateFields,                // data to set
+          { where: { Item_Number } }   // condition
+        );
+  
+        updatedCount += count;
+      }
+  
+      return {
+        updatedCount,
+      };
+    }
   }
-
 
   async getInventoryItemsForUpdate(query: any) {
     let { salesCategoryId, priceClassId, filter } = query;
@@ -4907,17 +4969,17 @@ export class ManagerService {
     };
 
 
-    if (filter == 'shortOrderForm') {
+    if (filter == 'ShortOrderForm') {
       whereClause.ShortOrderForm = true;
     }
-    if (filter == 'inactive') {
+    if (filter == 'I_Inactive') {
       whereClause.I_Inactive = true;
     }
 
 
     if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
       // Both filters exist → use OR condition
-      whereClause[Op.or] = [
+      whereClause[Op.and] = [
         { Sales_Category: { [Op.in]: salesCategoryId } },
         { Price_Class: { [Op.in]: priceClassId } }
       ];
@@ -4943,7 +5005,7 @@ export class ManagerService {
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category', "Price_Class", "Sales_Category", "ShortOrderForm"
       ],
       where: whereClause,
       include: [
@@ -4965,30 +5027,16 @@ export class ManagerService {
       logging: false
     });
 
-    const finalProductList = await Promise.all(productList.map(async (e: any) => {
+    // const finalProductList = await Promise.all(productList.map(async (e: any) => {
 
-      return {
-        Pack: e.Pack,
-        Description: e.Description,
-        Item_Number: e.Item_Number,
-        CaseCount: e.CaseCount,
-        UOM: e.UOM,
-        Price1: e.Price1,
-        OTP_Number: e.OTP_Number,
-        BaseCost: e.BaseCost,
-        Invoice_Cost: e.Invoice_Cost,
-        UnitOunces: e.UnitOunces,
-        AvgCost: e.AvgCost,
-        NetCost: e.NetCost,
-        UPCList: e.UPCList,
-        SalesCategory: e.SalesCategory?.Category_Desc || null,
-        PriceClass: e.PriceClass?.Class_Desc || null,
-      };
-    }));
+    //   return {
+    //    e
+    //   };
+    // }));
 
     return {
       totalCount,
-      finalProductList
+      productList
     };
   }
 

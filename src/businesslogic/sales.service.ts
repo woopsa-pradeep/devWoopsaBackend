@@ -807,7 +807,7 @@ export class SalesService {
   // }
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state, zip, jurisdiction } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='' } = query;
 
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
@@ -2031,7 +2031,7 @@ const newSalesRepArray = salesRepList.map(Number);
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state, zip, jurisdiction} = query;
+    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction=''} = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -3191,7 +3191,7 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
   async addToCartMultiScanner(body: any, userId: number) {
-    const { upcNumbers, isMultiple, arrayOfUpc ,state, zip, jurisdiction} = body;
+    const { upcNumbers, isMultiple, arrayOfUpc ,state='', zip='', jurisdiction=''} = body;
     let excludeItem: any = []
     if(state || zip || jurisdiction){
       excludeItem  = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);

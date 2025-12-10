@@ -236,6 +236,17 @@ router.get('/inventory-upc/:id', verifyRole(ROLES.MANAGER), catchAsync(managerCo
 router.get('/inventoryForReport',  verifyRole(ROLES.MANAGER),catchAsync(managerController.getInventoryForReport.bind(managerController)));
 router.get('/customerForReport',  verifyRole(ROLES.MANAGER), catchAsync(managerController.getCustomerForReport.bind(managerController)));
 
+
+router.post('/inventoryItemsForUpdate', catchAsync(managerController.getInventoryItemsForUpdate.bind(managerController)));
+router.post('/bulkUpdateInventory', catchAsync(managerController.bulkUpdateInventory.bind(managerController)));
+
+
+
+
+
+
+
+
 router.get('/inventory/:itemNumber', verifyRole(ROLES.MANAGER), catchAsync(managerController.getInventoryByItemNumber.bind(managerController)));
 router.get('/inventoryForReport',  catchAsync(managerController.getInventoryForReport.bind(managerController)));
 router.put('/inventory-upc/:id', verifyRole(ROLES.MANAGER), validateRequest(updateInventoryUPCSchema), catchAsync(managerController.updateInventoryUPC.bind(managerController)));

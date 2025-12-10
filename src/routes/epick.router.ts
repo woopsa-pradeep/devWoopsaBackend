@@ -23,6 +23,7 @@ const router = Router();
  router.put('/OrderCompleted/:id',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.OrderCompleted.bind(epickController)));
  router.get('/getUserHistory',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getUserHistory.bind(epickController)));
  router.get('/getOrderDetailByOrderNumber/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getOrderDetailByOrderNumber.bind(epickController)));
+ router.get('/getOrderDetailsByOrderNumber/:orderNumber',verifyRole( ROLES.MANAGER),catchAsync(epickController.getOrderDetailsByOrderNumber.bind(epickController)));
 router.get('/getUserCurrentOrder',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getUserCurrentOrder.bind(epickController)));
 router.get('/getItemAsPerBox/:boxId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getIntemDataAsPerBox.bind(epickController)));
 router.get('/getOrderSummary/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getOrderSummary.bind(epickController)));
@@ -33,6 +34,7 @@ router.get('/getCompleteOrderDetails/:orderNumber',verifyRole(ROLES.MANAGER),cat
 //reports 
  router.get('/getReportDate',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getReportDate.bind(epickController)));
  router.get('/getReportById/:id',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getReportById.bind(epickController)));
+ router.get('/getUserReportWithDateRange',verifyRole(ROLES.MANAGER),catchAsync(epickController.getUserReportWithDateRange.bind(epickController)));
  router.post('/getSubsituteProduct',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getSubsituteProduct.bind(epickController)));
  router.post('/addSubsituteProduct',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.addSubsituteProduct.bind(epickController)));
  router.post('/putPassScanItem',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.putPassScanItem.bind(epickController)));

@@ -262,7 +262,7 @@ export class RetailerService {
   // }
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state, zip, jurisdiction } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='' } = query;
 
     const userJurisdiction = await getJurisdiction(user.id);
 
@@ -2117,7 +2117,7 @@ export class RetailerService {
       salesCategory?: number[],
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state, zip, jurisdiction , salesCategory} = query;
+    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='' , salesCategory} = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -2814,7 +2814,7 @@ export class RetailerService {
 
 
   async addToCartMultiScanner(body: any, userId: number) {
-    const { upcNumbers, isMultiple, arrayOfUpc, state, zip, jurisdiction } = body;
+    const { upcNumbers, isMultiple, arrayOfUpc, state='', zip='', jurisdiction='' } = body;
     let excludeItem: any = []
     if(state || zip || jurisdiction){
       excludeItem  = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
@@ -3637,6 +3637,8 @@ export class RetailerService {
         "LastBalance",
         "C_Number",
         "C_OrderDay",
+        "C_Zip",
+        "Jurisdiction_State"
       ],
       include: [
         {

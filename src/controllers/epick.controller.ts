@@ -74,6 +74,98 @@ export class EpickController {
         const data = await this.epickService.getOrderDetailByOrderNumber(Number(req.params.orderNumber));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    /**
+     * Get order details by order number
+     * Returns complete order details with override requests, order items, and picking time
+     * Same structure as getUserReportWithDateRange but for a single order
+     * 
+     * Example Response:
+     * {
+     *   "success": true,
+     *   "message": "Success",
+     *   "data": {
+     *     "id": 1,
+     *     "orderNumber": 132698,
+     *     "customerNumber": 100,
+     *     "pickerUserNumber": 10,
+     *     "status": "completed",
+     *     "startedAt": "2024-01-15T08:30:00.000Z",
+     *     "completedAt": "2024-01-15T10:45:00.000Z",
+     *     "totalLines": 25,
+     *     "totalQty": 150.5000,
+     *     "scannedLines": 25,
+     *     "scannedQty": 150.5000,
+     *     "OutOfStockItem": 2,
+     *     "notes": null,
+     *     "picker": {
+     *       "id": 10,
+     *       "firstName": "John",
+     *       "lastName": "Doe",
+     *       "email": "john.doe@example.com",
+     *       "userNumber": 10
+     *     },
+     *     "customer": {
+     *       "C_Number": 100,
+     *       "C_Name": "ABC Store",
+     *       "Routes": [
+     *         {
+     *           "Route_Number": 1,
+     *           "Stop_Number": 5
+     *         }
+     *       ]
+     *     },
+     *     "overrideRequestCount": 3,
+     *     "overrideRequests": [
+     *       {
+     *         "id": 1,
+     *         "orderNumber": 132698,
+     *         "itemNumber": 234786,
+     *         "pickerUserNumber": 10,
+     *         "status": "approved",
+     *         "note": "Item out of stock",
+     *         "rejectionReason": null,
+     *         "createdAt": "2024-01-15T09:00:00.000Z",
+     *         "updatedAt": "2024-01-15T09:05:00.000Z"
+     *       }
+     *     ],
+     *     "orderItems": [
+     *       {
+     *         "Order_Number": 132698,
+     *         "Line_Number": 1,
+     *         "Item_Number": 234786,
+     *         "Quantity_Ordered": 1,
+     *         "Quantity_Shipped": 1,
+     *         "Pack": 5,
+     *         "CaseCount": 15,
+     *         "Confirmed": true,
+     *         "inventory": {
+     *           "Item_Number": 234786,
+     *           "Description": "MOJO 50MG ENG PCH MINT $4.99 15CT",
+     *           "Section": "A1",
+     *           "Location": 10,
+     *           "SalesCategory": {
+     *             "Category_Desc": "General Merchandise",
+     *             "Sales_Category": 1
+     *           }
+     *         }
+     *       }
+     *     ],
+     *     "pickingTimeSeconds": 8100,
+     *     "pickingTimeFormatted": "02:15:00"
+     *   }
+     * }
+     */
+    async getOrderDetailsByOrderNumber(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        const data = await this.epickService.getOrderDetailsByOrderNumber(orderNumber);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
     
        
 
@@ -99,6 +191,111 @@ export class EpickController {
 
     async getReportById(req: Request, res: Response) {
         const data = await this.epickService.getReportById(Number(req.params.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Get user report with date range filter
+     * Query params: userId (optional), fromDate, toDate
+     * Returns full data (no pagination) with override request details, order items, and picking times
+     * 
+     * Example Response:
+     * {
+     *   "success": true,
+     *   "message": "Success",
+     *   "data": {
+     *     "data": [
+     *       {
+     *         "id": 1,
+     *         "orderNumber": 132698,
+     *         "customerNumber": 100,
+     *         "pickerUserNumber": 10,
+     *         "status": "completed",
+     *         "startedAt": "2024-01-15T08:30:00.000Z",
+     *         "completedAt": "2024-01-15T10:45:00.000Z",
+     *         "totalLines": 25,
+     *         "totalQty": 150.5000,
+     *         "scannedLines": 25,
+     *         "scannedQty": 150.5000,
+     *         "OutOfStockItem": 2,
+     *         "notes": null,
+     *         "picker": {
+     *           "id": 10,
+     *           "firstName": "John",
+     *           "lastName": "Doe",
+     *           "email": "john.doe@example.com",
+     *           "userNumber": 10
+     *         },
+     *         "customer": {
+     *           "C_Number": 100,
+     *           "C_Name": "ABC Store",
+     *           "Routes": [
+     *             {
+     *               "Route_Number": 1,
+     *               "Stop_Number": 5
+     *             }
+     *           ]
+     *         },
+     *         "overrideRequestCount": 3,
+     *         "overrideRequests": [
+     *           {
+     *             "id": 1,
+     *             "orderNumber": 132698,
+     *             "itemNumber": 234786,
+     *             "pickerUserNumber": 10,
+     *             "status": "approved",
+     *             "note": "Item out of stock",
+     *             "rejectionReason": null,
+     *             "createdAt": "2024-01-15T09:00:00.000Z",
+     *             "updatedAt": "2024-01-15T09:05:00.000Z"
+     *           }
+     *         ],
+     *         "orderItems": [
+     *           {
+     *             "Order_Number": 132698,
+     *             "Line_Number": 1,
+     *             "Item_Number": 234786,
+     *             "Quantity_Ordered": 1,
+     *             "Quantity_Shipped": 1,
+     *             "Pack": 5,
+     *             "CaseCount": 15,
+     *             "Confirmed": true,
+     *             "inventory": {
+     *               "Item_Number": 234786,
+     *               "Description": "MOJO 50MG ENG PCH MINT $4.99 15CT",
+     *               "Section": "A1",
+     *               "Location": 10
+     *             }
+     *           }
+     *         ],
+     *         "pickingTimeSeconds": 8100,
+     *         "pickingTimeFormatted": "02:15:00"
+     *       }
+     *     ],
+     *     "totalCount": 1,
+     *     "summary": {
+     *       "totalOrders": 1,
+     *       "totalPickingTimeSeconds": 8100,
+     *       "totalPickingTimeFormatted": "02:15:00",
+     *       "averagePickingTimeSeconds": 8100
+     *     }
+     *   }
+     * }
+     */
+    async getUserReportWithDateRange(req: AuthRequest, res: Response) {
+        const userId = req.query.userId ? Number(req.query.userId) : null;
+        const fromDate = req.query.fromDate ? String(req.query.fromDate) : null;
+        const toDate = req.query.toDate ? String(req.query.toDate) : null;
+
+        if (userId && isNaN(userId)) {
+            return sendResponse(res, 400, false, null, "Invalid userId parameter");
+        }
+
+        const data = await this.epickService.getUserReportWithDateRange(
+            userId,
+            fromDate,
+            toDate
+        );
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
     async getSubsituteProduct(req: Request, res: Response) {

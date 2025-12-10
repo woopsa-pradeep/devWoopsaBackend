@@ -24,6 +24,7 @@ import SalesCategory from "../models/mmsql/salesCategory.model";
 import { PriceClass } from "../models/mmsql/priceClass.model";
 import InventoryStatus from "../models/mmsql/inventoryStatus.model";
 import Setting from "../models/postgres/setting.model";
+import { Distributor } from "../models/mmsql/distributor.model";
 import { OptionDefsValues } from "../models/mmsql/optionDefsValue.model";
 import { getDefaultOrderDetailValues } from "../utils/order";
 import { PassScanItem } from "../models/postgres/passScanItem.model";
@@ -1935,6 +1936,401 @@ export class EpickService {
       }
     })) as any
     return finalData;
+  }
+
+  /**
+   * Get epick user report with date range filter
+   * Returns all completed orders for a user within date range with override request details, order items, and picking times
+   * 
+   * @param userId - User ID to filter by (optional, if not provided returns all users)
+   * @param fromDate - Start date (ISO string or Date)
+   * @param toDate - End date (ISO string or Date)
+   */
+  async getUserReportWithDateRange(
+    userId: number | null,
+    fromDate: string | Date | null,
+    toDate: string | Date | null
+  ) {
+    // Build where condition
+    const whereCondition: any = {
+      status: 'completed'
+    };
+
+    // Filter by user if provided
+    if (userId) {
+      whereCondition.pickerUserNumber = userId;
+    }
+
+    // Filter by date range if provided
+    if (fromDate || toDate) {
+      whereCondition.completedAt = {};
+      if (fromDate) {
+        const startDate = moment(fromDate).startOf('day').toDate();
+        whereCondition.completedAt[Op.gte] = startDate;
+      }
+      if (toDate) {
+        const endDate = moment(toDate).endOf('day').toDate();
+        whereCondition.completedAt[Op.lte] = endDate;
+      }
+    }
+
+    // Get all completed orders (no pagination)
+    const orders = await OrderPick.findAll({
+      where: whereCondition,
+      attributes: [
+        'id',
+        'orderNumber',
+        'customerNumber',
+        'pickerUserNumber',
+        'status',
+        'startedAt',
+        'completedAt',
+        'totalLines',
+        'totalQty',
+        'scannedLines',
+        'scannedQty',
+        'OutOfStockItem',
+        'notes'
+      ],
+      order: [['completedAt', 'DESC']]
+    });
+
+    // Get all order numbers
+    const orderNumbers = orders.map((o: any) => o.orderNumber);
+
+    // Get all override requests with full details
+    const overrideRequests = await OverrideRequest.findAll({
+      where: {
+        orderNumber: { [Op.in]: orderNumbers }
+      },
+      attributes: [
+        'id',
+        'orderNumber',
+        'itemNumber',
+        'pickerUserNumber',
+        'status',
+        'note',
+        'rejectionReason',
+        'createdAt',
+        'updatedAt'
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Group override requests by order number
+    const overrideRequestsMap: { [key: number]: any[] } = {};
+    const overrideCountMap: { [key: number]: number } = {};
+    overrideRequests.forEach((req: any) => {
+      const orderNum = req.orderNumber;
+      if (!overrideRequestsMap[orderNum]) {
+        overrideRequestsMap[orderNum] = [];
+        overrideCountMap[orderNum] = 0;
+      }
+      overrideRequestsMap[orderNum].push(req.get({ plain: true }));
+      overrideCountMap[orderNum]++;
+    });
+
+    // Get all order items for all orders
+    const allOrderItems = await OrderDetail.findAll({
+      where: {
+        Order_Number: { [Op.in]: orderNumbers }
+      },
+      attributes: [
+        'Order_Number',
+        'Line_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Pack',
+        'CaseCount',
+        'Confirmed'
+      ],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: ['Item_Number', 'Description', 'Section', 'Location'],
+          required: false,
+          include: [
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Category_Desc', 'Sales_Category'],
+              required: false
+            }
+          ]
+        }
+      ],
+      order: [['Order_Number', 'ASC'], ['Line_Number', 'ASC']]
+    });
+
+    // Group order items by order number
+    const orderItemsMap: { [key: number]: any[] } = {};
+    allOrderItems.forEach((item: any) => {
+      const orderNum = item.Order_Number;
+      if (!orderItemsMap[orderNum]) {
+        orderItemsMap[orderNum] = [];
+      }
+      orderItemsMap[orderNum].push(item.get({ plain: true }));
+    });
+
+    // Get unique user IDs and customer numbers
+    const userIds = Array.from(new Set(orders.map((o: any) => o.pickerUserNumber).filter((id: any) => id)));
+    const customerNumbers = Array.from(new Set(orders.map((o: any) => o.customerNumber).filter((num: any) => num)));
+
+    // Fetch user information
+    const users = await WebUsers.findAll({
+      where: {
+        id: { [Op.in]: userIds }
+      },
+      attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
+      raw: true
+    });
+
+    const userMap: any = {};
+    users.forEach((user: any) => {
+      userMap[user.id] = user;
+    });
+
+    // Fetch customer information
+    const customers = await Customer.findAll({
+      where: {
+        C_Number: { [Op.in]: customerNumbers }
+      },
+      attributes: ['C_Number', 'C_Name'],
+      include: [
+        {
+          model: CustomerRoute,
+          as: 'Routes',
+          attributes: ['Route_Number', 'Stop_Number'],
+          required: false
+        }
+      ]
+    });
+
+    const customerMap: any = {};
+    customers.forEach((customer: any) => {
+      customerMap[customer.C_Number] = customer.get({ plain: true });
+    });
+
+    // Get distributor information
+    const distributor = await Distributor.findOne({
+      attributes: ['D_Name', 'D_Addr1', 'D_Addr2', 'D_City', 'D_State', 'D_Zip', 'D_Phone', 'D_Email'],
+    });
+
+    // Get warehouse logo
+    const getProfileImage: any = await Setting.findOne({});
+
+    // Calculate picking times and totals
+    let totalPickingTimeSeconds = 0;
+    const orderPickingTimes: { [key: number]: number } = {};
+
+    // Build final response with picking time calculations, override requests, and order items
+    const finalData = orders.map((order: any) => {
+      const orderData = order.get({ plain: true });
+      
+      // Calculate picking time for this order in seconds
+      let pickingTimeSeconds = 0;
+      if (orderData.startedAt && orderData.completedAt) {
+        const startTime = moment(orderData.startedAt);
+        const endTime = moment(orderData.completedAt);
+        pickingTimeSeconds = endTime.diff(startTime, 'seconds');
+        orderPickingTimes[orderData.orderNumber] = pickingTimeSeconds;
+        totalPickingTimeSeconds += pickingTimeSeconds;
+      }
+
+      // Format picking time as HH:MM:SS
+      const hours = Math.floor(pickingTimeSeconds / 3600);
+      const minutes = Math.floor((pickingTimeSeconds % 3600) / 60);
+      const seconds = pickingTimeSeconds % 60;
+      const pickingTimeFormatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+      return {
+        ...orderData,
+        picker: userMap[orderData.pickerUserNumber] || null,
+        customer: customerMap[orderData.customerNumber] || null,
+        overrideRequestCount: overrideCountMap[orderData.orderNumber] || 0,
+        overrideRequests: overrideRequestsMap[orderData.orderNumber] || [],
+        orderItems: orderItemsMap[orderData.orderNumber] || [],
+        pickingTimeSeconds: pickingTimeSeconds,
+        pickingTimeFormatted: pickingTimeFormatted
+      };
+    });
+
+    // Format total picking time
+    const totalHours = Math.floor(totalPickingTimeSeconds / 3600);
+    const totalMinutes = Math.floor((totalPickingTimeSeconds % 3600) / 60);
+    const totalSeconds = totalPickingTimeSeconds % 60;
+    const totalPickingTimeFormatted = `${String(totalHours).padStart(2, '0')}:${String(totalMinutes).padStart(2, '0')}:${String(totalSeconds).padStart(2, '0')}`;
+
+    return {
+      data: finalData,
+      totalCount: finalData.length,
+      summary: {
+        totalOrders: finalData.length,
+        totalPickingTimeSeconds: totalPickingTimeSeconds,
+        totalPickingTimeFormatted: totalPickingTimeFormatted,
+        averagePickingTimeSeconds: finalData.length > 0 ? Math.round(totalPickingTimeSeconds / finalData.length) : 0
+      },
+      distributor: distributor ? distributor.get({ plain: true }) : null,
+      logo: getProfileImage?.dataValues ? getProfileImage.dataValues.warehouseImage : null
+    };
+  }
+
+  /**
+   * Get order details by order number
+   * Returns complete order details with override requests, order items, and picking time
+   * 
+   * @param orderNumber - Order number to get details for
+   */
+  async getOrderDetailsByOrderNumber(orderNumber: number) {
+    // Validate order exists and is completed
+    const order = await OrderPick.findOne({
+      where: {
+        orderNumber: orderNumber,
+        status: 'completed'
+      },
+      attributes: [
+        'id',
+        'orderNumber',
+        'customerNumber',
+        'pickerUserNumber',
+        'status',
+        'startedAt',
+        'completedAt',
+        'totalLines',
+        'totalQty',
+        'scannedLines',
+        'scannedQty',
+        'OutOfStockItem',
+        'notes'
+      ]
+    });
+
+    if (!order) {
+      throw new AppError('Order not found or not completed', 404);
+    }
+
+    const orderData = order.get({ plain: true });
+
+    // Get all override requests for this order
+    const overrideRequests = await OverrideRequest.findAll({
+      where: {
+        orderNumber: orderNumber
+      },
+      attributes: [
+        'id',
+        'orderNumber',
+        'itemNumber',
+        'pickerUserNumber',
+        'status',
+        'note',
+        'rejectionReason',
+        'createdAt',
+        'updatedAt'
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Get all order items for this order
+    const allOrderItems = await OrderDetail.findAll({
+      where: {
+        Order_Number: orderNumber
+      },
+      attributes: [
+        'Order_Number',
+        'Line_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Pack',
+        'CaseCount',
+        'Confirmed'
+      ],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: ['Item_Number', 'Description', 'Section', 'Location'],
+          required: false,
+          include: [
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Category_Desc', 'Sales_Category'],
+              required: false
+            }
+          ]
+        }
+      ],
+      order: [['Line_Number', 'ASC']]
+    });
+
+    // Get picker user information
+    const picker = await WebUsers.findOne({
+      where: {
+        id: orderData.pickerUserNumber
+      },
+      attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
+      raw: true
+    });
+
+    // Get customer information
+    const customer = await Customer.findOne({
+      where: {
+        C_Number: orderData.customerNumber
+      },
+      attributes: ['C_Number', 'C_Name'],
+      include: [
+        {
+          model: CustomerRoute,
+          as: 'Routes',
+          attributes: ['Route_Number', 'Stop_Number'],
+          required: false
+        }
+      ]
+    });
+
+    // Calculate picking time for this order in seconds
+    let pickingTimeSeconds = 0;
+    if (orderData.startedAt && orderData.completedAt) {
+      const startTime = moment(orderData.startedAt);
+      const endTime = moment(orderData.completedAt);
+      pickingTimeSeconds = endTime.diff(startTime, 'seconds');
+    }
+
+    // Format picking time as HH:MM:SS
+    const hours = Math.floor(pickingTimeSeconds / 3600);
+    const minutes = Math.floor((pickingTimeSeconds % 3600) / 60);
+    const seconds = pickingTimeSeconds % 60;
+    const pickingTimeFormatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+    // Format order items
+    const orderItems = allOrderItems.map((item: any) => item.get({ plain: true }));
+
+    // Format override requests
+    const formattedOverrideRequests = overrideRequests.map((req: any) => req.get({ plain: true }));
+
+    // Get distributor information
+    const distributor = await Distributor.findOne({
+      attributes: ['D_Name', 'D_Addr1', 'D_Addr2', 'D_City', 'D_State', 'D_Zip', 'D_Phone', 'D_Email'],
+    });
+
+    // Get warehouse logo
+    const getProfileImage: any = await Setting.findOne({});
+
+    return {
+      ...orderData,
+      picker: picker || null,
+      customer: customer ? customer.get({ plain: true }) : null,
+      overrideRequestCount: overrideRequests.length,
+      overrideRequests: formattedOverrideRequests,
+      orderItems: orderItems,
+      pickingTimeSeconds: pickingTimeSeconds,
+      pickingTimeFormatted: pickingTimeFormatted,
+      distributor: distributor ? distributor.get({ plain: true }) : null,
+      logo: getProfileImage?.dataValues ? getProfileImage.dataValues.warehouseImage : null
+    };
   }
 
   async getSubsituteProduct(data: any) {

@@ -18,11 +18,13 @@ const connection = {
 
 export const EMAIL_QUEUE_NAME = 'email-queue';
 export const EMAIL_NOTIFICATION_QUEUE_NAME = 'email-notification';
-
+const queueName = process.env.QUEUE_NAME || 'default';
 export const emailQueue = new Queue(EMAIL_QUEUE_NAME, {
   connection,
+  prefix: queueName,
 });
 
 export const emailNotificationQueue = new Queue(EMAIL_NOTIFICATION_QUEUE_NAME, {
   connection,
+  prefix: queueName,
 });

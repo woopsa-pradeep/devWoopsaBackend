@@ -979,6 +979,15 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Customer details retrieved successfully')
   }
 
+  async getInventoryItemsForUpdate(req: AuthRequest, res: Response){
+    const data = await this.managerService.getInventoryItemsForUpdate(req.body)
+    sendResponse(res, 200, true, data, 'Inventory items for update retrieved successfully')
+  }
+
+  async bulkUpdateInventory(req: AuthRequest, res: Response){
+    const data = await this.managerService.bulkUpdateInventory(req.body)
+    sendResponse(res, 200, true, data, 'Inventory updated successfully')
+  }
 
 
 }

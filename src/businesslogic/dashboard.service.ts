@@ -21,7 +21,7 @@ import { OrderHistory } from "../models/postgres/orderHistory.model";
 export class DashboardService {
 
     async getPopularItems(userId: number,query: any) {
-        let { state, zip, jurisdiction } = query;
+        let { state='', zip='', jurisdiction='' } = query;
         console.log(userId, 'userId')
         const homeSetting = await HomeSettings.findOne();
         const currentYear = new Date().getFullYear();
@@ -742,7 +742,7 @@ export class DashboardService {
     }
 
     async getPromotedItems(query: PaginationOptions) {
-        let { customerNumber,state, zip, jurisdiction } = query
+        let { customerNumber,state='', zip='', jurisdiction='' } = query
         const homeSetting: any = await HomeSettings.findOne({});
         const promotedItems = homeSetting?.promotedItems || [];
 
@@ -922,7 +922,7 @@ export class DashboardService {
     }
 
     async getNewItem(query: PaginationOptions, customerId: number) {
-        let { page = 1, limit = 30, search, role, customerNumber, state, zip, jurisdiction } = query;
+        let { page = 1, limit = 30, search, role, customerNumber, state =' ', zip='', jurisdiction='' } = query;
         page = Number(page);
         limit = Number(limit);
 
@@ -1566,7 +1566,7 @@ export class DashboardService {
     }
 
     async getDiscountedItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-        let { search, masterSearch, role, customerNumber ,state, zip, jurisdiction} = query;
+        let { search, masterSearch, role, customerNumber ,state='', zip='', jurisdiction=''} = query;
         let wareHouseSetting: any = await Setting.findOne({});
         wareHouseSetting = wareHouseSetting?.dataValues || null;
 
