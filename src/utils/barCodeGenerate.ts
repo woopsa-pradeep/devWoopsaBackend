@@ -66,3 +66,30 @@ export async function generateBarcodeAndUpload(
     folderName          // folderName
   );
 }
+
+
+let counter = 0;
+const usedBarcodes = new Set();
+
+function generateTimeBased15Digit() {
+  const timestamp = Date.now().toString(); // 13 digits
+  counter = (counter + 1) % 100;           // 2-digit rolling counter (00–99)
+
+  const barcode = timestamp + counter.toString().padStart(2, "0"); // → 15 digits
+  return barcode;
+}
+
+export async function generateRandomBarCode(count: number) {
+  const results = [];
+
+  while (results.length < count) {
+    const code = generateTimeBased15Digit();
+
+    if (!usedBarcodes.has(code)) {
+      usedBarcodes.add(code);
+      results.push(code);
+    }
+  }
+
+  return results;
+}

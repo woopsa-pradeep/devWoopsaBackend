@@ -30,7 +30,9 @@ import { DeliveryTypes } from "../models/mmsql/deliveryType.model";
 import { CustomerStatus } from "../models/mmsql/customerStatus.model";
 import { DocumentAdditionalFormats } from "../models/mmsql/documentAdditionalFormat.model";
 import { EDIFormatsUser } from "../models/mmsql/ediFormatUser.model";
-
+import { POHeader } from "../models/mmsql/poHeader.model";
+import { POType } from "../models/mmsql/poType.model";
+import { QBBills } from "../models/mmsql/qbBills.model";
 
 export class ListService {
 
@@ -471,4 +473,56 @@ export class ListService {
       terms: terms,
     };
   }
+
+  async getListOfPurchaseOrdersCreate() {
+
+    const PO_Number = await POHeader.findAll({
+      attributes: ['PO_Number'],
+      order: [['PO_Number','ASC']]
+    });
+
+    const primaryVendor = await Vendor.findAll({ 
+      attributes: ['Primary_Vendor', 'V_Description'],
+      order: [['V_Description','ASC']]
+    });
+
+    const jurisdictionState = await TaxRates.findAll({
+      attributes: ['Jurisdiction_State', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    });
+
+    const jurisdictionCounty = await TaxRates_County.findAll({
+      attributes: ['Jurisdiction_County', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    });
+
+    const jurisdictionCity = await TaxRates_City.findAll({
+      attributes: ['Jurisdiction_City', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    }); 
+
+    const QB_Transfer = await QBBills.findAll({
+      attributes: ['QB_Transfer', 'QB_TransferDate'],
+      order: [['QB_Transfer','ASC']]
+    });
+
+    const terms = await Terms.findAll({
+      attributes: ['TermsCode', 'Terms', 'DaysUntilDue', 'TermsType'],
+      order: [['Terms', 'ASC']],
+    });
+
+    const PO_Type = await POType.findAll({
+      attributes: ['PO_Type', 'PO_TypeDescription'],
+      order: [['PO_Type','ASC']]
+    });
+
+    const Delivery_Id = await DeliveryTypes.findAll({
+      attributes: ['Delivery_ID','Delivery_Description'],
+      order: [['Delivery_Description','ASC']]
+    });
+
+    return { PO_Number, primaryVendor, jurisdictionState, jurisdictionCounty, jurisdictionCity, QB_Transfer, terms, PO_Type, Delivery_Id };
+
+  }
+
 } 

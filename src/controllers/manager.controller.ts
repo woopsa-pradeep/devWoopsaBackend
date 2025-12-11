@@ -526,6 +526,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 201, true, data, 'Policies created successfully');
   }
 
+  async createPurchaseOrder(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createPurchaseOrder(req.body , req.user.Id);
+    sendResponse(res, 201, true, data, 'PO Header created successfully');
+  }
+
   async getPolicies(req: AuthRequest, res: Response) {
     const data = await this.managerService.getPolicies();
     sendResponse(res, 200, true, data, 'Policies retrieved successfully');

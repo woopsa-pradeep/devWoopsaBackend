@@ -42,7 +42,9 @@ router.get('/getCompleteOrderDetails/:orderNumber',verifyRole(ROLES.MANAGER),cat
 
 // Override Request routes
 router.post('/createOverrideRequest',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.createOverrideRequest.bind(epickController)));
+router.post('/createScanOverrideRequest',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.createScanOverrideRequest.bind(epickController)));
 router.get('/checkOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.checkOverrideRequest.bind(epickController)));
+router.get('/checkScanOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.checkScanOverrideRequest.bind(epickController)));
 router.post('/cancelOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.cancelOverrideRequest.bind(epickController)));
 
 export default router;

@@ -44,6 +44,8 @@ import { sequelize, postgresSequelize } from "../db";
 import { Users } from "../models/mmsql/user.model";
 import { RecordLock } from "../models/mmsql/recordLocks.model";
 import { QueryTypes } from "sequelize";
+import { generateRandomBarCode } from "../utils/barCodeGenerate";
+import { DriverPickupOrder } from "../models/postgres/driverPickerOrder.model";
 
 export class SalesService {
 
@@ -4426,6 +4428,7 @@ const newSalesRepArray = salesRepList.map(Number);
       Lock_Workstation: 0
     });
   
+    await DriverPickupOrder.destroy({where:{order_number:Number(order_Number)}});
     return newOrder;
   }
   
@@ -4567,7 +4570,12 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         });
 
 
-        
+        const randomBarCode = await generateRandomBarCode(Number(updateData.Bundles));
+
+        await DriverPickupOrder.create({
+          order_number: Number(id),
+          barcodes: randomBarCode,
+        });
         
     
       } 
@@ -4610,7 +4618,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     if (!orderConfirmation) {
       throw new AppError("Order confirmation not found", 404);
     }
-
+    await DriverPickupOrder.destroy({where:{order_number:Number(id)}});
     await orderConfirmation.destroy();
     return { message: "Order confirmation deleted successfully" };
   }

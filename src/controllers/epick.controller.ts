@@ -392,7 +392,7 @@ export class EpickController {
     }
  
     /**
-     * Create override request (Epick user)
+     * Create override request (Epick user) - Pass type
      */
     async createOverrideRequest(req: AuthRequest, res: Response) {
         const userId = req.user?.id;
@@ -415,6 +415,33 @@ export class EpickController {
     }
 
     /**
+     * Create scan override request (Epick user) - Scan type with quantity
+     */
+    async createScanOverrideRequest(req: AuthRequest, res: Response) {
+        const userId = req.user?.id;
+        if (!userId) {
+            return sendResponse(res, 401, false, null, "User not authenticated");
+        }
+
+        const { orderNumber, itemNumber, qty, note } = req.body;
+
+        if (!orderNumber || !itemNumber) {
+            return sendResponse(res, 400, false, null, "orderNumber and itemNumber are required");
+        }
+
+        if (!qty || qty <= 0) {
+            return sendResponse(res, 400, false, null, "qty is required and must be greater than 0");
+        }
+
+        const data = await this.epickService.createScanOverrideRequest(
+            { orderNumber, itemNumber, qty, note },
+            userId
+        );
+
+        sendResponse(res, 201, true, data, "Scan override request created successfully");
+    }
+
+    /**
      * Check override request status (Epick user - for polling)
      */
     async checkOverrideRequest(req: AuthRequest, res: Response) {
@@ -429,6 +456,24 @@ export class EpickController {
         }
 
         const data = await this.epickService.checkOverrideRequest(requestId, userId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Check scan override request status (Epick user - for polling scan requests)
+     */
+    async checkScanOverrideRequest(req: AuthRequest, res: Response) {
+        const userId = req.user?.id;
+        if (!userId) {
+            return sendResponse(res, 401, false, null, "User not authenticated");
+        }
+
+        const requestId = Number(req.params.requestId);
+        if (!requestId || isNaN(requestId)) {
+            return sendResponse(res, 400, false, null, "Invalid request ID");
+        }
+
+        const data = await this.epickService.checkScanOverrideRequest(requestId, userId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 

@@ -333,6 +333,19 @@ export class EpickService {
     if (!isUserExist) {
       throw new AppError('User not found', 404);
     }
+
+    // Check if order is already locked in RecordLock (already started in ERP)
+    const existingLock = await RecordLock.findOne({
+      where: {
+        Lock_Number: body.orderNumber,
+        Lock_Type: 0
+      }
+    });
+
+    if (existingLock) {
+      throw new AppError('order is already started in other device please refresh the app', 400);
+    }
+
     let outOfStock = 0
 
     const orderItem = await OrderDetail.findAll({
@@ -683,18 +696,6 @@ export class EpickService {
       const data = await OrderDetail.findAll({
         where: {
           Order_Number: orderNumber,
-          [Op.and]: [
-            // Ensure Quantity_Ordered is greater than Quantity_Shipped
-            { Quantity_Ordered: { [Op.gt]: sequelize.col("Quantity_Shipped") } },
-            // Only show items where Confirmed = 0 (pending from ERP)
-            {
-              [Op.or]: [
-                { Confirmed: false },
-                { Confirmed: 0 },
-                { Confirmed: null }
-              ]
-            }
-          ],
         },
         attributes: [
           "Order_Number",
@@ -2665,27 +2666,30 @@ export class EpickService {
       throw new AppError(`Item ${itemNumber} not found in order ${orderNumber}`, 404);
     }
 
-    // Check if there's already a pending request for this item
+    // Check if there's already a pending 'pass' type request for this item
     const existingRequest = await OverrideRequest.findOne({
       where: {
         orderNumber,
         itemNumber,
         pickerUserNumber: userId,
         status: 'pending',
+        requestType: 'pass', // Only check for 'pass' type
       },
     });
 
     if (existingRequest) {
-      throw new AppError('A pending override request already exists for this item', 400);
+      throw new AppError('A pending pass override request already exists for this item', 400);
     }
 
-    // Create the request
+    // Create the request (default to 'pass' type)
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
       pickerUserNumber: userId,
       status: 'pending',
-      note: note || null,
+      requestType: 'pass',
+      qty: 0,
+      note: note || null, 
     });
 
     // Send notification to all distributors
@@ -2696,6 +2700,77 @@ export class EpickService {
       status: overrideRequest.status,
       orderNumber: overrideRequest.orderNumber,
       itemNumber: overrideRequest.itemNumber,
+      requestType: overrideRequest.requestType,
+      qty: overrideRequest.qty,
+      note: overrideRequest.note,
+      createdAt: overrideRequest.createdAt,
+    };
+  }
+
+  /**
+   * Create a new scan override request (with quantity)
+   */
+  async createScanOverrideRequest(data: {
+    orderNumber: number;
+    itemNumber: number;
+    qty: number;
+    note?: string;
+  }, userId: number) {
+    const { orderNumber, itemNumber, qty, note } = data;
+
+    // Validate qty is positive
+    if (!qty || qty <= 0) {
+      throw new AppError('Quantity must be greater than 0', 400);
+    }
+
+    // Validate order exists and item is in order
+    const orderDetail = await OrderDetail.findOne({
+      where: {
+        Order_Number: orderNumber,
+        Item_Number: itemNumber,
+      },
+    });
+
+    if (!orderDetail) {
+      throw new AppError(`Item ${itemNumber} not found in order ${orderNumber}`, 404);
+    }
+
+    // Check if there's already a pending 'scan' type request for this item
+    const existingRequest = await OverrideRequest.findOne({
+      where: {
+        orderNumber,
+        itemNumber,
+        pickerUserNumber: userId,
+        status: 'pending',
+        requestType: 'scan', // Only check for 'scan' type
+      },
+    });
+
+    if (existingRequest) {
+      throw new AppError('A pending scan override request already exists for this item', 400);
+    }
+
+    // Create the scan request
+    const overrideRequest = await OverrideRequest.create({
+      orderNumber,
+      itemNumber,
+      pickerUserNumber: userId,
+      status: 'pending',
+      requestType: 'scan',
+      qty: qty,
+      note: note || null, 
+    });
+
+    // Send notification to all distributors
+    await this.sendNotificationToDistributors(overrideRequest);
+
+    return {
+      requestId: overrideRequest.id,
+      status: overrideRequest.status,
+      orderNumber: overrideRequest.orderNumber,
+      itemNumber: overrideRequest.itemNumber,
+      requestType: overrideRequest.requestType,
+      qty: overrideRequest.qty,
       note: overrideRequest.note,
       createdAt: overrideRequest.createdAt,
     };
@@ -2734,6 +2809,52 @@ export class EpickService {
       status: overrideRequest.status,
       orderNumber: overrideRequest.orderNumber,
       itemNumber: overrideRequest.itemNumber,
+      requestType: overrideRequest.requestType,
+      qty: overrideRequest.qty,
+      itemDescription: inventory?.Description || null,
+      note: overrideRequest.note,
+      rejectionReason: overrideRequest.rejectionReason,
+      createdAt: overrideRequest.createdAt,
+      updatedAt: overrideRequest.updatedAt,
+    };
+  }
+
+  /**
+   * Check scan override request status (for polling) - Specific endpoint for scan type
+   */
+  async checkScanOverrideRequest(requestId: number, userId: number) {
+    const overrideRequest = await OverrideRequest.findOne({
+      where: {
+        id: requestId,
+        pickerUserNumber: userId, // Ensure user can only check their own requests
+        requestType: 'scan', // Only check scan type requests
+      },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+        },
+      ],
+    });
+
+    if (!overrideRequest) {
+      throw new AppError('Scan override request not found', 404);
+    }
+
+    // Get item description
+    const inventory = await Inventory.findOne({
+      where: { Item_Number: overrideRequest.itemNumber },
+      attributes: ['Description'],
+    });
+
+    return {
+      requestId: overrideRequest.id,
+      status: overrideRequest.status,
+      orderNumber: overrideRequest.orderNumber,
+      itemNumber: overrideRequest.itemNumber,
+      requestType: overrideRequest.requestType,
+      qty: overrideRequest.qty,
       itemDescription: inventory?.Description || null,
       note: overrideRequest.note,
       rejectionReason: overrideRequest.rejectionReason,
@@ -2814,6 +2935,8 @@ export class EpickService {
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
         userEmail: user?.email || null,
+        requestType: req.requestType, // 'pass' or 'scan'
+        qty: req.qty,                 // 0 for pass, actual qty for scan
         note: req.note,
         createdAt: req.createdAt,
         updatedAt: req.updatedAt,
@@ -3237,6 +3360,8 @@ export class EpickService {
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
         userEmail: user?.email || null,
+        requestType: req.requestType, // 'pass' or 'scan'
+        qty: req.qty,                 // 0 for pass, actual qty for scan
         note: req.note,
         createdAt: req.createdAt,
         updatedAt: req.updatedAt,
@@ -3283,6 +3408,8 @@ export class EpickService {
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
         userEmail: user?.email || null,
+        requestType: req.requestType, // 'pass' or 'scan'
+        qty: req.qty,                 // 0 for pass, actual qty for scan
         note: req.note,
         status: req.status,
         createdAt: req.createdAt,
@@ -3330,6 +3457,8 @@ export class EpickService {
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
         userEmail: user?.email || null,
+        requestType: req.requestType, // 'pass' or 'scan'
+        qty: req.qty,                 // 0 for pass, actual qty for scan
         note: req.note,
         status: req.status,
         createdAt: req.createdAt,
@@ -3364,6 +3493,65 @@ export class EpickService {
     overrideRequest.status = 'approved';
     await overrideRequest.save();
 
+    // If request type is 'scan', update qty_shipped like normal scan
+    if (overrideRequest.requestType === 'scan' && overrideRequest.qty > 0) {
+      // Get the order pick to find boxId (use first box or create logic)
+      const orderPick = await OrderPick.findOne({
+        where: {
+          orderNumber: overrideRequest.orderNumber
+        }
+      });
+
+      if (orderPick) {
+        // Get or create a box for this order (use first box or default)
+        const orderBox = await OrderPickBox.findOne({
+          where: {
+            orderNumber: overrideRequest.orderNumber
+          },
+          order: [['id', 'ASC']]
+        });
+
+        const boxId = orderBox?.id || null;
+
+        // Create OrderPickScan record (like normal scan)
+        if (boxId) {
+          await OrderPickScan.create({
+            orderNumber: overrideRequest.orderNumber,
+            itemNumber: overrideRequest.itemNumber,
+            qty: overrideRequest.qty,
+            boxId: boxId,
+            isSubsitute: false
+          });
+        }
+
+        // Update Quantity_Shipped in OrderDetail (like normal scan)
+        await OrderDetail.update(
+          {
+            Quantity_Shipped: literal(`"Quantity_Shipped" + ${overrideRequest.qty}`)
+          },
+          {
+            where: {
+              Order_Number: overrideRequest.orderNumber,
+              Item_Number: overrideRequest.itemNumber
+            }
+          }
+        );
+
+        // Update OrderPick scannedLines and scannedQty
+        await OrderPick.update(
+          {
+            scannedLines: literal(`"scannedLines" + 1`),
+            scannedQty: literal(`"scannedQty" + ${overrideRequest.qty}`)
+          },
+          {
+            where: {
+              orderNumber: overrideRequest.orderNumber
+            }
+          }
+        );
+      }
+    }
+
     // Note: Epick user will check status via polling API (checkOverrideRequest) every 5 seconds
     // No push notification needed
 
@@ -3372,6 +3560,8 @@ export class EpickService {
       status: overrideRequest.status,
       orderNumber: overrideRequest.orderNumber,
       itemNumber: overrideRequest.itemNumber,
+      requestType: overrideRequest.requestType,
+      qty: overrideRequest.qty,
       updatedAt: overrideRequest.updatedAt,
     };
   }

@@ -22,6 +22,7 @@ router.get('/listForInventory',catchAsync(listController.getListForInventory.bin
 
 router.get('/listOfCustomersCreate',verifyToken,catchAsync(listController.getListOfCustomersCreate.bind(listController)));
 router.get('/listOfVendorsCreate',verifyToken,catchAsync(listController.getListOfVendorsCreate.bind(listController)));
+router.get('/listOfPurchaseOrdersCreate',verifyToken,catchAsync(listController.getListOfPurchaseOrdersCreate.bind(listController)));
 
 
 

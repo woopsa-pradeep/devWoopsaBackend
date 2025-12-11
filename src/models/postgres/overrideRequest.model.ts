@@ -7,13 +7,15 @@ export interface IOverrideRequest {
   itemNumber: number;
   pickerUserNumber: number;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  requestType: 'scan' | 'pass';
+  qty: number;
   note: string | null;
   rejectionReason: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-type OverrideRequestCreationAttributes = Optional<IOverrideRequest, 'id' | 'status' | 'note' | 'rejectionReason'>;
+type OverrideRequestCreationAttributes = Optional<IOverrideRequest, 'id' | 'status' | 'note' | 'rejectionReason' | 'requestType' | 'qty'>;
 
 export class OverrideRequest
   extends Model<IOverrideRequest, OverrideRequestCreationAttributes>
@@ -24,6 +26,8 @@ export class OverrideRequest
   public itemNumber!: number;
   public pickerUserNumber!: number;
   public status!: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  public requestType!: 'scan' | 'pass';
+  public qty!: number;
   public note!: string | null;
   public rejectionReason!: string | null;
 
@@ -57,6 +61,17 @@ OverrideRequest.init(
       type: DataTypes.ENUM('pending', 'approved', 'rejected', 'cancelled'),
       allowNull: false,
       defaultValue: 'pending',
+    },
+    requestType: {
+      type: DataTypes.ENUM('scan', 'pass'),
+      allowNull: false,
+      defaultValue: 'pass',
+      field: 'request_type',
+    },
+    qty: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
     },
     note: {
       type: DataTypes.TEXT,

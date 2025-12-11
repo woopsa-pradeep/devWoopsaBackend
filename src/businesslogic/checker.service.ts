@@ -15,7 +15,7 @@ import { OverrideRequest } from "../models/postgres/overrideRequest.model";
 import { WebUsers } from "../models/postgres/users.model";
 import { getInventoryOnHand, generatePDFFromHTML } from "../utils/helper";
 import { AppError } from "../utils/AppError";
-import { uploadFileToAzure } from "../utils/azureUploader";
+import { uploadFileToAzure, deleteFileFromAzure } from "../utils/azureUploader";
 import { generateBarcodeAndUpload } from "../utils/barCodeGenerate";
 import { getDefaultOrderDetailValues } from "../utils/order";
 import puppeteer from 'puppeteer';
@@ -23,6 +23,183 @@ import moment from 'moment';
 import { sequelize } from "../db";
 
 export class CheckerService {
+
+  /**
+   * Get complete checker orders (ready for delivery)
+   * - Returns orders where OrderPick.status = 'ready_for_delivery'
+   * - Returns all ready for delivery orders (no date filter)
+   * - Includes only: order number, route, stop, customer name, time, box, tote, drink, startedAt, completedAt
+   */
+  async getCompleteCheckerOrder() {
+    // Get all ready_for_delivery orders from OrderPick (no date filter - get all ready for delivery orders)
+    const readyForDeliveryOrders = await OrderPick.findAll({
+      where: {
+        status: 'ready_for_delivery', // Only get orders marked as ready for delivery by checker
+      },
+      attributes: ['orderNumber', 'startedAt', 'completedAt'],
+      raw: false,
+    });
+
+    // Clean + dedupe array of order numbers
+    const readyForDeliveryOrderNumbers = Array.from(
+      new Set(
+        readyForDeliveryOrders
+        .map((o: any) => o?.orderNumber)
+        .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
+        .map((v: any) => Number(v)) // normalize to number
+      )
+    );
+    
+    console.log(readyForDeliveryOrderNumbers, 'readyForDeliveryOrderNumbers for checker');
+  
+    // If no ready for delivery orders, return empty array
+    if (readyForDeliveryOrderNumbers.length === 0) {
+      return [];
+    }
+
+    // Create a map of orderNumber to startedAt and completedAt
+    const orderPickMap: any = {};
+    readyForDeliveryOrders.forEach((order: any) => {
+      if (order.orderNumber) {
+        orderPickMap[order.orderNumber] = {
+          startedAt: order.startedAt,
+          completedAt: order.completedAt
+        };
+      }
+    });
+
+    // Query OrderHeader for ready for delivery orders
+    const headerWhere: any = {
+      // Exclude orders where Order_Updated = 1
+      Order_Updated: { [Op.ne]: true },
+      // Only get orders that are ready for delivery
+      Order_Number: { [Op.in]: readyForDeliveryOrderNumbers }
+    };
+    
+    console.log(headerWhere, 'headerWhere for complete checker order');
+    
+    const readyForDeliveryOrdersList = await OrderHeader.findAll({
+      where: headerWhere,
+      attributes: ['Order_Number', 'Order_Date', 'Invoice_Number', 'Picker_ID'],
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['C_Number', 'C_Name'],
+          include: [
+            {
+              model: CustomerRoute,
+              as: 'Routes',
+              attributes: ['Route_Number', 'Stop_Number'],
+              required: false,
+            },
+          ],
+          required: false,
+        },
+      ],
+      order: [
+        ['Order_Number', 'ASC'],
+      ],
+    });
+  
+    console.log(readyForDeliveryOrdersList, 'readyForDeliveryOrdersList for checker');
+  
+    // If no orders, return empty array
+    if (readyForDeliveryOrdersList.length === 0) {
+      return [];
+    }
+  
+    // Get all order numbers from the ready for delivery orders list
+    const orderNumbers = readyForDeliveryOrdersList.map((order: any) => order.Order_Number);
+    
+    // Get unique picker IDs and fetch picker names
+    const pickerIds = Array.from(
+      new Set(
+        readyForDeliveryOrdersList
+          .map((order: any) => order.Picker_ID)
+          .filter((id: any) => id !== null && id !== undefined)
+      )
+    );
+    
+    // Fetch picker names from Users table
+    const pickers = await Users.findAll({
+      where: {
+        UserNumber: { [Op.in]: pickerIds },
+      },
+      attributes: ['UserNumber', 'UserName'],
+      raw: true,
+    });
+    
+    // Create a map of picker ID to picker name
+    const pickerMap: any = {};
+    pickers.forEach((picker: any) => {
+      pickerMap[picker.UserNumber] = picker.UserName;
+    });
+    
+    // Query all OrderPickBox records for these orders
+    const orderBoxes = await OrderPickBox.findAll({
+      where: {
+        orderNumber: { [Op.in]: orderNumbers }
+      },
+      attributes: ['id', 'orderNumber', 'type'],
+      raw: true,
+    });
+    
+    // Group boxes by order number and collect IDs by type
+    const boxIdsByOrder: any = {};
+    orderBoxes.forEach((box: any) => {
+      const orderNum = box.orderNumber;
+      if (!boxIdsByOrder[orderNum]) {
+        boxIdsByOrder[orderNum] = {
+          box: [],
+          tote: [],
+          drink: []
+        };
+      }
+      if (box.type === 'box') {
+        boxIdsByOrder[orderNum].box.push(box.id);
+      } else if (box.type === 'tote') {
+        boxIdsByOrder[orderNum].tote.push(box.id);
+      } else if (box.type === 'drink') {
+        boxIdsByOrder[orderNum].drink.push(box.id);
+      }
+    });
+    
+    // Transform to only include requested fields
+    const simplifiedOrders = readyForDeliveryOrdersList.map((order: any) => {
+      const orderNum = order.Order_Number;
+      const boxIds = boxIdsByOrder[orderNum] || { box: [], tote: [], drink: [] };
+      const orderPickData = orderPickMap[orderNum] || { startedAt: null, completedAt: null };
+      
+      // Get first route and stop if available
+      const route = order.customer?.Routes?.[0]?.Route_Number || null;
+      const stop = order.customer?.Routes?.[0]?.Stop_Number || null;
+      
+      // Determine invoiced status: if Invoice_Number = 0, invoice not created (false), otherwise true
+      const invoiceNumber = order.Invoice_Number || 0;
+      const invoiced = invoiceNumber !== 0;
+      
+      // Get picker name from picker map
+      const pickerName = order.Picker_ID ? (pickerMap[order.Picker_ID] || null) : null;
+      
+      return {
+        orderNumber: orderNum,
+        route: route,
+        stop: stop,
+        customerName: order.customer?.C_Name || null,
+        time: order.Order_Date,
+        box: boxIds.box, 
+        tote: boxIds.tote,
+        drink: boxIds.drink,
+        startedAt: orderPickData.startedAt,
+        completedAt: orderPickData.completedAt,
+        invoiced: invoiced,
+        pickerName: pickerName
+      };
+    });
+    
+    return simplifiedOrders;
+  }
 
   /**
    * Get completed orders for checker to verify
@@ -3089,8 +3266,8 @@ export class CheckerService {
   }) {
     const { orderNumber, itemNumber, boxId, qty } = data;
 
-    // Validate inputs
-    if (!orderNumber || !itemNumber || !boxId || !qty || qty <= 0) {
+    // Validate inputs (allow qty to be 0)
+    if (!orderNumber || !itemNumber || !boxId || qty === undefined || qty === null || qty < 0) {
       throw new AppError("Invalid input parameters", 400);
     }
 
@@ -3582,6 +3759,238 @@ export class CheckerService {
       orderNumber,
       status: 'ready_for_delivery',
       updatedAt: orderPick.updatedAt
+    };
+  }
+
+  /**
+   * Get all photos for an order
+   * Returns a flat array of all photos from all containers
+   */
+  async getOrderPhotos(orderNumber: number) {
+    // Validate order exists
+    const orderPick = await OrderPick.findOne({
+      where: { orderNumber }
+    });
+
+    if (!orderPick) {
+      throw new AppError("Order not found", 404);
+    }
+
+    // Get all containers (boxes, totes, drinks) for this order
+    const containers = await OrderPickBox.findAll({
+      where: { orderNumber },
+      attributes: ['id', 'type', 'orderNumber', 'images'],
+      order: [['id', 'ASC']]
+    });
+
+    // Collect all photos from all containers into a single array
+    const allPhotos: string[] = [];
+    
+    containers.forEach((container: any) => {
+      const images = container.images || [];
+      // Handle both array of strings and array of objects
+      images.forEach((img: any) => {
+        if (typeof img === 'string') {
+          allPhotos.push(img);
+        } else if (img && img.url) {
+          allPhotos.push(img.url);
+        } else if (img && typeof img === 'object' && img !== null) {
+          // If it's an object without url, convert to string or keep as is
+          allPhotos.push(img);
+        }
+      });
+    });
+
+    return {
+      success: true,
+      orderNumber,
+      photos: allPhotos,
+      totalPhotos: allPhotos.length
+    };
+  }
+
+  /**
+   * Update photos for a specific box/container
+   * Replaces existing photos with new ones
+   * Validates: min = 1 image, max = 2 images per container
+   * If boxId is not provided, updates the first container found for the order
+   */
+  async updateBoxPhotos(req: Request, orderNumber: number, boxId: number | null) {
+    // Validate order exists
+    const orderPick = await OrderPick.findOne({
+      where: { orderNumber }
+    });
+
+    if (!orderPick) {
+      throw new AppError("Order not found", 404);
+    }
+
+    let box: any;
+
+    if (boxId) {
+      // Validate box exists and belongs to order
+      box = await OrderPickBox.findByPk(boxId);
+
+      if (!box) {
+        throw new AppError("Box not found", 404);
+      }
+
+      if (box.orderNumber !== orderNumber) {
+        throw new AppError("Box does not belong to the specified order", 400);
+      }
+    } else {
+      // If boxId not provided, get the first container for this order
+      box = await OrderPickBox.findOne({
+        where: { orderNumber },
+        order: [['id', 'ASC']]
+      });
+
+      if (!box) {
+        throw new AppError("No containers found for this order", 404);
+      }
+    }
+
+    // Upload new images
+    let uploadedImages: string[] = [];
+
+    if (req.files && (req.files as any).length > 0) {
+      // Upload all files in parallel
+      const uploadResults = await Promise.all(
+        (req.files as any).map((file: any) =>
+          uploadFileToAzure(file.buffer, file.originalname, file.mimetype, "checker")
+        )
+      );
+
+      // Collect only successful uploads
+      uploadedImages = uploadResults
+        .filter(result => result.success)
+        .map(result => result.url || "")
+        .filter(url => url && url.trim() !== "");
+    }
+
+    // Validate image count (1-2 images per container)
+    const minImages = 1;
+    const maxImages = 2;
+
+    if (uploadedImages.length < minImages) {
+      throw new AppError(
+        `Insufficient images. Minimum ${minImages} image required, received ${uploadedImages.length}`,
+        400
+      );
+    }
+
+    if (uploadedImages.length > maxImages) {
+      throw new AppError(
+        `Too many images. Maximum ${maxImages} images allowed, received ${uploadedImages.length}`,
+        400
+      );
+    }
+
+    // Update box with new images
+    await box.update({
+      images: uploadedImages,
+      notes: req.body.notes || box.notes || " "
+    });
+
+    return {
+      success: true,
+      message: `Successfully updated photos for ${box.type} ${boxId}`,
+      orderNumber,
+      boxId,
+      containerType: box.type,
+      photos: uploadedImages,
+      photoCount: uploadedImages.length,
+      notes: req.body.notes || box.notes || " "
+    };
+  }
+
+  /**
+   * Delete a specific photo from an order
+   * Searches across all containers and removes the photo URL from the images array
+   */
+  async deleteBoxPhoto(orderNumber: number, photoUrl: string) {
+    // Validate order exists
+    const orderPick = await OrderPick.findOne({
+      where: { orderNumber }
+    });
+
+    if (!orderPick) {
+      throw new AppError("Order not found", 404);
+    }
+
+    // Get all containers for this order
+    const containers = await OrderPickBox.findAll({
+      where: { orderNumber },
+      attributes: ['id', 'type', 'orderNumber', 'images']
+    });
+
+    if (!containers || containers.length === 0) {
+      throw new AppError("No containers found for this order", 404);
+    }
+
+    // Search for the photo across all containers
+    let foundContainer: any = null;
+    let filteredImages: any[] = [];
+    let photoFound = false;
+
+    for (const container of containers) {
+      const currentImages = container.images || [];
+      filteredImages = [];
+      
+      currentImages.forEach((img: any) => {
+        let imgUrl: string | null = null;
+        
+        if (typeof img === 'string') {
+          imgUrl = img;
+        } else if (img && img.url) {
+          imgUrl = img.url;
+        }
+        
+        // Only keep images that don't match the photoUrl to delete
+        if (imgUrl && imgUrl !== photoUrl) {
+          filteredImages.push(img);
+        } else if (img && typeof img === 'object' && !img.url) {
+          // Keep non-URL objects as-is (in case of other formats)
+          filteredImages.push(img);
+        }
+      });
+
+      // Check if photo was found in this container
+      if (currentImages.length > filteredImages.length) {
+        foundContainer = container;
+        photoFound = true;
+        break;
+      }
+    }
+
+    if (!photoFound || !foundContainer) {
+      throw new AppError("Photo not found in any container for this order", 404);
+    }
+
+    // Delete the file from Azure storage
+    const deleteResult = await deleteFileFromAzure(photoUrl);
+    if (!deleteResult.success) {
+      console.error(`Failed to delete file from Azure: ${deleteResult.error}`);
+      // Continue with database deletion even if Azure deletion fails
+      // This prevents orphaned database references
+    }
+
+    // Update container with filtered images
+    await foundContainer.update({
+      images: filteredImages.length > 0 ? filteredImages : null
+    });
+
+    return {
+      success: true,
+      message: `Successfully deleted photo from ${foundContainer.type} ${foundContainer.id}`,
+      orderNumber,
+      boxId: foundContainer.id,
+      containerType: foundContainer.type,
+      deletedPhotoUrl: photoUrl,
+      remainingPhotos: filteredImages,
+      remainingPhotoCount: filteredImages.length,
+      azureDeletionSuccess: deleteResult.success,
+      azureDeletionError: deleteResult.error || null
     };
   }
 }

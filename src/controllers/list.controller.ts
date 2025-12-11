@@ -81,4 +81,9 @@ export class ListController {
         const data = await this.listService.getListOfVendorsCreate();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getListOfPurchaseOrdersCreate(req: Request, res: Response) {
+        const data = await this.listService.getListOfPurchaseOrdersCreate();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

@@ -17,6 +17,11 @@ export class CheckerController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getCompleteCheckerOrder(req: Request, res: Response) {
+        const data = await this.checkerService.getCompleteCheckerOrder();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async getBoxItem(req: Request, res: Response) {
         const boxId = Number(req.params.boxId);
         if (!boxId || isNaN(boxId)) {
@@ -115,18 +120,14 @@ export class CheckerController {
     async updateItemQty(req: Request, res: Response) {
         const { orderNumber, itemNumber, boxId, qty } = req.body;
 
-        // Validate required fields
-        if (!orderNumber || !itemNumber || !boxId || qty === undefined) {
+        // Validate required fields (allow qty to be 0)
+        if (!orderNumber || !itemNumber || !boxId || qty === undefined || qty === null) {
             return sendResponse(res, 400, false, null, "Missing required fields: orderNumber, itemNumber, boxId, qty");
         }
 
         // Validate types
         if (typeof orderNumber !== 'number' || typeof itemNumber !== 'number' || typeof boxId !== 'number' || typeof qty !== 'number') {
             return sendResponse(res, 400, false, null, "orderNumber, itemNumber, boxId, and qty must be numbers");
-        }
-
-        if (qty <= 0) {
-            return sendResponse(res, 400, false, null, "Quantity must be greater than 0");
         }
 
         const data = await this.checkerService.updateItemQty({
@@ -192,6 +193,49 @@ export class CheckerController {
     async generateTestLabels(req: Request, res: Response) {
         const size = req.query.size as '4x3' | '4x6' | '3x6' | '3x2' | '4x4' | '2x2' | '2x3' | 'A4' | undefined;
         const data = await this.checkerService.generateTestLabels(size);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getOrderPhotos(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+        const data = await this.checkerService.getOrderPhotos(orderNumber);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async updateBoxPhotos(req: AuthRequest, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        const { boxId } = req.body;
+        
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+        
+        // boxId is optional - if not provided, will use first container
+        const boxIdNumber = boxId ? Number(boxId) : null;
+        if (boxId && (isNaN(Number(boxId)) || boxIdNumber === null)) {
+            return sendResponse(res, 400, false, null, "Invalid boxId in request body");
+        }
+
+        const data = await this.checkerService.updateBoxPhotos(req, orderNumber, boxIdNumber as number | null);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async deleteBoxPhoto(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        const { photoUrl } = req.body;
+        
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        if (!photoUrl || typeof photoUrl !== 'string') {
+            return sendResponse(res, 400, false, null, "Missing or invalid photoUrl in request body");
+        }
+
+        const data = await this.checkerService.deleteBoxPhoto(orderNumber, photoUrl);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 }

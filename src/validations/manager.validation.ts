@@ -93,6 +93,39 @@ export const createUserSchema = Joi.object({
   }),
 });
 
+// export const createPOHeaderSchema = Joi.object({
+//   PO_Date: Joi.date().required().messages({
+//       'any.required': 'PO_Date is required',
+//       'date.base': 'PO_Date must be a valid date',
+//     }),
+
+//   Primary_Vendor: Joi.number().required().messages({
+//       'any.required': 'Primary_Vendor is required',
+//       'number.base': 'Primary_Vendor must be a number',
+//     }),
+
+//   Invoice_Number: Joi.string().required().messages({
+//       'any.required': 'Invoice_Number is required',
+//       'string.base': 'Invoice_Number must be a string',
+//     }),
+
+//   Invoice_Date: Joi.date().required().messages({
+//       'any.required': 'Invoice_Date is required',
+//       'date.base': 'Invoice_Date must be a valid date',
+//     }),
+
+//   PO_Total: Joi.number().required().messages({
+//       'any.required': 'PO_Total is required',
+//       'number.base': 'PO_Total must be a number',
+//     }),
+
+//   Requested_Delivery_Date: Joi.date().optional().allow(null)
+//     .messages({
+//       'date.base': 'Requested_Delivery_Date must be a valid date in YYYY-MM-DD format',
+//     }),
+
+// }).unknown(true);
+
 
 
 // validations/rolePermissionRequest.validation.ts

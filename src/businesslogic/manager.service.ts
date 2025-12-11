@@ -58,6 +58,7 @@ import SalesCallTime from "../models/postgres/salesCallTime.model";
 import { Terms } from "../models/mmsql/invoiceTerm.model";
 import { SalesNote } from "../models/postgres/salesNotes";
 import { ContactUs } from "../models/postgres/contactUs.model";
+import { POHeader } from "../models/mmsql/poHeader.model";
 import { EmailConfig } from "../models/postgres/emailManagement.model";
 import { EmailMarketing } from "../models/postgres/emailMarketing.model";
 import { generateBarcodeAndUpload } from "../utils/barCodeGenerate";
@@ -82,6 +83,10 @@ import { ClassOfTrade } from "../models/mmsql/classOfTrade.model";
 import { TaxRates } from "../models/mmsql/taxRates.model";
 import { TaxRates_City } from "../models/mmsql/taxRateCity.model";
 import { TaxRates_County } from "../models/mmsql/taxRateCounty.model";
+import { PurchaseOrderRequest } from "../interfaces/request.body.interface";
+import { getDefaultPOHeaderValues, getNextPONumber } from "../utils/purchaseOrder";
+import {  PODetail } from "../models/mmsql/poDetail.model";
+import { now } from "moment";
 
 export class ManagerService {
 
@@ -3424,6 +3429,189 @@ export class ManagerService {
     const policies = await Policies.create(body);
     return policies;
   }
+
+  // PO Header
+  async createPurchaseOrder(poData: any, req: any) {
+      const { poHeaderPayload, poItems } = poData;
+
+      const nextPONumber = await getNextPONumber();
+      function formatDateForSQL(date: string | Date | null) {
+        if (!date) return null;
+        if (date instanceof Date) return date;
+        return new Date(date); // converts 'YYYY-MM-DD' to Date object
+      }
+
+      const poHeaderObj = {
+        PO_Number: nextPONumber,
+        PO_Date: formatDateForSQL(poHeaderPayload.PO_Date) || new Date(),
+        PO_Source: 1,
+        PO_Posted: 0,
+        PO_Type: poHeaderPayload.PO_Type || 0,
+        Confirmed: 0,
+        Date_Received: formatDateForSQL(poHeaderPayload.Date_Received) || new Date(),
+        Receiving_Code: poHeaderPayload.Receiving_Code || 'P',
+        Orig_PO_Number: 0,
+        Primary_Vendor: poHeaderPayload.Primary_Vendor,
+        Invoice_Number: poHeaderPayload.Invoice_Number || '',
+        Invoice_Date: formatDateForSQL(poHeaderPayload.Invoice_Date) || new Date(),
+        PO_Message: poHeaderPayload.PO_Message || '',
+        PO_Status: 0,
+        Ship_Date: formatDateForSQL(poHeaderPayload.Ship_Date) || new Date(),
+        BillTo_Vendor: poHeaderPayload.Primary_Vendor,
+        Promo_Code: '',
+        Terms: poHeaderPayload.Terms || 0,
+        FTP_Sent: 0,
+        FTP_Date: formatDateForSQL(poHeaderPayload.FTP_Date) || new Date(),
+        FTP_REQ_Date: formatDateForSQL(poHeaderPayload.FTP_REQ_Date) || new Date(),
+        ReceivingMode: 0,
+        Delivery_ID: 0,
+        Tracking_Number: '',
+        PO_DeliveryCharge: Number(poHeaderPayload.PO_DeliveryCharge || 0),
+        PO_MiscCharge: Number(poHeaderPayload.PO_MiscCharge || 0),
+        PO_MiscCharge2: 0,
+        PO_Discounts: 0,
+        PO_Total: 0,
+        Jurisdiction_State: '',
+        Jurisdiction_County: '',
+        Jurisdiction_City: '',
+        Inventory_CIG: 0,
+        Inventory_OTP: 0,
+        PrepaidTax_Calculation_Select: 0,
+        epoCreated: poHeaderPayload.epoCreated || 0,
+        epoApplied: 0,
+        epoUser: '',
+        Control_Date: new Date(),
+        // Control_Time: new Date(),
+        Date_Received_Control: null,
+        Invoice_Deposit: 0,
+        Total_Weight: 0,
+        Requested_Delivery_Date: poHeaderPayload.Requested_Delivery_Date || new Date(),
+        Delete_Date: formatDateForSQL(poHeaderPayload.Delete_Date) || new Date(),
+        Delete_User_Number: 0
+      };
+
+      const { ...defaultValues } = getDefaultPOHeaderValues();
+      const finalPoHeaderObj: any = {
+      ...defaultValues,
+      ...poHeaderObj,
+    };
+
+
+     Object.keys(finalPoHeaderObj).forEach(key => {
+      if (finalPoHeaderObj[key] === null || finalPoHeaderObj[key] === undefined) {
+        if (typeof finalPoHeaderObj[key] === 'number') {
+          finalPoHeaderObj[key] = 0;
+        } else if (typeof finalPoHeaderObj[key] === 'boolean') {
+          finalPoHeaderObj[key] = false;
+        } else if (typeof finalPoHeaderObj[key] === 'string') {
+          finalPoHeaderObj[key] = '';
+        }
+      }
+    });
+
+      let createdHeader;
+      try {
+        createdHeader = await POHeader.create(poHeaderObj);
+      } catch (error) {
+        console.log(error);
+        throw new AppError("Failed to create PO Header", 500);
+      }
+
+      const itemNumbers = poItems.map((i: { Item_Number: number }) => i.Item_Number);
+
+      const inventoryItems = await Inventory.findAll({
+        where: { Item_Number: itemNumbers },
+        raw: true
+      });
+
+      const invMap = new Map<number, Inventory>(
+        inventoryItems.map((p: Inventory) => [p.Item_Number, p])
+      );
+
+      const poDetailRows = poItems.map((item: any, index: number) => {
+  const product = invMap.get(item.Item_Number);
+
+  if (!product) throw new AppError(`Item ${item.Item_Number} not found`, 404);
+
+  return {
+        PO_Number: createdHeader.PO_Number,
+        Line_Number: index + 1,
+        Item_Number: item.Item_Number,
+        Sales_Category: product.Sales_Category,
+        OTP_Number: product.OTP_Number,
+        Quantity_Ordered: Number(item.Qty),
+        Quantity_Recd: 0,
+        Quantity_RecdDamaged: 0,
+        Unit_Code: 0,
+        Pack: Number(product.Pack || product.Pack), 
+        Cost: Number(product.AvgCost) || 0, 
+        BaseCost: Number(product.BaseCost) || 0,
+        NetCost: Number(product.NetCost) || 0,
+        Invoice_Cost: Number(product.Invoice_Cost) || 0,
+        AvgCost: Number(product.AvgCost) || 0,
+
+        PrepaidTax_State: 0,
+        PrepaidTax_County: 0,
+        PrepaidTax_City: 0,
+        PendingTax_State: 0,
+        PendingTax_County: 0,
+        PendingTax_City: 0,
+
+        GL_Special: 0,
+        Unit_Allowance: 0,
+        Credit_ReturnType: 0,
+        Confirmed: 1,
+        DetailPosted: 0,
+
+        AdjFromInventoryID: 0,
+        PO_Number_Legacy: 0,
+        PO_LocationID: 0,
+
+        InventoryGroupID: 0,
+        Inventory_ExpDate: null,       // DATE or NULL
+        Inventory_LotRef: "",
+
+        Unit_Allowance2: 0,
+        CaseCount: Number(product.CaseCount) || 0,
+
+        Unit_Allowance_ID: 0,
+        Unit_Allowance2_ID: 0,
+
+        STAMP_Requied: 0,              // spelling EXACT match
+        STAMP_Qty: 0,
+
+        AddOnDeposit_Item_Number: 0,
+        DepositAmount: Number(product.DepositAmount) || 0,
+        IsIncludeDeposit_QB: 0,
+
+        CaseWeight: Number(product.CaseWeight) || 0,
+        CaseOrd: 0,
+        CaseRecd: 0,
+        CasesPerPallet: Number(product.CasesPerPallet) || 0,
+
+        PO_Detail_Code: ""
+      };
+    });
+
+
+      // ===============================
+      // INSERT INTO PO_DETAIL
+      // ===============================
+      try {
+        await PODetail.bulkCreate(poDetailRows);
+      } catch (error) {
+        console.log(error);
+        throw new AppError("Failed to insert PO Details", 500);
+      }
+
+      return {
+        success: true,
+        message: "Purchase Order Created Successfully",
+        header: createdHeader,
+        items: poDetailRows
+      };
+    }
+
 
   async getPolicies() {
     const policies = await Policies.findOne();
