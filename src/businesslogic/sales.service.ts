@@ -4510,6 +4510,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
 
     try {
       // 1) Load order confirmation inside the transaction
+      let randomBarCode  :any= [];
       const orderConfirmation = await OrderConfirmation.findOne({where:{order_Number:id}});
   
       if (!orderConfirmation) {
@@ -4571,7 +4572,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         });
 
 
-        const randomBarCode = await generateRandomBarCode(Number(updateData.Bundles));
+         randomBarCode = await generateRandomBarCode(Number(updateData.Bundles));
 
         await DriverPickupOrder.create({
           order_number: Number(id),
@@ -4587,7 +4588,10 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
 
   
       // Optionally re-fetch if you want latest from DB
-      return orderConfirmation;
+      return {
+        ...orderConfirmation.toJSON(),
+        barcodes: randomBarCode,
+      };
     } catch (err) {
       throw err;
     }
@@ -5183,6 +5187,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           isAllow: true
         },
       });
+      
       let Price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
       return {
         ...detail.toJSON(),
@@ -5193,7 +5198,11 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
       };
     }));
 
-
+    let barcodes = await DriverPickupOrder.findOne({
+      where:{
+        order_number:orderNumber
+      }
+    })
 
     return {
       orderHeader: {
@@ -5202,6 +5211,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         Total_Discount: totalDiscount,
         Total_Deposit: totalDeposit
       },
+      barcodes: barcodes?.barcodes || [],
       totalCount,
       page,
       limit,
