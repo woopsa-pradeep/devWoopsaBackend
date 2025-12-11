@@ -207,19 +207,12 @@ export class CheckerController {
 
     async updateBoxPhotos(req: AuthRequest, res: Response) {
         const orderNumber = Number(req.params.orderNumber);
-        const { boxId } = req.body;
         
         if (!orderNumber || isNaN(orderNumber)) {
             return sendResponse(res, 400, false, null, "Invalid order number");
         }
-        
-        // boxId is optional - if not provided, will use first container
-        const boxIdNumber = boxId ? Number(boxId) : null;
-        if (boxId && (isNaN(Number(boxId)) || boxIdNumber === null)) {
-            return sendResponse(res, 400, false, null, "Invalid boxId in request body");
-        }
 
-        const data = await this.checkerService.updateBoxPhotos(req, orderNumber, boxIdNumber as number | null);
+        const data = await this.checkerService.updateBoxPhotos(req, orderNumber, null);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 

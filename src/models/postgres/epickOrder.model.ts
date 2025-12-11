@@ -13,6 +13,7 @@ export class OrderPick extends Model {
   declare completedAt: Date | null;
  
   declare notes: string | null;
+  declare images: any[] | null; // JSONB array of image URLs
 
   // rollups
   declare totalLines: number;
@@ -41,6 +42,7 @@ OrderPick.init({
   completedAt: { type: DataTypes.DATE, allowNull: true },
 
   notes: { type: DataTypes.TEXT, allowNull: true },
+  images: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
 
   totalLines: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   totalQty: { type: DataTypes.DECIMAL(18, 4), allowNull: false, defaultValue: 0 },

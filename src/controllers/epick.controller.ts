@@ -520,6 +520,19 @@ export class EpickController {
     }
 
     /**
+     * Get all override requests for an order (Epick user)
+     */
+    async getAllOverrideRequests(req: Request, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        const data = await this.epickService.getAllOverrideRequests(orderNumber);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
      * Get approved override requests (Distributor)
      */
     async getApprovedOverrideRequests(req: Request, res: Response) {

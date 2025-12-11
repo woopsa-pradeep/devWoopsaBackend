@@ -3769,36 +3769,28 @@ export class CheckerService {
   async getOrderPhotos(orderNumber: number) {
     // Validate order exists
     const orderPick = await OrderPick.findOne({
-      where: { orderNumber }
+      where: { orderNumber },
+      attributes: ['orderNumber', 'images']
     });
 
     if (!orderPick) {
       throw new AppError("Order not found", 404);
     }
 
-    // Get all containers (boxes, totes, drinks) for this order
-    const containers = await OrderPickBox.findAll({
-      where: { orderNumber },
-      attributes: ['id', 'type', 'orderNumber', 'images'],
-      order: [['id', 'ASC']]
-    });
-
-    // Collect all photos from all containers into a single array
+    // Get photos directly from OrderPick.images
+    const images = orderPick.images || [];
     const allPhotos: string[] = [];
     
-    containers.forEach((container: any) => {
-      const images = container.images || [];
-      // Handle both array of strings and array of objects
-      images.forEach((img: any) => {
-        if (typeof img === 'string') {
-          allPhotos.push(img);
-        } else if (img && img.url) {
-          allPhotos.push(img.url);
-        } else if (img && typeof img === 'object' && img !== null) {
-          // If it's an object without url, convert to string or keep as is
-          allPhotos.push(img);
-        }
-      });
+    // Handle both array of strings and array of objects
+    images.forEach((img: any) => {
+      if (typeof img === 'string') {
+        allPhotos.push(img);
+      } else if (img && img.url) {
+        allPhotos.push(img.url);
+      } else if (img && typeof img === 'object' && img !== null) {
+        // If it's an object without url, convert to string or keep as is
+        allPhotos.push(img);
+      }
     });
 
     return {
@@ -3810,10 +3802,9 @@ export class CheckerService {
   }
 
   /**
-   * Update photos for a specific box/container
+   * Update photos for an order
    * Replaces existing photos with new ones
-   * Validates: min = 1 image, max = 2 images per container
-   * If boxId is not provided, updates the first container found for the order
+   * Validates: min = 1 image, max = 2 images per order
    */
   async updateBoxPhotos(req: Request, orderNumber: number, boxId: number | null) {
     // Validate order exists
@@ -3823,31 +3814,6 @@ export class CheckerService {
 
     if (!orderPick) {
       throw new AppError("Order not found", 404);
-    }
-
-    let box: any;
-
-    if (boxId) {
-      // Validate box exists and belongs to order
-      box = await OrderPickBox.findByPk(boxId);
-
-      if (!box) {
-        throw new AppError("Box not found", 404);
-      }
-
-      if (box.orderNumber !== orderNumber) {
-        throw new AppError("Box does not belong to the specified order", 400);
-      }
-    } else {
-      // If boxId not provided, get the first container for this order
-      box = await OrderPickBox.findOne({
-        where: { orderNumber },
-        order: [['id', 'ASC']]
-      });
-
-      if (!box) {
-        throw new AppError("No containers found for this order", 404);
-      }
     }
 
     // Upload new images
@@ -3868,7 +3834,7 @@ export class CheckerService {
         .filter(url => url && url.trim() !== "");
     }
 
-    // Validate image count (1-2 images per container)
+    // Validate image count (1-2 images per order)
     const minImages = 1;
     const maxImages = 2;
 
@@ -3886,27 +3852,25 @@ export class CheckerService {
       );
     }
 
-    // Update box with new images
-    await box.update({
+    // Update order with new images
+    await orderPick.update({
       images: uploadedImages,
-      notes: req.body.notes || box.notes || " "
+      notes: req.body.notes || orderPick.notes || " "
     });
 
     return {
       success: true,
-      message: `Successfully updated photos for ${box.type} ${boxId}`,
+      message: `Successfully updated photos for order ${orderNumber}`,
       orderNumber,
-      boxId,
-      containerType: box.type,
       photos: uploadedImages,
       photoCount: uploadedImages.length,
-      notes: req.body.notes || box.notes || " "
+      notes: req.body.notes || orderPick.notes || " "
     };
   }
 
   /**
    * Delete a specific photo from an order
-   * Searches across all containers and removes the photo URL from the images array
+   * Removes the photo URL from the order's images array
    */
   async deleteBoxPhoto(orderNumber: number, photoUrl: string) {
     // Validate order exists
@@ -3918,53 +3882,37 @@ export class CheckerService {
       throw new AppError("Order not found", 404);
     }
 
-    // Get all containers for this order
-    const containers = await OrderPickBox.findAll({
-      where: { orderNumber },
-      attributes: ['id', 'type', 'orderNumber', 'images']
+    // Get current images from order
+    const currentImages = orderPick.images || [];
+    
+    if (!currentImages || currentImages.length === 0) {
+      throw new AppError("No photos found for this order", 404);
+    }
+
+    // Filter out the photo to delete
+    const filteredImages: any[] = [];
+    let photoFound = false;
+    
+    currentImages.forEach((img: any) => {
+      let imgUrl: string | null = null;
+      
+      if (typeof img === 'string') {
+        imgUrl = img;
+      } else if (img && img.url) {
+        imgUrl = img.url;
+      }
+      
+      // Only keep images that don't match the photoUrl to delete
+      if (imgUrl && imgUrl === photoUrl) {
+        photoFound = true;
+      } else {
+        // Keep images that don't match
+        filteredImages.push(img);
+      }
     });
 
-    if (!containers || containers.length === 0) {
-      throw new AppError("No containers found for this order", 404);
-    }
-
-    // Search for the photo across all containers
-    let foundContainer: any = null;
-    let filteredImages: any[] = [];
-    let photoFound = false;
-
-    for (const container of containers) {
-      const currentImages = container.images || [];
-      filteredImages = [];
-      
-      currentImages.forEach((img: any) => {
-        let imgUrl: string | null = null;
-        
-        if (typeof img === 'string') {
-          imgUrl = img;
-        } else if (img && img.url) {
-          imgUrl = img.url;
-        }
-        
-        // Only keep images that don't match the photoUrl to delete
-        if (imgUrl && imgUrl !== photoUrl) {
-          filteredImages.push(img);
-        } else if (img && typeof img === 'object' && !img.url) {
-          // Keep non-URL objects as-is (in case of other formats)
-          filteredImages.push(img);
-        }
-      });
-
-      // Check if photo was found in this container
-      if (currentImages.length > filteredImages.length) {
-        foundContainer = container;
-        photoFound = true;
-        break;
-      }
-    }
-
-    if (!photoFound || !foundContainer) {
-      throw new AppError("Photo not found in any container for this order", 404);
+    if (!photoFound) {
+      throw new AppError("Photo not found in this order", 404);
     }
 
     // Delete the file from Azure storage
@@ -3975,17 +3923,15 @@ export class CheckerService {
       // This prevents orphaned database references
     }
 
-    // Update container with filtered images
-    await foundContainer.update({
-      images: filteredImages.length > 0 ? filteredImages : null
+    // Update order with filtered images
+    await orderPick.update({
+      images: filteredImages.length > 0 ? filteredImages : []
     });
 
     return {
       success: true,
-      message: `Successfully deleted photo from ${foundContainer.type} ${foundContainer.id}`,
+      message: `Successfully deleted photo from order ${orderNumber}`,
       orderNumber,
-      boxId: foundContainer.id,
-      containerType: foundContainer.type,
       deletedPhotoUrl: photoUrl,
       remainingPhotos: filteredImages,
       remainingPhotoCount: filteredImages.length,

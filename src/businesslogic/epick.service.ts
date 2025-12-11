@@ -3370,6 +3370,56 @@ export class EpickService {
   }
 
   /**
+   * Get all override requests for an order (for Epick user)
+   * Returns all override requests grouped by type (pass and scan)
+   */
+  async getAllOverrideRequests(orderNumber: number) {
+    // Validate order number
+    if (!orderNumber || isNaN(orderNumber)) {
+      throw new AppError('Invalid order number', 400);
+    }
+
+    // Get all override requests for this order (all statuses)
+    const allRequests = await OverrideRequest.findAll({
+      where: {
+        orderNumber: orderNumber,
+      },
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Separate requests by type
+    const passOverrides = allRequests
+      .filter(req => req.requestType === 'pass')
+      .map(req => ({
+        requestId: req.id,
+        itemNumber: req.itemNumber,
+        status: req.status,
+        note: req.note || null,
+        rejectionReason: (req.status === 'rejected' || req.status === 'cancelled') 
+          ? (req.rejectionReason || null) 
+          : null,
+      }));
+
+    const scanOverrides = allRequests
+      .filter(req => req.requestType === 'scan')
+      .map(req => ({
+        requestId: req.id,
+        itemNumber: req.itemNumber,
+        status: req.status,
+        qty: req.qty,
+        note: req.note || null,
+        rejectionReason: (req.status === 'rejected' || req.status === 'cancelled') 
+          ? (req.rejectionReason || null) 
+          : null,
+      }));
+
+    return {
+      passOverrides,
+      scanOverrides,
+    };
+  }
+
+  /**
    * Get all approved override requests (for distributor)
    */
   async getApprovedOverrideRequests() {

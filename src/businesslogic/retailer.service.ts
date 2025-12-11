@@ -51,6 +51,7 @@ import { ContactUs } from "../models/postgres/contactUs.model";
 import { postgresSequelize } from "../db";
 import { QueryTypes } from "sequelize";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
+import { OrderPick } from "../models/postgres/epickOrder.model";
 import { Users } from "../models/mmsql/user.model";
 import { sendResponse } from "../utils/sendResponse";
 import e, { Request, Response } from "express"
@@ -1961,23 +1962,23 @@ export class RetailerService {
       };
     }));
 
-    // Get checker images from OrderPickBox using raw SQL query for better performance
-    const checkerImagesResult = await postgresSequelize.query(
-      `SELECT jsonb_array_elements_text(images) as image_url
-       FROM "Order_Pick_Box"
-       WHERE "orderNumber" = :orderNumber
-         AND images IS NOT NULL
-         AND jsonb_typeof(images) = 'array'`,
-      {
-        replacements: { orderNumber },
-        type: QueryTypes.SELECT
-      }
-    );
+    // Get checker images from OrderPick
+    const orderPick = await OrderPick.findOne({
+      where: { orderNumber },
+      attributes: ['images']
+    });
 
-    // Extract image URLs from query result
-    const checkerImages: string[] = (checkerImagesResult as any[])
-      .map((row: any) => row?.image_url)
-      .filter((url: any) => url && typeof url === 'string');
+    // Extract image URLs from OrderPick.images
+    const checkerImages: string[] = [];
+    if (orderPick && orderPick.images) {
+      orderPick.images.forEach((img: any) => {
+        if (typeof img === 'string') {
+          checkerImages.push(img);
+        } else if (img && img.url && typeof img.url === 'string') {
+          checkerImages.push(img.url);
+        }
+      });
+    }
 
     return {
       orderHeader: {
