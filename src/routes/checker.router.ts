@@ -26,7 +26,7 @@ router.post("/deleteBoxPhoto/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALE
 
 
 
-router.put('/requestAllStatusOverride/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(checkerController.requestAllStatusOverride.bind(checkerController)));
+router.put('/requestAllStatusOverride/:orderNumber',verifyRole(ROLES.MANAGER,ROLES.CHECKER, ROLES.SALES),catchAsync(checkerController.requestAllStatusOverride.bind(checkerController)));
 
 
 export default router;
