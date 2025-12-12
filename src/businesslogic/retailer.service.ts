@@ -1226,7 +1226,15 @@ export class RetailerService {
 
 
     try {
-      await OrderDetail.bulkCreate(await Promise.all(orderDetails));
+      const resolvedOrderDetails = await Promise.all(orderDetails);
+    
+      await OrderDetail.bulkCreate(resolvedOrderDetails);
+    
+      try {
+        sendEmailToOrder(orderHeaderCreated, resolvedOrderDetails, customer, Delivery_Charge);
+      } catch (error) {
+        console.log(error, 'error-->')
+      }
       console.log('Order details created successfully');
     } catch (e: any) {
       console.log(e, 'error-->')
@@ -1271,11 +1279,7 @@ export class RetailerService {
     });
 
     // Send order confirmation email to customer
-    try {
-      sendEmailToOrder(orderHeaderCreated, orderDetails, customer, Delivery_Charge);
-    } catch (error) {
-      console.log(error, 'error-->')
-    }
+  
 
     return {
       orderHeader: orderHeaderCreated,

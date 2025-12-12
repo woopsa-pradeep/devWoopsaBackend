@@ -100,8 +100,8 @@ export class PuppeteerPDFGenerator {
            <td>${item.UOM?.toString() || '0'}</td>
           <td>${item.Pack?.toString() || '0'}</td>
          
-          <td>$${(item.Price + item.OTP_Amount_State || 0) || item.Price + item.OTP_Amount_State}</td>
-          <td>$${itemTotal}</td>
+          <td>$${((item.Price + item.OTP_Amount_State || 0) || item.Price + item.OTP_Amount_State).toFixed(2)}</td>
+          <td>$${itemTotal.toFixed(2)}</td>
         </tr>
       `;
     }).join('') || '';
