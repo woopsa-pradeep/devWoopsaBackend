@@ -179,7 +179,7 @@ export const getDefaultOrderDetailValues = (): OrderDetailDefaultValues => {
     Tote_ID: 0,
     Special_ID: 0,
     Order_Number_Legacy: 0,
-    PPD_PackType: 0,
+  
     PPD_Packs: 0,
     Prebook_ID: 0,
     MergedFromOrder: 0,

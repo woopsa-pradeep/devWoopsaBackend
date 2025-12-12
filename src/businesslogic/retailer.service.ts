@@ -1137,14 +1137,13 @@ export class RetailerService {
 
     // Fetch products and options
     const itemNumbers = orderPlayload.map(item => item.Item_Number);
-    const [products, optionDefsValues] = await Promise.all([
+    const [products] = await Promise.all([
       Inventory.findAll({ where: { Item_Number: itemNumbers }, raw: true }),
-      OptionDefsValues.findOne({ where: { ID_Number: 4003 }, raw: true })
     ]);
 
     const productMap = new Map(products.map(product => [product.Item_Number, product]));
 
-    const orderDetails = orderPlayload.map((item, index) => {
+    const orderDetails = orderPlayload.map(async (item:any, index) => {
       const product = productMap.get(item.Item_Number);
 
       if (!product) {
@@ -1155,6 +1154,32 @@ export class RetailerService {
         throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
       }
 
+      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.Sales_Category}, raw: true })
+
+      if(!optionDefsValues){
+        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.OTP_Number}, raw: true })
+      }
+
+      console.log(optionDefsValues, 'optionDefsValues-->')
+      if(!optionDefsValues){
+        optionDefsValues = 0
+      }else {
+        optionDefsValues = Number(item.Qty)
+      }
+      let PPD_PackType = 0
+      let PPD_Packs = 0
+
+      if(product.OTP_Number == 255){
+        if(product.Cig_Pack == 20){
+          PPD_PackType = 20
+          PPD_Packs = 10
+        }
+        else if(product.Cig_Pack == 10){
+          PPD_PackType = 10
+          PPD_Packs = 20
+        }
+       
+      }
       const orderDetail = {
         PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
         Order_Number: orderHeaderCreated.Order_Number,
@@ -1184,10 +1209,12 @@ export class RetailerService {
         OffInvoice_Special: false,
         EBT: product.EBT,
         Points: product.Points,
-        STAMP_Qty: optionDefsValues?.Option_Value || 0,
+        Stamp_Qty: optionDefsValues || 0,
         ItemDescription: product.Description,
         CaseWeight: product.CaseWeight,
         CaseCount: product.CaseCount,
+        PPD_PackType:PPD_PackType,
+        PPD_Packs:PPD_Packs,
         // CasesPerPallet: product.CasesPerPallet,
       };
 
@@ -1199,7 +1226,7 @@ export class RetailerService {
 
 
     try {
-      await OrderDetail.bulkCreate(orderDetails);
+      await OrderDetail.bulkCreate(await Promise.all(orderDetails));
       console.log('Order details created successfully');
     } catch (e: any) {
       console.log(e, 'error-->')

@@ -1115,11 +1115,10 @@ export class CheckerService {
       throw new AppError("Order not found", 404);
     }
 
-    // Get all containers (boxes, totes, drinks) for this order
+    // Get all containers (boxes, totes, drinks) for this order to calculate min/max images
     const containers = await OrderPickBox.findAll({
       where: { orderNumber },
-      attributes: ['id', 'type', 'orderNumber'],
-      order: [['id', 'ASC']] // Consistent ordering for distribution
+      attributes: ['id', 'type', 'orderNumber']
     });
 
     if (!containers || containers.length === 0) {
@@ -1127,6 +1126,7 @@ export class CheckerService {
     }
 
     const containerCount = containers.length;
+    // Validate image count based on containers: 1 image per container minimum, 2 images per container maximum
     const minImages = containerCount; // 1 image per container minimum
     const maxImages = containerCount * 2; // 2 images per container maximum
 
@@ -1163,60 +1163,19 @@ export class CheckerService {
       );
     }
 
-    // Distribute images across containers
-    // Strategy: Each container gets at least 1 image, remaining images distributed evenly (max 2 per container)
-    const imagesPerContainer = Math.floor(uploadedImages.length / containerCount); // Base images per container
-    const remainingImages = uploadedImages.length % containerCount; // Extra images to distribute
-
-    let imageIndex = 0;
-    const containerUpdates: Array<{ id: number; images: string[] }> = [];
-
-    for (let i = 0; i < containers.length; i++) {
-      const container = containers[i];
-      // Each container gets base amount, first 'remainingImages' containers get 1 extra
-      const imagesForThisContainer = imagesPerContainer + (i < remainingImages ? 1 : 0);
-      
-      const containerImages = uploadedImages.slice(imageIndex, imageIndex + imagesForThisContainer);
-      imageIndex += imagesForThisContainer;
-
-      containerUpdates.push({
-        id: container.id,
-        images: containerImages
-      });
-    }
-
-    // Update all containers with their assigned images
-    await Promise.all(
-      containerUpdates.map((update) =>
-        OrderPickBox.update(
-          {
-            images: update.images,
-            notes: req.body.notes || " ",
-          },
-          {
-            where: { id: update.id },
-          }
-        )
-      )
-    );
+    // Update order with images
+    await orderPick.update({
+      images: uploadedImages,
+      notes: req.body.notes || orderPick.notes || " "
+    });
 
     return {
       success: true,
-      message: `Photos captured and distributed across ${containerCount} containers successfully`,
+      message: `Photos captured successfully for order ${orderNumber}`,
       orderNumber,
-      totalContainers: containerCount,
       totalImages: uploadedImages.length,
-      imagesPerContainer: {
-        base: imagesPerContainer,
-        extra: remainingImages,
-        distribution: containerUpdates.map(c => ({
-          containerId: c.id,
-          containerType: containers.find(ct => ct.id === c.id)?.type,
-          imageCount: c.images.length,
-          images: c.images
-        }))
-      },
-      notes: req.body.notes || " "
+      photos: uploadedImages,
+      notes: req.body.notes || orderPick.notes || " "
     };
   }
 

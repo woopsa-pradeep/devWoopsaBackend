@@ -147,10 +147,11 @@ export class SalesService {
 
     // Get customer and route info
 
-    const customer = await Customer.findOne({ where: { C_Number: customerId } });
+    let customer = await Customer.findOne({ where: { C_Number: customerId } });
 
 
-    console.log(customer, 'customer-->---->')
+    console.log(customer?.dataValues, 'customer-->---->')
+    customer=customer?.dataValues as any;
     const customerRoutes = await CustomerRoute.findOne({ where: { C_Number: customerId } });
 
 
@@ -196,6 +197,8 @@ export class SalesService {
       Other_Charge_Select: !!customer.Other_Amount,
     };
 
+
+
     // Combine with defaults (exclude Order_Number since it's auto-increment)
     const { Order_Number, ...defaultValues } = getDefaultOrderValues();
     const finalOrderHeader: any = {
@@ -220,6 +223,8 @@ export class SalesService {
 
 
 
+    console.log(finalOrderHeader, 'finalOrderHeader-->---->------------------------>')
+
 
     let orderHeaderCreated: any;
     try {
@@ -230,14 +235,15 @@ export class SalesService {
 
     // Fetch products and options
     const itemNumbers = orderPlayload.map(item => item.Item_Number);
-    const [products, optionDefsValues] = await Promise.all([
+    const [products] = await Promise.all([
       Inventory.findAll({ where: { Item_Number: itemNumbers }, raw: true }),
-      OptionDefsValues.findOne({ where: { ID_Number: 4003 }, raw: true })
     ]);
+
+
 
     const productMap = new Map(products.map(product => [product.Item_Number, product]));
 
-    const orderDetails = orderPlayload.map((item, index) => {
+    const orderDetails = orderPlayload.map(async (item:any, index) => {
       const product = productMap.get(item.Item_Number);
 
       if (!product) {
@@ -248,9 +254,36 @@ export class SalesService {
         throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
       }
 
-      console.log(item.Price, 'item.Price-->')
+      console.log(item.Price, 'item.Price-->','item.Sales_Category',product.Sales_Category,'item.OTP_Number',product.OTP_Number)
 
       console.log(hasDiscount == true,'hasDiscount == true')
+      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.Sales_Category}, raw: true })
+
+      if(!optionDefsValues){
+        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.OTP_Number}, raw: true })
+      }
+
+      console.log(optionDefsValues, 'optionDefsValues-->')
+      if(!optionDefsValues){
+        optionDefsValues = 0
+      }else {
+        optionDefsValues = Number(item.Qty)
+      }
+
+      let PPD_PackType = 0
+      let PPD_Packs = 0
+
+      if(product.OTP_Number == 255){
+        if(product.Cig_Pack == 20){
+          PPD_PackType = 20
+          PPD_Packs = 10
+        }
+        else if(product.Cig_Pack == 10){
+          PPD_PackType = 10
+          PPD_Packs = 20
+        }
+       
+      }
 
       let adjprice = hasDiscount == true? Number(item.discountPrice || 0): Number(item.Price);
       const orderDetail = {
@@ -263,6 +296,7 @@ export class SalesService {
         Quantity_Ordered: Number(item.Qty),
         Quantity_Shipped: item.Qty,
         Pack: product.Pack,
+        UOM: product.UOM,
         Price: Number(adjprice),
         Price_Reference:Number(adjprice),
         Retail: product.Retail1,
@@ -283,10 +317,12 @@ export class SalesService {
         OffInvoice_Special: false,
         EBT: product.EBT,
         Points: product.Points,
-        STAMP_Qty: optionDefsValues?.Option_Value || 0,
+        Stamp_Qty: optionDefsValues || 0,
         ItemDescription: product.Description,
         CaseWeight: product.CaseWeight,
         CaseCount: product.CaseCount,
+        PPD_PackType:PPD_PackType,
+        PPD_Packs:PPD_Packs,
         // CasesPerPallet: product.CasesPerPallet,
       };
 
@@ -298,13 +334,15 @@ export class SalesService {
 
 
     try {
-      await OrderDetail.bulkCreate(orderDetails);
+      await OrderDetail.bulkCreate(await Promise.all(orderDetails));
       console.log('Order details created successfully');
     } catch (error) {
       console.log(error, 'error-->')
       throw new AppError('Failed to create order details', 500);
     }
 
+
+    console.log(customer, 'customer-->---->------------------------>')
   
 
     await CustomerCart.update({ isActive: false }, { where: { Customer_Number: customerId } });

@@ -56,7 +56,7 @@ export class OrderDetail extends Model {
   public AddOnDeposit_Item_Number?: number;
   public EPick_ItemStatus?: number;
   public EPick_ItemStatusOn?: Date;
-  public STAMP_Qty?: number;
+  public Stamp_Qty?: number;
   public ItemDescription?: string;
   public CaseWeight?: number;
   public CaseCount?: number;
@@ -139,8 +139,7 @@ OrderDetail.init({
   AddOnDeposit_Item_Number: { type: DataTypes.INTEGER },
   EPick_ItemStatus: { type: DataTypes.INTEGER },
   EPick_ItemStatusOn: { type: DataTypes.DATE, allowNull: true },
-
-  STAMP_Qty: DataTypes.DECIMAL(18, 2),
+  Stamp_Qty: DataTypes.DECIMAL(18, 2),
   ItemDescription: DataTypes.STRING(100),
   CaseWeight: DataTypes.DECIMAL(18, 4),
   CaseCount: DataTypes.INTEGER,
