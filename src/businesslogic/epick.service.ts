@@ -391,6 +391,7 @@ export class EpickService {
       {
         where: {
           Order_Number: body.orderNumber,
+          Confirmed:0
         },
         }
 );
@@ -1931,8 +1932,15 @@ export class EpickService {
 
         ]
       })
+
+      // Calculate total quantity shipped from OrderDetail
+      const totalQtyShipped = product.reduce((sum: number, item: any) => {
+        return sum + (Number(item.Quantity_Shipped) || 0);
+      }, 0);
+
       return {
         ...e.dataValues,
+        totalQtyShipped: totalQtyShipped, // Add total quantity shipped
         ...product
       }
     })) as any
@@ -2011,6 +2019,8 @@ export class EpickService {
         'pickerUserNumber',
         'status',
         'note',
+        'requestType',
+        'qty',
         'rejectionReason',
         'createdAt',
         'updatedAt'
@@ -2650,9 +2660,10 @@ export class EpickService {
   async createOverrideRequest(data: {
     orderNumber: number;
     itemNumber: number;
+    qty?: number;
     note?: string;
   }, userId: number) {
-    const { orderNumber, itemNumber, note } = data;
+    const { orderNumber, itemNumber, qty, note } = data;
 
     // Validate order exists and item is in order
     const orderDetail = await OrderDetail.findOne({
@@ -2682,13 +2693,14 @@ export class EpickService {
     }
 
     // Create the request (default to 'pass' type)
+    // qty defaults to 0 if not provided (for backward compatibility)
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
       pickerUserNumber: userId,
       status: 'pending',
       requestType: 'pass',
-      qty: 0,
+      qty: qty !== undefined && qty !== null ? qty : 0,
       note: note || null, 
     });
 
@@ -3394,6 +3406,7 @@ export class EpickService {
         requestId: req.id,
         itemNumber: req.itemNumber,
         status: req.status,
+        qty: req.qty,
         note: req.note || null,
         rejectionReason: (req.status === 'rejected' || req.status === 'cancelled') 
           ? (req.rejectionReason || null) 

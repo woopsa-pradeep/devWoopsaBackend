@@ -98,7 +98,7 @@ export class CheckerService {
         },
       ],
       order: [
-        ['Order_Number', 'ASC'],
+        ['Order_Number', 'DESC'], // Newest first
       ],
     });
   
@@ -275,7 +275,7 @@ export class CheckerService {
         },
       ],
       order: [
-        ['Order_Number', 'ASC'],
+        ['Order_Number', 'DESC'], // Newest first
       ],
     });
   
@@ -800,6 +800,7 @@ export class CheckerService {
     const scans = await OrderPickScan.findAll({
       where: { orderNumber },
       attributes: ['orderNumber', 'itemNumber', 'qty', 'isSubsitute', 'boxId'],
+      order: [['itemNumber', 'ASC']], // Order by itemNumber ascending
       raw: true,
     });
 
@@ -1105,6 +1106,7 @@ export class CheckerService {
    * - Distributes images evenly across containers (1-2 images per container)
    * - Updates each container with assigned images
    */
+  
   async capturePhotos(req: Request, orderNumber: number) {
     // Validate order exists
     const orderPick = await OrderPick.findOne({
@@ -1130,6 +1132,9 @@ export class CheckerService {
     const minImages = containerCount; // 1 image per container minimum
     const maxImages = containerCount * 2; // 2 images per container maximum
 
+    // Get existing images from order
+    const existingImages = orderPick.images || [];
+
     // Upload images
     let uploadedImages: string[] = [];
 
@@ -1148,24 +1153,27 @@ export class CheckerService {
         .filter(url => url && url.trim() !== "");
     }
 
-    // Validate image count
-    if (uploadedImages.length < minImages) {
+    // Combine existing images with new uploaded images
+    const combinedImages = [...existingImages, ...uploadedImages];
+
+    // Validate total image count (existing + new)
+    if (combinedImages.length < minImages) {
       throw new AppError(
-        `Insufficient images. Minimum ${minImages} images required (1 per container), received ${uploadedImages.length}`,
+        `Insufficient images. Minimum ${minImages} images required (1 per container), currently have ${combinedImages.length} (${existingImages.length} existing + ${uploadedImages.length} new)`,
         400
       );
     }
 
-    if (uploadedImages.length > maxImages) {
+    if (combinedImages.length > maxImages) {
       throw new AppError(
-        `Too many images. Maximum ${maxImages} images allowed (2 per container), received ${uploadedImages.length}`,
+        `Too many images. Maximum ${maxImages} images allowed (2 per container), currently have ${combinedImages.length} (${existingImages.length} existing + ${uploadedImages.length} new)`,
         400
       );
     }
 
-    // Update order with images
+    // Update order with combined images (existing + new)
     await orderPick.update({
-      images: uploadedImages,
+      images: combinedImages,
       notes: req.body.notes || orderPick.notes || " "
     });
 
@@ -1173,8 +1181,10 @@ export class CheckerService {
       success: true,
       message: `Photos captured successfully for order ${orderNumber}`,
       orderNumber,
-      totalImages: uploadedImages.length,
-      photos: uploadedImages,
+      totalImages: combinedImages.length,
+      existingImages: existingImages.length,
+      newImages: uploadedImages.length,
+      photos: combinedImages,
       notes: req.body.notes || orderPick.notes || " "
     };
   }

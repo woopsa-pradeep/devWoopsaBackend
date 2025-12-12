@@ -400,14 +400,14 @@ export class EpickController {
             return sendResponse(res, 401, false, null, "User not authenticated");
         }
 
-        const { orderNumber, itemNumber, note } = req.body;
+        const { orderNumber, itemNumber, qty, note } = req.body;
 
         if (!orderNumber || !itemNumber) {
             return sendResponse(res, 400, false, null, "orderNumber and itemNumber are required");
         }
 
         const data = await this.epickService.createOverrideRequest(
-            { orderNumber, itemNumber, note },
+            { orderNumber, itemNumber, qty, note },
             userId
         );
 

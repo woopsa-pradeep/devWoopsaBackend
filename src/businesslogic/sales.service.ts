@@ -4398,7 +4398,8 @@ const newSalesRepArray = salesRepList.map(Number);
       { Quantity_Shipped: 0 },
       {
         where: {
-          Order_Number: orderData.order_Number
+          Order_Number: orderData.order_Number,
+          Confirmed: false
         }
       }
     );
@@ -5019,6 +5020,64 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         });
       }
   
+
+      const qtyAgg = await OrderDetail.findAll({
+        attributes: [
+          'Order_Number',
+      
+          // Total ordered
+          [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalOrdered'],
+      
+          // Total shipped (treat NULL as 0)
+          [
+            Sequelize.fn(
+              'SUM',
+              Sequelize.literal('ISNULL(Quantity_Shipped, 0)')
+            ),
+            'totalShipped',
+          ],
+      
+          // Any unconfirmed lines?
+          [
+            Sequelize.fn(
+              'SUM',
+              Sequelize.literal(`
+                CASE 
+                  WHEN ISNULL(Confirmed, 0) = 0 THEN 1 
+                  ELSE 0 
+                END
+              `)
+            ),
+            'unconfirmedCount',
+          ],
+        ],
+        where: { Order_Number: { [Op.in]: orderNumbers } },
+        group: ['Order_Number'],
+        raw: true,
+      });
+      
+      
+      const totalOrderedMap = new Map<number, number>();
+      const totalShippedMap = new Map<number, number>();
+      const confirmFromErpMap = new Map<number, boolean>();
+      
+      qtyAgg.forEach((r: any) => {
+        const orderNo = Number(r.Order_Number);
+      
+        const totalOrdered = Number(r.totalOrdered || 0);
+        const totalShipped = Number(r.totalShipped || 0);
+        const unconfirmedCount = Number(r.unconfirmedCount || 0);
+      
+        totalOrderedMap.set(orderNo, totalOrdered);
+        totalShippedMap.set(orderNo, totalShipped);
+      
+        // Rule: if any Confirmed=0 => false
+        // else compare totals
+        const confirmFromErp =
+          unconfirmedCount === 0 && totalOrdered === totalShipped;
+      
+        confirmFromErpMap.set(orderNo, confirmFromErp);
+      });
       // Format the response
       const formattedOrderList = await Promise.all(
         orderList.map(async (order: any) => {
@@ -5045,6 +5104,8 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             raw: true,
           });
     
+          const confirmFromErp = confirmFromErpMap.get(order.Order_Number) ?? false;
+
           return {
             Order_Number: order.Order_Number,
             C_Number: order.C_Number,
@@ -5064,11 +5125,15 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             route: route?.Route_Number ?? null,
             Bundles: order.Bundles,
             stop: route?.Stop_Number ?? null,
+            erpConfirmStatus: confirmFromErp ? 'Confirmed from ERP' : 'Not Confirmed from ERP',
+            totalOrdered: totalOrderedMap.get(order.Order_Number) || 0,
+            totalShipped: totalShippedMap.get(order.Order_Number) || 0,
             salesRep: order.customer?.salesRep?.S_Desc ?? null,
             totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
           };
         })
       );
+      
   
       return {
         totalCount,
