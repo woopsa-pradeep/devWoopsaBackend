@@ -441,6 +441,17 @@ export class EpickController {
         sendResponse(res, 201, true, data, "Scan override request created successfully");
     }
 
+
+
+    async requestAllStatusOverride(req: AuthRequest, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        const data = await this.epickService.requestAllStatusOverride(orderNumber, req.query);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
     /**
      * Check override request status (Epick user - for polling)
      */

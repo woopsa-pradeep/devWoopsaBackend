@@ -2788,6 +2788,20 @@ export class EpickService {
     };
   }
 
+
+  async requestAllStatusOverride(orderNumber: number,query:any){
+const {status} = query; 
+
+    const overrideRequests = await OverrideRequest.update({status:status}, {
+      where: {
+        orderNumber: orderNumber,
+       
+      },
+    });
+    return overrideRequests;
+  }
+
+  
   /**
    * Check override request status (for polling)
    */
@@ -3413,6 +3427,8 @@ export class EpickService {
           : null,
       }));
 
+   
+      
     const scanOverrides = allRequests
       .filter(req => req.requestType === 'scan')
       .map(req => ({
@@ -3420,6 +3436,7 @@ export class EpickService {
         itemNumber: req.itemNumber,
         status: req.status,
         qty: req.qty,
+       
         note: req.note || null,
         rejectionReason: (req.status === 'rejected' || req.status === 'cancelled') 
           ? (req.rejectionReason || null) 
@@ -3812,7 +3829,15 @@ export class EpickService {
       )
     );
     const orderNumbers = ongoingOrders.map((order: any) => order.orderNumber);
-
+   const allRequests = await OverrideRequest.findAll({
+    where: {
+      orderNumber: { [Op.in]: orderNumbers },
+      status: 'pending',
+      requestType: 'pass',
+    },
+   });
+      const flagPass = allRequests.some(req => req.status === 'pending');
+ 
     // Fetch picker user information
     const pickers = await WebUsers.findAll({
       where: {
@@ -3874,7 +3899,7 @@ export class EpickService {
       const orderInfo = orderHeaderMap[order.orderNumber] || {};
       
       return {
-        orderNumber: order.orderNumber,
+        orderNumber: order.orderNumber,   
         customerNumber: order.customerNumber,
         customerName: orderInfo.customer?.customerName || null,
         routes: orderInfo.customer?.routes || [],
@@ -3890,6 +3915,7 @@ export class EpickService {
         scannedQty: parseFloat(order.scannedQty) || 0,
         outOfStockItems: order.OutOfStockItem,
         notes: order.notes,
+        flagPass: flagPass,
         createdAt: order.createdAt,
         updatedAt: order.updatedAt,
       };

@@ -48,4 +48,7 @@ router.get('/checkScanOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.S
 router.get('/getAllOverrideRequests/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getAllOverrideRequests.bind(epickController)));
 router.post('/cancelOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.cancelOverrideRequest.bind(epickController)));
 
+router.put('/requestAllStatusOverride/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.requestAllStatusOverride.bind(epickController)));
+
+
 export default router;
