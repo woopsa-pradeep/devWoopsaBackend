@@ -231,4 +231,15 @@ export class CheckerController {
         const data = await this.checkerService.deleteBoxPhoto(orderNumber, photoUrl);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+
+    async requestAllStatusOverride(req: AuthRequest, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        const data = await this.checkerService.requestAllStatusOverride(orderNumber, req.query);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

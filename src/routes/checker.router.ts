@@ -24,4 +24,9 @@ router.get("/getOrderPhotos/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES
 router.post("/updateBoxPhotos/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES), multerUpload.array('images'), catchAsync(checkerController.updateBoxPhotos.bind(checkerController)));
 router.post("/deleteBoxPhoto/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.deleteBoxPhoto.bind(checkerController)));
 
+
+
+router.put('/requestAllStatusOverride/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(checkerController.requestAllStatusOverride.bind(checkerController)));
+
+
 export default router;

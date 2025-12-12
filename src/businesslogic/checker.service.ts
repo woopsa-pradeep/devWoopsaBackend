@@ -3908,4 +3908,17 @@ export class CheckerService {
       azureDeletionError: deleteResult.error || null
     };
   }
+
+
+  async requestAllStatusOverride(orderNumber: number,query:any){
+    const {status} = query; 
+    
+        const overrideRequests = await OverrideRequest.update({status:status}, {
+          where: {
+            orderNumber: orderNumber,
+           
+          },
+        });
+        return overrideRequests;
+      }
 }
