@@ -17,7 +17,7 @@ export const generateResetPasswordEmail = (resetLink: string): string => {
           If you did not request this password reset, you can safely ignore this email.
         </p>
         <p style="font-size: 14px; color: #888;">
-          Thanks,<br />CDT TEAM
+          Thanks,<br />WOOPSA TEAM
         </p>
       </div>
     </div>
@@ -30,7 +30,7 @@ export function getPasswordTemplate(name: string, password: string, companyName:
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>CDT</title>
+      <title>WOOPSA</title>
       <style>
   body {{
     font-family: Arial, sans-serif;
@@ -395,7 +395,7 @@ export function generateSupportTicketEmail(
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Support Ticket Update - CDT</title>
+      <title>Support Ticket Update </title>
       <style>
         * {
           margin: 0;
@@ -736,18 +736,18 @@ export function generateSupportTicketEmail(
         </div>
         
         <div class="footer">
-          <p><strong>CDT Support Team</strong></p>
+          <p><strong>WOOPSA Support Team</strong></p>
           <p>We're committed to providing you with the best possible support experience.</p>
           
           <div class="contact-info">
             <div class="contact-item">
-              📧 support@cdt.com
+              📧 support@woopsa.com
             </div>
             <div class="contact-item">
               📞 +1 (555) 123-4567
             </div>
             <div class="contact-item">
-              🌐 www.cdt.com/support
+              🌐 www.woopsa.com/support
             </div>
           </div>
           
@@ -805,7 +805,7 @@ export function generateSupportTicketForDistributor(
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Support Ticket Alert - CDT Admin</title>
+      <title>Support Ticket Alert -  Admin</title>
       <style>
         * {
           margin: 0;
@@ -1249,18 +1249,18 @@ export function generateSupportTicketForDistributor(
         </div>
         
         <div class="footer">
-          <p><strong>CDT Admin Team</strong></p>
+          <p><strong>WOOPSA Admin Team</strong></p>
           <p>This is an automated notification for immediate action required.</p>
           
           <div class="contact-info">
             <div class="contact-item">
-              📧 admin@cdt.com
+              📧 admin@woopsa.com
             </div>
             <div class="contact-item">
               📞 +1 (555) 123-4567
             </div>
             <div class="contact-item">
-              🌐 www.cdt.com/admin
+              🌐 www.woopsa.app
             </div>
           </div>
           

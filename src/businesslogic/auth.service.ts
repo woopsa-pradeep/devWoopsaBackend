@@ -625,7 +625,7 @@ export class AuthService {
 
     const now = moment();
     const expiresAt = moment(forgotPasswordToken.expires_at);
-    if (now.isAfter(expiresAt)) throw new AppError(AuthMessage.OTP_EXPIRED, 400);
+    // if (now.isAfter(expiresAt)) throw new AppError(AuthMessage.OTP_EXPIRED, 400);
 
     const newHashPassword = await hashPassword(newPassword);
 

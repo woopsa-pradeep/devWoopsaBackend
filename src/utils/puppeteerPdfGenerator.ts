@@ -285,7 +285,7 @@ export class PuppeteerPDFGenerator {
         </div>
         
         <div class="footer">
-          <p>This document was generated automatically by the CDT system.</p>
+          <p>This document was generated automatically by the  system.</p>
         </div>
       </body>
       </html>

@@ -38,7 +38,7 @@ export const sendEmail = async ({
       socketTimeout: 30_000,
     });
 
-    const fromName = process.env.EMAIL_FROM_NAME || "CDT TEAM";
+    const fromName = process.env.EMAIL_FROM_NAME || "WOOPSA TEAM";
     const fromAddress = process.env.MAIL_FROM || process.env.MAIL_USER!;
 
     const info = await transporter.sendMail({

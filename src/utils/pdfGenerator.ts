@@ -170,7 +170,7 @@ export class PDFGenerator {
     doc.moveDown(2)
        .fontSize(10)
        .font('Helvetica')
-       .text('This document was generated automatically by the CDT system.', { align: 'center' });
+       .text('This document was generated automatically by the  system.', { align: 'center' });
   }
   
   /**

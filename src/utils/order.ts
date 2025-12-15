@@ -228,11 +228,11 @@ export const sendEmailToOrder = async (
     // 3️⃣ Send email to customer (if email exists)
     if (customer.C_Email) {
       const sendCustomer = process.env.SEND_CUSTOMER_EMAIL === 'true';
-      let sendCustomerEmail = sendCustomer ? customer.C_Email : process.env.EMAIL_FROM || "CDT TEAM";
+      let sendCustomerEmail = sendCustomer ? customer.C_Email : process.env.EMAIL_FROM || "WOOPSA TEAM";
       console.log(sendCustomerEmail,'sendCustomerEmail');
       await sendEmail({
          to: sendCustomerEmail,
-        subject: `Order Confirmation #${orderHeaderCreated.Order_Number} - CDT`,
+        subject: `Order Confirmation #${orderHeaderCreated.Order_Number} - WOOPSA`,
         html: customerEmailHtml,
         attachments: [
           {
@@ -261,7 +261,7 @@ export const sendEmailToOrder = async (
 
 
     const distributorEmailHtml = generateDistributorOrderNotificationEmail(
-      distributor?.D_Name || 'CDT Distributor',
+      distributor?.D_Name || ' Distributor',
       customer.C_Name,
       customer.C_Number,
       customer.C_Email || '',
@@ -314,7 +314,7 @@ export const sendEmailToReturnOrder = async (
 
     // 2️⃣ Prepare customer email HTML
     const returnEmailHtml = generateReturnOrderNotificationEmail(
-      "CDT Distributor",
+      " Distributor",
       customer.C_Name,
       customer.C_Number,
       customer.C_Email || "",
@@ -329,11 +329,11 @@ export const sendEmailToReturnOrder = async (
     // 3️⃣ Send email to customer (if email exists)
     if (customer.C_Email) {
       const sendCustomer = process.env.SEND_CUSTOMER_EMAIL === 'true';
-      let sendCustomerEmail = sendCustomer ? customer.C_Email : process.env.EMAIL_FROM || "CDT TEAM";
+      let sendCustomerEmail = sendCustomer ? customer.C_Email : process.env.EMAIL_FROM || "WOOPSA TEAM";
       console.log(sendCustomerEmail,'sendCustomerEmail');
       await sendEmail({
          to: sendCustomerEmail,
-        subject: `Order Confirmation #${orderHeaderCreated.Order_Number} - CDT`,
+        subject: `Order Confirmation #${orderHeaderCreated.Order_Number} `,
         html: returnEmailHtml,
         attachments: [
           {
@@ -358,7 +358,7 @@ export const sendEmailToReturnOrder = async (
     distributor = distributor?.dataValues;
 
     const distributorEmailHtml = generateDistributorOrderNotificationEmail(
-      distributor?.D_Name || 'CDT Distributor',
+      distributor?.D_Name || ' Distributor',
       customer.C_Name,
       customer.C_Number,
       customer.C_Email || '',
