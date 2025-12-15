@@ -86,4 +86,10 @@ export class ListController {
         const data = await this.listService.getListOfPurchaseOrdersCreate();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+
+    async getListOfRoutesForDriver(req: Request, res: Response) {
+        const data = await this.listService.getListOfRoutesForDriver();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

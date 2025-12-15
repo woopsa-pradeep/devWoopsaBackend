@@ -33,6 +33,7 @@ import { EDIFormatsUser } from "../models/mmsql/ediFormatUser.model";
 import { POHeader } from "../models/mmsql/poHeader.model";
 import { POType } from "../models/mmsql/poType.model";
 import { QBBills } from "../models/mmsql/qbBills.model";
+import { Route } from "../models/mmsql/routes.model";
 
 export class ListService {
 
@@ -523,6 +524,15 @@ export class ListService {
 
     return { PO_Number, primaryVendor, jurisdictionState, jurisdictionCounty, jurisdictionCity, QB_Transfer, terms, PO_Type, Delivery_Id };
 
+  }
+
+
+  async getListOfRoutesForDriver() {
+    const routes = await Route.findAll({
+      attributes: ['Route_Number'],
+      order: [['Route_Number','ASC']]
+    });
+    return routes;
   }
 
 } 

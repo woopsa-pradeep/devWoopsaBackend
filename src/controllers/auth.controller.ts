@@ -83,7 +83,10 @@ async loginWithPassword(req: Request, res: Response) {
       const data = await this.authService.checkerLogin(req.body);
       sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
   }
-  
+  async driverLogin(req: Request, res: Response) {
+    const data = await this.authService.driverLogin(req.body);
+    sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
+  }
 
   async changePassword(req: AuthRequest, res: Response) {
   const data = await this.authService.changePassword(req.body, req);

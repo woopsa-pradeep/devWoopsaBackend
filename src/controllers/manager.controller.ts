@@ -107,6 +107,11 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async deleteUser(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteUser(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async updateUserOrderPreferences(req: AuthRequest, res: Response) {
     const userId = Number(req.params.userId);
     if (!userId || isNaN(userId)) {
@@ -992,6 +997,68 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async bulkUpdateInventory(req: AuthRequest, res: Response){
     const data = await this.managerService.bulkUpdateInventory(req.body)
     sendResponse(res, 200, true, data, 'Inventory updated successfully')
+  }
+
+  // Driver CRUD controller methods
+  async createDriver(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createDriver(req.body);
+    sendResponse(res, 201, true, data, 'Driver created successfully');
+  }
+
+  async getDriverById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getDriverById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Driver retrieved successfully');
+  }
+
+  async getAllDrivers(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllDrivers(req.query as PaginationOptions & { search?: string });
+    sendResponse(res, 200, true, data, 'Drivers retrieved successfully');
+  }
+
+  async updateDriver(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateDriver(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Driver updated successfully');
+  }
+
+  async deleteDriver(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteDriver(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Driver deleted successfully');
+  }
+
+  async updateDriverLocation(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateDriverLocation(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Driver location updated successfully');
+  }
+
+  // DriverRouteAssignment CRUD controller methods
+  async createDriverRouteAssignment(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createDriverRouteAssignment(req.body);
+    sendResponse(res, 201, true, data, 'Driver route assignment created successfully');
+  }
+
+  async getDriverRouteAssignmentById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getDriverRouteAssignmentById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Driver route assignment retrieved successfully');
+  }
+
+  async getAllDriverRouteAssignments(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllDriverRouteAssignments(req.query as PaginationOptions & { search?: string; driverId?: number; deliveryDay?: string });
+    sendResponse(res, 200, true, data, 'Driver route assignments retrieved successfully');
+  }
+
+  async updateDriverRouteAssignment(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateDriverRouteAssignment(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Driver route assignment updated successfully');
+  }
+
+  async deleteDriverRouteAssignment(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteDriverRouteAssignment(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Driver route assignment deleted successfully');
+  }
+
+  async getDriverRouteAssignmentsByDriver(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getDriverRouteAssignmentsByDriver(Number(req.params.driverId), req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, 'Driver route assignments retrieved successfully');
   }
 
 

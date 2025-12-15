@@ -175,7 +175,7 @@ export const roleUdatePermissionRequestSchema = Joi.object({
         delete: Joi.boolean().optional(),
         view: Joi.boolean().optional(),
         path: Joi.string().required(),
-        id: Joi.number().required(),
+        id: Joi.number().optional().allow(null,''),
       })
     )
     .min(1)
@@ -1404,6 +1404,164 @@ export const getEpickSettingsQuerySchema = Joi.object({
     'number.integer': 'Priority must be an integer',
     'number.min': 'Priority must be between 0 and 255',
     'number.max': 'Priority must be between 0 and 255'
+  })
+});
+
+// Driver CRUD validation schemas
+export const createDriverSchema = Joi.object({
+  firstName: Joi.string().trim().required().messages({
+    'string.base': 'First name must be a string',
+    'string.empty': 'First name cannot be empty',
+    'any.required': 'First name is required'
+  }),
+  lastName: Joi.string().trim().required().messages({
+    'string.base': 'Last name must be a string',
+    'string.empty': 'Last name cannot be empty',
+    'any.required': 'Last name is required'
+  }),
+  email: Joi.string().email().required().messages({
+    'string.base': 'Email must be a string',
+    'string.email': 'Email must be a valid email address',
+    'string.empty': 'Email cannot be empty',
+    'any.required': 'Email is required'
+  }),
+  currentLatitude: Joi.number().min(-90).max(90).allow(null).optional().messages({
+    'number.base': 'Latitude must be a number',
+    'number.min': 'Latitude must be between -90 and 90',
+    'number.max': 'Latitude must be between -90 and 90'
+  }),
+  currentLongitude: Joi.number().min(-180).max(180).allow(null).optional().messages({
+    'number.base': 'Longitude must be a number',
+    'number.min': 'Longitude must be between -180 and 180',
+    'number.max': 'Longitude must be between -180 and 180'
+  })
+});
+
+export const updateDriverSchema = Joi.object({
+  firstName: Joi.string().trim().optional().messages({
+    'string.base': 'First name must be a string',
+    'string.empty': 'First name cannot be empty'
+  }),
+  lastName: Joi.string().trim().optional().messages({
+    'string.base': 'Last name must be a string',
+    'string.empty': 'Last name cannot be empty'
+  }),
+  email: Joi.string().email().optional().messages({
+    'string.base': 'Email must be a string',
+    'string.email': 'Email must be a valid email address',
+    'string.empty': 'Email cannot be empty'
+  }),
+  currentLatitude: Joi.number().min(-90).max(90).allow(null).optional().messages({
+    'number.base': 'Latitude must be a number',
+    'number.min': 'Latitude must be between -90 and 90',
+    'number.max': 'Latitude must be between -90 and 90'
+  }),
+  currentLongitude: Joi.number().min(-180).max(180).allow(null).optional().messages({
+    'number.base': 'Longitude must be a number',
+    'number.min': 'Longitude must be between -180 and 180',
+    'number.max': 'Longitude must be between -180 and 180'
+  })
+});
+
+export const updateDriverLocationSchema = Joi.object({
+  currentLatitude: Joi.number().min(-90).max(90).required().messages({
+    'number.base': 'Latitude must be a number',
+    'number.min': 'Latitude must be between -90 and 90',
+    'number.max': 'Latitude must be between -90 and 90',
+    'any.required': 'Latitude is required'
+  }),
+  currentLongitude: Joi.number().min(-180).max(180).required().messages({
+    'number.base': 'Longitude must be a number',
+    'number.min': 'Longitude must be between -180 and 180',
+    'number.max': 'Longitude must be between -180 and 180',
+    'any.required': 'Longitude is required'
+  })
+});
+
+export const getDriversQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be at least 1'
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be at least 1',
+    'number.max': 'Limit cannot exceed 100'
+  }),
+  search: Joi.string().trim().optional().messages({
+    'string.base': 'Search must be a string'
+  })
+});
+
+// DriverRouteAssignment CRUD validation schemas
+export const createDriverRouteAssignmentSchema = Joi.object({
+  driverId: Joi.number().integer().required().messages({
+    'number.base': 'Driver ID must be a number',
+    'number.integer': 'Driver ID must be an integer',
+    'any.required': 'Driver ID is required'
+  }),
+  routes: Joi.array().items(Joi.number().integer()).default([]).messages({
+    'array.base': 'Routes must be an array',
+    'number.base': 'Each route must be a number'
+  }),
+  deliveryDay: Joi.string().trim().required().messages({
+    'string.base': 'Delivery day must be a string',
+    'string.empty': 'Delivery day cannot be empty',
+    'any.required': 'Delivery day is required'
+  }),
+  deliveryDayNumber: Joi.number().integer().min(1).max(7).required().messages({
+    'number.base': 'Delivery day number must be a number',
+    'number.integer': 'Delivery day number must be an integer',
+    'number.min': 'Delivery day number must be between 1 and 7',
+    'number.max': 'Delivery day number must be between 1 and 7',
+    'any.required': 'Delivery day number is required'
+  })
+});
+
+export const updateDriverRouteAssignmentSchema = Joi.object({
+  driverId: Joi.number().integer().optional().messages({
+    'number.base': 'Driver ID must be a number',
+    'number.integer': 'Driver ID must be an integer'
+  }),
+  routes: Joi.array().items(Joi.string().trim()).optional().messages({
+    'array.base': 'Routes must be an array',
+    'string.base': 'Each route must be a string'
+  }),
+  deliveryDay: Joi.string().trim().optional().messages({
+    'string.base': 'Delivery day must be a string',
+    'string.empty': 'Delivery day cannot be empty'
+  }),
+  deliveryDayNumber: Joi.number().integer().min(1).max(7).optional().messages({
+    'number.base': 'Delivery day number must be a number',
+    'number.integer': 'Delivery day number must be an integer',
+    'number.min': 'Delivery day number must be between 1 and 7',
+    'number.max': 'Delivery day number must be between 1 and 7'
+  })
+});
+
+export const getDriverRouteAssignmentsQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be at least 1'
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be at least 1',
+    'number.max': 'Limit cannot exceed 100'
+  }),
+  search: Joi.string().trim().optional().messages({
+    'string.base': 'Search must be a string'
+  }),
+  driverId: Joi.number().integer().optional().messages({
+    'number.base': 'Driver ID must be a number',
+    'number.integer': 'Driver ID must be an integer'
+  }),
+  deliveryDay: Joi.string().trim().optional().messages({
+    'string.base': 'Delivery day must be a string'
   })
 });
 

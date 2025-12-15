@@ -87,6 +87,8 @@ import { PurchaseOrderRequest } from "../interfaces/request.body.interface";
 import { getDefaultPOHeaderValues, getNextPONumber } from "../utils/purchaseOrder";
 import {  PODetail } from "../models/mmsql/poDetail.model";
 import { now } from "moment";
+import { Driver } from "../models/postgres/driver.model";
+import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.model";
 
 export class ManagerService {
 
@@ -1361,6 +1363,13 @@ export class ManagerService {
     return updateUser;
   }
 
+  async deleteUser(id: number) {
+    const deleteUser = await WebUsers.destroy({
+      where: { id }
+    });
+    return deleteUser;
+  }
+
   /**
    * Update user order preferences (order_type and shortby)
    * order_type: 'order_number' | 'qty_number'
@@ -1666,17 +1675,23 @@ export class ManagerService {
   };
 
   async updateRolePermissions(body: any) {
-    const { permissions } = body;
+    const { permissions,userId } = body;
 
     const updates = await Promise.all(
       permissions.map(async (perm: any) => {
         console.log(perm, "perm")
-        const updated = await RolePermission.update(perm, {
-          where: {
-            id: Number(perm.id),
-          },
-        });
-        return updated;
+        if(!perm.id){
+          const created = await RolePermission.create({...perm, userId});
+          return created;
+        }else {
+          const updated = await RolePermission.update(perm, {
+            where: {
+              id: Number(perm.id),
+            },
+          });
+          return updated;
+        }
+       
       })
     );
 
@@ -5283,6 +5298,240 @@ export class ManagerService {
     return {
       totalCount,
       productList
+    };
+  }
+
+  // Driver CRUD methods
+  async createDriver(body: any) {
+    // Check if email already exists
+    const existingDriver = await Driver.findOne({
+      where: { email: body.email }
+    });
+
+    if (existingDriver) {
+      throw new AppError('Driver with this email already exists', 400);
+    }
+
+    const driver = await Driver.create(body);
+    return driver;
+  }
+
+  async getDriverById(id: number) {
+    const driver = await Driver.findByPk(id);
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+    return driver;
+  }
+
+  async getAllDrivers(query: PaginationOptions & { search?: string }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const search = query.search || '';
+
+    const whereCondition: any = {};
+
+    if (search) {
+      whereCondition[Op.or] = [
+        { firstName: { [Op.iLike]: `%${search}%` } },
+        { lastName: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    const { count: totalCount, rows: drivers } = await Driver.findAndCountAll({
+      where: whereCondition,
+      limit,
+      offset: (page - 1) * limit,
+      order: [['createdAt', 'DESC']],
+    });
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      drivers,
+    };
+  }
+
+  async updateDriver(id: number, body: any) {
+    const driver = await Driver.findByPk(id);
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+
+    // Check if email is being updated and if it already exists
+    if (body.email && body.email !== driver.email) {
+      const existingDriver = await Driver.findOne({
+        where: { email: body.email }
+      });
+
+      if (existingDriver) {
+        throw new AppError('Driver with this email already exists', 400);
+      }
+    }
+
+    await driver.update(body);
+    return driver;
+  }
+
+  async deleteDriver(id: number) {
+    const driver = await Driver.findByPk(id);
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+
+    await driver.destroy();
+    return { message: 'Driver deleted successfully' };
+  }
+
+  async updateDriverLocation(id: number, body: { currentLatitude: number; currentLongitude: number }) {
+    const driver = await Driver.findByPk(id);
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+
+    await driver.update({
+      currentLatitude: body.currentLatitude,
+      currentLongitude: body.currentLongitude
+    });
+
+    return driver;
+  }
+
+  // DriverRouteAssignment CRUD methods
+  async createDriverRouteAssignment(body: any) {
+    // Verify driver (user) exists
+    const driver = await WebUsers.findByPk(body.driverId);
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+
+    const routeAssignment = await DriverRouteAssignment.create(body);
+    return routeAssignment;
+  }
+
+  async getDriverRouteAssignmentById(id: number) {
+    const routeAssignment = await DriverRouteAssignment.findByPk(id, {
+      include: [
+        {
+          model: Driver,
+          as: 'driver',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: false
+        }
+      ]
+    });
+
+    if (!routeAssignment) {
+      throw new AppError('Driver route assignment not found', 404);
+    }
+    return routeAssignment;
+  }
+
+  async getAllDriverRouteAssignments(query: PaginationOptions & { search?: string; driverId?: number; deliveryDay?: string }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const search = query.search || '';
+    const driverId = query.driverId ? Number(query.driverId) : undefined;
+    const deliveryDay = query.deliveryDay || '';
+
+    const whereCondition: any = {};
+
+    if (driverId) {
+      whereCondition.driverId = driverId;
+    }
+
+    if (deliveryDay) {
+      whereCondition.deliveryDay = { [Op.iLike]: `%${deliveryDay}%` };
+    }
+
+    if (search) {
+      whereCondition[Op.or] = [
+        { deliveryDay: { [Op.iLike]: `%${search}%` } },
+        Sequelize.where(
+          Sequelize.cast(Sequelize.col('routes'), 'TEXT'),
+          { [Op.iLike]: `%${search}%` }
+        )
+      ];
+    }
+
+    const { count: totalCount, rows: routeAssignments } = await DriverRouteAssignment.findAndCountAll({
+      where: whereCondition,
+      include: [
+        {
+          model: Driver,
+          as: 'driver',
+          attributes: ['id', 'firstName', 'lastName', 'email'],
+          required: false
+        }
+      ],
+      limit,
+      offset: (page - 1) * limit,
+      order: [['deliveryDayNumber', 'ASC'], ['createdAt', 'DESC']],
+    });
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      routeAssignments,
+    };
+  }
+
+  async updateDriverRouteAssignment(id: number, body: any) {
+    const routeAssignment = await DriverRouteAssignment.findByPk(id);
+    if (!routeAssignment) {
+      throw new AppError('Driver route assignment not found', 404);
+    }
+
+    // If driverId is being updated, verify the driver exists
+    if (body.driverId && body.driverId !== routeAssignment.driverId) {
+      const driver = await WebUsers.findByPk(body.driverId);
+      if (!driver) {
+        throw new AppError('Driver not found', 404);
+      }
+    }
+
+    await routeAssignment.update(body);
+    return routeAssignment;
+  }
+
+  async deleteDriverRouteAssignment(id: number) {
+    const routeAssignment = await DriverRouteAssignment.findByPk(id);
+    if (!routeAssignment) {
+      throw new AppError('Driver route assignment not found', 404);
+    }
+
+    await routeAssignment.destroy();
+    return { message: 'Driver route assignment deleted successfully' };
+  }
+
+  async getDriverRouteAssignmentsByDriver(driverId: number, query: PaginationOptions) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+
+    // Verify driver (user) exists
+    const driver = await WebUsers.findByPk(driverId);
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+
+    const { count: totalCount, rows: routeAssignments } = await DriverRouteAssignment.findAndCountAll({
+      where: { driverId },
+      limit,
+      offset: (page - 1) * limit,
+      order: [['deliveryDayNumber', 'ASC'], ['createdAt', 'DESC']],
+    });
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      routeAssignments,
     };
   }
 

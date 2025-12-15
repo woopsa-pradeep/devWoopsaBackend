@@ -20,6 +20,7 @@ import { SalesCategory } from '../mmsql/salesCategory.model';
 import { PriceClass } from '../mmsql/priceClass.model';
 import { InventoryUPC } from '../mmsql/inventoryUpc.model';
 import { OrderConfirmation } from './orderConfirmation.model';
+import { DriverRouteAssignment } from './driverRouteAssignment.model';
 // import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
 
 export function applyAssociations(): void {
@@ -112,6 +113,17 @@ WebUsers.hasMany(OverrideRequest, {
 OverrideRequest.belongsTo(WebUsers, {
   foreignKey: 'pickerUserNumber',
   as: 'user',
+});
+
+// DriverRouteAssignment associations
+WebUsers.hasMany(DriverRouteAssignment, {
+  foreignKey: 'driverId',
+  as: 'routeAssignments',
+});
+
+DriverRouteAssignment.belongsTo(WebUsers, {
+  foreignKey: 'driverId',
+  as: 'driver',
 });
 
 
