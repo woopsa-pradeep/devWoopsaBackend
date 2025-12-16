@@ -1900,7 +1900,7 @@ export class RetailerService {
 
       price += Number(detail.PrepaidTax_Amount || 0);
       totalPrice += (price) * quantity;
-      totalPrice+= Number(detail.PrepaidTax_Amount || 0);
+    
       totalDiscount += Number(detail.OffInvoice_Amount || 0);
       totalDeposit += Number(detail.DepositAmount || 0);
     }
@@ -1943,7 +1943,7 @@ export class RetailerService {
         'ItemDescription',
         'CaseWeight',
         'CaseCount',
-
+        'PrepaidTax_Amount'
       ],
       include: [
         {

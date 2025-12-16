@@ -13,7 +13,6 @@ interface DriverOrdersAttributes {
   totalScanBundle: number;
   totalBundle: number;
   damageBundle: number;
-  barcodes: string[];
   scanBarcode: string[];
   barCode: string[];
   paymentMethod: string;
@@ -44,7 +43,6 @@ export class DriverOrders
   public totalScanBundle!: number;
   public totalBundle!: number;
   public damageBundle!: number;
-  public barcodes!: string[];
   public scanBarcode!: string[];
   public barCode!: string[];
   public paymentMethod!: string;
@@ -113,11 +111,6 @@ DriverOrders.init(
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0,
-    },
-    barcodes: {
-      type: DataTypes.ARRAY(DataTypes.STRING),
-      allowNull: false,
-      defaultValue: [],
     },
     scanBarcode: {
       type: DataTypes.ARRAY(DataTypes.STRING),

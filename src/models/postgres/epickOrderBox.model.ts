@@ -16,7 +16,7 @@ import {
     declare value: string | null;   // DECIMAL returns as string
   
   
-  }
+  } 
   
   OrderPickBox.init({
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },

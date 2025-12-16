@@ -1975,7 +1975,6 @@ export class ManagerService {
       const quantity = Number(detail.Quantity_Ordered || 0);
 
       totalPrice += (price + otpAmount) * quantity;
-      totalPrice += Number(detail.PrepaidTax_Amount || 0);
       totalDiscount += Number(detail.OffInvoice_Amount || 0);
       totalDeposit += Number(detail.DepositAmount || 0);
     }
@@ -5311,6 +5310,22 @@ export class ManagerService {
     if (existingDriver) {
       throw new AppError('Driver with this email already exists', 400);
     }
+    const password = generateRandomString(9);
+    const hashedPassword = await hashPassword(password);
+
+    body.password = hashedPassword;
+
+ const htmlContent = generateNewCredentialsEmail(body.firstName + " " + body.lastName, body.email, password);
+    await sendEmail({
+      to: body.email,
+      subject: `Welcome to Driver Portal – Your Account is Ready!`,
+      html: htmlContent,
+    });
+
+
+
+
+
 
     const driver = await Driver.create(body);
     return driver;
@@ -5403,7 +5418,7 @@ export class ManagerService {
   // DriverRouteAssignment CRUD methods
   async createDriverRouteAssignment(body: any) {
     // Verify driver (user) exists
-    const driver = await WebUsers.findByPk(body.driverId);
+    const driver = await Driver.findByPk(body.driverId);
     if (!driver) {
       throw new AppError('Driver not found', 404);
     }
@@ -5514,7 +5529,7 @@ export class ManagerService {
     const limit = parseInt(query.limit as any) || 10;
 
     // Verify driver (user) exists
-    const driver = await WebUsers.findByPk(driverId);
+    const driver = await Driver.findByPk(driverId);
     if (!driver) {
       throw new AppError('Driver not found', 404);
     }

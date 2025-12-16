@@ -573,7 +573,6 @@ export class SalesService {
       const quantity = Number(detail.Quantity_Ordered || 0);
 
       totalPrice += (price) * quantity;
-      totalPrice+= Number(detail.PrepaidTax_Amount || 0);
       totalDiscount += Number(detail.OffInvoice_Amount || 0);
       totalDeposit += Number(detail.DepositAmount || 0);
     }
@@ -610,7 +609,7 @@ export class SalesService {
         'ItemDescription',
         'CaseWeight',
         'CaseCount',
-   
+        'PrepaidTax_Amount'
       ],
       include: [
         {

@@ -6,6 +6,8 @@ interface DriverAttributes {
   firstName: string;
   lastName: string;
   email: string;
+  password: string;
+  isActive: boolean;
   currentLatitude: number;
   currentLongitude: number;
   createdAt?: Date;
@@ -22,6 +24,8 @@ export class Driver
   public firstName!: string;
   public lastName!: string;
   public email!: string;
+  public isActive!: boolean;
+  public password!: string;
   public currentLatitude!: number;
   public currentLongitude!: number;
   public readonly createdAt!: Date;
@@ -42,6 +46,15 @@ Driver.init(
     lastName: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
     },
     email: {
       type: DataTypes.STRING,
@@ -65,7 +78,7 @@ Driver.init(
     tableName: 'drivers',
     modelName: 'Driver',
     timestamps: true,
-    underscored: true,
+  
   }
 );
 

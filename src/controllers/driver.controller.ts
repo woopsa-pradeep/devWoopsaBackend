@@ -15,5 +15,18 @@ async getDriverOrderList(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, General.SUCCESS);
 }
 
+async getDriverOrder(req: AuthRequest, res: Response) {
+    const { id } = req.user;
+    const data = await this.driverService.getDriverOrder(req.query,Number(id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async startOrder(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+    const data = await this.driverService.startOrder(Number(id))
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+
 
 }

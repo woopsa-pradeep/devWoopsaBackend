@@ -51,6 +51,7 @@ import SalesCallTime from "../models/postgres/salesCallTime.model";
 import SalesNote from "../models/postgres/salesNotes";
 import { SupportTicket } from "../models/postgres/supportTicket.model";
 import EpickSetting from "../models/postgres/epickSetting.model";
+import { Driver } from "../models/postgres/driver.model";
 
 export class AuthService {
 
@@ -1050,17 +1051,13 @@ export class AuthService {
 
   async driverLogin(body: any){
     // 1️⃣ Find user with role = "checker"
-    const isUserExist = await WebUsers.findOne({
+    const isUserExist = await Driver.findOne({
       where: {
         email: body.email,
-        status: true,
-        role: "driver",
-        isActive: true,
       },
     });
 
     // 2️⃣ Fetch logo from settings
-    const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
 
     if (!isUserExist) {
       throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
@@ -1075,84 +1072,16 @@ export class AuthService {
     // 4️⃣ Generate token
     const token = generateToken({
       id: isUserExist.id,
-      role: isUserExist.role,
-      userNumber: isUserExist.userNumber,
+      role: "driver",
     });
 
-    // 5️⃣ Get role permissions
-    const getUserRolesPermissions = await RolePermission.findAll({
-      where: { userId: isUserExist.id },
-    });
-    const filtered = getUserRolesPermissions.filter(
-      (perm: any) => perm.add || perm.edit || perm.view
-    );
+   
 
-    // 6️⃣ Check if user already has an active session
-    const isSessionActive = await SalesSession.findOne({
-      where: { userId: isUserExist.id },
-    });
-
-    // 7️⃣ If active, fetch store details
-    let storeDetail: any = null;
-    if (isSessionActive) {
-      const store = await Customer.findOne({
-        where: { C_Number: isSessionActive.currentCustomerId },
-        attributes: [
-          "C_CoName",
-          "C_Number",
-          "C_Address",
-          "C_City",
-          "C_State",
-          "C_Phone",
-          "C_Name",
-          "LastBalance",
-          "C_OrderDaySequence",
-          "C_OrderDay",
-        ],
-        include: [
-          {
-            model: CustomerRoute,
-            as: "Routes",
-            attributes: ["Route_Number", "Stop_Number"],
-          },
-          {
-            model: SalesRep,
-            as: "salesRep",
-            attributes: ["S_Desc"],
-          },
-        ],
-      });
-      if (store) {
-        storeDetail = store;
-      }
-    }
-
-    // 8️⃣ Get Distributor and Epick Settings
-    const wholeStoreDetail = await Distributor.findOne({
-      attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"],
-    });
-
-    const epickSetting = await EpickSetting.findOne({});
 
     // 9️⃣ Final Response
     return {
       token: token,
-      rolesPermission: filtered,
-      logo: logo?.warehouseImage || null,
-      epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
-      role: "driver",
-      profile: {
-        id: isUserExist.id,
-        email: isUserExist.email,
-        firstName: isUserExist.firstName,
-        lastName: isUserExist.lastName,
-        userNumber: isUserExist.userNumber,
-        salesRepNumber: isUserExist.salesRepNumber,
-        isSessionActive: isSessionActive,
-        isUserExist: isUserExist,
-      },
-      storeDetail: storeDetail,
-      wholeStoreDetail: wholeStoreDetail,
+     
     };
   }
 

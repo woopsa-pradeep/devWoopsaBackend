@@ -41,7 +41,6 @@ DriverPickupOrder.init(
     sequelize: postgresSequelize,
     tableName: 'driverpickuporder',
     modelName: 'DriverPickupOrder',
-    timestamps: true,
-    underscored: true,
+    timestamps: true
   }
 );

@@ -12,8 +12,9 @@ const driverController = new DriverController();
 
 router.get('/getDriverOrderList', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverOrderList.bind(driverController)));
 
+router.get('/getDriverOrder', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverOrder.bind(driverController)));
 
-
+router.post('/startOrder/:id', verifyRole(ROLES.DRIVER), catchAsync(driverController.startOrder.bind(driverController)));
 
 
 

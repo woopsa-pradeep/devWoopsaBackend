@@ -22,6 +22,8 @@ import { getNextVendorNumber } from './utils/vendor';
 
 startCronJobs();
 
+
+
 dotenv.config();
 
 const app = express();
@@ -89,6 +91,9 @@ app.get('/testVendor',(async(req:Request,res:Response)=>{
   res.json({data});
 }))
 
+app.get('/test',(async(req:Request,res:Response)=>{
+  res.json({message:'Hello World'});
+}))
 
 
 
