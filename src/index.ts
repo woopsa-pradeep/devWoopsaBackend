@@ -71,8 +71,12 @@ app.post('/checkUrl',(req:Request,res:Response)=>{
     res.status(400).json({message:'Url is not valid'});
    }
 })
-console.log(process.env.SERVER_URL,'the server url')
 
+app.get('/testPrepaidTaxRate',(async(req:Request,res:Response)=>{
+  const data = await getPrepaidTaxRate(1,1);
+  console.log(data,'the data')
+  res.json({data});
+}))
 
 app.use('/api', router);
 

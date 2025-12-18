@@ -5290,12 +5290,7 @@ export class ManagerService {
 
 
     const productList = await Inventory.findAll({
-      attributes: [
-        'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
-        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
-        'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category', "Price_Class", "Sales_Category", "ShortOrderForm"
-      ],
+      
       where: whereClause,
       include: [
         {
