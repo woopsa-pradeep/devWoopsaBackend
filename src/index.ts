@@ -71,7 +71,7 @@ app.post('/checkUrl',(req:Request,res:Response)=>{
     res.status(400).json({message:'Url is not valid'});
    }
 })
-
+console.log(process.env.SERVER_URL,'the server url')
 
 
 app.use('/api', router);
