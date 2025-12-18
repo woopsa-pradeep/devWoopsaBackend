@@ -54,7 +54,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            echo "🚀 LIVE DEPLOY STARTED"
+            echo "🚀 LIVE DEV SERVER DEPLOY STARTED"
 
             cd /var/www/myapp/devWoopsaBackend
 
@@ -89,7 +89,7 @@ jobs:
                     "body": [
                       {
                         "type": "TextBlock",
-                        "text": "✅ DEV STAGE DEPLOY SUCCESS",
+                        "text": "LIVE ✅ DEV STAGE DEPLOY SUCCESS",
                         "weight": "Bolder",
                         "size": "Medium"
                       },
