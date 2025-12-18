@@ -51,5 +51,10 @@ async orderHistory(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, General.SUCCESS);
 }   
 
+async uploadImages(req: AuthRequest, res: Response) {
+    const data = await this.driverService.uploadImages( req);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
 
 }

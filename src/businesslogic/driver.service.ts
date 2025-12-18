@@ -13,6 +13,10 @@ import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { DriverPickupOrder } from "../models/postgres/driverPickerOrder.model";
 import { DriverOrders } from "../models/postgres/driverOrders.model";
 import { PaginationOptions } from "../interfaces/pagination.interface";
+import { IUploadProductImage } from "../interfaces/request.body.interface";
+import { AuthRequest } from "../middlewares/verifyToken.middleware";
+import { uploadFileToAzure } from "../utils/azureUploader";
+import { AuthMessage } from "../constants";
 
 export class DriverService {
 
@@ -201,6 +205,21 @@ async updateDeliveryOrder(id:number,body:any){
     await order.update(body);
 
 }
+
+
+async uploadImages( req: AuthRequest) {
+    const file = req.file;
+    if (!file) {
+      throw new AppError(AuthMessage.FILE_NOT_FOUND, 400);
+    }
+    const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, 'driver-images');
+
+    if (!result.success) {
+      throw new AppError(result.error || AuthMessage.FILE_NOT_FOUND, 500);
+    }
+    return result;
+    
+  }
 
 
 async completeOrder(orderNumber:string){

@@ -3,6 +3,7 @@ import { DriverController } from "../controllers/driver.controller";
 import verifyRole from "../middlewares/verifyUser.middleware";
 import { ROLES } from "../interfaces/request.body.interface";
 import { catchAsync } from "../utils/catchAsync";
+import { multerUpload } from "../middlewares/upload.middleware";
 
 
 
@@ -23,6 +24,8 @@ router.post('/updateDeliveryOrder/:id', verifyRole(ROLES.DRIVER), catchAsync(dri
 router.post('/completeOrder/:id', verifyRole(ROLES.DRIVER), catchAsync(driverController.completeOrder.bind(driverController))); 
 
 router.get('/orderHistory', verifyRole(ROLES.DRIVER), catchAsync(driverController.orderHistory.bind(driverController)));
+
+router.post('/uploadImages', verifyRole(ROLES.DRIVER), multerUpload.single('image'), catchAsync(driverController.uploadImages.bind(driverController)));
 
 export default router;
 
