@@ -16,7 +16,13 @@ router.get('/getDriverOrder', verifyRole(ROLES.DRIVER), catchAsync(driverControl
 
 router.post('/startOrder/:id', verifyRole(ROLES.DRIVER), catchAsync(driverController.startOrder.bind(driverController)));
 
+router.get('/getCurrentOrderList', verifyRole(ROLES.DRIVER), catchAsync(driverController.getCurrentOrderList.bind(driverController)));
 
+router.post('/updateDeliveryOrder/:id', verifyRole(ROLES.DRIVER), catchAsync(driverController.updateDeliveryOrder.bind(driverController)));
+
+router.post('/completeOrder/:id', verifyRole(ROLES.DRIVER), catchAsync(driverController.completeOrder.bind(driverController))); 
+
+router.get('/orderHistory', verifyRole(ROLES.DRIVER), catchAsync(driverController.orderHistory.bind(driverController)));
 
 export default router;
 

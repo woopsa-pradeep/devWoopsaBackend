@@ -995,7 +995,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   }
 
   async bulkUpdateInventory(req: AuthRequest, res: Response){
-    const data = await this.managerService.bulkUpdateInventory(req.body)
+    const data = await this.managerService.bulkUpdateInventory(req.body,req?.user?.id)
     sendResponse(res, 200, true, data, 'Inventory updated successfully')
   }
 

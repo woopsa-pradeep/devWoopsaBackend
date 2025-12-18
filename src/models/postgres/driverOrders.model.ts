@@ -3,6 +3,7 @@ import { postgresSequelize } from '../../db';
 
 interface DriverOrdersAttributes {
   id: number;
+  driverId: number;
   orderNumber: string;
   status: 'pending' | 'rescheduled' | 'return' | 'inProgress' | 'completed' | 'cancelled';
   startTime: Date | null;
@@ -15,6 +16,7 @@ interface DriverOrdersAttributes {
   damageBundle: number;
   scanBarcode: string[];
   barCode: string[];
+  damageBundleImages: string[];
   paymentMethod: string;
   amount: number;
   checkImage: string[];
@@ -33,6 +35,7 @@ export class DriverOrders
   implements DriverOrdersAttributes 
 {
   public id!: number;
+  public driverId!: number;
   public orderNumber!: string;
   public status!: 'pending' | 'rescheduled' | 'return' | 'inProgress' | 'completed' | 'cancelled';
   public startTime!: Date | null;
@@ -40,6 +43,7 @@ export class DriverOrders
   public estimateTime!: Date | null;
   public images!: string[];
   public note!: string;
+  public damageBundleImages!: string[];
   public totalScanBundle!: number;
   public totalBundle!: number;
   public damageBundle!: number;
@@ -63,9 +67,18 @@ DriverOrders.init(
       autoIncrement: true,
       primaryKey: true,
     },
+    driverId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
     orderNumber: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    damageBundleImages:{
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      allowNull: false,
+      defaultValue: [],
     },
     status: {
       type: DataTypes.ENUM('pending', 'rescheduled', 'return', 'inProgress', 'completed', 'cancelled'),
@@ -172,8 +185,7 @@ DriverOrders.init(
     sequelize: postgresSequelize,
     tableName: 'driverorders',
     modelName: 'DriverOrders',
-    timestamps: true,
-    underscored: true,
+    timestamps: true
   }
 );
 

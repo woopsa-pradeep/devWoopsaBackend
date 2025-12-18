@@ -4,7 +4,7 @@ import moment from 'moment';
 import axios from "axios";
 import crypto from 'crypto';
 import { GetDiscount } from "../models/mmsql/getDiscount.model";
-import { col, fn, Op } from "sequelize";
+import { col, fn, Op, Sequelize } from "sequelize";
 import CustPricing from "../models/mmsql/customerPricing.model";
 import CustAuthorized from "../models/mmsql/customerAuthorization.model";
 import { Inventory } from "../models/mmsql/inventory.model";
@@ -25,6 +25,8 @@ import { Console } from "console";
 import { SalesCategoryTaxRate } from "../models/mmsql/salesCategoryTaxes.model";
 import { TaxRates } from "../models/mmsql/taxRates.model";
 import { Inventory_ExcludeState } from "../models/mmsql/inventoryExcludeState.model";
+import { OrderHeader } from "../models/mmsql/orderHeader.model";
+import { OrderDetail } from "../models/mmsql/orderDetail.model";
 
 type PriceFields = {
   Price1?: number | null;
@@ -985,6 +987,39 @@ export async function getJurisdiction(userId: number) {
   return user?.dataValues?.Jurisdiction_State || null;
 }
 export async function getInventoryOnHand(Item_Number: number) {
+
+  const date = moment().format('YYYY-MM-DD');
+  const result: any = await OrderHeader.findAll({
+    attributes: [],
+    where: {
+      Order_Updated: false,
+      Order_Date: date
+    },
+    include: [
+      {
+        model: OrderDetail,
+        as: 'orderDetails',
+        attributes: [
+          [Sequelize.fn('SUM', Sequelize.col('orderDetails.Quantity_Ordered')), 'totalQuantityOrdered']
+        ],
+        where: {
+          Item_Number: Item_Number
+        }
+      }
+    ],
+    group: ['OrderHeader.Order_Number'],
+    raw: true
+  });
+
+
+  const totalQty = result
+  .map((r: any) => Number(r['orderDetails.totalQuantityOrdered'] || 0))
+  .reduce((sum: any, qty: any) => sum + qty, 0);
+
+console.log(totalQty, 'totalQty----->'); // 13
+
+  
+
   const inventoryOnHandSum: any = await InventoryStatus.findAll({
     attributes: [[fn("SUM", col("Inventory_OnHand")), "total_onhand"]],
     where: {
@@ -994,7 +1029,10 @@ export async function getInventoryOnHand(Item_Number: number) {
     raw: true,
   });
 
-  return inventoryOnHandSum[0].total_onhand || null;
+
+
+
+  return (inventoryOnHandSum[0].total_onhand || 0) - totalQty;
 }
 
 export async function checkRegisterCustomer(id: number) {
@@ -1863,3 +1901,25 @@ export const dayFunctionObject:any = {
   'saturday': 6,
   'sunday': 7,
 }
+
+
+export const toNum = (v: any) => {
+  // Handles: number, "5.74", "5.74 ", null, undefined, Decimal-like objects
+  if (v === null || v === undefined) return 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.trim());
+    return Number.isFinite(n) ? n : 0;
+  }
+  // Some drivers return DECIMAL as object; try valueOf/toString
+  const n = parseFloat(String(v).trim());
+  return Number.isFinite(n) ? n : 0;
+};
+
+
+
+export function hasPriceChange(obj:any){
+  const keysToCheck = ['Price1', 'Price2', 'Price3',"Price4","Price5","Price6","BaseCost","NetCost","Invoice_Cost"];
+  return keysToCheck.some((key:any) => obj.hasOwnProperty(key));
+}
+

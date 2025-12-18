@@ -75,6 +75,8 @@ export class SalesController {
     }
 
     async getCustomerList(req: AuthRequest, res: Response) {
+
+        console.log(req.user.id, 'req.user.id');
         const data = await this.salesService.getCustomerList(Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }

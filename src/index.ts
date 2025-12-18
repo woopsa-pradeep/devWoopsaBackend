@@ -19,6 +19,7 @@ import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { emailQueue, emailNotificationQueue } from './configuration/config';
 import { getNextVendorNumber } from './utils/vendor';
+import { OrderHeader } from './models/mmsql/orderHeader.model';
 
 startCronJobs();
 
@@ -85,6 +86,24 @@ app.get('/testPrice',(async(req:Request,res:Response)=>{
 }))
 
 
+
+
+app.get('/testInventory',(async(req:Request,res:Response)=>{
+  const date = moment().format('YYYY-MM-DD');
+
+  const currentOrderInventory = await OrderHeader.findAll({
+    where:{
+      Order_Updated: false,
+      Order_Date: date
+    }
+  })
+  res.json({currentOrderInventory});
+}))
+
+
+
+
+
 app.get('/testVendor',(async(req:Request,res:Response)=>{
   
   const data = await getNextVendorNumber();
@@ -95,7 +114,7 @@ app.get('/test',(async(req:Request,res:Response)=>{
   res.json({message:'Hello World'});
 }))
 
-
+// console.log(process.env.CI,'the ci')
 
 // Global error handling setup
 setupErrorHandlers(app);

@@ -20,7 +20,7 @@ import { Users } from "../models/mmsql/user.model"
 import { CustReceivables } from "../models/mmsql/custReceivables.model";
 import { Token } from "../models/postgres/token.model";
 import { Retailer } from "../models/postgres/retailer.model";
-import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getTaxRateV1, hashPassword, pgArrayToJsArray, sendEmailToMarketing } from "../utils/helper";
+import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getTaxRateV1, hashPassword, hasPriceChange, pgArrayToJsArray, sendEmailToMarketing, toNum } from "../utils/helper";
 import { generateNewCredentialsEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
 import { sendDistributorEmail, sendEmail } from "../utils/sendMail";
 import { WebUsers } from "../models/postgres/users.model";
@@ -658,7 +658,7 @@ export class ManagerService {
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
       ],
       where: whereClause,
       include: [
@@ -727,7 +727,7 @@ export class ManagerService {
         QtyLimit: getProductList || null,
         Price1: e.Price1,
         Price2: e.Price2,
-
+        EBT: e.EBT,
         UnitOunces: e.UnitOunces,
         OTP_Number: e.OTP_Number,
         BaseCost: e.BaseCost,
@@ -1951,7 +1951,8 @@ export class ManagerService {
         'Price',
         'OTP_Amount_State',
         'Quantity_Ordered',
-        'OffInvoice_Amount',
+      'OffInvoice_Amount',
+        'Quantity_Shipped',
         'DepositAmount',
         'PrepaidTax_Amount'
       ]
@@ -1967,16 +1968,23 @@ export class ManagerService {
     if (orderDiscount) {
       totalDiscount = orderDiscount.discount;
     }
-    for (const detail of allOrderDetails) {
 
-      let price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
-      price += Number(detail.PrepaidTax_Amount || 0);
-      const otpAmount = Number(detail.OTP_Amount_State || 0);
-      const quantity = Number(detail.Quantity_Ordered || 0);
-
-      totalPrice += (price + otpAmount) * quantity;
-      totalDiscount += Number(detail.OffInvoice_Amount || 0);
-      totalDeposit += Number(detail.DepositAmount || 0);
+    for (const details of allOrderDetails) {
+      const d = details.dataValues;
+    
+      const basePrice = toNum(d.Price);
+      const otpState  = toNum(d.OTP_Amount_State);
+      const prepaid   = toNum(d.PrepaidTax_Amount);
+      const qty       = toNum(d.Quantity_Shipped); // or fallback below
+    
+      const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
+    
+      const unitPrice = basePrice + otpState + prepaid;
+    
+      totalPrice += unitPrice * quantity;
+    
+      totalDiscount += toNum(d.OffInvoice_Amount);   // multiply by qty only if this is per-unit
+      totalDeposit  += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
     }
 
     // Get product images for each item
@@ -1990,7 +1998,7 @@ export class ManagerService {
 
       return {
         ...detail.toJSON(),
-        Price: Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0),
+        Price: Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0) + Number(detail.PrepaidTax_Amount || 0),
         isDistributorImageShow: productImage?.isAllow ?? false,
         distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory?.UPCList?.[0]?.UPC_Number}.jpg`,
@@ -5150,7 +5158,21 @@ export class ManagerService {
     return customer;
   }
 
-  async bulkUpdateInventory(updateData: any) {
+  async bulkUpdateInventory(updateData: any, userId: number) {
+
+
+
+    console.log(userId, 'userId');
+
+    let userIdValue = 0;
+    if(userId){
+
+      const user = await WebUsers.findOne({where: {id: userId},attributes: ['userNumber']});
+      if(user){
+        userIdValue = user.userNumber ? parseInt(user.userNumber) : 0;
+      }
+    }
+
     const { field, data, excludeItem, hasBulkUpdate, singleUpdateData } = updateData;
     console.log(hasBulkUpdate, 'hasBulkUpdate');
   
@@ -5172,8 +5194,14 @@ export class ManagerService {
   
       const whereClause: any = { ...field };
 
-      console.log(whereClause, 'whereClause--->');
-  
+      whereClause.Date_LastChangeUser = userIdValue;
+      whereClause.Date_LastChange = new Date();
+
+      if(hasPriceChange(data)){
+        whereClause.PriceCostModifiedUser = userIdValue;
+        whereClause.PriceCostModifiedDate = new Date();
+      }
+
       if (Array.isArray(excludeItem) && excludeItem.length > 0) {
         whereClause.Item_Number = { [Op.notIn]: excludeItem };
       }
@@ -5183,7 +5211,8 @@ export class ManagerService {
       return {
         updatedCount: affectedRows,
       };
-    } else {
+    }
+     else {
       // -------- PER-ITEM UPDATE BRANCH (loop over singleUpdateData) ---------
   
       console.log(singleUpdateData, 'singleUpdateData');

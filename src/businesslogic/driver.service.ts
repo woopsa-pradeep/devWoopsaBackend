@@ -12,6 +12,7 @@ import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { DriverPickupOrder } from "../models/postgres/driverPickerOrder.model";
 import { DriverOrders } from "../models/postgres/driverOrders.model";
+import { PaginationOptions } from "../interfaces/pagination.interface";
 
 export class DriverService {
 
@@ -61,11 +62,14 @@ async getDriverOrder(query:any,id:number){
 
    driverRouteAssignment = driverRouteAssignment?.dataValues ?? null;
    
+   let deliveryStartDate = process.env.DELIVERY_START_DATE;
    if (!driverRouteAssignment) throw new AppError("Driver not found", 404);
    const {rows: orders, count: total} = await OrderHeader.findAndCountAll({
     where: {
         Delivery_ID: { [Op.not]: 99 },
         Invoice_Number: { [Op.gt]: 0 },
+        Delivered: 0,
+        Order_Date: { [Op.gte]: deliveryStartDate },
         Route_Number:{[Op.in]: driverRouteAssignment.routes},
     },
     attributes: ['Order_Number', 'Order_Date', 'Invoice_Number', 'Delivery_ID','Route_Number'],
@@ -88,7 +92,7 @@ async getDriverOrder(query:any,id:number){
 }
 
 
-async startOrder(orderNumber:number){
+async startOrder(orderNumber:number, driverId:number){
 
 
     let orderValue :any= await OrderHeader.findOne({
@@ -129,6 +133,7 @@ async startOrder(orderNumber:number){
         startTime: new Date(),
         endTime: null,
         estimateTime: null,
+        driverId: driverId,
         images: [],
         note: "",
         totalScanBundle: 0,
@@ -150,6 +155,98 @@ async startOrder(orderNumber:number){
     
 }
 
- 
+
+async getCurrentOrderList(id:number){
+
+const currentOrder = await DriverOrders.findOne({
+    where: {
+        driverId: id,
+        status: 'inProgress'
+    },
+    order: [['orderNumber', 'DESC']],
+})
+
+const orderNumber = currentOrder?.dataValues?.orderNumber;
+
+if(!orderNumber) throw new AppError("Order not found", 404);
+
+const order = await OrderHeader.findOne({
+    where: {
+        Order_Number: orderNumber,
+    },
+    attributes: ['Order_Number', 'Order_Date', 'Invoice_Number', 'Delivery_ID','Route_Number','Stop_Number'],
+    include: [
+        {
+            model: Customer,
+            as: 'customer',
+            attributes: ['C_Number','C_CoName','C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip','C_Phone','C_PhoneMobile'],
+        }
+    ]
+})
+return {
+    orderInfo: order,
+    currentOrderInfo: currentOrder
+}
 
 }
+
+async updateDeliveryOrder(id:number,body:any){
+    let order :any= await DriverOrders.findOne({
+        where: {
+            id: id,
+        }
+    })
+    if(!order) throw new AppError("Order not found", 404);
+    order = order?.dataValues ?? null;
+    await order.update(body);
+
+}
+
+
+async completeOrder(orderNumber:string){
+
+
+    let order :any= await DriverOrders.findOne({
+        where: {
+            orderNumber: orderNumber,
+        }
+    })
+    if(!order) throw new AppError("Order not found", 404);
+    await order.update({
+        status: 'completed',
+        endTime: new Date()
+    });
+
+
+    await OrderHeader.update({
+        Delivered: 1
+    },{
+        where: {
+            Order_Number: orderNumber,
+        }
+    });
+
+}
+
+async orderHistory(id:number,query:PaginationOptions){
+
+    let {page,limit} = query;
+    page = page ? Number(page) : 1;
+    limit = limit ? Number(limit) : 10;
+    const offset = (page - 1) * limit;
+
+    const orderHistory = await DriverOrders.findAll({
+        where: {
+            driverId: id,
+        },
+        order: [['orderNumber', 'DESC']],
+        limit,
+        offset,
+    })
+    return orderHistory;
+
+}
+
+
+}
+ 

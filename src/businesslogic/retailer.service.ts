@@ -10,7 +10,7 @@ import Banner from "../models/postgres/banner.model";
 import { ProductImage } from "../models/postgres/product.model";
 import CustomerCart from "../models/postgres/retailerCart.model";
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, checkTimeOut, excludeItemByUser, generatePDFFromHTML, generateToken, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP } from "../utils/helper";
+import { checkQtyDiscount, checkTimeOut, excludeItemByUser, generatePDFFromHTML, generateToken, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP, toNum } from "../utils/helper";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { Operations } from "../utils/operations";
 import { generateOrderConfirmationEmail, generateDistributorOrderNotificationEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
@@ -335,6 +335,10 @@ export class RetailerService {
       { [Op.like]: anywhere }
     ),
     Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
       Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
       { [Op.like]: anywhere }
     )
@@ -418,7 +422,7 @@ export class RetailerService {
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
       ],
       where: whereClause,
       include: [
@@ -511,6 +515,7 @@ export class RetailerService {
         NetCost: e.NetCost,
         hasProductLimit: productLimit ? true : false,
         productLimit,
+        EBT: e.EBT,
         UPCList: e.UPCList,
         Inventory_OnHand: inventoryOnHand,
         UnitOunces: e.UnitOunces,
@@ -1894,17 +1899,23 @@ export class RetailerService {
     let totalPrice = 0;
     let totalDiscount = 0;
     let totalDeposit = 0;
-    for (const detail of allOrderDetails) {
-      let price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
-      const quantity = Number(detail.Quantity_Ordered || 0);
-
-      price += Number(detail.PrepaidTax_Amount || 0);
-      totalPrice += (price) * quantity;
+    for (const details of allOrderDetails) {
+      const d = details.dataValues;
     
-      totalDiscount += Number(detail.OffInvoice_Amount || 0);
-      totalDeposit += Number(detail.DepositAmount || 0);
+      const basePrice = toNum(d.Price);
+      const otpState  = toNum(d.OTP_Amount_State);
+      const prepaid   = toNum(d.PrepaidTax_Amount);
+      const qty       = toNum(d.Quantity_Shipped); // or fallback below
+    
+      const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
+    
+      const unitPrice = basePrice + otpState + prepaid;
+    
+      totalPrice += unitPrice * quantity;
+    
+      totalDiscount += toNum(d.OffInvoice_Amount);   // multiply by qty only if this is per-unit
+      totalDeposit  += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
     }
-
     const orderDiscount = await OrderDiscount.findOne({
       where: { orderNumber: orderNumber }
     });
@@ -1983,7 +1994,7 @@ export class RetailerService {
         },
       });
 
-      let Price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
+      let Price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0) + Number(detail.PrepaidTax_Amount || 0);
       return {
         ...detail.toJSON(),
         Price,
