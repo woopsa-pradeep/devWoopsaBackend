@@ -844,7 +844,6 @@ export class AuthService {
       const wholeStoreDetail = await Distributor.findOne({
         attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"],
       });
-      const salesCategory :any= await getAllowedSalesCategories(Number(storeDetail?.C_Number));
 
       const epickSetting = await EpickSetting.findOne({});
   
@@ -865,7 +864,6 @@ export class AuthService {
           isSessionActive: isSessionActive,
           isUserExist: isUserExist,
         },
-        salesCategory: salesCategory,
         storeDetail: storeDetail,
         wholeStoreDetail: wholeStoreDetail,
       };
