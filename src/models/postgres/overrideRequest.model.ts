@@ -6,6 +6,7 @@ export interface IOverrideRequest {
   orderNumber: number;
   itemNumber: number;
   pickerUserNumber: number;
+  pickerUserId: number;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   requestType: 'scan' | 'pass';
   qty: number;
@@ -25,6 +26,7 @@ export class OverrideRequest
   public orderNumber!: number;
   public itemNumber!: number;
   public pickerUserNumber!: number;
+  public pickerUserId!: number;
   public status!: 'pending' | 'approved' | 'rejected' | 'cancelled';
   public requestType!: 'scan' | 'pass';
   public qty!: number;
@@ -56,6 +58,11 @@ OverrideRequest.init(
       type: DataTypes.INTEGER,
       allowNull: false,
       field: 'picker_user_number',
+    },
+    pickerUserId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'picker_user_id',
     },
     status: {
       type: DataTypes.ENUM('pending', 'approved', 'rejected', 'cancelled'),

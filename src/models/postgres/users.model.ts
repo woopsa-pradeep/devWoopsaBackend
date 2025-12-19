@@ -26,8 +26,6 @@ export class WebUsers
   public setUserDiscountLimit!: number;
   public allowDiscount!: boolean;
   public allowDeliveryCharge!: boolean;
-  public order_type!: string | null;
-  public shortby!: string | null;
   public readonly createdAt!: Date;
   public readonly    updatedAt!: Date;
 }
@@ -99,16 +97,6 @@ WebUsers.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
-    },
-    order_type: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      defaultValue: 'order_number',
-    },
-    shortby: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      defaultValue: 'Des',
     },
     createdAt: {
       type: DataTypes.DATE,

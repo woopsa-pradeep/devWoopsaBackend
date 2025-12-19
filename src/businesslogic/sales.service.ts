@@ -860,7 +860,7 @@ export class SalesService {
   // }
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='' } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='',salesCategory=[] } = query;
 
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
@@ -1007,6 +1007,9 @@ export class SalesService {
         where: whereClause,
         logging: false
       });
+    }
+    if(salesCategory.length > 0){
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
     }
 
     const productList = await Inventory.findAll({
@@ -1160,6 +1163,7 @@ export class SalesService {
       search,
       priceClassId,
       masterSearch,
+      salesCategory=[],
       shortBy,
       state,
       zip,
@@ -1183,6 +1187,10 @@ export class SalesService {
       ShortOrderForm: true,
     };
   
+    if(salesCategory.length > 0){
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    }
+    
     let searchInUPC = false;
   
     if (masterSearch && typeof masterSearch === "string") {
@@ -1261,6 +1269,8 @@ export class SalesService {
         logging: false,
       });
     }
+
+   
   
     // === Product List Query ===
     const productList = await Inventory.findAll({
@@ -5363,6 +5373,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
 
 
   async getSalesCategoryByCustomer(customerNumber: number){
+    console.log(customerNumber,'customerNumber')
     const data = await getAllowedSalesCategories(customerNumber);
     return data;
   }

@@ -30,6 +30,8 @@ import { getDefaultOrderDetailValues } from "../utils/order";
 import { PassScanItem } from "../models/postgres/passScanItem.model";
 import EpickSetting from "../models/postgres/epickSetting.model";
 import { WebUsers } from "../models/postgres/users.model";
+import { EpickUser } from "../models/postgres/epickUser.model";
+import { EpickConfirmation } from "../models/postgres/epickConfirmation.model";
 import { OverrideRequest } from "../models/postgres/overrideRequest.model";
 import { sendMultiFCMNotification } from "../utils/sentNotification";
 import { RetailerDevice } from "../models/postgres/device.model";
@@ -38,6 +40,77 @@ import { RecordLock } from "../models/mmsql/recordLocks.model";
 
 
 export class EpickService {
+
+  /**
+   * Helper function: Get all unique categories in an order
+   * @param orderNumber - Order number
+   * @returns Array of unique category numbers
+   */
+  private async getOrderCategories(orderNumber: number): Promise<number[]> {
+    const orderDetails = await OrderDetail.findAll({
+      where: {
+        Order_Number: orderNumber
+      },
+      attributes: ['Item_Number'],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: ['Sales_Category'],
+          required: true
+        }
+      ],
+      raw: false
+    });
+
+    const categories = new Set<number>();
+    orderDetails.forEach((detail: any) => {
+      const inventory = detail.inventory;
+      if (inventory && inventory.Sales_Category) {
+        categories.add(inventory.Sales_Category);
+      }
+    });
+
+    return Array.from(categories);
+  }
+
+  /**
+   * Helper function: Check if all categories in an order are completed
+   * @param orderNumber - Order number
+   * @returns true if all categories have at least one completed confirmation
+   */
+  private async areAllCategoriesCompleted(orderNumber: number): Promise<boolean> {
+    // Get all categories in the order
+    const orderCategories = await this.getOrderCategories(orderNumber);
+    
+    if (orderCategories.length === 0) {
+      return false; // No categories found, can't be completed
+    }
+
+    // Get all completed confirmations for this order
+    const completedConfirmations = await EpickConfirmation.findAll({
+      where: {
+        orderNumber: orderNumber,
+        status: 'completed'
+      },
+      attributes: ['category'],
+      raw: true
+    });
+
+    // Get all completed categories (flatten all category arrays from confirmations)
+    const completedCategories = new Set<number>();
+    completedConfirmations.forEach((confirmation: any) => {
+      const cats = confirmation.category || [];
+      cats.forEach((cat: number) => completedCategories.add(cat));
+    });
+
+    // Check if every category in the order has at least one completed confirmation
+    const allCompleted = orderCategories.every((orderCat: number) => 
+      completedCategories.has(orderCat)
+    );
+
+    return allCompleted;
+  }
 
   // async  getOrder() {
   //     const start = moment().startOf('day').toDate();
@@ -107,56 +180,245 @@ export class EpickService {
   //      return notAcceptedOrders;
   //    }
        
-       async getOrder(userId: number) {
-        // Step 0: Fetch user preferences (order_type and shortby)
-        const user = await WebUsers.findOne({
+       async getOrder(userId: number, query: PaginationOptions = {}) {
+        // Parse pagination parameters
+        let page = Number(query.page) || 1;
+        let limit = Number(query.limit) || 10;
+        
+        // Validate pagination parameters
+        if (page < 1) page = 1;
+        if (limit < 1) limit = 10;
+        if (limit > 100) limit = 100; // Max 100 items per page
+        
+        const offset = (page - 1) * limit;
+        // Step 0: Fetch user preferences (order_type and shortby) and categories from epick_user
+        const user = await EpickUser.findOne({
           where: { id: userId },
-          attributes: ['order_type', 'shortby'],
+          attributes: ['order_type', 'shortby', 'category'],
           raw: true,
         });
         
         const orderType = (user as any)?.order_type || 'order_number';
         const shortBy = (user as any)?.shortby || 'Des';
+        const userCategories = (user as any)?.category || [];
         
-        console.log(`User ${userId} preferences: order_type=${orderType}, shortby=${shortBy}`);
+        console.log(`User ${userId} preferences: order_type=${orderType}, shortby=${shortBy}, categories=${userCategories}`);
         console.log('User object:', user);
+
+        // If user has no categories assigned, return empty paginated response
+        if (userCategories.length === 0) {
+          return {
+            data: [],
+            pagination: {
+              page: page,
+              limit: limit,
+              total: 0,
+              totalPages: 0,
+              hasNextPage: false,
+              hasPreviousPage: false
+            }
+          };
+        }
         
-        // Step 1: Get completed order numbers from PostgreSQL first (single query)
-        const completedOrders = await OrderPick.findAll({
+        // Step 1: Get completed confirmations with their categories
+        // We need to exclude orders where user's categories (that are IN THE ORDER) are already completed
+        const completedConfirmations = await EpickConfirmation.findAll({
           where: {
             status: 'completed'
           },
+          attributes: ['orderNumber', 'category'],
+          raw: true,
+        });
+        
+        // Create a map: orderNumber -> array of completed categories
+        const completedCategoriesByOrder: { [key: number]: number[] } = {};
+        completedConfirmations.forEach((conf: any) => {
+          const orderNum = conf.orderNumber;
+          const categories = conf.category || [];
+          if (!completedCategoriesByOrder[orderNum]) {
+            completedCategoriesByOrder[orderNum] = [];
+          }
+          categories.forEach((cat: number) => {
+            if (!completedCategoriesByOrder[orderNum].includes(cat)) {
+              completedCategoriesByOrder[orderNum].push(cat);
+            }
+          });
+        });
+        
+        // Find orders where ALL user's categories (that exist in the order) are already completed
+        // We check by verifying that all items in the user's categories have Confirmed = 1
+        const ordersWithAllUserCategoriesCompleted: number[] = [];
+        
+        // Get all unique order numbers from completed confirmations
+        const completedOrderNumbers = new Set(
+          completedConfirmations.map((conf: any) => conf.orderNumber)
+        );
+        
+        // For each order with completed confirmations, check if user's categories in that order are all completed
+        for (const orderNum of completedOrderNumbers) {
+          // Get all categories that exist in this order
+          const orderCategories = await this.getOrderCategories(orderNum);
+          
+          // Find which of the user's categories are actually in this order
+          const userCategoriesInOrder = userCategories.filter((userCat: number) => 
+            orderCategories.includes(userCat)
+          );
+          
+          // If user has no categories in this order, skip (user shouldn't see this order anyway)
+          if (userCategoriesInOrder.length === 0) {
+            continue;
+          }
+          
+          // Check if ALL items in the user's categories (that are in this order) are confirmed
+          // Query: Get count of items in user's categories vs count of confirmed items in user's categories
+          const categoryCheckResult = await sequelize.query(
+            `SELECT 
+              COUNT(*) as totalItems,
+              SUM(CASE WHEN od.Confirmed = 1 THEN 1 ELSE 0 END) as confirmedItems
+            FROM Order_Detail od
+            INNER JOIN Inventory inv ON od.Item_Number = inv.Item_Number
+            WHERE od.Order_Number = :orderNumber
+            AND inv.Sales_Category IN (:userCategoriesInOrder)`,
+            {
+              replacements: { 
+                orderNumber: orderNum,
+                userCategoriesInOrder: userCategoriesInOrder 
+              },
+              type: QueryTypes.SELECT,
+              raw: true,
+            }
+          ) as any[];
+          
+          if (categoryCheckResult.length > 0) {
+            const result = categoryCheckResult[0];
+            const totalItems = Number(result.totalItems) || 0;
+            const confirmedItems = Number(result.confirmedItems) || 0;
+            
+            // If all items in user's categories are confirmed, exclude this order
+            if (totalItems > 0 && totalItems === confirmedItems) {
+              ordersWithAllUserCategoriesCompleted.push(orderNum);
+            }
+          }
+        }
+        
+        console.log(ordersWithAllUserCategoriesCompleted.length, 'orders where user categories (in order) are already completed');
+        
+        // Step 1a: Get orders that are locked in RecordLock but NOT in epick_confirmation
+        // These should be excluded (locked by ERP only, not started by picker)
+        const lockedOrdersInRecordLock = await RecordLock.findAll({
+          attributes: ['Lock_Number'],
+          raw: true,
+        });
+        
+        const lockedOrderNumbers = lockedOrdersInRecordLock
+          .map((lock: any) => lock?.Lock_Number)
+          .filter((v: any) => v !== null && v !== undefined)
+          .map((v: any) => Number(v));
+        
+        // Get orders that ARE in epick_confirmation (in_progress OR completed)
+        // If an order has ANY confirmation, it means a picker has worked on it, so it should NOT be excluded
+        const ordersInEpickConfirmation = await EpickConfirmation.findAll({
           attributes: ['orderNumber'],
           raw: true,
         });
         
-        const completedOrderNumbers = completedOrders
+        const epickConfirmationOrderNumbers = ordersInEpickConfirmation
           .map((o: any) => o?.orderNumber)
           .filter((v: any) => v !== null && v !== undefined)
           .map((v: any) => Number(v));
         
-        console.log(completedOrderNumbers.length, 'completed orders to exclude');
+        // Orders locked ONLY in RecordLock (not in epick_confirmation at all) should be excluded
+        // If order has ANY epick_confirmation (in_progress or completed), it means a picker has worked on it, so don't exclude
+        const lockedOnlyInRecordLock = lockedOrderNumbers.filter(
+          (orderNum: number) => !epickConfirmationOrderNumbers.includes(orderNum)
+        );
         
-        // Step 2: Query Order_Header (MSSQL) with all filters in SQL
+        // Step 1.5: Get orders that have items matching user's categories
+        // This ensures users only see orders they can actually work on
+        // Only include orders where user's category items are NOT confirmed (still scannable)
+        const ordersWithMatchingCategories = await sequelize.query(
+          `SELECT DISTINCT od.Order_Number 
+           FROM Order_Detail od
+           INNER JOIN Inventory inv ON od.Item_Number = inv.Item_Number
+           WHERE inv.Sales_Category IN (:userCategories)
+           AND (od.Confirmed = 0 OR od.Confirmed IS NULL)`,
+          {
+            replacements: { userCategories: userCategories },
+            type: QueryTypes.SELECT,
+            raw: true,
+          }
+        ) as any[];
+
+        let matchingOrderNumbers = ordersWithMatchingCategories
+          .map((row: any) => row.Order_Number)
+          .filter((v: any) => v !== null && v !== undefined)
+          .map((v: any) => Number(v));
+
+        console.log(`Found ${matchingOrderNumbers.length} orders with unconfirmed items matching user categories ${userCategories}`);
+
+        // Also include orders where user has active (in_progress) confirmation
+        // These should always be visible, even if items are confirmed
+        const userActiveConfirmations = await EpickConfirmation.findAll({
+          where: {
+            pickerUserId: userId,
+            status: 'in_progress'
+          },
+          attributes: ['orderNumber'],
+          raw: true
+        });
+
+        const userActiveOrderNumbers = userActiveConfirmations
+          .map((conf: any) => conf.orderNumber)
+          .filter((v: any) => v !== null && v !== undefined)
+          .map((v: any) => Number(v));
+
+        // Merge both lists (orders with unconfirmed items + user's active orders)
+        const allMatchingOrderNumbers = new Set([...matchingOrderNumbers, ...userActiveOrderNumbers]);
+        matchingOrderNumbers = Array.from(allMatchingOrderNumbers);
+
+        console.log(`After including user's active orders: ${matchingOrderNumbers.length} total orders`);
+
+        // Pre-filter matchingOrderNumbers to exclude locked and completed orders
+        // This simplifies the SQL query by reducing Op.in/Op.notIn complexity
+        if (lockedOnlyInRecordLock.length > 0) {
+          matchingOrderNumbers = matchingOrderNumbers.filter(
+            (orderNum: number) => !lockedOnlyInRecordLock.includes(orderNum)
+          );
+        }
+        
+        if (ordersWithAllUserCategoriesCompleted.length > 0) {
+          matchingOrderNumbers = matchingOrderNumbers.filter(
+            (orderNum: number) => !ordersWithAllUserCategoriesCompleted.includes(orderNum)
+          );
+        }
+
+        // If no orders have items in user's categories after filtering, return empty paginated response
+        if (matchingOrderNumbers.length === 0) {
+          return {
+            data: [],
+            pagination: {
+              page: page,
+              limit: limit,
+              total: 0,
+              totalPages: 0,
+              hasNextPage: false,
+              hasPreviousPage: false
+            }
+          };
+        }
+        
+        // Step 2: Query Order_Header (MSSQL) with simplified filters
         // Filter: Order_Updated = 0 AND Invoice_Number = 0
-        // Exclude locked orders from Record_Locks
-        // Include only orders that HAVE Order_Detail items
-        // Exclude completed orders from PostgreSQL
+        // Include only pre-filtered orders (already excludes locked and completed)
+        // Note: matchingOrderNumbers already ensures orders have Order_Detail items, so no need for literal clause
         const headerWhere: any = {
           [Op.and]: [
             { Order_Updated: false },
             { Invoice_Number: 0 },
-            // Exclude orders that are locked in Record_Locks table
-            literal(`Order_Number NOT IN (SELECT Lock_Number FROM Record_Locks WHERE Lock_Number IS NOT NULL)`),
-            // Ensure order has Order_Detail items (has at least one detail)
-            literal(`Order_Number IN (SELECT DISTINCT Order_Number FROM Order_Detail)`)
+            // Only include pre-filtered orders (simplified - single Op.in condition)
+            { Order_Number: { [Op.in]: matchingOrderNumbers } }
           ]
         };
-        
-        // Exclude completed orders if any exist
-        if (completedOrderNumbers.length > 0) {
-          headerWhere[Op.and].push({ Order_Number: { [Op.notIn]: completedOrderNumbers } });
-        }
         
         console.log(headerWhere, 'headerWhere');
         
@@ -193,7 +455,13 @@ export class EpickService {
           console.log('Will sort by totalQty in JavaScript after calculation');
         }
         
-        // Step 2c: Fetch orders (NO Order_Detail include - much faster!)
+        // Step 2c: Get total count of orders (for pagination)
+        // Use same simplified where condition (matchingOrderNumbers already pre-filtered)
+        const totalCount = await OrderHeader.count({
+          where: headerWhere,
+        });
+
+        // Step 2d: Fetch orders with pagination (NO Order_Detail include - much faster!)
         const orders = await OrderHeader.findAll({
           where: headerWhere,
           attributes: ['Order_Number', 'Order_Date'],
@@ -214,6 +482,8 @@ export class EpickService {
             },
           ],
           order: orderBy,
+          limit: limit,
+          offset: offset,
         });
       
         console.log(orders.length, 'final orders fetched');
@@ -244,12 +514,139 @@ export class EpickService {
           console.log('Sample totalQty values:', Object.entries(totalQtyMap).slice(0, 5));
         }
       
-        // Step 3: Format response - add note only if order has Confirmed != 0 items
+        // Step 2e: Get ALL epick_confirmation data (both in_progress and completed) for orders
+        const orderNumbersForConfirmation = orders.map((order: any) => order.Order_Number);
+        const allEpickConfirmations = await EpickConfirmation.findAll({
+          where: {
+            orderNumber: { [Op.in]: orderNumbersForConfirmation }
+          },
+          include: [
+            {
+              model: EpickUser,
+              as: 'picker',
+              attributes: ['id', 'firstName', 'lastName', 'email'],
+              required: false
+            }
+          ],
+          raw: false,
+        });
+        
+        // Separate confirmations by status
+        const inProgressConfirmations = allEpickConfirmations.filter((c: any) => c.status === 'in_progress');
+        const completedConfirmationsForResponse = allEpickConfirmations.filter((c: any) => c.status === 'completed');
+        
+        // Get RecordLock for these orders
+        const recordLocksForResponse = await RecordLock.findAll({
+          where: {
+            Lock_Number: { [Op.in]: orderNumbersForConfirmation },
+            Lock_Type: 0
+          },
+          attributes: ['Lock_Number'],
+          raw: true
+        });
+        const lockedOrderNumbersSet = new Set(
+          recordLocksForResponse.map((lock: any) => Number(lock.Lock_Number))
+        );
+        
+        // Get orders that have ANY confirmation (in_progress or completed)
+        const ordersWithConfirmations = new Set(
+          allEpickConfirmations.map((c: any) => c.orderNumber)
+        );
+        
+        // Collect all unique category numbers from all confirmations
+        const allCategoryNumbers = new Set<number>();
+        allEpickConfirmations.forEach((confirmation: any) => {
+          const categories = confirmation.category || [];
+          categories.forEach((cat: number) => allCategoryNumbers.add(cat));
+        });
+
+        // Fetch category names from SalesCategory table
+        const categoryMap: { [key: number]: string } = {};
+        if (allCategoryNumbers.size > 0) {
+          const categoryNumbersArray = Array.from(allCategoryNumbers);
+          const salesCategories = await SalesCategory.findAll({
+            where: {
+              Sales_Category: { [Op.in]: categoryNumbersArray }
+            },
+            attributes: ['Sales_Category', 'Category_Desc'],
+            raw: true
+          });
+
+          salesCategories.forEach((cat: any) => {
+            categoryMap[cat.Sales_Category] = cat.Category_Desc || `Category ${cat.Sales_Category}`;
+          });
+
+          // For any category numbers not found in database, use fallback
+          categoryNumbersArray.forEach((catNum: number) => {
+            if (!categoryMap[catNum]) {
+              categoryMap[catNum] = `Category ${catNum}`;
+            }
+          });
+        }
+        
+        // Create map of orderNumber to pickers (in_progress only for display)
+        const orderPickersMap: any = {};
+        inProgressConfirmations.forEach((confirmation: any) => {
+          const orderNum = confirmation.orderNumber;
+          if (!orderPickersMap[orderNum]) {
+            orderPickersMap[orderNum] = [];
+          }
+          const picker = confirmation.picker;
+          if (picker) {
+            // Map category numbers to names using database lookup
+            const categoryNames = (confirmation.category || []).map((cat: number) => 
+              categoryMap[cat] || `Category ${cat}`
+            );
+            
+            orderPickersMap[orderNum].push({
+              userId: picker.id,
+              userName: `${picker.firstName} ${picker.lastName}`,
+              email: picker.email,
+              categories: confirmation.category,
+              categoryNames: categoryNames,
+              status: 'in_progress'
+            });
+          }
+        });
+        
+        // Create map of completed pickers
+        const completedPickersMap: any = {};
+        completedConfirmationsForResponse.forEach((confirmation: any) => {
+          const orderNum = confirmation.orderNumber;
+          if (!completedPickersMap[orderNum]) {
+            completedPickersMap[orderNum] = [];
+          }
+          const picker = confirmation.picker;
+          if (picker) {
+            const categoryNames = (confirmation.category || []).map((cat: number) => 
+              categoryMap[cat] || `Category ${cat}`
+            );
+            
+            completedPickersMap[orderNum].push({
+              userId: picker.id,
+              userName: `${picker.firstName} ${picker.lastName}`,
+              email: picker.email,
+              categories: confirmation.category,
+              categoryNames: categoryNames,
+              status: 'completed'
+            });
+          }
+        });
+        
+        // Get current user's confirmations
+        const userConfirmations = allEpickConfirmations.filter((c: any) => c.pickerUserId === userId);
+        const userConfirmationMap: any = {};
+        userConfirmations.forEach((conf: any) => {
+          userConfirmationMap[conf.orderNumber] = conf;
+        });
+        
+        // Step 3: Format response with proper note logic
         let result = orders.map((order: any) => {
+          const orderNum = order.Order_Number;
           const orderData: any = {
-            Order_Number: order.Order_Number,
+            Order_Number: orderNum,
             Order_Date: order.Order_Date,
-            totalQty: totalQtyMap[order.Order_Number] || 0,
+            totalQty: totalQtyMap[orderNum] || 0,
             customer: order.customer ? {
               C_Number: order.customer.C_Number,
               C_Name: order.customer.C_Name,
@@ -261,9 +658,43 @@ export class EpickService {
             } : null
           };
           
-          // Add note only if order has ANY item with Confirmed != 0 (check from Set - O(1) lookup)
-          if (orderNumbersWithConfirmedNotZero.has(order.Order_Number)) {
+          // Determine note based on RecordLock and confirmations
+          const hasRecordLock = lockedOrderNumbersSet.has(orderNum);
+          const hasAnyConfirmation = ordersWithConfirmations.has(orderNum);
+          const userConfirmation = userConfirmationMap[orderNum];
+          
+          // Logic: "pending from erp" only if RecordLock exists but NO confirmation exists
+          if (hasRecordLock && !hasAnyConfirmation) {
             orderData.note = 'pending from erp';
+          } else if (userConfirmation) {
+            // User has a confirmation
+            if (userConfirmation.status === 'completed') {
+              orderData.note = 'completed by this user';
+            }
+            // If in_progress, no special note needed
+          } else if (completedPickersMap[orderNum] && completedPickersMap[orderNum].length > 0) {
+            // Other pickers completed, but user hasn't started
+            const completedPickerNames = completedPickersMap[orderNum]
+              .map((p: any) => p.userName)
+              .join(', ');
+            orderData.note = `completed by ${completedPickerNames}`;
+          }
+          
+          // Add picker information (in_progress pickers)
+          if (orderPickersMap[orderNum] && orderPickersMap[orderNum].length > 0) {
+            orderData.isBeingPicked = true;
+            orderData.pickers = orderPickersMap[orderNum];
+          } else {
+            orderData.isBeingPicked = false;
+            orderData.pickers = [];
+          }
+          
+          // Add completed pickers info
+          if (completedPickersMap[orderNum] && completedPickersMap[orderNum].length > 0) {
+            if (!orderData.pickers) {
+              orderData.pickers = [];
+            }
+            orderData.pickers = [...orderData.pickers, ...completedPickersMap[orderNum]];
           }
           
           return orderData;
@@ -312,13 +743,29 @@ export class EpickService {
         }
       
         console.log(result.length, 'final orders to return');
-        return result;
+        
+        // Calculate pagination metadata
+        const totalPages = Math.ceil(totalCount / limit);
+        const hasNextPage = page < totalPages;
+        const hasPreviousPage = page > 1;
+
+        return {
+          data: result,
+          pagination: {
+            page: page,
+            limit: limit,
+            total: totalCount,
+            totalPages: totalPages,
+            hasNextPage: hasNextPage,
+            hasPreviousPage: hasPreviousPage
+          }
+        };
       }
 
   async getOrderHistory(id: number) {
     const data = await OrderPick.findAll({
       where: {
-        pickerUserNumber: id
+        pickerUserId: id
       }
     })
     return data;
@@ -326,15 +773,19 @@ export class EpickService {
 
   async acceptOrder(body: IOrderPick, id: number) {
 
-    const isUserExist = await WebUsers.findOne({
-      where: { id: id, status: true, role: { [Op.in]: ['epick', 'sales'] }, isActive: true, },
+    // Get epick user with categories
+    const isUserExist = await EpickUser.findOne({
+      where: { id: id, status: true, isActive: true, },
       attributes: { exclude: ['password'] } // Exclude password for security
     })
     if (!isUserExist) {
       throw new AppError('User not found', 404);
     }
 
-    // Check if order is already locked in RecordLock (already started in ERP)
+    // Get user's categories
+    const userCategories = isUserExist.category || [];
+    
+    // Check if order is already locked in RecordLock
     const existingLock = await RecordLock.findOne({
       where: {
         Lock_Number: body.orderNumber,
@@ -342,59 +793,155 @@ export class EpickService {
       }
     });
 
-    if (existingLock) {
-      throw new AppError('order is already started in other device please refresh the app', 400);
+    // Get all epick_confirmation records for this order (both in_progress and completed)
+    const allConfirmations = await EpickConfirmation.findAll({
+      where: {
+        orderNumber: body.orderNumber
+      }
+    });
+
+    // Separate confirmations by status
+    const inProgressConfirmations = allConfirmations.filter(conf => conf.status === 'in_progress');
+    const completedConfirmations = allConfirmations.filter(conf => conf.status === 'completed');
+
+    // If locked in RecordLock but NOT in epick_confirmation at all, it's locked by ERP only - block it
+    // If order has ANY confirmation (in_progress or completed), it means a picker has worked on it via our system
+    if (existingLock && allConfirmations.length === 0) {
+      throw new AppError('Order is locked by ERP system', 400);
     }
 
-    let outOfStock = 0
+    // Check if user's categories are already completed for this order
+    if (completedConfirmations.length > 0) {
+      // Get all completed categories for this order
+      const completedCategories = new Set<number>();
+      completedConfirmations.forEach((conf: any) => {
+        const cats = conf.category || [];
+        cats.forEach((cat: number) => completedCategories.add(cat));
+      });
 
-    const orderItem = await OrderDetail.findAll({
-      where: {
-        Order_Number: body.orderNumber
-      },
-      attributes: ['Item_Number']
-    })
-    for (const item of orderItem) {
-      const inventoryOnHand = await getInventoryOnHand(item.Item_Number)
-      if (inventoryOnHand <= 0) {
-        console.log(item.Item_Number, 'item.Item_Number')
-        outOfStock++
+      // Check if any of user's categories are already completed
+      const userCategoriesCompleted = userCategories.some((userCat: number) => 
+        completedCategories.has(userCat)
+      );
+
+      if (userCategoriesCompleted) {
+        throw new AppError(
+          'This order is already completed for your assigned categories',
+          400
+        );
       }
     }
-    console.log(outOfStock, 'outOfStock');
 
-
-    const data = await OrderPick.create({
-      orderNumber: body.orderNumber,
-      customerNumber: body.customerNumber,
-      notes: body.notes,
-      totalLines: body.totalLines,
-      startedAt: moment().toDate(),
-      totalQty: body.totalQty,
-      scannedLines: body.scannedLines,
-      OutOfStockItem: outOfStock,
-      scannedQty: body.scannedQty,
-      pickerUserNumber: id,
-    })
+    // Check category overlap with existing epick_confirmation records (in_progress)
+    const existingConfirmations = inProgressConfirmations;
     
-    // Create lock record when order is started
-    // myKey is auto-generated, so we only insert other fields
-    await RecordLock.create({
-      Lock_Type: 0,
-      Lock_Number: Number(body.orderNumber),
-      Lock_User: Number(isUserExist.userNumber ?? 0),
-      Lock_Workstation: 0
+    // Check if any existing confirmation has overlapping categories
+    for (const confirmation of existingConfirmations) {
+      const existingCategories = confirmation.category || [];
+      
+      // Check for overlap (any common category)
+      const hasOverlap = userCategories.some((cat: number) => existingCategories.includes(cat));
+      
+      if (hasOverlap) {
+        // Get picker info for error message
+        const picker = await EpickUser.findByPk(confirmation.pickerUserNumber, {
+          attributes: ['firstName', 'lastName']
+        });
+        const pickerName = picker ? `${picker.firstName} ${picker.lastName}` : 'another picker';
+        
+        // Map categories to names
+        const categoryNames = existingCategories.map((cat: number) => {
+          if (cat === 12) return 'CIG';
+          if (cat === 10) return 'General';
+          if (cat === 20) return 'Kratoms';
+          return `Category ${cat}`;
+        });
+        
+        throw new AppError(
+          `This order is already being picked by ${pickerName} (${categoryNames.join(', ')}) in your category`,
+          400
+        );
+      }
+    }
+
+    // Check if OrderPick already exists (first picker already created it)
+    let existingOrderPick = await OrderPick.findOne({
+      where: {
+        orderNumber: body.orderNumber
+      }
+    });
+
+    let data;
+    
+    // Only create OrderPick if it doesn't exist (first picker)
+    if (!existingOrderPick) {
+      let outOfStock = 0
+
+      const orderItem = await OrderDetail.findAll({
+        where: {
+          Order_Number: body.orderNumber
+        },
+        attributes: ['Item_Number']
+      })
+      for (const item of orderItem) {
+        const inventoryOnHand = await getInventoryOnHand(item.Item_Number)
+        if (inventoryOnHand <= 0) {
+          console.log(item.Item_Number, 'item.Item_Number')
+          outOfStock++
+        }
+      }
+      console.log(outOfStock, 'outOfStock');
+
+      // Create OrderPick (only first picker creates this)
+      data = await OrderPick.create({
+        orderNumber: body.orderNumber,
+        customerNumber: body.customerNumber,
+        notes: body.notes,
+        totalLines: body.totalLines,
+        startedAt: moment().toDate(),
+        totalQty: body.totalQty,
+        scannedLines: body.scannedLines,
+        OutOfStockItem: outOfStock,
+        scannedQty: body.scannedQty,
+        pickerUserNumber: Number(isUserExist.userNumber ?? 0),
+        pickerUserId: id,
+      });
+      
+      // Create RecordLock in MSSQL (only first picker creates this)
+      if (!existingLock) {
+        await RecordLock.create({
+          Lock_Type: 0,
+          Lock_Number: Number(body.orderNumber),
+          Lock_User: Number(isUserExist.userNumber ?? 0),
+          Lock_Workstation: 0
+        });
+      }
+      
+      // Update OrderDetail Quantity_Shipped to 0 (only first picker does this)
+      await OrderDetail.update(
+        { Quantity_Shipped: 0 },
+        {
+          where: {
+            Order_Number: body.orderNumber,
+            Confirmed: 0
+          },
+        }
+      );
+    } else {
+      // Subsequent pickers use existing OrderPick
+      data = existingOrderPick;
+    }
+    
+    // Always create epick_confirmation record (every picker creates this)
+    await EpickConfirmation.create({
+      orderNumber: body.orderNumber,
+      pickerUserNumber: Number(isUserExist.userNumber ?? 0),
+      pickerUserId: id,
+      category: userCategories,
+      status: 'in_progress',
+      startedAt: moment().toDate(),
     });
     
-    await OrderDetail.update(
-      { Quantity_Shipped: 0 },
-      {
-        where: {
-          Order_Number: body.orderNumber,
-          Confirmed:0
-        },
-        }
-);
 
         // Get pin and allowSingleScan from EpickSetting
         const epickSetting :any = await EpickSetting.findOne({
@@ -447,7 +994,15 @@ export class EpickService {
     return data;
   }
 
-    async getOrderItem(orderNumber: number) {
+    async getOrderItem(orderNumber: number, userId: number) {
+      // Get user's categories
+      const user = await EpickUser.findOne({
+        where: { id: userId },
+        attributes: ['category'],
+        raw: true,
+      });
+      
+      const userCategories = (user as any)?.category || [];
 
       // Get customer number from order header
       const orderHeader = await OrderHeader.findOne({
@@ -489,7 +1044,11 @@ export class EpickService {
           {
             model: Inventory,
             as: "inventory",
-            attributes: ["Item_Number", "Description", "Section", "Location"],
+            attributes: ["Item_Number", "Description", "Section", "Location", "Sales_Category"],
+            where: userCategories.length > 0 ? {
+              Sales_Category: { [Op.in]: userCategories }
+            } : undefined,
+            required: userCategories.length > 0,
             include: [
               {
                 model: InventoryUPC,
@@ -682,7 +1241,21 @@ export class EpickService {
         return finalData;
     }
 
-    async getOrderItemFirst(orderNumber: number) {
+    async getOrderItemFirst(orderNumber: number, userId: number) {
+      // Get user's categories
+      const user = await EpickUser.findOne({
+        where: { id: userId },
+        attributes: ['category'],
+        raw: true,
+      });
+      
+      const userCategories = (user as any)?.category || [];
+
+      // If user has no categories assigned, return empty array
+      if (userCategories.length === 0) {
+        return [];
+      }
+
       // Get customer number from order header
       const orderHeader = await OrderHeader.findOne({
         where: {
@@ -693,7 +1266,7 @@ export class EpickService {
 
       const customerNumber = (orderHeader as any)?.C_Number || null;
 
-      // Get only the first item (lowest Line_Number)
+      // Get only the first item (lowest Line_Number) filtered by user's sales categories
       const data = await OrderDetail.findAll({
         where: {
           Order_Number: orderNumber,
@@ -712,7 +1285,11 @@ export class EpickService {
           {
             model: Inventory,
             as: "inventory",
-            attributes: ["Item_Number", "Description", "Section", "Location"],
+            attributes: ["Item_Number", "Description", "Section", "Location", "Sales_Category"],
+            where: userCategories.length > 0 ? {
+              Sales_Category: { [Op.in]: userCategories }
+            } : undefined,
+            required: userCategories.length > 0,
             include: [
               {
                 model: InventoryUPC,
@@ -952,17 +1529,24 @@ export class EpickService {
         }
       );
 
-      await OrderDetail.update(
+      // Update Quantity_Shipped - ensure item is not confirmed
+      // Use MSSQL syntax [column] instead of PostgreSQL "column"
+      const updateResult1 = await OrderDetail.update(
         {
-          Quantity_Shipped: literal(`"Quantity_Shipped" + ${Number(data.qty)}`)
+          Quantity_Shipped: literal(`[Quantity_Shipped] + ${Number(data.qty)}`)
         },
         {
           where: {
             Order_Number: data.orderNumber,
-            Item_Number: product.Item_Number
+            Item_Number: product.Item_Number,
+            Confirmed: 0
           }
         }
       );
+
+      if (updateResult1[0] === 0) {
+        console.warn(`Warning: Quantity_Shipped update affected 0 rows for Order ${data.orderNumber}, Item ${product.Item_Number}. Item may be confirmed.`);
+      }
 
     } else {
 
@@ -975,17 +1559,24 @@ export class EpickService {
         isSubsitute: data.isSubsitute || false
       })
 
-      await OrderDetail.update(
+      // Update Quantity_Shipped - ensure item is not confirmed
+      // Use MSSQL syntax [column] instead of PostgreSQL "column"
+      const updateResult2 = await OrderDetail.update(
         {
-          Quantity_Shipped: literal(`"Quantity_Shipped" + ${Number(data.qty)}`)
+          Quantity_Shipped: literal(`[Quantity_Shipped] + ${Number(data.qty)}`)
         },
         {
           where: {
             Order_Number: data.orderNumber,
-            Item_Number: product.Item_Number
+            Item_Number: product.Item_Number,
+            Confirmed: 0
           }
         }
       );
+
+      if (updateResult2[0] === 0) {
+        console.warn(`Warning: Quantity_Shipped update affected 0 rows for Order ${data.orderNumber}, Item ${product.Item_Number}. Item may be confirmed.`);
+      }
       await OrderPick.update(
         {
           scannedLines: literal(`"scannedLines" + 1`),
@@ -1014,11 +1605,6 @@ export class EpickService {
         passItems?: Array<{ itemNumber: number; note?: string }> // Items to pass (skip) with optional manager note
     }, userId: number) {
         const { products = [], orderNumber, passItems = [] } = data;
-
-        // Allow empty products if there are passItems (user wants to mark items as passed without scanning)
-        if ((!products || products.length === 0) && (!passItems || passItems.length === 0)) {
-            throw new AppError("No products or passItems provided", 400);
-        }
 
         // Validate order exists
         const orderPick = await OrderPick.findOne({
@@ -1516,17 +2102,20 @@ export class EpickService {
                 orderDetail.update(data)
             ),
             // Update OrderDetail for each item (skip substitute items - they already have OrderDetail records created above)
+            // Only update items that are not confirmed
+            // Use MSSQL syntax [column] instead of PostgreSQL "column"
             ...Array.from(itemQtyMap.entries())
                 .filter(([itemNumber]) => !substituteItemNumbersSet.has(itemNumber))
                 .map(([itemNumber, qty]) =>
                     OrderDetail.update(
                         {
-                            Quantity_Shipped: literal(`"Quantity_Shipped" + ${qty}`)
+                            Quantity_Shipped: literal(`[Quantity_Shipped] + ${qty}`)
                         },
                         {
                             where: {
                                 Order_Number: orderNumber,
-                                Item_Number: itemNumber
+                                Item_Number: itemNumber,
+                                Confirmed: 0
                             }
                         }
                     )
@@ -1603,106 +2192,208 @@ export class EpickService {
   }
 
 
-  async OrderCompleted(id: number) {
-    const data = await OrderPick.findOne({
+  async OrderCompleted(orderNumber: number, pickerUserId: number) {
+    // Check if OrderPick exists
+    const orderPick = await OrderPick.findOne({
       where: {
-        orderNumber: id
+        orderNumber: orderNumber
       }
     })
-    if (!data) {
+    if (!orderPick) {
       throw new AppError("Order not found", 404);
     }
     
-    // Get picker user ID from OrderPick
-    const pickerUserId = data.pickerUserNumber;
-    
-    // Find the user in WebUsers table to get userNumber
-    const pickerUser = await WebUsers.findOne({
+    // Find the current picker user in EpickUser table to get userNumber and categories
+    const pickerUser = await EpickUser.findOne({
       where: {
         id: pickerUserId
       },
-      attributes: ['userNumber']
+      attributes: ['userNumber', 'category']
     });
 
     if (!pickerUser) {
       throw new AppError("Picker user not found", 404);
     }
 
-    // Get userNumber from WebUsers (convert string to number for Picker_ID)
-    const pickerUserNumber = pickerUser.userNumber 
+    const pickerUserNumber = pickerUser.userNumber;
+    const pickerCategories = pickerUser.category || [];
     
     if (!pickerUserNumber) {
       throw new AppError("Picker user number not found", 404);
     }
+
+    // Find the current picker's epick_confirmation
+    const currentConfirmation = await EpickConfirmation.findOne({
+      where: {
+        orderNumber: orderNumber,
+        pickerUserNumber: pickerUserId,
+        status: 'in_progress'
+      }
+    });
+
+    if (!currentConfirmation) {
+      throw new AppError("No active confirmation found for this picker and order", 404);
+    }
     
-    // Count bundles (box + drink) and totes from OrderPickBox
+    // Count bundles (box + drink) and totes from OrderPickBox for THIS picker only
+    // We need to track which boxes belong to which picker - for now, count all boxes for the order
+    // Note: This is a limitation - we're counting all boxes, not just this picker's boxes
+    // If you need per-picker box tracking, you'd need to add pickerUserNumber to OrderPickBox
     const orderBoxes = await OrderPickBox.findAll({
       where: {
-        orderNumber: id
+        orderNumber: orderNumber
       },
       attributes: ['type']
     });
 
-    // Count bundles = number of (box + drink)
+    // Count bundles = number of (box + drink) for this picker
+    // For now, we'll count all boxes (limitation: can't distinguish per picker)
     const bundlesCount = orderBoxes.filter(
       (box: any) => box.type === 'box' || box.type === 'drink'
     ).length;
 
-    // Count totes = number of (tote)
+    // Count totes = number of (tote) for this picker
     const totesCount = orderBoxes.filter(
       (box: any) => box.type === 'tote'
     ).length;
 
-    // Update OrderPick status
-    await data.update({
-      status: 'completed',
-      completedAt: moment().toDate()
-    })
+    // Get current Order_Header values to add to them (additive)
+    const currentOrderHeader = await OrderHeader.findOne({
+      where: {
+        Order_Number: orderNumber
+      },
+      attributes: ['Bundles', 'Totes']
+    }) as any;
 
-    // Update Order_Header with Picker_ID, Bundles, and Totes
+    const currentBundles = currentOrderHeader?.Bundles || 0;
+    const currentTotes = currentOrderHeader?.Totes || 0;
+
+    // Calculate new totals (additive)
+    const newBundles = currentBundles + bundlesCount;
+    const newTotes = currentTotes + totesCount;
+
+    // Update Order_Header with Picker_ID (last picker), Bundles, and Totes (additive)
     await OrderHeader.update(
       {
-        Picker_ID: pickerUserNumber,
-        Bundles: bundlesCount,
-        Totes: totesCount
+        Picker_ID: pickerUserNumber, // Last picker's userNumber
+        Bundles: newBundles,
+        Totes: newTotes
       },
       {
         where: {
-          Order_Number: id
+          Order_Number: orderNumber
         }
       }
     );
 
-    // Update all Order_Detail.Confirmed to 1 (true)
-    await OrderDetail.update(
-      {
-        Confirmed: true
-      },
-      {
-        where: {
-          Order_Number: id
-        }
-      }
-    );
-
-    // Destroy lock record when order is completed
-    await RecordLock.destroy({
+    // Update Order_Detail.Confirmed to 1 (true) ONLY for items in picker's categories
+    // Get all OrderDetail items for this order
+    const orderDetails = await OrderDetail.findAll({
       where: {
-        Lock_Number: id
-      }
+        Order_Number: orderNumber
+      },
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: ['Sales_Category'],
+          required: true
+        }
+      ],
+      raw: false
     });
 
-    console.log(data, 'data--->');
-    console.log(`Bundles: ${bundlesCount}, Totes: ${totesCount}`);
+    // Filter items that belong to picker's categories
+    const itemsToConfirm = orderDetails.filter((detail: any) => {
+      const inventory = detail.inventory;
+      if (!inventory || !inventory.Sales_Category) return false;
+      return pickerCategories.includes(inventory.Sales_Category);
+    });
 
-    return data;
+    // Update Confirmed for items in picker's categories
+    if (itemsToConfirm.length > 0) {
+      const itemNumbers = itemsToConfirm.map((detail: any) => detail.Item_Number);
+      await OrderDetail.update(
+        {
+          Confirmed: true
+        },
+        {
+          where: {
+            Order_Number: orderNumber,
+            Item_Number: { [Op.in]: itemNumbers }
+          }
+        }
+      );
+    }
+
+    // Update ONLY current picker's epick_confirmation status to completed (PostgreSQL)
+    await EpickConfirmation.update(
+      {
+        status: 'completed',
+        completedAt: moment().toDate()
+      },
+      {
+        where: {
+          orderNumber: orderNumber,
+          pickerUserNumber: pickerUserId,
+          status: 'in_progress'
+        }
+      }
+    );
+
+    // Check if all categories in the order are completed
+    const allCategoriesCompleted = await this.areAllCategoriesCompleted(orderNumber);
+
+    // Only mark OrderPick as completed if all categories are completed
+    if (allCategoriesCompleted) {
+      await orderPick.update({
+        status: 'completed',
+        completedAt: moment().toDate()
+      });
+    }
+
+    // Only destroy lock record when ALL categories are completed (MSSQL)
+    // This prevents ERP from interfering with other pickers who are still working
+    if (allCategoriesCompleted) {
+      await RecordLock.destroy({
+        where: {
+          Lock_Number: orderNumber
+        }
+      });
+      console.log(`RecordLock deleted for order ${orderNumber} - all categories completed`);
+    } else {
+      console.log(`RecordLock kept for order ${orderNumber} - other pickers still working`);
+    }
+
+    console.log(`Order ${orderNumber}: Picker ${pickerUserId} completed. All categories completed: ${allCategoriesCompleted}`);
+    console.log(`Bundles added: ${bundlesCount}, Total: ${newBundles}, Totes added: ${totesCount}, Total: ${newTotes}`);
+
+    return orderPick;
   }
 
   async getUserHistory(id: number) {
+    // Get user's completed confirmations
+    const completedConfirmations = await EpickConfirmation.findAll({
+      where: {
+        pickerUserId: id,
+        status: 'completed'
+      },
+      attributes: ['orderNumber'],
+      raw: true
+    });
+
+    const completedOrderNumbers = completedConfirmations
+      .map((conf: any) => conf.orderNumber)
+      .filter((v: any) => v !== null && v !== undefined);
+
+    if (completedOrderNumbers.length === 0) {
+      return [];
+    }
+
+    // Get OrderPick records for these orders
     const data = await OrderPick.findAll({
       where: {
-        pickerUserNumber: id,
-        status: 'completed'
+        orderNumber: { [Op.in]: completedOrderNumbers }
       },
       include: [
         {
@@ -1713,7 +2404,6 @@ export class EpickService {
           model: OrderPickScan,
           as: 'scans'
         }
-
       ]
     })
     return data;
@@ -1737,7 +2427,7 @@ export class EpickService {
   async getUserCurrentOrder(id: number) {
     const data = await OrderPick.findOne({
       where: {
-        pickerUserNumber: id,
+        pickerUserId: id,
         status: 'in_progress'
       }
     })
@@ -1864,34 +2554,80 @@ export class EpickService {
     limit = Number(query.limit || (query as any)['limit ']) || 10;
     const offset = (page - 1) * limit;
 
-
-    const { rows: data, count: totalCount } = await OrderPick.findAndCountAll({
+    // Query epick_confirmation for this user's completed orders
+    const { rows: confirmations, count: totalCount } = await EpickConfirmation.findAndCountAll({
       where: {
-        pickerUserNumber: id,
+        pickerUserId: id,
         status: 'completed'
       },
-      attributes: ['orderNumber', 'customerNumber'],
+      order: [['completedAt', 'DESC']],
       limit,
       offset
-    })
+    });
 
-    const finalData = await Promise.all(data.map(async (e: any) => {
-      const customer = await Customer.findOne({
-        where: { C_Number: e.customerNumber },
-        attributes: ['C_Number', 'C_Name'],
-        include: [
-          {
-            model: CustomerRoute,
-            as: 'Routes',
-            attributes: ['Route_Number', 'Stop_Number']
-          }
-        ]
-      })
-      return {
-        ...e.dataValues,
-        customer: customer
+    // Get order numbers
+    const orderNumbers = confirmations.map((conf: any) => conf.orderNumber);
+
+    // Get OrderPick data for customer info
+    const orderPicks = await OrderPick.findAll({
+      where: {
+        orderNumber: { [Op.in]: orderNumbers }
       }
-    }))
+    });
+
+    const orderPickMap: { [key: number]: any } = {};
+    orderPicks.forEach((op: any) => {
+      orderPickMap[op.orderNumber] = op;
+    });
+
+    // Get customer info
+    const customerNumbers = orderPicks.map((op: any) => op.customerNumber).filter(Boolean);
+    const customers = customerNumbers.length > 0 ? await Customer.findAll({
+      where: { C_Number: { [Op.in]: customerNumbers } },
+      attributes: ['C_Number', 'C_Name'],
+      include: [
+        {
+          model: CustomerRoute,
+          as: 'Routes',
+          attributes: ['Route_Number', 'Stop_Number']
+        }
+      ]
+    }) : [];
+
+    const customerMap: { [key: number]: any } = {};
+    customers.forEach((cust: any) => {
+      customerMap[cust.C_Number] = cust;
+    });
+
+    const finalData = confirmations.map((conf: any) => {
+      const orderPick = orderPickMap[conf.orderNumber];
+      const customer = orderPick ? customerMap[orderPick.customerNumber] : null;
+
+      // Calculate duration
+      let duration = null;
+      let durationSeconds = null;
+      if (conf.startedAt && conf.completedAt) {
+        const start = moment(conf.startedAt);
+        const end = moment(conf.completedAt);
+        durationSeconds = end.diff(start, 'seconds');
+        const minutes = Math.floor(durationSeconds / 60);
+        const seconds = durationSeconds % 60;
+        duration = minutes > 0 ? `${minutes} min ${seconds} sec` : `${seconds} sec`;
+      }
+
+      return {
+        orderNumber: conf.orderNumber,
+        customerNumber: orderPick?.customerNumber || null,
+        categories: conf.category || [],
+        startedAt: conf.startedAt,
+        completedAt: conf.completedAt,
+        duration: duration,
+        durationSeconds: durationSeconds,
+        status: conf.status,
+        customer: customer
+      };
+    });
+
     return {
       data: finalData,
       totalCount: totalCount,
@@ -1902,49 +2638,116 @@ export class EpickService {
   }
 
 
-  async getReportById(id: number) {
-    const data = await OrderPick.findAll({
+  async getReportById(id: number, userId: number) {
+    // Get current user with categories from WebUsers
+    const currentUser = await WebUsers.findOne({
+      where: { id: userId },
+      attributes: ['id', 'firstName', 'lastName', 'userNumber', 'order_type', 'shortby']
+    });
+
+    if (!currentUser) {
+      throw new AppError('User not found', 404);
+    }
+
+    // Get OrderPick data for this order
+    const orderPick = await OrderPick.findOne({
       where: {
         orderNumber: id
       }
-    })
+    });
 
-    const finalData = await Promise.all(data?.map(async (e: any) => {
+    if (!orderPick) {
+      throw new AppError('Order not found', 404);
+    }
 
-      const product = await OrderDetail.findAll({
-        where: {
-          Order_Number: e.orderNumber
-        },
-        include: [
-          {
-            model: Inventory,
-            as: 'inventory',
-            attributes: ['Item_Number', 'Description', 'Item_Number'],
-            include: [
-              {
-                model: InventoryUPC,
-                as: 'UPCList',
-                attributes: ['UPC_Number'],
-                required: false
-              }
-            ]
-          },
+    // Get all items for this order
+    const product = await OrderDetail.findAll({
+      where: {
+        Order_Number: id
+      },
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: ['Item_Number', 'Description', 'Section', 'Location', 'Sales_Category'],
+          include: [
+            {
+              model: InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              required: false
+            },
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Category_Desc'],
+              required: false
+            }
+          ]
+        }
+      ]
+    });
 
-        ]
-      })
+    // Calculate total quantity shipped
+    const totalQtyShipped = product.reduce((sum: number, item: any) => {
+      return sum + (Number(item.Quantity_Shipped) || 0);
+    }, 0);
 
-      // Calculate total quantity shipped from OrderDetail
-      const totalQtyShipped = product.reduce((sum: number, item: any) => {
-        return sum + (Number(item.Quantity_Shipped) || 0);
-      }, 0);
+    // Calculate duration from OrderPick
+    let duration = null;
+    let durationSeconds = null;
+    const opData = orderPick as any;
+    if (opData.startedAt && opData.completedAt) {
+      const start = moment(opData.startedAt);
+      const end = moment(opData.completedAt);
+      durationSeconds = end.diff(start, 'seconds');
+      const minutes = Math.floor(durationSeconds / 60);
+      const seconds = durationSeconds % 60;
+      duration = minutes > 0 ? `${minutes} min ${seconds} sec` : `${seconds} sec`;
+    } else if (opData.startedAt && !opData.completedAt) {
+      duration = 'in progress';
+    }
 
-      return {
-        ...e.dataValues,
-        totalQtyShipped: totalQtyShipped, // Add total quantity shipped
-        ...product
-      }
-    })) as any
-    return finalData;
+    // Build picker info for current user
+    const pickerInfo = {
+      pickerId: userId,
+      pickerName: currentUser ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() : null,
+      pickerUserNumber: currentUser?.userNumber || null,
+      startedAt: opData.startedAt,
+      completedAt: opData.completedAt,
+      duration: duration,
+      durationSeconds: durationSeconds,
+      itemsCount: product.length,
+      status: opData.status
+    };
+
+    // Build response with numbered items (like original format)
+    const itemsObject: any = {};
+    product.forEach((item: any, index: number) => {
+      itemsObject[index.toString()] = item;
+    });
+
+    return [{
+      ...itemsObject,
+      id: orderPick.id,
+      orderNumber: orderPick.orderNumber,
+      pickerUserNumber: userId,
+      customerNumber: opData.customerNumber,
+      status: opData.status,
+      startedAt: opData.startedAt,
+      completedAt: opData.completedAt,
+      notes: opData.notes,
+      images: opData.images,
+      totalLines: product.length,
+      totalQty: product.reduce((sum: number, item: any) => sum + (Number(item.Quantity_Ordered) || 0), 0),
+      OutOfStockItem: opData.OutOfStockItem,
+      scannedLines: opData.scannedLines,
+      scannedQty: opData.scannedQty,
+      createdAt: orderPick.createdAt,
+      updatedAt: orderPick.updatedAt,
+      totalQtyShipped: totalQtyShipped,
+      picker: pickerInfo
+    }];
   }
 
   /**
@@ -1967,7 +2770,7 @@ export class EpickService {
 
     // Filter by user if provided
     if (userId) {
-      whereCondition.pickerUserNumber = userId;
+      whereCondition.pickerUserId = userId;
     }
 
     // Filter by date range if provided
@@ -2665,6 +3468,10 @@ export class EpickService {
   }, userId: number) {
     const { orderNumber, itemNumber, qty, note } = data;
 
+    // Get user info
+    const user = await EpickUser.findOne({ where: { id: userId } });
+    const userNumber = user?.userNumber ? Number(user.userNumber) : 0;
+
     // Validate order exists and item is in order
     const orderDetail = await OrderDetail.findOne({
       where: {
@@ -2682,7 +3489,7 @@ export class EpickService {
       where: {
         orderNumber,
         itemNumber,
-        pickerUserNumber: userId,
+        pickerUserId: userId,
         status: 'pending',
         requestType: 'pass', // Only check for 'pass' type
       },
@@ -2697,7 +3504,8 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
-      pickerUserNumber: userId,
+      pickerUserNumber: userNumber,
+      pickerUserId: userId,
       status: 'pending',
       requestType: 'pass',
       qty: qty !== undefined && qty !== null ? qty : 0,
@@ -2730,6 +3538,10 @@ export class EpickService {
   }, userId: number) {
     const { orderNumber, itemNumber, qty, note } = data;
 
+    // Get user info
+    const user = await EpickUser.findOne({ where: { id: userId } });
+    const userNumber = user?.userNumber ? Number(user.userNumber) : 0;
+
     // Validate qty is positive
     if (!qty || qty <= 0) {
       throw new AppError('Quantity must be greater than 0', 400);
@@ -2752,7 +3564,7 @@ export class EpickService {
       where: {
         orderNumber,
         itemNumber,
-        pickerUserNumber: userId,
+        pickerUserId: userId,
         status: 'pending',
         requestType: 'scan', // Only check for 'scan' type
       },
@@ -2766,7 +3578,8 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
-      pickerUserNumber: userId,
+      pickerUserNumber: userNumber,
+      pickerUserId: userId,
       status: 'pending',
       requestType: 'scan',
       qty: qty,
@@ -2790,13 +3603,20 @@ export class EpickService {
 
 
   async requestAllStatusOverride(orderNumber: number,query:any){
-const {status} = query; 
+    const {status, pickerId} = query; 
+
+    const whereCondition: any = {
+      orderNumber: orderNumber,
+      status: 'pending'
+    };
+
+    // If pickerId provided, filter by that picker
+    if (pickerId) {
+      whereCondition.pickerUserId = Number(pickerId);
+    }
 
     const overrideRequests = await OverrideRequest.update({status:status}, {
-      where: {
-        orderNumber: orderNumber,
-       
-      },
+      where: whereCondition,
     });
     return overrideRequests;
   }
@@ -2809,7 +3629,7 @@ const {status} = query;
     const overrideRequest = await OverrideRequest.findOne({
       where: {
         id: requestId,
-        pickerUserNumber: userId, // Ensure user can only check their own requests
+        pickerUserId: userId, // Ensure user can only check their own requests
       },
       include: [
         {
@@ -2852,7 +3672,7 @@ const {status} = query;
     const overrideRequest = await OverrideRequest.findOne({
       where: {
         id: requestId,
-        pickerUserNumber: userId, // Ensure user can only check their own requests
+        pickerUserId: userId, // Ensure user can only check their own requests
         requestType: 'scan', // Only check scan type requests
       },
       include: [
@@ -2896,7 +3716,7 @@ const {status} = query;
     const overrideRequest = await OverrideRequest.findOne({
       where: {
         id: requestId,
-        pickerUserNumber: userId, // Ensure user can only cancel their own requests
+        pickerUserId: userId, // Ensure user can only cancel their own requests
       },
     });
 
@@ -3365,51 +4185,116 @@ const {status} = query;
       order: [['createdAt', 'DESC']],
     });
 
-    // Get item descriptions for all requests
-    const itemNumbers = pendingRequests.map(req => req.itemNumber);
-    const inventories = await Inventory.findAll({
-      where: {
-        Item_Number: { [Op.in]: itemNumbers },
-      },
-      attributes: ['Item_Number', 'Description'],
+    // Get unique picker user IDs
+    const pickerUserIds = [...new Set(pendingRequests.map(req => req.pickerUserId).filter(Boolean))];
+
+    // Get picker categories from EpickUser
+    const pickers = await EpickUser.findAll({
+      where: { id: { [Op.in]: pickerUserIds } },
+      attributes: ['id', 'category']
+    });
+    const pickerCategoryMap: { [key: number]: number[] } = {};
+    pickers.forEach((p: any) => {
+      pickerCategoryMap[p.id] = p.category || [];
     });
 
-    const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
+    // Get all order items with inventory info
+    const orderItems = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      include: [{
+        model: Inventory,
+        as: 'inventory',
+        attributes: ['Item_Number', 'Description', 'Section', 'Location', 'Sales_Category'],
+        include: [{
+          model: InventoryUPC,
+          as: 'UPCList',
+          attributes: ['UPC_Number'],
+          required: false
+        }]
+      }]
+    });
 
-    return pendingRequests.map((req: any) => {
-      const user = req.user as WebUsers | undefined;
-      return {
-        requestId: req.id,
-        orderNumber: req.orderNumber,
-        itemNumber: req.itemNumber,
-        itemDescription: inventoryMap.get(req.itemNumber) || null,
-        pickerUserNumber: req.pickerUserNumber,
+    // Group by pickerUserId
+    const pickerData: { [key: number]: { requests: any[], user: any } } = {};
+    
+    pendingRequests.forEach((req: any) => {
+      const pickerId = req.pickerUserId || 0;
+      if (!pickerData[pickerId]) {
+        pickerData[pickerId] = { requests: [], user: req.user };
+      }
+      pickerData[pickerId].requests.push(req);
+    });
+
+    // Build response grouped by picker
+    const result: any[] = [];
+
+    for (const pickerId of Object.keys(pickerData)) {
+      const pickerIdNum = Number(pickerId);
+      const { requests, user } = pickerData[pickerIdNum];
+      const pickerCategories = pickerCategoryMap[pickerIdNum] || [];
+
+      // Filter order items by picker's categories
+      const pickerItems = orderItems.filter((item: any) => {
+        const salesCategory = item.inventory?.Sales_Category;
+        return pickerCategories.length === 0 || pickerCategories.includes(salesCategory);
+      });
+
+      result.push({
+        pickerUserId: pickerIdNum,
+        pickerUserNumber: requests[0]?.pickerUserNumber || null,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
         userEmail: user?.email || null,
-        requestType: req.requestType, // 'pass' or 'scan'
-        qty: req.qty,                 // 0 for pass, actual qty for scan
-        note: req.note,
-        createdAt: req.createdAt,
-        updatedAt: req.updatedAt,
-      };
-    });
+        pickerCategories: pickerCategories,
+        overrideRequests: requests.map((req: any) => ({
+          requestId: req.id,
+          orderNumber: req.orderNumber,
+          itemNumber: req.itemNumber,
+          itemDescription: (pickerItems.find((i: any) => i.Item_Number === req.itemNumber) as any)?.inventory?.Description || null,
+          requestType: req.requestType,
+          qty: req.qty,
+          note: req.note,
+          createdAt: req.createdAt,
+          updatedAt: req.updatedAt,
+        })),
+        pickerItems: pickerItems.map((item: any) => ({
+          itemNumber: item.Item_Number,
+          description: item.inventory?.Description,
+          section: item.inventory?.Section,
+          location: item.inventory?.Location,
+          salesCategory: item.inventory?.Sales_Category,
+          quantityOrdered: item.Quantity_Ordered,
+          quantityShipped: item.Quantity_Shipped,
+          confirmed: item.Confirmed
+        }))
+      });
+    }
+
+    return result;
   }
 
   /**
    * Get all override requests for an order (for Epick user)
    * Returns all override requests grouped by type (pass and scan)
    */
-  async getAllOverrideRequests(orderNumber: number) {
+  async getAllOverrideRequests(orderNumber: number, userId?: number) {
     // Validate order number
     if (!orderNumber || isNaN(orderNumber)) {
       throw new AppError('Invalid order number', 400);
     }
 
+    // Build where condition
+    const whereCondition: any = {
+      orderNumber: orderNumber,
+    };
+
+    // If userId provided, filter by pickerUserId
+    if (userId) {
+      whereCondition.pickerUserId = userId;
+    }
+
     // Get all override requests for this order (all statuses)
     const allRequests = await OverrideRequest.findAll({
-      where: {
-        orderNumber: orderNumber,
-      },
+      where: whereCondition,
       order: [['createdAt', 'DESC']],
     });
 
@@ -3437,6 +4322,111 @@ const {status} = query;
         status: req.status,
         qty: req.qty,
        
+        note: req.note || null,
+        rejectionReason: (req.status === 'rejected' || req.status === 'cancelled') 
+          ? (req.rejectionReason || null) 
+          : null,
+      }));
+
+    return {
+      passOverrides,
+      scanOverrides,
+    };
+  }
+
+  /**
+   * Get all override requests for an order filtered by epick user's categories
+   * Returns only override requests for items in the user's assigned sales categories
+   * Same response structure as getAllOverrideRequests
+   */
+  async getAllOverrideRequestsForEpick(orderNumber: number, userId: number) {
+    // Validate order number
+    if (!orderNumber || isNaN(orderNumber)) {
+      throw new AppError('Invalid order number', 400);
+    }
+
+    // Get epick user's categories
+    const epickUser = await EpickUser.findOne({
+      where: {
+        id: userId
+      },
+      attributes: ['category']
+    });
+
+    if (!epickUser) {
+      throw new AppError('Epick user not found', 404);
+    }
+
+    const userCategories = epickUser.category || [];
+
+    if (userCategories.length === 0) {
+      // If user has no categories, return empty result
+      return {
+        passOverrides: [],
+        scanOverrides: [],
+      };
+    }
+
+    // Get all override requests for this order
+    const allRequests = await OverrideRequest.findAll({
+      where: {
+        orderNumber: orderNumber,
+      },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (allRequests.length === 0) {
+      return {
+        passOverrides: [],
+        scanOverrides: [],
+      };
+    }
+
+    // Get item numbers from override requests
+    const itemNumbers = Array.from(new Set(allRequests.map(req => req.itemNumber)));
+
+    // Get Inventory records for these items to check Sales_Category
+    const inventoryItems = await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: itemNumbers }
+      },
+      attributes: ['Item_Number', 'Sales_Category'],
+      raw: true
+    });
+
+    // Create a map: itemNumber -> Sales_Category
+    const itemCategoryMap: { [key: number]: number } = {};
+    inventoryItems.forEach((item: any) => {
+      itemCategoryMap[item.Item_Number] = item.Sales_Category;
+    });
+
+    // Filter requests: only include items whose Sales_Category is in user's categories
+    const filteredRequests = allRequests.filter(req => {
+      const itemCategory = itemCategoryMap[req.itemNumber];
+      return itemCategory !== undefined && userCategories.includes(itemCategory);
+    });
+
+    // Separate filtered requests by type
+    const passOverrides = filteredRequests
+      .filter(req => req.requestType === 'pass')
+      .map(req => ({
+        requestId: req.id,
+        itemNumber: req.itemNumber,
+        status: req.status,
+        qty: req.qty,
+        note: req.note || null,
+        rejectionReason: (req.status === 'rejected' || req.status === 'cancelled') 
+          ? (req.rejectionReason || null) 
+          : null,
+      }));
+
+    const scanOverrides = filteredRequests
+      .filter(req => req.requestType === 'scan')
+      .map(req => ({
+        requestId: req.id,
+        itemNumber: req.itemNumber,
+        status: req.status,
+        qty: req.qty,
         note: req.note || null,
         rejectionReason: (req.status === 'rejected' || req.status === 'cancelled') 
           ? (req.rejectionReason || null) 
@@ -3575,61 +4565,54 @@ const {status} = query;
 
     // If request type is 'scan', update qty_shipped like normal scan
     if (overrideRequest.requestType === 'scan' && overrideRequest.qty > 0) {
-      // Get the order pick to find boxId (use first box or create logic)
-      const orderPick = await OrderPick.findOne({
+      // Get or create a box for this order (use first box or default)
+      const orderBox = await OrderPickBox.findOne({
         where: {
           orderNumber: overrideRequest.orderNumber
-        }
+        },
+        order: [['id', 'ASC']]
       });
 
-      if (orderPick) {
-        // Get or create a box for this order (use first box or default)
-        const orderBox = await OrderPickBox.findOne({
+      const boxId = orderBox?.id || null;
+
+      // Create OrderPickScan record (like normal scan)
+      if (boxId) {
+        await OrderPickScan.create({
+          orderNumber: overrideRequest.orderNumber,
+          itemNumber: overrideRequest.itemNumber,
+          qty: overrideRequest.qty,
+          boxId: boxId,
+          isSubsitute: false
+        });
+      }
+
+      // Update Quantity_Shipped in OrderDetail (like normal scan)
+      // Override approval is explicit manager action - update regardless of Confirmed status
+      // Use MSSQL syntax [column] instead of PostgreSQL "column"
+      await OrderDetail.update(
+        {
+          Quantity_Shipped: literal(`[Quantity_Shipped] + ${overrideRequest.qty}`)
+        },
+        {
+          where: {
+            Order_Number: overrideRequest.orderNumber,
+            Item_Number: overrideRequest.itemNumber
+          }
+        }
+      );
+
+      // Update OrderPick scannedLines and scannedQty
+      await OrderPick.update(
+        {
+          scannedLines: literal(`"scannedLines" + 1`),
+          scannedQty: literal(`"scannedQty" + ${overrideRequest.qty}`)
+        },
+        {
           where: {
             orderNumber: overrideRequest.orderNumber
-          },
-          order: [['id', 'ASC']]
-        });
-
-        const boxId = orderBox?.id || null;
-
-        // Create OrderPickScan record (like normal scan)
-        if (boxId) {
-          await OrderPickScan.create({
-            orderNumber: overrideRequest.orderNumber,
-            itemNumber: overrideRequest.itemNumber,
-            qty: overrideRequest.qty,
-            boxId: boxId,
-            isSubsitute: false
-          });
+          }
         }
-
-        // Update Quantity_Shipped in OrderDetail (like normal scan)
-        await OrderDetail.update(
-          {
-            Quantity_Shipped: literal(`"Quantity_Shipped" + ${overrideRequest.qty}`)
-          },
-          {
-            where: {
-              Order_Number: overrideRequest.orderNumber,
-              Item_Number: overrideRequest.itemNumber
-            }
-          }
-        );
-
-        // Update OrderPick scannedLines and scannedQty
-        await OrderPick.update(
-          {
-            scannedLines: literal(`"scannedLines" + 1`),
-            scannedQty: literal(`"scannedQty" + ${overrideRequest.qty}`)
-          },
-          {
-            where: {
-              orderNumber: overrideRequest.orderNumber
-            }
-          }
-        );
-      }
+      );
     }
 
     // Note: Epick user will check status via polling API (checkOverrideRequest) every 5 seconds
@@ -3803,9 +4786,11 @@ const {status} = query;
   /**
    * Get all ongoing orders (for distributor/admin)
    * Returns orders with status 'in_progress' with user and order details
+   * Now returns one entry per picker per order (same order can have multiple entries)
    */
   async getOngoingOrders() {
-    const ongoingOrders = await OrderPick.findAll({
+    // Query epick_confirmation instead of OrderPick to get per-picker entries
+    const ongoingConfirmations = await EpickConfirmation.findAll({
       where: {
         status: 'in_progress',
       },
@@ -3813,7 +4798,7 @@ const {status} = query;
       raw: true,
     });
 
-    if (ongoingOrders.length === 0) {
+    if (ongoingConfirmations.length === 0) {
       return {
         total: 0,
         orders: [],
@@ -3823,27 +4808,35 @@ const {status} = query;
     // Get unique picker user IDs and order numbers
     const pickerUserIds = Array.from(
       new Set(
-        ongoingOrders
-          .map((order: any) => order.pickerUserNumber)
+        ongoingConfirmations
+          .map((conf: any) => conf.pickerUserNumber)
           .filter((id: any) => id !== null && id !== undefined)
       )
     );
-    const orderNumbers = ongoingOrders.map((order: any) => order.orderNumber);
-   const allRequests = await OverrideRequest.findAll({
-    where: {
-      orderNumber: { [Op.in]: orderNumbers },
-      status: 'pending',
-      requestType: 'pass',
-    },
-   });
-      const flagPass = allRequests.some(req => req.status === 'pending');
- 
-    // Fetch picker user information
-    const pickers = await WebUsers.findAll({
+    const orderNumbers = Array.from(
+      new Set(ongoingConfirmations.map((conf: any) => conf.orderNumber))
+    );
+
+    const allRequests = await OverrideRequest.findAll({
+      where: {
+        orderNumber: { [Op.in]: orderNumbers },
+        status: 'pending',
+        requestType: 'pass',
+      },
+    });
+
+    // Create a map of orderNumber -> hasPendingPassRequest
+    const orderPassRequestMap: { [key: number]: boolean } = {};
+    allRequests.forEach((req: any) => {
+      orderPassRequestMap[req.orderNumber] = true;
+    });
+
+    // Fetch picker user information from EpickUser table
+    const pickers = await EpickUser.findAll({
       where: {
         id: { [Op.in]: pickerUserIds },
       },
-      attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
+      attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber', 'category'],
       raw: true,
     });
 
@@ -3851,6 +4844,18 @@ const {status} = query;
     const pickerMap: any = {};
     pickers.forEach((picker: any) => {
       pickerMap[picker.id] = picker;
+    });
+
+    // Fetch OrderPick data for additional info (totalLines, scannedLines, etc.)
+    const orderPickMap: any = {};
+    const orderPicks = await OrderPick.findAll({
+      where: {
+        orderNumber: { [Op.in]: orderNumbers },
+      },
+      raw: true,
+    });
+    orderPicks.forEach((op: any) => {
+      orderPickMap[op.orderNumber] = op;
     });
 
     // Fetch order headers and customer details
@@ -3893,31 +4898,72 @@ const {status} = query;
       });
     }
 
-    // Format response
-    const result = ongoingOrders.map((order: any) => {
-      const picker = pickerMap[order.pickerUserNumber];
-      const orderInfo = orderHeaderMap[order.orderNumber] || {};
+    // Get category names
+    const allCategoryIds = new Set<number>();
+    ongoingConfirmations.forEach((conf: any) => {
+      const cats = conf.category || [];
+      cats.forEach((cat: number) => allCategoryIds.add(cat));
+    });
+
+    let categoryNameMap: { [key: number]: string } = {};
+    if (allCategoryIds.size > 0) {
+      const categories = await SalesCategory.findAll({
+        where: {
+          Sales_Category: { [Op.in]: Array.from(allCategoryIds) }
+        },
+        attributes: ['Sales_Category', 'Category_Desc'],
+        raw: true
+      });
+      categories.forEach((cat: any) => {
+        categoryNameMap[cat.Sales_Category] = cat.Category_Desc;
+      });
+    }
+
+    // Format response - one entry per picker per order
+    const result = ongoingConfirmations.map((conf: any) => {
+      const picker = pickerMap[conf.pickerUserNumber];
+      const orderInfo = orderHeaderMap[conf.orderNumber] || {};
+      const orderPick = orderPickMap[conf.orderNumber] || {};
       
+      // Map category IDs to names
+      const categoryNames = (conf.category || []).map((catId: number) => 
+        categoryNameMap[catId] || `Category ${catId}`
+      );
+
       return {
-        orderNumber: order.orderNumber,   
-        customerNumber: order.customerNumber,
+        // Confirmation-specific fields
+        confirmationId: conf.id,
+        orderNumber: conf.orderNumber,
+        categories: conf.category || [],
+        categoryNames: categoryNames,
+        status: conf.status,
+        startedAt: conf.startedAt,
+        
+        // Customer info
+        customerNumber: orderPick.customerNumber || null,
         customerName: orderInfo.customer?.customerName || null,
         routes: orderInfo.customer?.routes || [],
         orderDate: orderInfo.orderDate || null,
+        
+        // Picker info
         pickerId: picker?.id || null,
         pickerName: picker ? `${picker.firstName || ''} ${picker.lastName || ''}`.trim() : null,
         pickerEmail: picker?.email || null,
         pickerUserNumber: picker?.userNumber || null,
-        startedAt: order.startedAt,
-        totalLines: order.totalLines,
-        totalQty: parseFloat(order.totalQty) || 0,
-        scannedLines: order.scannedLines,
-        scannedQty: parseFloat(order.scannedQty) || 0,
-        outOfStockItems: order.OutOfStockItem,
-        notes: order.notes,
-        flagPass: flagPass,
-        createdAt: order.createdAt,
-        updatedAt: order.updatedAt,
+        
+        // Order progress (shared across all pickers for this order)
+        totalLines: orderPick.totalLines || 0,
+        totalQty: parseFloat(orderPick.totalQty) || 0,
+        scannedLines: orderPick.scannedLines || 0,
+        scannedQty: parseFloat(orderPick.scannedQty) || 0,
+        outOfStockItems: orderPick.OutOfStockItem || 0,
+        notes: orderPick.notes || null,
+        
+        // Flags
+        flagPass: orderPassRequestMap[conf.orderNumber] || false,
+        
+        createdAt: conf.createdAt,
+        updatedAt: conf.updatedAt,
       };
     });
 
@@ -3928,30 +4974,90 @@ const {status} = query;
   }
 
   /**
-   * Remove/delete an ongoing order (for distributor/admin)
-   * This will:
-   * 1. Delete from Order_Pick (PostgreSQL) - also removes from getUserCurrentOrder
-   * 2. Delete from Order_Pick_Box (PostgreSQL)
-   * 3. Delete from Order_Pick_Scan (PostgreSQL)
-   * 4. Delete from passScanItems (PostgreSQL)
-   * 5. Delete from Record_Locks (MSSQL)
-   * This makes the order available again in getOrder API and removes it from current order
+   * Remove/delete an ongoing order for a specific picker (for distributor/admin)
+   * Now accepts optional pickerId to remove only that picker's confirmation
+   * If no pickerId provided, removes all pickers from the order
+   * 
+   * Logic:
+   * - If picker specified: Delete only that picker's epick_confirmation
+   * - If last picker: Delete OrderPick, RecordLock, and all related data
+   * - If other pickers remain: Keep OrderPick and RecordLock
    */
-  async removeOngoingOrder(orderNumber: number) {
-    // Check if order exists and is in progress
-    const orderPick = await OrderPick.findOne({
+  async removeOngoingOrder(orderNumber: number, pickerId?: number) {
+    // Check if order has any in_progress confirmations
+    const existingConfirmations = await EpickConfirmation.findAll({
       where: {
         orderNumber: orderNumber,
         status: 'in_progress',
       },
     });
 
-    if (!orderPick) {
-      throw new AppError('Ongoing order not found', 404);
+    if (existingConfirmations.length === 0) {
+      throw new AppError('No ongoing order found for this order number', 404);
     }
 
-    // Delete all related data in PostgreSQL (cascade delete should handle this, but being explicit)
-    
+    // If pickerId is provided, remove only that picker's confirmation
+    if (pickerId) {
+      const pickerConfirmation = existingConfirmations.find(
+        (conf: any) => conf.pickerUserId === pickerId
+      );
+
+      if (!pickerConfirmation) {
+        throw new AppError('Picker is not working on this order', 404);
+      }
+
+      // Delete this picker's confirmation
+      await EpickConfirmation.destroy({
+        where: {
+          orderNumber: orderNumber,
+          pickerUserId: pickerId,
+          status: 'in_progress',
+        },
+      });
+
+      // Check if any other pickers remain
+      const remainingConfirmations = await EpickConfirmation.findAll({
+        where: {
+          orderNumber: orderNumber,
+          status: 'in_progress',
+        },
+      });
+
+      // If no other pickers remain, clean up everything
+      if (remainingConfirmations.length === 0) {
+        await this.cleanupOrderData(orderNumber);
+      }
+
+      return {
+        message: `Picker removed from order successfully`,
+        orderNumber: orderNumber,
+        pickerId: pickerId,
+        remainingPickers: remainingConfirmations.length,
+      };
+    }
+
+    // If no pickerId provided, remove ALL pickers from this order
+    // Delete all in_progress confirmations for this order
+    await EpickConfirmation.destroy({
+      where: {
+        orderNumber: orderNumber,
+        status: 'in_progress',
+      },
+    });
+
+    // Clean up all order data
+    await this.cleanupOrderData(orderNumber);
+
+    return {
+      message: 'Ongoing order removed successfully (all pickers)',
+      orderNumber: orderNumber,
+    };
+  }
+
+  /**
+   * Helper: Clean up all order-related data when no pickers remain
+   */
+  private async cleanupOrderData(orderNumber: number) {
     // 1. Delete all scans for this order
     await OrderPickScan.destroy({
       where: {
@@ -3981,10 +5087,13 @@ const {status} = query;
     });
 
     // 5. Delete the order pick record
-    // This also removes it from getUserCurrentOrder API (which queries Order_Pick with status='in_progress')
-    await orderPick.destroy();
+    await OrderPick.destroy({
+      where: {
+        orderNumber: orderNumber,
+      },
+    });
 
-    // 6. Delete from Record_Locks (MSSQL) - this is what makes the order visible again in getOrder
+    // 6. Delete from Record_Locks (MSSQL) - this makes the order visible again in getOrder
     await RecordLock.destroy({
       where: {
         Lock_Type: 0,
@@ -3992,7 +5101,7 @@ const {status} = query;
       },
     });
 
-    // 7. Optionally reset Quantity_Shipped in Order_Detail (reset to 0)
+    // 7. Reset Quantity_Shipped in Order_Detail (reset to 0)
     // This ensures clean state if order is accepted again
     await OrderDetail.update(
       { Quantity_Shipped: 0 },
@@ -4003,10 +5112,16 @@ const {status} = query;
       }
     );
 
-    return {
-      message: 'Ongoing order removed successfully',
-      orderNumber: orderNumber,
-    };
+    // 8. Reset Confirmed to 0 in Order_Detail
+    // This ensures items can be picked again
+    await OrderDetail.update(
+      { Confirmed: 0 },
+      {
+        where: {
+          Order_Number: orderNumber,
+        },
+      }
+    );
   }
 }
 

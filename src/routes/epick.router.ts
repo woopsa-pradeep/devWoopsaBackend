@@ -46,6 +46,7 @@ router.post('/createScanOverrideRequest',verifyRole(ROLES.EPIK, ROLES.SALES),cat
 router.get('/checkOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.checkOverrideRequest.bind(epickController)));
 router.get('/checkScanOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.checkScanOverrideRequest.bind(epickController)));
 router.get('/getAllOverrideRequests/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getAllOverrideRequests.bind(epickController)));
+router.get('/getAllOverrideRequestsForEpick/:orderNumber',verifyRole(ROLES.EPIK),catchAsync(epickController.getAllOverrideRequestsForEpick.bind(epickController)));
 router.post('/cancelOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.cancelOverrideRequest.bind(epickController)));
 
 router.put('/requestAllStatusOverride/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.requestAllStatusOverride.bind(epickController)));

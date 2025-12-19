@@ -20,6 +20,8 @@ import { SalesCategory } from '../mmsql/salesCategory.model';
 import { PriceClass } from '../mmsql/priceClass.model';
 import { InventoryUPC } from '../mmsql/inventoryUpc.model';
 import { OrderConfirmation } from './orderConfirmation.model';
+import { EpickUser } from './epickUser.model';
+import { EpickConfirmation } from './epickConfirmation.model';
 import { DriverRouteAssignment } from './driverRouteAssignment.model';
 import { Driver } from './driver.model';
 // import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
@@ -116,6 +118,17 @@ OverrideRequest.belongsTo(WebUsers, {
   as: 'user',
 });
 
+// EpickConfirmation associations
+EpickConfirmation.belongsTo(EpickUser, {
+  foreignKey: 'pickerUserNumber',
+  as: 'picker',
+});
+
+EpickUser.hasMany(EpickConfirmation, {
+  foreignKey: 'pickerUserNumber',
+  as: 'confirmations',
+
+});
 // DriverRouteAssignment associations
 Driver.hasMany(DriverRouteAssignment, {
   foreignKey: 'driverId',

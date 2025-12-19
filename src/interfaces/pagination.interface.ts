@@ -55,5 +55,7 @@ export interface PaginationOptions {
     state?:string;
     zip?:string;
     jurisdiction?:number;
+    salesCategory?:any;
+    userSalesCategory?:any;
   }
   

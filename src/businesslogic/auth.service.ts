@@ -876,8 +876,10 @@ export class AuthService {
   }
 
   async epikLogin(body: IUserLogin) {
-    const isUserExist = await WebUsers.findOne({
-      where: { email: body.email, status: true, role: 'epick', isActive: true, },
+    const { EpickUser } = await import("../models/postgres/epickUser.model");
+    
+    const isUserExist = await EpickUser.findOne({
+      where: { email: body.email, status: true, isActive: true, },
     })
     const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
     if (!isUserExist) {
@@ -889,7 +891,7 @@ export class AuthService {
     }
     const token = generateToken({
       id: isUserExist.id,
-      role: isUserExist.role,
+      role: 'epick',
       userNumber: isUserExist.userNumber,
     });
     const getUserRolesPermissions = await RolePermission.findAll({ where: { userId: isUserExist.id } });
@@ -937,7 +939,9 @@ export class AuthService {
         firstName: isUserExist.firstName,
         lastName: isUserExist.lastName,
         userNumber: isUserExist.userNumber,
-        salesRepNumber: isUserExist.salesRepNumber,
+        category: isUserExist.category,
+        order_type: isUserExist.order_type,
+        shortby: isUserExist.shortby,
         isSessionActive: isSessionActive,
         isUserExist:isUserExist
         // allowSingleScan: isUserExist.allowSingleScan

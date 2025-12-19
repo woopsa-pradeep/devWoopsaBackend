@@ -7,6 +7,7 @@ export class OrderPick extends Model {
   declare id: number;
   declare orderNumber: number;
   declare pickerUserNumber: number;
+  declare pickerUserId: number;
 
   declare status: 'pending' | 'in_progress' | 'completed' | 'ready_for_delivery' | 'cancelled';
   declare startedAt: Date | null;
@@ -31,6 +32,7 @@ OrderPick.init({
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
   orderNumber: { type: DataTypes.INTEGER, allowNull: false,unique: true },
   pickerUserNumber: { type: DataTypes.INTEGER, allowNull: false },
+  pickerUserId: { type: DataTypes.INTEGER, allowNull: true },
   customerNumber: { type: DataTypes.INTEGER, allowNull: false },
   status: {
     type: DataTypes.ENUM('pending', 'in_progress', 'completed', 'ready_for_delivery'),

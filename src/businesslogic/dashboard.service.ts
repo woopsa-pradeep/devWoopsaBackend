@@ -23,7 +23,7 @@ import { WebUsers } from "../models/postgres/users.model";
 export class DashboardService {
 
     async getPopularItems(userId: number,query: any) {
-        let { state='', zip='', jurisdiction='' } = query;
+        let { state='', zip='', jurisdiction='' ,salesCategory=[]} = query;
         console.log(userId, 'userId')
         const homeSetting = await HomeSettings.findOne();
         const currentYear = new Date().getFullYear();
@@ -60,6 +60,9 @@ export class DashboardService {
             whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
           }
 
+        if(salesCategory.length > 0){
+            whereClause.Sales_Category = { [Op.in]: salesCategory };
+        }
 
         if (homeSetting?.showMostSale) {
             // Get most sold inventory items in the current year
@@ -294,10 +297,15 @@ export class DashboardService {
                         const uniqueExcluded = [...new Set(allExcludedItems)];
                         whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
                       }
+
+                    if(salesCategory.length > 0){
+                        whereClause.Sales_Category = { [Op.in]: salesCategory };
+                    }
                     // Get products that other customers in the same city buy
                     const allAsPerCustomerData = await OrderDetail.findAll({
                         attributes: [
                             'Item_Number',
+                            'Sales_Category',
                             [Sequelize.fn('SUM', Sequelize.col('Quantity_Shipped')), 'totalQuantitySold'],
                             [Sequelize.fn('COUNT', Sequelize.fn('DISTINCT', Sequelize.col('orderHeader.C_Number'))), 'uniqueCustomers'],
                             [Sequelize.fn('COUNT', Sequelize.col('OrderDetail.Order_Number')), 'totalOrders']
@@ -520,6 +528,10 @@ export class DashboardService {
                 const uniqueExcluded = [...new Set(allExcludedItems)];
                 whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
               }
+
+            if(salesCategory.length > 0){
+                whereClause.Sales_Category = { [Op.in]: salesCategory };
+            }
 
             // Get customer's most bought products for the current year
             const customerOrderHistory = await OrderDetail.findAll({
@@ -744,7 +756,7 @@ export class DashboardService {
     }
 
     async getPromotedItems(query: PaginationOptions) {
-        let { customerNumber,state='', zip='', jurisdiction='' } = query
+        let { customerNumber,state='', zip='', jurisdiction='',salesCategory=[] } = query
         const homeSetting: any = await HomeSettings.findOne({});
         const promotedItems = homeSetting?.promotedItems || [];
 
@@ -771,6 +783,10 @@ export class DashboardService {
             const uniqueExcluded = [...new Set(allExcludedItems)];
             whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
           }
+
+        if(salesCategory.length > 0){
+            whereClause.Sales_Category = { [Op.in]: salesCategory };
+        }
 
 
         const { count: totalCount, rows: productList } = await Inventory.findAndCountAll({
@@ -924,7 +940,7 @@ export class DashboardService {
     }
 
     async getNewItem(query: PaginationOptions, customerId: number) {
-        let { page = 1, limit = 30, search, role, customerNumber, state =' ', zip='', jurisdiction='' } = query;
+        let { page = 1, limit = 30, search, role, customerNumber, state =' ', zip='', jurisdiction='',salesCategory=[] } = query;
         page = Number(page);
         limit = Number(limit);
 
@@ -932,6 +948,10 @@ export class DashboardService {
             I_Inactive: false,
             ShortOrderForm: true,
         };
+
+        if(salesCategory.length > 0){
+            whereClause.Sales_Category = { [Op.in]: salesCategory };
+        }
 
         let allExcludedItems: any[] = [];
 
@@ -1568,7 +1588,7 @@ export class DashboardService {
     }
 
     async getDiscountedItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-        let { search, masterSearch, role, customerNumber ,state='', zip='', jurisdiction=''} = query;
+        let { search, masterSearch, role, customerNumber ,state='', zip='', jurisdiction='',salesCategory=[]} = query;
         let wareHouseSetting: any = await Setting.findOne({});
         wareHouseSetting = wareHouseSetting?.dataValues || null;
 
@@ -1594,6 +1614,10 @@ export class DashboardService {
                 },
             ],
         };
+
+        if(salesCategory.length > 0){
+            whereClause.Sales_Category = { [Op.in]: salesCategory };
+        }
 
         let allExcludedItems: any[] = [];
 

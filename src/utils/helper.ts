@@ -1965,40 +1965,35 @@ export async function getAllowedSalesCategoriesAndPriceClasses(customerNumber: n
 }
 
 export async function getAllowedSalesCategories(customerNumber: number) {
-  // 1. Fetch customer
+  // 1) Fetch customer flags
   const customer :any= await Customer.findOne({
     where: { C_Number: customerNumber },
-    raw: true
+    raw: true,
   });
 
-  if (!customer) {
-    throw new Error("Customer not found");
-  }
+  if (!customer) throw new Error("Customer not found");
 
-  // 2. Extract allowed category numbers
+  // 2) Build allowed category list [1..12]
   const allowedCategories: number[] = [];
-
   for (let i = 1; i <= 12; i++) {
     const key = `Category_Allow${String(i).padStart(2, "0")}`;
-    if (customer[key] === 1) {
-      allowedCategories.push(i);
-    }
+    if (Number(customer[key] ?? 0) === 1) allowedCategories.push(i);
   }
 
-  // Safety check
   if (allowedCategories.length === 0) {
-    return [];
+    return { priceClasses: [], salesCategories: [] };
   }
 
-  // 3. Fetch allowed sales categories
-  const categories = await SalesCategory.findAll({
-    where: {
-      Sales_Category: {
-        [Op.in]: allowedCategories
-      }
-    },
-    order: [["Sales_Category", "ASC"]]
+  // 3) Fetch allowed Sales Categories (only needed columns)
+  const salesCategories = await SalesCategory.findAll({
+    where: { Sales_Category: { [Op.in]: allowedCategories } },
+    attributes: ["Sales_Category", "Category_Desc"],
+    order: [["Sales_Category", "ASC"]],
+    raw: true,
   });
 
-  return categories
+  const retrunSalesCategories = salesCategories.map((r: any) => r.Sales_Category);
+ 
+
+  return {  retrunSalesCategories };
 }

@@ -82,7 +82,7 @@ export const createUserSchema = Joi.object({
     'string.empty': 'lastName cannot be empty',
   }),
 
-  role: Joi.string().required().valid('epick', 'sales', 'driver', 'checker').messages({
+  role: Joi.string().required().valid('sales', 'driver', 'checker').messages({
     'any.required': 'role is required',
     'string.empty': 'role cannot be empty',
   }),
@@ -91,6 +91,89 @@ export const createUserSchema = Joi.object({
     'string.email': 'email must be a valid email address',
     'any.required': 'email is required',
   }),
+});
+
+export const createEpickUserSchema = Joi.object({
+  email: Joi.string().email().required().messages({
+    'string.email': 'email must be a valid email address',
+    'any.required': 'email is required',
+  }),
+
+  firstName: Joi.string().required().messages({
+    'any.required': 'firstName is required',
+    'string.empty': 'firstName cannot be empty',
+  }),
+
+  lastName: Joi.string().required().messages({
+    'any.required': 'lastName is required',
+    'string.empty': 'lastName cannot be empty',
+  }),
+
+  password: Joi.string().min(3).required().messages({
+    'any.required': 'password is required',
+    'string.min': 'password must be at least 3 characters',
+  }),
+
+  userNumber: Joi.number().required().messages({
+    'any.required': 'userNumber is required',
+    'number.base': 'userNumber must be a number',
+  }),
+
+  category: Joi.array()
+    .items(Joi.number().integer())
+    .min(1)
+    .required()
+    .messages({
+      'array.base': 'category must be an array',
+      'array.min': 'category must contain at least one category',
+      'any.required': 'category is required',
+    }),
+
+  order_type: Joi.string().valid('order_number', 'qty_number').optional().default('order_number'),
+
+  shortby: Joi.string().valid('Asc', 'Des').optional().default('Des'),
+
+  status: Joi.boolean().optional().default(true),
+
+  isActive: Joi.boolean().optional().default(true),
+});
+
+export const updateEpickUserSchema = Joi.object({
+  email: Joi.string().email().optional(),
+  firstName: Joi.string().optional(),
+  lastName: Joi.string().optional(),
+  userNumber: Joi.string().allow(null, '').optional(),
+  status: Joi.boolean().optional(),
+  isActive: Joi.boolean().optional(),
+  category: Joi.array()
+    .items(Joi.number().integer())
+    .min(1)
+    .optional()
+    .messages({
+      'array.base': 'category must be an array',
+      'array.min': 'category must contain at least one category',
+    }),
+  order_type: Joi.string().valid('order_number', 'qty_number').optional(),
+  shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
+});
+
+export const updateEpickUserPreferencesSchema = Joi.object({
+  order_type: Joi.string().valid('order_number', 'qty_number').optional(),
+  shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
+}).or('order_type', 'shortby').messages({
+  'object.missing': 'At least one of order_type or shortby must be provided'
+});
+
+export const updateEpickUserCategoriesSchema = Joi.object({
+  category: Joi.array()
+    .items(Joi.number().integer())
+    .min(1)
+    .required()
+    .messages({
+      'array.base': 'category must be an array',
+      'array.min': 'category must contain at least one category',
+      'any.required': 'category is required',
+    }),
 });
 
 // export const createPOHeaderSchema = Joi.object({

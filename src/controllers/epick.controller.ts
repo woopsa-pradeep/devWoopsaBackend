@@ -23,13 +23,14 @@ export class EpickController {
     }
 
 
-    async getOrderItem(req: Request, res: Response) {
-        const data = await this.epickService.getOrderItem(Number(req.params.orderNumber));
+    async getOrderItem(req: AuthRequest, res: Response) {
+        const data = await this.epickService.getOrderItem(Number(req.params.orderNumber), Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
-    async getOrderItemFirst(req: Request, res: Response) {
-        const data = await this.epickService.getOrderItemFirst(Number(req.params.orderNumber));
+    async getOrderItemFirst(req: AuthRequest, res: Response) {
+        const userId = Number(req.user?.id);
+        const data = await this.epickService.getOrderItemFirst(Number(req.params.orderNumber), userId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -40,7 +41,8 @@ export class EpickController {
 
     async getOrder(req: AuthRequest, res: Response) {
         const userId = Number(req.user?.id);
-        const data = await this.epickService.getOrder(userId);
+        const query = req.query as any;
+        const data = await this.epickService.getOrder(userId, query);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -61,7 +63,7 @@ export class EpickController {
     }
 
     async OrderCompleted(req: AuthRequest, res: Response) {
-        const data = await this.epickService.OrderCompleted(Number(req.params.id));
+        const data = await this.epickService.OrderCompleted(Number(req.params.id), Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -237,6 +239,7 @@ export class EpickController {
         }
 
         const data = await this.epickService.getOrderDetailsByOrderNumber(orderNumber);
+        
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
     
@@ -262,8 +265,9 @@ export class EpickController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
-    async getReportById(req: Request, res: Response) {
-        const data = await this.epickService.getReportById(Number(req.params.id));
+    async getReportById(req: AuthRequest, res: Response) {
+        const userId = Number(req.user?.id);
+        const data = await this.epickService.getReportById(Number(req.params.id), userId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -533,13 +537,29 @@ export class EpickController {
     /**
      * Get all override requests for an order (Epick user)
      */
-    async getAllOverrideRequests(req: Request, res: Response) {
+    async getAllOverrideRequests(req: AuthRequest, res: Response) {
         const orderNumber = Number(req.params.orderNumber);
         if (!orderNumber || isNaN(orderNumber)) {
             return sendResponse(res, 400, false, null, "Invalid order number");
         }
 
-        const data = await this.epickService.getAllOverrideRequests(orderNumber);
+        const userId = req.user?.id ? Number(req.user.id) : undefined;
+        const data = await this.epickService.getAllOverrideRequests(orderNumber, userId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    /**
+     * Get all override requests for an order filtered by epick user's categories
+     * Only returns requests for items in the user's assigned sales categories
+     */
+    async getAllOverrideRequestsForEpick(req: AuthRequest, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (!orderNumber || isNaN(orderNumber)) {
+            return sendResponse(res, 400, false, null, "Invalid order number");
+        }
+
+        const userId = Number(req.user.id);
+        const data = await this.epickService.getAllOverrideRequestsForEpick(orderNumber, userId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -638,7 +658,10 @@ export class EpickController {
             return sendResponse(res, 400, false, null, "Invalid order number");
         }
 
-        const data = await this.epickService.removeOngoingOrder(orderNumber);
-        sendResponse(res, 200, true, data, "Ongoing order removed successfully");
+        // Optional pickerId from query params to remove specific picker
+        const pickerId = req.query.pickerId ? Number(req.query.pickerId) : undefined;
+
+        const data = await this.epickService.removeOngoingOrder(orderNumber, pickerId);
+        sendResponse(res, 200, true, data, data.message || "Ongoing order removed successfully");
     }
 }

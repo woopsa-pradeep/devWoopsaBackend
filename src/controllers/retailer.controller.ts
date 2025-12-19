@@ -315,4 +315,10 @@ export class RetailerController {
     const data = await this.retailerService.getSalesCategoryPriceClassByCustomer(Number(customerNumber));
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
+
+  async getSalesCategoryByCustomer(req: AuthRequest, res: Response) {
+    const customerNumber = req.params.customerNumber ;
+    const data = await this.retailerService.getSalesCategoryByCustomer(Number(customerNumber));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 }

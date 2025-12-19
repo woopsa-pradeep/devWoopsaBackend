@@ -186,5 +186,7 @@ router.put('/switchStore/:storeId',verifyRole(ROLES.RETAILER),catchAsync(retaile
 // get sales category price class by customer
 router.get('/getSalesCategoryPriceClassByCustomer/:customerNumber',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getSalesCategoryPriceClassByCustomer.bind(retailerController)));
 
+// get sales category by customer
+router.get('/getSalesCategoryByCustomer/:customerNumber',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getSalesCategoryByCustomer.bind(retailerController)));
 
 export default router; 

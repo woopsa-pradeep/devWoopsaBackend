@@ -10,7 +10,7 @@ import Banner from "../models/postgres/banner.model";
 import { ProductImage } from "../models/postgres/product.model";
 import CustomerCart from "../models/postgres/retailerCart.model";
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, checkTimeOut, excludeItemByUser, generatePDFFromHTML, generateToken, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP, toNum } from "../utils/helper";
+import { checkQtyDiscount, checkTimeOut, excludeItemByUser, generatePDFFromHTML, generateToken, getAllowedSalesCategories, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP, toNum } from "../utils/helper";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { Operations } from "../utils/operations";
 import { generateOrderConfirmationEmail, generateDistributorOrderNotificationEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
@@ -263,7 +263,7 @@ export class RetailerService {
   // }
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='' } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='', salesCategory=[] } = query;
 
     const userJurisdiction = await getJurisdiction(user.id);
 
@@ -367,6 +367,10 @@ export class RetailerService {
         
       }
 
+    }
+
+    if(salesCategory.length > 0){
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
     }
 
     // === UPC JOIN logic ===
@@ -1808,6 +1812,14 @@ export class RetailerService {
     // Get order headers with pagination
     const { count: totalCount, rows: orderHeaders } = await OrderHeader.findAndCountAll({
       where: whereClause,
+      include: [
+        {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Category_Desc','Sales_Category'],
+          required: false
+        }
+      ],
       attributes: [
         'Order_Number',
         'Order_Date',
@@ -2157,7 +2169,7 @@ export class RetailerService {
       salesCategory?: number[],
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='' , salesCategory} = query;
+    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='' , salesCategory,userSalesCategory=[]} = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -2220,6 +2232,8 @@ export class RetailerService {
         };
       }
     }
+
+  
 
     // First, get all order numbers that match the date filter and customer
     // Join OrderHeader to OrderDetail and only include OrderHeaders where OrderDetail exists
@@ -2285,6 +2299,10 @@ export class RetailerService {
       const uniqueExcluded = [...new Set(allExcludedItems)];
       whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
     }
+
+    if(userSalesCategory.length > 0){
+      whereClause.Sales_Category = { [Op.in]: userSalesCategory };
+    }
     if (search) {
       const matchingInventoryItems = await Inventory.findAll({
         where: {
@@ -2317,7 +2335,10 @@ export class RetailerService {
     }
     // Get total count of order details
     const totalCount = await OrderDetail.count({
-      where: orderDetailWhereClause,
+      where: {
+        ...orderDetailWhereClause,
+        ...(userSalesCategory.length > 0 ? { Sales_Category: { [Op.in]: userSalesCategory } } : {})
+      },
       distinct: true,
       col: 'Item_Number'
     });
@@ -3739,6 +3760,11 @@ async getSalesCategoryPriceClassByCustomer(customerNumber: number){
 
 
 
+async getSalesCategoryByCustomer(customerNumber: number){
+  console.log(customerNumber,'customerNumber')
+  const data = await getAllowedSalesCategories(customerNumber);
+  return data;
+}
 
 
 }

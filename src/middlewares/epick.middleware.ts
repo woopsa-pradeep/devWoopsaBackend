@@ -1,18 +1,22 @@
 import { NextFunction, Response } from "express"
 import { OrderPick } from "../models/postgres/epickOrder.model"
+import { EpickConfirmation } from "../models/postgres/epickConfirmation.model"
+import { EpickUser } from "../models/postgres/epickUser.model"
+import { RecordLock } from "../models/mmsql/recordLocks.model"
 import { AuthRequest } from "./verifyToken.middleware"
 import { sendResponse } from "../utils/sendResponse"
 import { Op } from "sequelize"
 
 
 export const hasExistingOrder = async (req: AuthRequest, res: Response, next: NextFunction) => {
-    const order = await OrderPick.findOne({
+    // Check if user has an existing in_progress confirmation
+    const confirmation = await EpickConfirmation.findOne({
         where: {
-            pickerUserNumber: req.user.id,
+            pickerUserId: req.user.id,
             status: 'in_progress'
         }
     })
-    if(order){
+    if(confirmation){
         return sendResponse(res, 400, false, null, 'You already have an existing order in progress')
     }
     next()
@@ -25,22 +29,59 @@ export const hasOrderTakenByOtherPicker = async (req: AuthRequest, res: Response
         orderNumber = req.body.orderNumber
     }
     
-    // Check if order is already in progress or completed
-    const existingOrder = await OrderPick.findOne({
-        attributes: ['id', 'orderNumber', 'pickerUserNumber', 'status'],
+    // Get user's categories
+    const user = await EpickUser.findOne({
         where: {
-          orderNumber: orderNumber,
-          status: { [Op.in]: ['in_progress', 'completed'] },
+            id: req.user.id
         },
-      });
-    
-    if(existingOrder){
-        if(existingOrder.status === 'completed'){
-            return sendResponse(res, 400, false, null, 'This order is already completed')
+        attributes: ['category']
+    });
+
+    const userCategories = user?.category || [];
+
+    // Get all epick_confirmation records for this order (both in_progress and completed)
+    const allConfirmations = await EpickConfirmation.findAll({
+        where: {
+            orderNumber: orderNumber
         }
-        if(existingOrder.pickerUserNumber !== req.user.id){
-            return sendResponse(res, 400, false, null, 'This order is already taken by another picker')
+    });
+
+    // Separate confirmations by status
+    const inProgressConfirmations = allConfirmations.filter(conf => conf.status === 'in_progress');
+    const completedConfirmations = allConfirmations.filter(conf => conf.status === 'completed');
+
+    // Check if user's categories are already completed for this order
+    if (userCategories.length > 0 && completedConfirmations.length > 0) {
+        // Get all completed categories for this order
+        const completedCategories = new Set<number>();
+        completedConfirmations.forEach((conf: any) => {
+            const cats = conf.category || [];
+            cats.forEach((cat: number) => completedCategories.add(cat));
+        });
+
+        // Check if any of user's categories are already completed
+        const userCategoriesCompleted = userCategories.some((userCat: number) => 
+            completedCategories.has(userCat)
+        );
+
+        if (userCategoriesCompleted) {
+            return sendResponse(res, 400, false, null, 'This order is already completed for your assigned categories')
         }
     }
+    
+    // Check if order is locked in RecordLock but NOT in epick_confirmation at all (ERP lock only)
+    const recordLock = await RecordLock.findOne({
+        where: {
+            Lock_Number: orderNumber,
+            Lock_Type: 0
+        }
+    });
+    
+    // If locked in RecordLock but NOT in epick_confirmation at all (no in_progress AND no completed), it's ERP lock only - block it
+    // If order has ANY confirmation (in_progress or completed), it means a picker has worked on it via our system
+    if(recordLock && allConfirmations.length === 0){
+        return sendResponse(res, 400, false, null, 'Order is locked by ERP system')
+    }
+    
     next()
 }

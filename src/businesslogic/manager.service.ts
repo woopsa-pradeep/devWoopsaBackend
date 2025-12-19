@@ -24,6 +24,8 @@ import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValid
 import { generateNewCredentialsEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
 import { sendDistributorEmail, sendEmail } from "../utils/sendMail";
 import { WebUsers } from "../models/postgres/users.model";
+import { EpickUser } from "../models/postgres/epickUser.model";
+import { EpickConfirmation } from "../models/postgres/epickConfirmation.model";
 import { SalesRep } from "../models/mmsql/salesrep.model";
 import { RolePermission } from "../models/postgres/rolesPermission.model";
 import { CustomerRequest } from "../models/postgres/retailerRequest.model";
@@ -1319,6 +1321,11 @@ export class ManagerService {
   }
 
   async createUser(body: any) {
+    // Don't allow creating epick users through this endpoint
+    if (body.role === 'epick') {
+      throw new AppError('Use createEpickUser endpoint to create epick users', 400);
+    }
+
     body.firstName = body.firstName.trim();
     body.lastName = body.lastName.trim();
     const existingUser = await WebUsers.findOne({
@@ -1356,6 +1363,58 @@ export class ManagerService {
     return user;
   }
 
+  async createEpickUser(body: any) {
+    body.firstName = body.firstName.trim();
+    body.lastName = body.lastName.trim();
+
+    // Check if email already exists in epick_user or users table
+    const checkEmailEpick = await EpickUser.findOne({
+      where: { email: body.email }
+    });
+    const checkEmailUsers = await WebUsers.findOne({
+      where: { email: body.email }
+    });
+    if (checkEmailEpick || checkEmailUsers) {
+      throw new AppError(Manager.EMAIL_ALREADY_EXISTS, 400);
+    }
+
+    // Validate password is provided
+    if (!body.password) {
+      throw new AppError('Password is required', 400);
+    }
+
+    // Validate category is provided and is an array
+    if (!body.category || !Array.isArray(body.category) || body.category.length === 0) {
+      throw new AppError('Category is required and must be a non-empty array', 400);
+    }
+
+    // Validate userNumber is provided (required like normal createUser)
+    if (!body.userNumber) {
+      throw new AppError('userNumber is required', 400);
+    }
+
+    // Hash the password (user chosen password)
+    const hashedPassword = await hashPassword(body.password);
+
+    // Create epick user
+    const epickUser = await EpickUser.create({
+      email: body.email,
+      firstName: body.firstName,
+      lastName: body.lastName,
+      password: hashedPassword,
+      userNumber: String(body.userNumber), // Convert to string to match table type
+      category: body.category,
+      order_type: body.order_type || 'order_number',
+      shortby: body.shortby || 'Des',
+      status: body.status !== undefined ? body.status : true,
+      isActive: body.isActive !== undefined ? body.isActive : true,
+    });
+
+    // Return user without password
+    const { password: _, ...userWithoutPassword } = epickUser.toJSON();
+    return userWithoutPassword;
+  }
+
   async updateUser(id: number, body: any) {
     const updateUser = await WebUsers.update(body, {
       where: { id: id }
@@ -1363,23 +1422,110 @@ export class ManagerService {
     return updateUser;
   }
 
-  async deleteUser(id: number) {
-    const deleteUser = await WebUsers.destroy({
-      where: { id }
+  async updateEpickUser(id: number, body: any) {
+    // Check if epick user exists
+    const epickUser = await EpickUser.findByPk(id);
+    if (!epickUser) {
+      throw new AppError('Epick user not found', 404);
+    }
+
+    // Prepare update data (only allow specific fields)
+    const updateData: any = {};
+    
+    if (body.firstName !== undefined) {
+      updateData.firstName = body.firstName.trim();
+    }
+    if (body.lastName !== undefined) {
+      updateData.lastName = body.lastName.trim();
+    }
+    if (body.email !== undefined) {
+      // Check if email already exists (excluding current user)
+      const checkEmail = await EpickUser.findOne({
+        where: {
+          email: body.email,
+          id: { [Op.ne]: id }
+        }
+      });
+      if (checkEmail) {
+        throw new AppError(Manager.EMAIL_ALREADY_EXISTS, 400);
+      }
+      updateData.email = body.email;
+    }
+    if (body.userNumber !== undefined) {
+      updateData.userNumber = body.userNumber;
+    }
+    if (body.status !== undefined) {
+      updateData.status = body.status;
+    }
+    if (body.isActive !== undefined) {
+      updateData.isActive = body.isActive;
+    }
+    
+    // Handle category update
+    if (body.category !== undefined) {
+      // Validate category
+      if (!Array.isArray(body.category) || body.category.length === 0) {
+        throw new AppError('Category must be a non-empty array', 400);
+      }
+      
+      // Validate all categories are numbers
+      if (!body.category.every((cat: any) => typeof cat === 'number' && Number.isInteger(cat))) {
+        throw new AppError('All categories must be integers', 400);
+      }
+      
+      // Check if user has any active orders (in_progress)
+      const activeConfirmations = await EpickConfirmation.findAll({
+        where: {
+          pickerUserNumber: id,
+          status: 'in_progress'
+        }
+      });
+      
+      if (activeConfirmations.length > 0) {
+        throw new AppError(
+          'Cannot update categories while user has active orders. Please complete all active orders first.',
+          400
+        );
+      }
+      
+      updateData.category = body.category;
+    }
+    
+    // Handle order_type update
+    if (body.order_type !== undefined) {
+      const validOrderTypes = ['order_number', 'qty_number'];
+      if (!validOrderTypes.includes(body.order_type)) {
+        throw new AppError(`Invalid order_type. Must be one of: ${validOrderTypes.join(', ')}`, 400);
+      }
+      updateData.order_type = body.order_type;
+    }
+    
+    // Handle shortby update
+    if (body.shortby !== undefined) {
+      const normalizedShortby = body.shortby.toLowerCase();
+      if (normalizedShortby !== 'asc' && normalizedShortby !== 'des') {
+        throw new AppError("Invalid shortby. Must be 'asc' or 'des' (case insensitive)", 400);
+      }
+      // Normalize to 'Asc' or 'Des' for consistency
+      updateData.shortby = normalizedShortby === 'asc' ? 'Asc' : 'Des';
+    }
+
+    await EpickUser.update(updateData, {
+      where: { id: id }
     });
-    return deleteUser;
+
+    const updatedUser = await EpickUser.findByPk(id, {
+      attributes: { exclude: ['password'] }
+    });
+
+    return updatedUser;
   }
 
-  /**
-   * Update user order preferences (order_type and shortby)
-   * order_type: 'order_number' | 'qty_number'
-   * shortby: 'asc' | 'des' (case insensitive)
-   */
-  async updateUserOrderPreferences(userId: number, preferences: { order_type?: string; shortby?: string }) {
+  async updateEpickUserPreferences(userId: number, preferences: { order_type?: string; shortby?: string }) {
     // Validate user exists
-    const user = await WebUsers.findByPk(userId);
+    const user = await EpickUser.findByPk(userId);
     if (!user) {
-      throw new AppError('User not found', 404);
+      throw new AppError('Epick user not found', 404);
     }
 
     // Validate order_type if provided
@@ -1413,32 +1559,90 @@ export class ManagerService {
       throw new AppError('No preferences provided to update', 400);
     }
 
-    await WebUsers.update(updateData, {
+    await EpickUser.update(updateData, {
       where: { id: userId }
     });
 
     // Return updated user
-    const updatedUser = await WebUsers.findByPk(userId, {
+    const updatedUser = await EpickUser.findByPk(userId, {
       attributes: ['id', 'email', 'firstName', 'lastName', 'order_type', 'shortby'],
     });
 
     return {
-      message: 'User order preferences updated successfully',
+      message: 'Epick user order preferences updated successfully',
       user: updatedUser,
     };
   }
+
+  async updateEpickUserCategories(userId: number, categories: number[]) {
+    // Validate user exists
+    const user = await EpickUser.findByPk(userId);
+    if (!user) {
+      throw new AppError('Epick user not found', 404);
+    }
+
+    // Validate categories
+    if (!Array.isArray(categories) || categories.length === 0) {
+      throw new AppError('Categories must be a non-empty array', 400);
+    }
+
+    // Validate all categories are numbers
+    if (!categories.every((cat: any) => typeof cat === 'number' && Number.isInteger(cat))) {
+      throw new AppError('All categories must be integers', 400);
+    }
+
+    // Check if user has any active orders (in_progress)
+    const activeConfirmations = await EpickConfirmation.findAll({
+      where: {
+        pickerUserNumber: userId,
+        status: 'in_progress'
+      }
+    });
+
+    if (activeConfirmations.length > 0) {
+      throw new AppError(
+        'Cannot update categories while user has active orders. Please complete all active orders first.',
+        400
+      );
+    }
+
+    // Update categories
+    await EpickUser.update(
+      { category: categories },
+      {
+        where: { id: userId }
+      }
+    );
+
+    // Return updated user
+    const updatedUser = await EpickUser.findByPk(userId, {
+      attributes: ['id', 'email', 'firstName', 'lastName', 'category'],
+    });
+
+    return {
+      message: 'Epick user categories updated successfully',
+      user: updatedUser,
+    };
+  }
+
+  async deleteUser(id: number) {
+    const deleteUser = await WebUsers.destroy({
+      where: { id }
+    });
+    return deleteUser;
+  }
+
 
   /**
    * Get all epick users with order preferences
    * Returns list of all epick users including order_type and shortby
    */
   async getEpickUserDetails() {
-    const users = await WebUsers.findAll({
+    const users = await EpickUser.findAll({
       where: {
-        role: 'epick', // Only return epick users
         isActive: true, // Only return active users
       },
-      attributes: ['id', 'email', 'firstName', 'lastName', 'order_type', 'shortby', 'userNumber', 'isActive', 'status'],
+      attributes: ['id', 'email', 'firstName', 'lastName', 'category', 'order_type', 'shortby', 'userNumber', 'isActive', 'status'],
       order: [['firstName', 'ASC'], ['lastName', 'ASC']],
     });
 

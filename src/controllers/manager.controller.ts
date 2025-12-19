@@ -102,6 +102,12 @@ export class ManagerController {
     const data = await this.managerService.createUser(req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
+  
+  async createEpickUser(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createEpickUser(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+  
   async updateUser(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateUser(Number(req.params.id), req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -112,7 +118,12 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
-  async updateUserOrderPreferences(req: AuthRequest, res: Response) {
+  async updateEpickUser(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateEpickUser(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async updateEpickUserPreferences(req: AuthRequest, res: Response) {
     const userId = Number(req.params.userId);
     if (!userId || isNaN(userId)) {
       return sendResponse(res, 400, false, null, "Invalid user ID");
@@ -124,8 +135,24 @@ export class ManagerController {
       return sendResponse(res, 400, false, null, "At least one preference (order_type or shortby) must be provided");
     }
 
-    const data = await this.managerService.updateUserOrderPreferences(userId, { order_type, shortby });
-    sendResponse(res, 200, true, data, "User order preferences updated successfully");
+    const data = await this.managerService.updateEpickUserPreferences(userId, { order_type, shortby });
+    sendResponse(res, 200, true, data, "Epick user order preferences updated successfully");
+  }
+
+  async updateEpickUserCategories(req: AuthRequest, res: Response) {
+    const userId = Number(req.params.userId);
+    if (!userId || isNaN(userId)) {
+      return sendResponse(res, 400, false, null, "Invalid user ID");
+    }
+
+    const { category } = req.body;
+    
+    if (!category || !Array.isArray(category)) {
+      return sendResponse(res, 400, false, null, "Category must be a non-empty array");
+    }
+
+    const data = await this.managerService.updateEpickUserCategories(userId, category);
+    sendResponse(res, 200, true, data, "Epick user categories updated successfully");
   }
 
   async getEpickUserDetails(req: AuthRequest, res: Response) {

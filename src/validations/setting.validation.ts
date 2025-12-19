@@ -15,6 +15,7 @@ export const itemGlobalSchema = Joi.object({
         maxOrderLimit: Joi.number().integer().min(0),
         MiniMumOrderAmount: Joi.number().integer().min(0),
     }).required(),
+    showWithPerpaidTax: Joi.boolean().optional().allow(null,false),
 });
 
 export const retailerSchema = Joi.object({
