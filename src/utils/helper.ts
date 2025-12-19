@@ -1923,3 +1923,82 @@ export function hasPriceChange(obj:any){
   return keysToCheck.some((key:any) => obj.hasOwnProperty(key));
 }
 
+
+
+export async function getAllowedSalesCategoriesAndPriceClasses(customerNumber: number) {
+  // 1) Fetch customer flags
+  const customer :any= await Customer.findOne({
+    where: { C_Number: customerNumber },
+    raw: true,
+  });
+
+  if (!customer) throw new Error("Customer not found");
+
+  // 2) Build allowed category list [1..12]
+  const allowedCategories: number[] = [];
+  for (let i = 1; i <= 12; i++) {
+    const key = `Category_Allow${String(i).padStart(2, "0")}`;
+    if (Number(customer[key] ?? 0) === 1) allowedCategories.push(i);
+  }
+
+  if (allowedCategories.length === 0) {
+    return { priceClasses: [], salesCategories: [] };
+  }
+
+  // 3) Fetch allowed Sales Categories (only needed columns)
+  const salesCategories = await SalesCategory.findAll({
+    where: { Sales_Category: { [Op.in]: allowedCategories } },
+    attributes: ["Sales_Category", "Category_Desc"],
+    order: [["Sales_Category", "ASC"]],
+    raw: true,
+  });
+
+  // 4) Fetch Price Classes that belong to those groups (only needed columns)
+  const priceClasses = await PriceClass.findAll({
+    where: { Sales_Category_Group: { [Op.in]: allowedCategories } },
+    attributes: ["Price_Class", "Class_Desc"],
+    order: [["Price_Class", "ASC"]],
+    raw: true,
+  });
+
+  return { priceClasses, salesCategories };
+}
+
+export async function getAllowedSalesCategories(customerNumber: number) {
+  // 1. Fetch customer
+  const customer :any= await Customer.findOne({
+    where: { C_Number: customerNumber },
+    raw: true
+  });
+
+  if (!customer) {
+    throw new Error("Customer not found");
+  }
+
+  // 2. Extract allowed category numbers
+  const allowedCategories: number[] = [];
+
+  for (let i = 1; i <= 12; i++) {
+    const key = `Category_Allow${String(i).padStart(2, "0")}`;
+    if (customer[key] === 1) {
+      allowedCategories.push(i);
+    }
+  }
+
+  // Safety check
+  if (allowedCategories.length === 0) {
+    return [];
+  }
+
+  // 3. Fetch allowed sales categories
+  const categories = await SalesCategory.findAll({
+    where: {
+      Sales_Category: {
+        [Op.in]: allowedCategories
+      }
+    },
+    order: [["Sales_Category", "ASC"]]
+  });
+
+  return categories
+}

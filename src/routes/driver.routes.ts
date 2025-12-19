@@ -15,6 +15,8 @@ router.get('/getDriverOrderList', verifyRole(ROLES.DRIVER), catchAsync(driverCon
 
 router.get('/getDriverOrder', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverOrder.bind(driverController)));
 
+router.get('/home/getOrderSummayByRouteNumber', verifyRole(ROLES.DRIVER), catchAsync(driverController.getOrderSummayByRouteNumber.bind(driverController)));
+
 router.post('/startOrder/:id', verifyRole(ROLES.DRIVER), catchAsync(driverController.startOrder.bind(driverController)));
 
 router.get('/getCurrentOrderList', verifyRole(ROLES.DRIVER), catchAsync(driverController.getCurrentOrderList.bind(driverController)));

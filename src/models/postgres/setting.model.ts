@@ -1,8 +1,35 @@
 // models/Setting.ts
-import { DataTypes, Model } from 'sequelize';
+import { DataTypes, Model,Optional } from 'sequelize';
 import { postgresSequelize } from '../../db';
+import { defaultValueSchemable } from 'sequelize/types/utils';
 
-class Setting extends Model { }
+  interface SettingAttributes {
+    id: number;
+    salesRep: any;
+    itemGlobal: any;
+    showWithPerpaidTax: boolean;
+    retailer: any;
+    warehouseProfile: any;
+    warehouseImage: string;
+    orderEmailNotification: string | null;
+  }
+
+  type SettingCreationAttributes =  Optional<SettingAttributes, 'id' | 'showWithPerpaidTax' | 'warehouseImage' > 
+
+
+  class Setting
+    extends Model<SettingAttributes, SettingCreationAttributes>
+    implements SettingAttributes
+  {
+    public id!: number;
+    public salesRep!: any;
+    public itemGlobal!: any;
+    public showWithPerpaidTax!: boolean;
+    public retailer!: any;
+    public warehouseProfile!: any;
+    public warehouseImage!: string;
+    public orderEmailNotification!: string | null;
+  }
 
 Setting.init(
   {
@@ -28,8 +55,14 @@ Setting.init(
         InventoryThreshold: 10,
         maxOrderLimit: 100,
         MiniMumOrderAmount: 1,
+        
 
       },
+    },
+
+    showWithPerpaidTax:{
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
     },
 
     retailer: {

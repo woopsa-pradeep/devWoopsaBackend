@@ -26,6 +26,12 @@ export class RetailerController {
     const data = await this.retailerService.getInventoryItems(req.body,req.user);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
+
+  async getInventoryShowPrepaidTax(req: AuthRequest, res: Response) {
+  const data = await this.retailerService.getInventoryShowPrepaidTax(req.user);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async getDeliveryCharge(req: AuthRequest, res: Response) {
     const data = await this.retailerService.getDeliveryCharge(req.user.id);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -301,6 +307,12 @@ export class RetailerController {
 
   async switchStore(req: AuthRequest, res: Response) {
     const data = await this.retailerService.switchStore(Number(req.params.storeId), req);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getSalesCategoryPriceClassByCustomer(req: AuthRequest, res: Response) {
+    const customerNumber = req.params.customerNumber ;
+    const data = await this.retailerService.getSalesCategoryPriceClassByCustomer(Number(customerNumber));
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 }

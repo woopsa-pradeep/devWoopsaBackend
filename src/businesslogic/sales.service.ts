@@ -2,7 +2,7 @@ import { IChangePassword } from "../interfaces/request.body.interface";
 import { SalesRep } from "../models/mmsql/salesrep.model"
 import { WebUsers } from "../models/postgres/users.model"
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, comparePassword, excludeItemByUser, generatePDFFromHTML, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP, toNum } from "../utils/helper";
+import { checkQtyDiscount, comparePassword, excludeItemByUser, generatePDFFromHTML, getAllowedSalesCategories, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP, toNum } from "../utils/helper";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { col, literal, Op, Order, Sequelize } from "sequelize";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
@@ -1138,6 +1138,16 @@ export class SalesService {
       finalProductList
     };
   }
+
+  async getInventoryShowPrepaidTax(user: any) {
+        const setting = await Setting.findOne({
+            where: { showWithPerpaidTax: true },
+          });
+  
+          return {
+            showWithPerpaidTax: setting ? setting.showWithPerpaidTax : false,
+          };
+      }
 
   async getInventoryItemsBySalesMan(
     query: PaginationOptions & { search?: string; masterSearch?: string },
@@ -3531,6 +3541,7 @@ const newSalesRepArray = salesRepList.map(Number);
         'OTP_Amount_City',
         'DepositAmount',
         'Price_Subclass',
+        "Taxable",
         'OffInvoice_Amount',
         'Taxable',
         'EBT',
@@ -5345,4 +5356,14 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
   }
 
 
+  async getSalesCategoryPriceClassByCustomer(customerNumber: number){
+    const data = await getAllowedSalesCategoriesAndPriceClasses(customerNumber);
+    return data;
+  }
+
+
+  async getSalesCategoryByCustomer(customerNumber: number){
+    const data = await getAllowedSalesCategories(customerNumber);
+    return data;
+  }
 }

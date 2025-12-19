@@ -10,7 +10,7 @@ import Banner from "../models/postgres/banner.model";
 import { ProductImage } from "../models/postgres/product.model";
 import CustomerCart from "../models/postgres/retailerCart.model";
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, checkTimeOut, excludeItemByUser, generatePDFFromHTML, generateToken, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP, toNum } from "../utils/helper";
+import { checkQtyDiscount, checkTimeOut, excludeItemByUser, generatePDFFromHTML, generateToken, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP, toNum } from "../utils/helper";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { Operations } from "../utils/operations";
 import { generateOrderConfirmationEmail, generateDistributorOrderNotificationEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
@@ -543,6 +543,15 @@ export class RetailerService {
     };
   }
 
+  async getInventoryShowPrepaidTax(user: any) {
+      const setting = await Setting.findOne({
+          where: { showWithPerpaidTax: true },
+        });
+
+        return {
+          showWithPerpaidTax: setting ? setting.showWithPerpaidTax : false,
+        };
+    }
 
   async getInventoryItemByItemNumber(itemNumber: string) {
     const data = await Inventory.findOne({
@@ -3146,6 +3155,7 @@ export class RetailerService {
         'EBT',
         'Points',
         'STAMP_Qty',
+        'PrepaidTax_Amount',
         'ItemDescription',
         'CaseWeight',
         'CaseCount'
@@ -3187,7 +3197,7 @@ export class RetailerService {
       CaseCount: detail.CaseCount || detail.inventory?.CaseCount || 1,
       Quantity_Ordered: detail.Quantity_Ordered || 0,
       Item_Number: detail.Item_Number || detail.inventory?.Item_Number || 'N/A',
-      Price: detail.Price + detail.OTP_Amount_State || 0,
+      Price: detail.Price + detail.OTP_Amount_State + detail.PrepaidTax_Amount || 0,
       Size: detail.inventory?.UOM || 'N/A'
     }));
 
@@ -3720,5 +3730,15 @@ export class RetailerService {
     };
 
   }
+
+
+async getSalesCategoryPriceClassByCustomer(customerNumber: number){
+  const data = await getAllowedSalesCategoriesAndPriceClasses(customerNumber);
+  return data;
+}
+
+
+
+
 
 }

@@ -26,6 +26,7 @@ const retailerController = new RetailerController();
 
 router.get('/getNewItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getNewItems.bind(retailerController)));
 router.post('/getInventory',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getInventoryItems.bind(retailerController)));
+router.get('/getInventoryShowPrepaidTax', verifyRole(ROLES.RETAILER),catchAsync(retailerController.getInventoryShowPrepaidTax.bind(retailerController)));
 
 router.get('/getAllInventoryData',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getAllInventoryData.bind(retailerController)));
 router.get('/profile',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getProfile.bind(retailerController)));
@@ -181,6 +182,9 @@ router.get('/hasmultipleStore',catchAsync(retailerController.hasmultipleStore.bi
 
 // switch store
 router.put('/switchStore/:storeId',verifyRole(ROLES.RETAILER),catchAsync(retailerController.switchStore.bind(retailerController)));
+
+// get sales category price class by customer
+router.get('/getSalesCategoryPriceClassByCustomer/:customerNumber',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getSalesCategoryPriceClassByCustomer.bind(retailerController)));
 
 
 export default router; 

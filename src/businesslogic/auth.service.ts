@@ -17,6 +17,7 @@ import {
   generateForgotPasswordToken,
   generateOTP,
   generateToken,
+  getAllowedSalesCategories,
   hashPassword,
 } from "../utils/helper";
 import {
@@ -52,6 +53,7 @@ import SalesNote from "../models/postgres/salesNotes";
 import { SupportTicket } from "../models/postgres/supportTicket.model";
 import EpickSetting from "../models/postgres/epickSetting.model";
 import { Driver } from "../models/postgres/driver.model";
+import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.model";
 
 export class AuthService {
 
@@ -384,12 +386,14 @@ export class AuthService {
 
       })
 
+      const salesCategory = await getAllowedSalesCategories(storeDetail?.C_Number || 0);
       return {
         wareHouseDetail,
         storeDetail,
         role: "retailer",
         token,
-        logo: logo?.warehouseImage || null
+        logo: logo?.warehouseImage || null,
+        salesCategory
       };
     }
 
@@ -454,13 +458,16 @@ export class AuthService {
             retailerId: storeDetail?.C_Number,
 
           })
+          const salesCategory = await getAllowedSalesCategories(Number(record.customerId));
+
 
           return {
             wareHouseDetail,
             storeDetail,
             role: "retailer",
             token,
-            logo: logo?.warehouseImage || null
+            logo: logo?.warehouseImage || null,
+            salesCategory
           };
         }
 
@@ -837,7 +844,8 @@ export class AuthService {
       const wholeStoreDetail = await Distributor.findOne({
         attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"],
       });
-  
+      const salesCategory :any= await getAllowedSalesCategories(Number(storeDetail?.C_Number));
+
       const epickSetting = await EpickSetting.findOne({});
   
       // 9️⃣ Final Response
@@ -857,6 +865,7 @@ export class AuthService {
           isSessionActive: isSessionActive,
           isUserExist: isUserExist,
         },
+        salesCategory: salesCategory,
         storeDetail: storeDetail,
         wholeStoreDetail: wholeStoreDetail,
       };
@@ -1076,12 +1085,23 @@ export class AuthService {
     });
 
    
-
+    const finalUser = await Driver.findOne({
+      where: {
+        email: body.email,
+      },
+      attributes: ['id', 'email', 'firstName', 'lastName'],
+      include: [
+        {
+          model: DriverRouteAssignment,
+          as: 'routeAssignments'
+        }
+      ],
+    });
 
     // 9️⃣ Final Response
     return {
       token: token,
-     
+      user: finalUser,
     };
   }
 

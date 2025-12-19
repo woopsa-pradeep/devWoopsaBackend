@@ -206,7 +206,7 @@ export function generateOrderConfirmationEmail(
     <strong>Order Source:</strong> ${orderSource}
   </p>
   <p>
-    <strong>Total Estimate:</strong> $${orderItems.reduce((total, item) => total + (item.Price + item.OTP_Amount_State || 0) * (item.Quantity_Ordered || 0), 0).toFixed(2)}
+    <strong>Total Estimate:</strong> $${orderItems.reduce((total, item) => total + (item.Price + item.OTP_Amount_State + item.PrepaidTax_Amount || 0) * (item.Quantity_Ordered || 0), 0).toFixed(2)}
   </p>
   <p>
     <strong>Delivery Fees:</strong> $${Delivery_Charge}
@@ -234,8 +234,8 @@ export function generateOrderConfirmationEmail(
                       <td >${item.CaseCount || 0}</td>
                       <td >${item.UOM || 'N/A'}</td>
                       <td >${item.Pack || 0}</td>
-                      <td >$${(item.Price + item.OTP_Amount_State || 0).toFixed(2)}</td>
-                      <td >$${((item.Price + item.OTP_Amount_State || 0) * (item.Quantity_Ordered || 0)).toFixed(2)}</td>
+                      <td >$${(item.Price + item.OTP_Amount_State + item.PrepaidTax_Amount || 0).toFixed(2)}</td>
+                      <td >$${((item.Price + item.OTP_Amount_State + item.PrepaidTax_Amount || 0) * (item.Quantity_Ordered || 0)).toFixed(2)}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -318,7 +318,7 @@ export function generateDistributorOrderNotificationEmail(
     <strong>Order Source:</strong> ${orderSource}
   </p>
   <p>
-    <strong>Total Estimate:</strong> $${orderItems.reduce((total, item) => total + (item.Price + item.OTP_Amount_State || 0) * (item.Quantity_Ordered || 0), 0).toFixed(2)}
+    <strong>Total Estimate:</strong> $${orderItems.reduce((total, item) => total + (item.Price + item.OTP_Amount_State + item.PrepaidTax_Amount || 0) * (item.Quantity_Ordered || 0), 0).toFixed(2)}
   </p>
   <p>
     <strong>Delivery Fees:</strong> $${Delivery_Charge}
@@ -346,8 +346,8 @@ export function generateDistributorOrderNotificationEmail(
                       <td >${item.CaseCount || 0}</td>
                       <td >${item.UOM || 'N/A'}</td>
                       <td >${item.Pack || 0}</td>
-                      <td >$${(item.Price + item.OTP_Amount_State || 0).toFixed(2)}</td>
-                      <td >$${((item.Price + item.OTP_Amount_State || 0) * (item.Quantity_Ordered || 0)).toFixed(2)}</td>
+                      <td >$${(item.Price + item.OTP_Amount_State + item.PrepaidTax_Amount || 0).toFixed(2)}</td>
+                      <td >$${((item.Price + item.OTP_Amount_State + item.PrepaidTax_Amount || 0) * (item.Quantity_Ordered || 0)).toFixed(2)}</td>
                     </tr>
                   `).join('')}
                 </tbody>

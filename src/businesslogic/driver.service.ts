@@ -95,6 +95,60 @@ async getDriverOrder(query:any,id:number){
 
 }
 
+async getOrderSummayByRouteNumber(driverId: number) {
+    const assignment: any = await DriverRouteAssignment.findOne({
+      where: { driverId },
+      attributes: ["routes"],
+      raw: true,
+    });
+  
+    const routesRaw = assignment?.routes ?? [];
+    const routes: number[] = Array.from(
+      new Set(
+        (Array.isArray(routesRaw) ? routesRaw : [])
+          .map((r) => Number(r))
+          
+      )
+    );
+  
+    if (routes.length === 0) {
+      return { totalOrder: 0, completedOrder: 0, routes: [] };
+    }
+  
+    const deliveryStartDate = process.env.DELIVERY_START_DATE;
+  
+    const baseWhere: any = {
+      Delivery_ID: { [Op.not]: 99 },
+      Invoice_Number: { [Op.gt]: 0 },
+      Order_Date: { [Op.gte]: deliveryStartDate },
+      Route_Number: { [Op.in]: routes },
+    };
+  
+    const [totalOrder, completedOrder] = await Promise.all([
+      OrderHeader.count({
+        where: { ...baseWhere, Delivered: 0 },
+      }),
+      OrderHeader.count({
+        where: { ...baseWhere, Delivered: 1 },
+      }),
+    ]);
+  
+    // Optional: per-route counts (remove if you don't need it)
+    const byRoute = await Promise.all(
+      routes.map(async (routeNumber) => {
+        const whereRoute = { ...baseWhere, Route_Number: routeNumber };
+        const [pending, completed] = await Promise.all([
+          OrderHeader.count({ where: { ...whereRoute, Delivered: 0 } }),
+          OrderHeader.count({ where: { ...whereRoute, Delivered: 1 } }),
+        ]);
+        return { routeNumber, totalOrder: pending, completedOrder: completed };
+      })
+    );
+  
+    return { totalOrder, completedOrder, routes, byRoute };
+  }
+
+
 
 async startOrder(orderNumber:number, driverId:number){
 

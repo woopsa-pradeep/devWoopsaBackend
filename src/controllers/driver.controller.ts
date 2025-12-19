@@ -21,6 +21,11 @@ async getDriverOrder(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, General.SUCCESS);
 }
 
+async getOrderSummayByRouteNumber(req: AuthRequest, res: Response) {
+    
+    const data = await this.driverService.getOrderSummayByRouteNumber( req.user.id);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
 async startOrder(req: AuthRequest, res: Response) {
     const { id } = req.params;
     const data = await this.driverService.startOrder(Number(id), req.user.id)

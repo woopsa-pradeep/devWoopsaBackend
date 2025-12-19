@@ -64,6 +64,12 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getInventoryShowPrepaidTax(req: AuthRequest, res: Response) {
+      const data = await this.salesService.getInventoryShowPrepaidTax(req.user);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+      }
+
+
     async getInventoryItemsBySalesMan(req: AuthRequest, res: Response) {
         const data = await this.salesService.getInventoryItemsBySalesMan(req.body as PaginationOptions & { search?: string, masterSearch?: string }, Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -400,6 +406,18 @@ export class SalesController {
 
     async getOrderConfirmationDetailsHistory(req: AuthRequest, res: Response) {
         const data = await this.salesService.getOrderConfirmationDetailsHistory(Number(req.params.orderNumber), req.query as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getSalesCategoryPriceClassByCustomer(req: AuthRequest, res: Response) {
+        const customerNumber = req.params.customerNumber ;
+        const data = await this.salesService.getSalesCategoryPriceClassByCustomer(Number(customerNumber));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getSalesCategoryByCustomer(req: AuthRequest, res: Response) {
+        const customerNumber = req.params.customerNumber ;
+        const data = await this.salesService.getSalesCategoryByCustomer(Number(customerNumber));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
