@@ -29,7 +29,7 @@ jobs:
                     "body": [
                       {
                         "type": "TextBlock",
-                        "text": "🚀 LIVE DEPLOY STARTED",
+                        "text": "🚀 DEV SERVER DEPLOY STARTED",
                         "weight": "Bolder",
                         "size": "Medium"
                       },
@@ -54,7 +54,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            echo "🚀 LIVE DEV SERVER DEPLOY STARTED"
+            echo "🚀 DEV SERVER DEPLOY STARTED"
 
             cd /var/www/myapp/devWoopsaBackend
 
@@ -89,7 +89,7 @@ jobs:
                     "body": [
                       {
                         "type": "TextBlock",
-                        "text": "LIVE ✅ DEV STAGE DEPLOY SUCCESS",
+                        "text": "✅ DEV SERVER DEPLOY SUCCESS",
                         "weight": "Bolder",
                         "size": "Medium"
                       },
@@ -123,13 +123,13 @@ jobs:
                     "body": [
                       {
                         "type": "TextBlock",
-                        "text": "❌ LIVE DEPLOY FAILED",
+                        "text": "❌ DEV SERVER DEPLOY FAILED",
                         "weight": "Bolder",
                         "size": "Medium"
                       },
                       {
                         "type": "TextBlock",
-                        "text": "Project: Woopsa Backend\nBranch: dev\nCheck GitHub Actions logs"
+                        "text": "Project: Dev Stage Backend\nBranch: dev\nCheck GitHub Actions logs"
                       }
                     ]
                   }
@@ -146,7 +146,7 @@ jobs:
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "✅ LIVE DEPLOY SUCCESS (DEV)"
+          subject: "✅ DEV SERVER DEPLOY SUCCESS"
           to: ${{ secrets.EMAIL_TO }}
           from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
           body: |
@@ -165,7 +165,7 @@ jobs:
           server_port: 587
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "❌ LIVE DEPLOY FAILED (DEV)"
+          subject: "❌ DEV SERVER DEPLOY FAILED"
           to: ${{ secrets.EMAIL_TO }}
           from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
           body: |
