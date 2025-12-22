@@ -2186,7 +2186,7 @@ export class ManagerService {
       const unitPrice = basePrice + otpState + prepaid;
     
       totalPrice += unitPrice * quantity;
-      totalPrepaidTax += prepaid;
+      totalPrepaidTax += prepaid * quantity;
     
       totalDiscount += toNum(d.OffInvoice_Amount);   // multiply by qty only if this is per-unit
       totalDeposit  += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
