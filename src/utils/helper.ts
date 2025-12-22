@@ -1995,5 +1995,5 @@ export async function getAllowedSalesCategories(customerNumber: number) {
   const retrunSalesCategories = salesCategories.map((r: any) => r.Sales_Category);
  
 
-  return {  retrunSalesCategories };
+  return   retrunSalesCategories ;
 }

@@ -1932,7 +1932,7 @@ export class RetailerService {
       const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
     
       const unitPrice = basePrice + otpState + prepaid;
-      totalPrepaidTax += prepaid;
+      totalPrepaidTax += prepaid * quantity;
     
       totalPrice += unitPrice * quantity;
     

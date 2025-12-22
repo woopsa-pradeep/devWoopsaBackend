@@ -576,7 +576,7 @@ export class SalesService {
       const qty       = toNum(d.Quantity_Shipped); // or fallback below
     
       const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
-      totalPrepaidTax += prepaid;
+      totalPrepaidTax += prepaid * quantity;
       const unitPrice = basePrice + otpState + prepaid;
     
       totalPrice += unitPrice * quantity;
