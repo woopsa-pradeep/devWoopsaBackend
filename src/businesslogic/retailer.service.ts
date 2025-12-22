@@ -1920,6 +1920,7 @@ export class RetailerService {
     let totalPrice = 0;
     let totalDiscount = 0;
     let totalDeposit = 0;
+    let totalPrepaidTax = 0;
     for (const details of allOrderDetails) {
       const d = details.dataValues;
     
@@ -1931,6 +1932,7 @@ export class RetailerService {
       const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
     
       const unitPrice = basePrice + otpState + prepaid;
+      totalPrepaidTax += prepaid;
     
       totalPrice += unitPrice * quantity;
     
@@ -2048,7 +2050,8 @@ export class RetailerService {
         ...orderHeader?.toJSON(),
         Total_Price: totalPrice,
         Total_Discount: totalDiscount,
-        Total_Deposit: totalDeposit
+        Total_Deposit: totalDeposit,
+        Total_PrepaidTax: totalPrepaidTax
       },
       totalCount,
       page,
@@ -2531,25 +2534,32 @@ export class RetailerService {
     const posFields = ['POS_Cash', 'POS_Check', 'POS_Credit', 'POS_Debit', 'POS_Other', 'POS_House'];
     const hasPosValue = posFields.some(field => status[field] && status[field] > 0);
 
+
+    const allowPrepaidTax = await Setting.findOne({
+      attributes: ['showWithPerpaidTax']
+    });
     if (hasPosValue) {
       return [
         {
           status: 'Order Packed',
           no: 2,
           time: status.POS_Time || null,
-          active: true
+          active: true,
+          allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
         },
         {
           status: 'Picklist Print',
           no: 1,
           time: status.Picklist_Time || null,
-          active: false
+          active: false,
+          allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
         },
         {
           status: 'Order Placed',
           no: 0,
           time: status.Order_Date || null,
-          active: false
+          active: false,
+          allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
         }
       ];
     }
@@ -2561,19 +2571,22 @@ export class RetailerService {
           status: 'Order Packed',
           no: 2,
           time: null,
-          active: false
+          active: false,
+          allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
         },
         {
           status: 'Picklist Print',
           no: 1,
           time: status.Picklist_Time,
-          active: true
+          active: true,
+          allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
         },
         {
           status: 'Order Placed',
           no: 0,
           time: status.Order_Date || null,
-          active: false
+          active: false,
+          allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
         }
       ];
     }
@@ -2584,19 +2597,22 @@ export class RetailerService {
         status: 'Order Packed',
         no: 2,
         time: null,
-        active: false
+        active: false,
+        allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
       },
       {
         status: 'Picklist Print',
         no: 1,
         time: null,
-        active: false
+        active: false,
+        allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
       },
       {
         status: 'Order Placed',
         no: 0,
         time: status.Order_Date || null,
-        active: true
+        active: true,
+        allowPrepaidTax: allowPrepaidTax?.showWithPerpaidTax || false
       }
     ];
   }
