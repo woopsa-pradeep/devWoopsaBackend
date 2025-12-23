@@ -5461,7 +5461,11 @@ export class ManagerService {
           { where: { Item_Number } }   // condition
         );
   
-        updatedCount += count;
+        // Count each item as 1 if it was successfully updated (count > 0)
+        // This ensures we return the number of unique items updated, not total rows affected
+        if (count > 0) {
+          updatedCount += 1;
+        }
       }
   
       return {
@@ -5471,11 +5475,32 @@ export class ManagerService {
   }
 
   async getInventoryItemsForUpdate(query: any) {
-    let { salesCategoryId, priceClassId, filter } = query;
+    let { salesCategoryId, priceClassId, filter,search } = query;
 
     let whereClause: any = {
     };
+    if (search) {
+      const term = search.toLowerCase();
+      const startsWith = `${term}%`;
+      
+      whereClause[Op.or] = [
+        Sequelize.where(
+          Sequelize.fn("LOWER", Sequelize.col("Description")),
+          { [Op.like]: startsWith }
+        ),
+        Sequelize.where(
+          Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
+          { [Op.like]: startsWith }
+        ),
+        Sequelize.where(
+          Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+          { [Op.like]: startsWith }
+        )
+      ];
+   
+   
 
+}
 
     if (filter == 'ShortOrderForm') {
       whereClause.ShortOrderForm = true;

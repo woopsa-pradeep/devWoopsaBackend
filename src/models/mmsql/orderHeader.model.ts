@@ -123,8 +123,8 @@ OrderHeader.init(
     EpickCompletedOn: { type: DataTypes.DATE, allowNull: true },
     OrderedOn: { type: DataTypes.DATE, allowNull: true },
     Order_Source: { type: DataTypes.INTEGER, allowNull: true },
-    deliverd: { type: DataTypes.BOOLEAN },
-    Delivered: { type: DataTypes.BOOLEAN },
+    // deliverd: { type: DataTypes.BOOLEAN },
+    // Delivered: { type: DataTypes.BOOLEAN },
   },
   {
     sequelize,
