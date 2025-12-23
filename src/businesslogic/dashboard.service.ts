@@ -5,7 +5,7 @@ import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Customer } from "../models/mmsql/customer.model";
 import { SalesRep } from "../models/mmsql/salesrep.model";
 import { Sequelize, Op, col, cast, where } from "sequelize";
-import { checkQtyDiscount, excludeItemByUser, getCustomerExcludeItem, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
+import { checkQtyDiscount, excludeItemByUser, getAllowedSalesCategories, getCustomerExcludeItem, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
 import { ProductImage } from "../models/postgres/product.model";
 import { getDiscount } from "../utils/helper";
 import SalesCategory from "../models/mmsql/salesCategory.model";
@@ -941,6 +941,11 @@ export class DashboardService {
 
     async getNewItem(query: PaginationOptions, customerId: number) {
         let { page = 1, limit = 30, search, role, customerNumber, state =' ', zip='', jurisdiction='',salesCategory=[] } = query;
+
+        if(customerNumber){
+            salesCategory = await getAllowedSalesCategories(customerNumber);
+            console.log(salesCategory, 'salesCategory')
+        }
         page = Number(page);
         limit = Number(limit);
 

@@ -935,7 +935,7 @@ export class EpickService {
     // Always create epick_confirmation record (every picker creates this)
     await EpickConfirmation.create({
       orderNumber: body.orderNumber,
-      pickerUserNumber: Number(isUserExist.userNumber ?? 0),
+      pickerUserNumber: id, // Use user's id, not userNumber (foreign key references epick_user.id)
       pickerUserId: id,
       category: userCategories,
       status: 'in_progress',
@@ -2639,15 +2639,25 @@ export class EpickService {
 
 
   async getReportById(id: number, userId: number) {
-    // Get current user with categories from WebUsers
-    const currentUser = await WebUsers.findOne({
+    // Get current user with categories from EpickUser
+    const currentUser = await EpickUser.findOne({
       where: { id: userId },
-      attributes: ['id', 'firstName', 'lastName', 'userNumber', 'order_type', 'shortby']
+      attributes: ['id', 'firstName', 'lastName', 'userNumber', 'category']
     });
 
     if (!currentUser) {
       throw new AppError('User not found', 404);
     }
+
+    const userCategories = currentUser.category || [];
+
+    // Get user's confirmation for this order to get time info
+    const userConfirmation = await EpickConfirmation.findOne({
+      where: {
+        orderNumber: id,
+        pickerUserId: userId
+      }
+    });
 
     // Get OrderPick data for this order
     const orderPick = await OrderPick.findOne({
@@ -2660,7 +2670,7 @@ export class EpickService {
       throw new AppError('Order not found', 404);
     }
 
-    // Get all items for this order
+    // Get only items in user's categories
     const product = await OrderDetail.findAll({
       where: {
         Order_Number: id
@@ -2670,6 +2680,10 @@ export class EpickService {
           model: Inventory,
           as: 'inventory',
           attributes: ['Item_Number', 'Description', 'Section', 'Location', 'Sales_Category'],
+          where: userCategories.length > 0 ? {
+            Sales_Category: { [Op.in]: userCategories }
+          } : undefined,
+          required: userCategories.length > 0,
           include: [
             {
               model: InventoryUPC,
@@ -2688,37 +2702,59 @@ export class EpickService {
       ]
     });
 
-    // Calculate total quantity shipped
+    // Calculate total quantity shipped from filtered items
     const totalQtyShipped = product.reduce((sum: number, item: any) => {
       return sum + (Number(item.Quantity_Shipped) || 0);
     }, 0);
 
-    // Calculate duration from OrderPick
+    // Get category names
+    let categoryNameMap: { [key: number]: string } = {};
+    if (userCategories.length > 0) {
+      const categories = await SalesCategory.findAll({
+        where: {
+          Sales_Category: { [Op.in]: userCategories }
+        },
+        attributes: ['Sales_Category', 'Category_Desc'],
+        raw: true
+      });
+      categories.forEach((cat: any) => {
+        categoryNameMap[cat.Sales_Category] = cat.Category_Desc;
+      });
+    }
+
+    // Calculate duration from user's confirmation (not OrderPick)
     let duration = null;
     let durationSeconds = null;
-    const opData = orderPick as any;
-    if (opData.startedAt && opData.completedAt) {
-      const start = moment(opData.startedAt);
-      const end = moment(opData.completedAt);
+    const confData = userConfirmation as any;
+    if (confData?.startedAt && confData?.completedAt) {
+      const start = moment(confData.startedAt);
+      const end = moment(confData.completedAt);
       durationSeconds = end.diff(start, 'seconds');
       const minutes = Math.floor(durationSeconds / 60);
       const seconds = durationSeconds % 60;
       duration = minutes > 0 ? `${minutes} min ${seconds} sec` : `${seconds} sec`;
-    } else if (opData.startedAt && !opData.completedAt) {
+    } else if (confData?.startedAt && !confData?.completedAt) {
       duration = 'in progress';
     }
+
+    // Map category IDs to names
+    const categoryNames = userCategories.map((catId: number) => 
+      categoryNameMap[catId] || `Category ${catId}`
+    );
 
     // Build picker info for current user
     const pickerInfo = {
       pickerId: userId,
       pickerName: currentUser ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() : null,
       pickerUserNumber: currentUser?.userNumber || null,
-      startedAt: opData.startedAt,
-      completedAt: opData.completedAt,
+      categories: userCategories,
+      categoryNames: categoryNames,
+      startedAt: confData?.startedAt || null,
+      completedAt: confData?.completedAt || null,
       duration: duration,
       durationSeconds: durationSeconds,
       itemsCount: product.length,
-      status: opData.status
+      status: confData?.status || null
     };
 
     // Build response with numbered items (like original format)
@@ -2727,15 +2763,17 @@ export class EpickService {
       itemsObject[index.toString()] = item;
     });
 
+    const opData = orderPick as any;
+
     return [{
       ...itemsObject,
       id: orderPick.id,
       orderNumber: orderPick.orderNumber,
       pickerUserNumber: userId,
       customerNumber: opData.customerNumber,
-      status: opData.status,
-      startedAt: opData.startedAt,
-      completedAt: opData.completedAt,
+      status: confData?.status || opData.status,
+      startedAt: confData?.startedAt || opData.startedAt,
+      completedAt: confData?.completedAt || opData.completedAt,
       notes: opData.notes,
       images: opData.images,
       totalLines: product.length,

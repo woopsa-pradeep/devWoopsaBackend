@@ -306,4 +306,7 @@ router.put('/driver-route-assignments/:id', verifyRole(ROLES.MANAGER), validateR
 router.delete('/driver-route-assignments/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteDriverRouteAssignment.bind(managerController)));
 router.get('/drivers/:driverId/route-assignments', verifyRole(ROLES.MANAGER), catchAsync(managerController.getDriverRouteAssignmentsByDriver.bind(managerController)));
 
+// Order Numbers routes
+router.get('/order-numbers', verifyRole(ROLES.MANAGER), catchAsync(managerController.getAllOrderNumbers.bind(managerController)));
+
 export default router; 

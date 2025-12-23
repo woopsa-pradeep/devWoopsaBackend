@@ -1088,5 +1088,8 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Driver route assignments retrieved successfully');
   }
 
-
+  async getAllOrderNumbers(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllOrderNumbers();
+    sendResponse(res, 200, true, data, 'Order numbers retrieved successfully');
+  }
 }

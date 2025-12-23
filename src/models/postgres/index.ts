@@ -2,7 +2,6 @@ import { postgresSequelize } from '../../db';
 import { applyAssociations } from './associate';
 
 
-
 applyAssociations();
 
 // Sync all PostgreSQL models

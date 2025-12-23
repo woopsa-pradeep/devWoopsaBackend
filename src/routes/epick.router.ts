@@ -49,7 +49,7 @@ router.get('/getAllOverrideRequests/:orderNumber',verifyRole(ROLES.EPIK, ROLES.S
 router.get('/getAllOverrideRequestsForEpick/:orderNumber',verifyRole(ROLES.EPIK),catchAsync(epickController.getAllOverrideRequestsForEpick.bind(epickController)));
 router.post('/cancelOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.cancelOverrideRequest.bind(epickController)));
 
-router.put('/requestAllStatusOverride/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.requestAllStatusOverride.bind(epickController)));
+router.put('/requestAllStatusOverride/:orderNumber',verifyRole( ROLES.MANAGER),catchAsync(epickController.requestAllStatusOverride.bind(epickController)));
 
 
 export default router;

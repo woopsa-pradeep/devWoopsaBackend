@@ -1363,6 +1363,103 @@ export class ManagerService {
     return user;
   }
 
+  /**
+   * Get all assigned categories from all epick users
+   * Returns a map: categoryNumber -> array of user IDs who have it
+   */
+  private async getAssignedCategories(excludeUserId?: number): Promise<{ [key: number]: number[] }> {
+    const allUsers = await EpickUser.findAll({
+      where: excludeUserId ? { id: { [Op.ne]: excludeUserId } } : {},
+      attributes: ['id', 'category']
+    });
+
+    const assignedMap: { [key: number]: number[] } = {};
+    
+    allUsers.forEach((user: any) => {
+      const categories = user.category || [];
+      categories.forEach((cat: number) => {
+        if (!assignedMap[cat]) {
+          assignedMap[cat] = [];
+        }
+        assignedMap[cat].push(user.id);
+      });
+    });
+
+    return assignedMap;
+  }
+
+  /**
+   * Get the lowest unassigned category number
+   */
+  private getLowestUnassignedCategory(assignedCategories: { [key: number]: number[] }, maxCategory: number = 12): number {
+    for (let i = 1; i <= maxCategory; i++) {
+      if (!assignedCategories[i] || assignedCategories[i].length === 0) {
+        return i;
+      }
+    }
+    return maxCategory + 1; // All categories assigned
+  }
+
+  /**
+   * Validate category assignment based on rules
+   * Rules:
+   * 1. Single category (already assigned) → allowed (sharing)
+   * 2. Multiple categories → must start from lowest unassigned category number
+   * 3. Cannot mix assigned and unassigned categories
+   */
+  private async validateCategoryAssignment(categories: number[], excludeUserId?: number): Promise<void> {
+    if (!Array.isArray(categories) || categories.length === 0) {
+      throw new AppError('Categories must be a non-empty array', 400);
+    }
+
+    // Validate all categories are numbers
+    if (!categories.every((cat: any) => typeof cat === 'number' && Number.isInteger(cat) && cat > 0)) {
+      throw new AppError('All categories must be positive integers', 400);
+    }
+
+    // Get assigned categories (excluding current user if updating)
+    const assignedCategories = await this.getAssignedCategories(excludeUserId);
+
+    // If single category
+    if (categories.length === 1) {
+      const cat = categories[0];
+      // Single category is always allowed (can share with others)
+      return;
+    }
+
+    // If multiple categories
+    const sortedCategories = [...categories].sort((a, b) => a - b);
+    const lowestUnassigned = this.getLowestUnassignedCategory(assignedCategories);
+
+    // Check if all categories are unassigned
+    const allUnassigned = sortedCategories.every(cat => !assignedCategories[cat] || assignedCategories[cat].length === 0);
+    
+    if (!allUnassigned) {
+      throw new AppError(
+        'Multiple categories cannot include already assigned categories. You can only select multiple categories starting from the lowest unassigned category.',
+        400
+      );
+    }
+
+    // Check if starts from lowest unassigned
+    if (sortedCategories[0] !== lowestUnassigned) {
+      throw new AppError(
+        `Multiple categories must start from category ${lowestUnassigned} (lowest unassigned category). You selected: ${sortedCategories.join(', ')}`,
+        400
+      );
+    }
+
+    // Check if categories are consecutive
+    for (let i = 0; i < sortedCategories.length - 1; i++) {
+      if (sortedCategories[i + 1] !== sortedCategories[i] + 1) {
+        throw new AppError(
+          'Multiple categories must be consecutive. You cannot skip categories.',
+          400
+        );
+      }
+    }
+  }
+
   async createEpickUser(body: any) {
     body.firstName = body.firstName.trim();
     body.lastName = body.lastName.trim();
@@ -1387,6 +1484,9 @@ export class ManagerService {
     if (!body.category || !Array.isArray(body.category) || body.category.length === 0) {
       throw new AppError('Category is required and must be a non-empty array', 400);
     }
+
+    // Validate category assignment rules
+    await this.validateCategoryAssignment(body.category);
 
     // Validate userNumber is provided (required like normal createUser)
     if (!body.userNumber) {
@@ -1463,20 +1563,13 @@ export class ManagerService {
     
     // Handle category update
     if (body.category !== undefined) {
-      // Validate category
-      if (!Array.isArray(body.category) || body.category.length === 0) {
-        throw new AppError('Category must be a non-empty array', 400);
-      }
-      
-      // Validate all categories are numbers
-      if (!body.category.every((cat: any) => typeof cat === 'number' && Number.isInteger(cat))) {
-        throw new AppError('All categories must be integers', 400);
-      }
+      // Validate category assignment rules (exclude current user)
+      await this.validateCategoryAssignment(body.category, id);
       
       // Check if user has any active orders (in_progress)
       const activeConfirmations = await EpickConfirmation.findAll({
         where: {
-          pickerUserNumber: id,
+          pickerUserId: id,
           status: 'in_progress'
         }
       });
@@ -1581,20 +1674,13 @@ export class ManagerService {
       throw new AppError('Epick user not found', 404);
     }
 
-    // Validate categories
-    if (!Array.isArray(categories) || categories.length === 0) {
-      throw new AppError('Categories must be a non-empty array', 400);
-    }
-
-    // Validate all categories are numbers
-    if (!categories.every((cat: any) => typeof cat === 'number' && Number.isInteger(cat))) {
-      throw new AppError('All categories must be integers', 400);
-    }
+    // Validate category assignment rules (exclude current user)
+    await this.validateCategoryAssignment(categories, userId);
 
     // Check if user has any active orders (in_progress)
     const activeConfirmations = await EpickConfirmation.findAll({
       where: {
-        pickerUserNumber: userId,
+        pickerUserId: userId,
         status: 'in_progress'
       }
     });
@@ -5818,5 +5904,12 @@ export class ManagerService {
     };
   }
 
+  async getAllOrderNumbers (){
+    const orderNumbers = await OrderHeader.findAll({
+      attributes: ['Order_Number'],
+      order: [['Order_Number', 'DESC']]
+    });
+    return orderNumbers;
+  }
 
 } 
