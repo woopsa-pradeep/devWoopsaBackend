@@ -1404,9 +1404,9 @@ export class ManagerService {
   /**
    * Validate category assignment based on rules
    * Rules:
-   * 1. Single category (already assigned) → allowed (sharing)
-   * 2. Multiple categories → must start from lowest unassigned category number
-   * 3. Cannot mix assigned and unassigned categories
+   * 1. Single category (already assigned) → NOT allowed (cannot share single categories)
+   * 2. Multiple categories → allowed (can share multiple categories)
+   * 3. Multiple categories must be consecutive
    */
   private async validateCategoryAssignment(categories: number[], excludeUserId?: number): Promise<void> {
     if (!Array.isArray(categories) || categories.length === 0) {
@@ -1424,31 +1424,19 @@ export class ManagerService {
     // If single category
     if (categories.length === 1) {
       const cat = categories[0];
-      // Single category is always allowed (can share with others)
+      // Check if this single category is already assigned to another user
+      if (assignedCategories[cat] && assignedCategories[cat].length > 0) {
+        throw new AppError(
+          `Category ${cat} is already assigned to another user. Single categories cannot be shared. You can select multiple categories to share them.`,
+          400
+        );
+      }
+      // Single category is allowed only if it's not assigned
       return;
     }
 
-    // If multiple categories
+    // If multiple categories - allow sharing (no restriction on already assigned)
     const sortedCategories = [...categories].sort((a, b) => a - b);
-    const lowestUnassigned = this.getLowestUnassignedCategory(assignedCategories);
-
-    // Check if all categories are unassigned
-    const allUnassigned = sortedCategories.every(cat => !assignedCategories[cat] || assignedCategories[cat].length === 0);
-    
-    if (!allUnassigned) {
-      throw new AppError(
-        'Multiple categories cannot include already assigned categories. You can only select multiple categories starting from the lowest unassigned category.',
-        400
-      );
-    }
-
-    // Check if starts from lowest unassigned
-    if (sortedCategories[0] !== lowestUnassigned) {
-      throw new AppError(
-        `Multiple categories must start from category ${lowestUnassigned} (lowest unassigned category). You selected: ${sortedCategories.join(', ')}`,
-        400
-      );
-    }
 
     // Check if categories are consecutive
     for (let i = 0; i < sortedCategories.length - 1; i++) {
@@ -1490,7 +1478,8 @@ export class ManagerService {
     await this.validateCategoryAssignment(body.category);
 
     // Validate userNumber is provided (required like normal createUser)
-    if (!body.userNumber) {
+    // Allow 0 as valid userNumber, only reject undefined/null
+    if (body.userNumber === undefined || body.userNumber === null) {
       throw new AppError('userNumber is required', 400);
     }
 
@@ -1563,6 +1552,16 @@ export class ManagerService {
       updateData.isActive = body.isActive;
     }
     
+    // Handle password update
+    if (body.password !== undefined) {
+      if (!body.password || body.password.trim().length < 3) {
+        throw new AppError('Password must be at least 3 characters long', 400);
+      }
+      // Hash the new password
+      const hashedPassword = await hashPassword(body.password);
+      updateData.password = hashedPassword;
+    }
+    
     // Handle category update
     if (body.category !== undefined) {
       // Validate category assignment rules (exclude current user)
@@ -1607,7 +1606,7 @@ export class ManagerService {
     
     // Handle item_sort_by update
     if (body.item_sort_by !== undefined) {
-      const validSortOptions = ['sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      const validSortOptions = ['section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
       if (!validSortOptions.includes(body.item_sort_by)) {
         throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
       }
@@ -1652,7 +1651,7 @@ export class ManagerService {
 
     // Validate item_sort_by if provided
     if (preferences.item_sort_by !== undefined) {
-      const validSortOptions = ['sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      const validSortOptions = ['section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
       if (!validSortOptions.includes(preferences.item_sort_by)) {
         throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
       }
@@ -1697,7 +1696,7 @@ export class ManagerService {
     }
 
     // Validate item_sort_by
-    const validSortOptions = ['sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+    const validSortOptions = ['section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
     if (!validSortOptions.includes(itemSortBy)) {
       throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
     }
@@ -1889,6 +1888,15 @@ export class ManagerService {
     };
   }
 
+
+  async deleteEpickUser(userId: number) {
+    await EpickUser.update({
+      isActive: false,
+    }, {
+      where: { id: userId }
+    });
+    return true;
+  }
   // async getUserList(query: PaginationOptions) {
   //   const page = parseInt(query.page as any) || 1;
   //   const limit = parseInt(query.limit as any) || 10;

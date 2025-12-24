@@ -43,6 +43,7 @@ router.put('/epickUsers/:userId/preferences', verifyRole(ROLES.MANAGER), validat
 router.put('/epickUsers/:userId/categories', verifyRole(ROLES.MANAGER), validateRequest(updateEpickUserCategoriesSchema), catchAsync(managerController.updateEpickUserCategories.bind(managerController)));
 router.put('/epickUsers/:userId/itemSort', verifyRole(ROLES.MANAGER), validateRequest(updateEpickUserItemSortSchema), catchAsync(managerController.updateEpickUserItemSort.bind(managerController)));
 router.get('/epickReports', verifyRole(ROLES.MANAGER), catchAsync(managerController.getEpickReports.bind(managerController)));
+router.delete('/deleteEpickUser/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteEpickUser.bind(managerController)));
 router.post('/createRolePermissions', verifyRole(ROLES.MANAGER), validateRequest(rolePermissionRequestSchema), catchAsync(managerController.createRolePermissions.bind(managerController)));
 router.put('/updateRolePermissions', verifyRole(ROLES.MANAGER), validateRequest(roleUdatePermissionRequestSchema), catchAsync(managerController.updateRolePermissions.bind(managerController)));
 router.get('/getUserRolePermissions/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getUserRolePermissions.bind(managerController)));

@@ -184,6 +184,12 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+
+  async deleteEpickUser(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteEpickUser(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async createRolePermissions(req: AuthRequest, res: Response) {
     const data = await this.managerService.createRolePermissions(req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);

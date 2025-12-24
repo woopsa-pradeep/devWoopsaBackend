@@ -65,7 +65,7 @@ jobs:
             npm install
 
             echo "🔄 Restarting application"
-            pm2 restart 2
+            pm2 restart 1
 
             echo "✅ DEV STAGE DEPLOY COMPLETED"
 
