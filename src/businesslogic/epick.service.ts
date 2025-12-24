@@ -37,6 +37,7 @@ import { sendMultiFCMNotification } from "../utils/sentNotification";
 import { RetailerDevice } from "../models/postgres/device.model";
 import { Notifications } from "../models/postgres/notification.model";
 import { RecordLock } from "../models/mmsql/recordLocks.model";
+import { ItemLimit } from "../models/postgres/itemLimit.model";
 
 
 export class EpickService {
@@ -1102,9 +1103,27 @@ export class EpickService {
         order: this.getOrderItemSortOrder(itemSortBy),
       });
       
+      // Get all unique item numbers from order items
+      const itemNumbers = Array.from(new Set(data.map((item: any) => {
+        const itemData = item.dataValues || item;
+        return itemData.Item_Number;
+      })));
 
-      
-        
+      // Query ItemLimits table for all items (batch query for efficiency)
+      const itemLimits = await ItemLimit.findAll({
+        where: {
+          Item_Number: { [Op.in]: itemNumbers },
+          isActive: true
+        },
+        attributes: ['Item_Number', 'markAsBundle'],
+        raw: true
+      });
+
+      // Create a map: itemNumber -> markAsBundle
+      const itemLimitMap: { [key: number]: boolean } = {};
+      itemLimits.forEach((limit: any) => {
+        itemLimitMap[limit.Item_Number] = limit.markAsBundle || false;
+      });
 
         const finalData = await Promise.all(data.map(async (e: any) => {
             let item = e.dataValues || null;
@@ -1261,6 +1280,9 @@ export class EpickService {
               }
             }
 
+            // Get markAsBundle from ItemLimits (default to false if not found)
+            const markAsBundle = itemLimitMap[item.Item_Number] || false;
+
             return {
                 ...item,
                 inventoryOnHand: inventoryOnHand,
@@ -1268,7 +1290,8 @@ export class EpickService {
                 isDistributorImageShow: productImage?.isAllow ?? false,
                 distributorImage: productImage?.img_url || null,
                 substituteProduct: substituteProduct,
-                SalesCategory: item?.inventory?.SalesCategory?.Category_Desc || null
+                SalesCategory: item?.inventory?.SalesCategory?.Category_Desc || null,
+                markAsBundle: markAsBundle
             }
 
         }))
