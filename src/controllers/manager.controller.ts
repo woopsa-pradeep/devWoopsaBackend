@@ -129,13 +129,13 @@ export class ManagerController {
       return sendResponse(res, 400, false, null, "Invalid user ID");
     }
 
-    const { order_type, shortby } = req.body;
+    const { order_type, shortby, item_sort_by } = req.body;
     
-    if (!order_type && !shortby) {
-      return sendResponse(res, 400, false, null, "At least one preference (order_type or shortby) must be provided");
+    if (!order_type && !shortby && !item_sort_by) {
+      return sendResponse(res, 400, false, null, "At least one preference (order_type, shortby, or item_sort_by) must be provided");
     }
 
-    const data = await this.managerService.updateEpickUserPreferences(userId, { order_type, shortby });
+    const data = await this.managerService.updateEpickUserPreferences(userId, { order_type, shortby, item_sort_by });
     sendResponse(res, 200, true, data, "Epick user order preferences updated successfully");
   }
 
@@ -153,6 +153,21 @@ export class ManagerController {
 
     const data = await this.managerService.updateEpickUserCategories(userId, category);
     sendResponse(res, 200, true, data, "Epick user categories updated successfully");
+  }
+
+  async updateEpickUserItemSort(req: AuthRequest, res: Response) {
+    const userId = Number(req.params.userId);
+    if (!userId || isNaN(userId)) {
+      return sendResponse(res, 400, false, null, "Invalid user ID");
+    }
+
+    const { item_sort_by } = req.body;
+    if (!item_sort_by) {
+      return sendResponse(res, 400, false, null, "item_sort_by is required");
+    }
+
+    const data = await this.managerService.updateEpickUserItemSort(userId, item_sort_by);
+    sendResponse(res, 200, true, data, "Epick user item sort preference updated successfully");
   }
 
   async getEpickUserDetails(req: AuthRequest, res: Response) {

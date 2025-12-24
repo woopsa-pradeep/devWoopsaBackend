@@ -727,6 +727,7 @@ export class ManagerService {
         CaseCount: e.CaseCount,
         UOM: e.UOM,
         QtyLimit: getProductList || null,
+        markAsBundle: getProductList?.markAsBundle || false,
         Price1: e.Price1,
         Price2: e.Price2,
         EBT: e.EBT,
@@ -1506,6 +1507,7 @@ export class ManagerService {
       category: body.category,
       order_type: body.order_type || 'order_number',
       shortby: body.shortby || 'Des',
+      item_sort_by: body.item_sort_by || 'line_number',
       status: body.status !== undefined ? body.status : true,
       isActive: body.isActive !== undefined ? body.isActive : true,
     });
@@ -1602,6 +1604,15 @@ export class ManagerService {
       // Normalize to 'Asc' or 'Des' for consistency
       updateData.shortby = normalizedShortby === 'asc' ? 'Asc' : 'Des';
     }
+    
+    // Handle item_sort_by update
+    if (body.item_sort_by !== undefined) {
+      const validSortOptions = ['sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      if (!validSortOptions.includes(body.item_sort_by)) {
+        throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
+      }
+      updateData.item_sort_by = body.item_sort_by;
+    }
 
     await EpickUser.update(updateData, {
       where: { id: id }
@@ -1614,7 +1625,7 @@ export class ManagerService {
     return updatedUser;
   }
 
-  async updateEpickUserPreferences(userId: number, preferences: { order_type?: string; shortby?: string }) {
+  async updateEpickUserPreferences(userId: number, preferences: { order_type?: string; shortby?: string; item_sort_by?: string }) {
     // Validate user exists
     const user = await EpickUser.findByPk(userId);
     if (!user) {
@@ -1639,6 +1650,14 @@ export class ManagerService {
       preferences.shortby = normalizedShortby === 'asc' ? 'Asc' : 'Des';
     }
 
+    // Validate item_sort_by if provided
+    if (preferences.item_sort_by !== undefined) {
+      const validSortOptions = ['sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      if (!validSortOptions.includes(preferences.item_sort_by)) {
+        throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
+      }
+    }
+
     // Update user preferences
     const updateData: any = {};
     if (preferences.order_type !== undefined) {
@@ -1646,6 +1665,9 @@ export class ManagerService {
     }
     if (preferences.shortby !== undefined) {
       updateData.shortby = preferences.shortby;
+    }
+    if (preferences.item_sort_by !== undefined) {
+      updateData.item_sort_by = preferences.item_sort_by;
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -1658,11 +1680,40 @@ export class ManagerService {
 
     // Return updated user
     const updatedUser = await EpickUser.findByPk(userId, {
-      attributes: ['id', 'email', 'firstName', 'lastName', 'order_type', 'shortby'],
+      attributes: ['id', 'email', 'firstName', 'lastName', 'order_type', 'shortby', 'item_sort_by'],
     });
 
     return {
       message: 'Epick user order preferences updated successfully',
+      user: updatedUser,
+    };
+  }
+
+  async updateEpickUserItemSort(userId: number, itemSortBy: string) {
+    // Validate user exists
+    const user = await EpickUser.findByPk(userId);
+    if (!user) {
+      throw new AppError('Epick user not found', 404);
+    }
+
+    // Validate item_sort_by
+    const validSortOptions = ['sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+    if (!validSortOptions.includes(itemSortBy)) {
+      throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
+    }
+
+    // Update item_sort_by
+    await EpickUser.update(
+      { item_sort_by: itemSortBy },
+      { where: { id: userId } }
+    );
+
+    const updatedUser = await EpickUser.findByPk(userId, {
+      attributes: { exclude: ['password'] }
+    });
+
+    return {
+      message: 'Epick user item sort preference updated successfully',
       user: updatedUser,
     };
   }
@@ -1728,7 +1779,7 @@ export class ManagerService {
       where: {
         isActive: true, // Only return active users
       },
-      attributes: ['id', 'email', 'firstName', 'lastName', 'category', 'order_type', 'shortby', 'userNumber', 'isActive', 'status'],
+      attributes: ['id', 'email', 'firstName', 'lastName', 'category', 'order_type', 'shortby', 'item_sort_by', 'userNumber', 'isActive', 'status'],
       order: [['firstName', 'ASC'], ['lastName', 'ASC']],
     });
 

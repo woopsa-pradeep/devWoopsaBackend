@@ -11,6 +11,7 @@ export interface EpickUserAttributes {
   category: number[]; // Array of category IDs: [12, 10, 20]
   order_type: string | null; // 'order_number' | 'qty_number'
   shortby: string | null; // 'Asc' | 'Des'
+  item_sort_by: string | null; // 'sales_location' | 'alphabetically' | 'item_number' | 'short_number' | 'line_number'
   status: boolean;
   isActive: boolean;
   createdAt?: Date;
@@ -33,6 +34,7 @@ export class EpickUser
   public category!: number[];
   public order_type!: string | null;
   public shortby!: string | null;
+  public item_sort_by!: string | null;
   public status!: boolean;
   public isActive!: boolean;
   public readonly createdAt!: CreationOptional<Date>;
@@ -86,6 +88,14 @@ EpickUser.init(
       defaultValue: 'Des',
       validate: {
         isIn: [['Asc', 'Des']],
+      },
+    },
+    item_sort_by: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: 'line_number',
+      validate: {
+        isIn: [['sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number']],
       },
     },
     status: {

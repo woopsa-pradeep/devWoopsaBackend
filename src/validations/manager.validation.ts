@@ -133,6 +133,8 @@ export const createEpickUserSchema = Joi.object({
 
   shortby: Joi.string().valid('Asc', 'Des').optional().default('Des'),
 
+  item_sort_by: Joi.string().valid('sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
+
   status: Joi.boolean().optional().default(true),
 
   isActive: Joi.boolean().optional().default(true),
@@ -155,13 +157,15 @@ export const updateEpickUserSchema = Joi.object({
     }),
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
+  item_sort_by: Joi.string().valid('sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
 });
 
 export const updateEpickUserPreferencesSchema = Joi.object({
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
-}).or('order_type', 'shortby').messages({
-  'object.missing': 'At least one of order_type or shortby must be provided'
+  item_sort_by: Joi.string().valid('sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
+}).or('order_type', 'shortby', 'item_sort_by').messages({
+  'object.missing': 'At least one of order_type, shortby, or item_sort_by must be provided'
 });
 
 export const updateEpickUserCategoriesSchema = Joi.object({
@@ -174,6 +178,13 @@ export const updateEpickUserCategoriesSchema = Joi.object({
       'array.min': 'category must contain at least one category',
       'any.required': 'category is required',
     }),
+});
+
+export const updateEpickUserItemSortSchema = Joi.object({
+  item_sort_by: Joi.string().valid('sales_location', 'alphabetically', 'item_number', 'short_number', 'line_number').required().messages({
+    'any.required': 'item_sort_by is required',
+    'any.only': 'item_sort_by must be one of: sales_location, alphabetically, item_number, short_number, line_number'
+  }),
 });
 
 // export const createPOHeaderSchema = Joi.object({
@@ -357,6 +368,9 @@ export const updateItemLimitSchema = Joi.object({
   QtyLimit: Joi.number().optional().messages({
     'number.base': 'Quantity limit must be a number',
     'number.min': 'Quantity limit must be at least 1',
+  }),
+  markAsBundle: Joi.boolean().optional().allow(null,'').messages({
+    'boolean.base': 'Mark as bundle must be a boolean',
   }),
  
 });

@@ -7,6 +7,7 @@ interface ItemLimitAttributes {
   Item_Number: string;
   QtyLimit: number;
   isActive:boolean
+  markAsBundle:boolean
 }
 
 // Optional fields for creation
@@ -21,6 +22,7 @@ export class ItemLimit
   public Item_Number!: string;
   public QtyLimit!: number;
   public  isActive!: boolean;
+  public markAsBundle!: boolean;
 }
 
 // Initialize the model
@@ -44,6 +46,11 @@ ItemLimit.init(
       QtyLimit: {
         type: DataTypes.INTEGER,
         defaultValue: 0,
+      },
+      markAsBundle:{
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: true
       }
     },
     {

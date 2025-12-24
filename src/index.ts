@@ -10,7 +10,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting, seedInvoiceSetting } from './seeder/wareHouseSetting.seeder';
 import { startCronJobs } from './cron'; // adjust path if needed
-import { getDiscount, getPrepaidTaxRate } from './utils/helper';
+import { getAllowedSalesCategories, getDiscount, getPrepaidTaxRate } from './utils/helper';
 import moment from 'moment';
 import './workers/emailWorker'; // Start the email worker
 import './workers/emailNotificationWorker'; // Start the email notification worker
@@ -100,6 +100,10 @@ app.get('/testInventory',(async(req:Request,res:Response)=>{
   res.json({currentOrderInventory});
 }))
 
+app.get('/testSalesCategory',(async(req:Request,res:Response)=>{
+  const data = await getAllowedSalesCategories(5000);
+  res.json({data});
+}))
 
 
 

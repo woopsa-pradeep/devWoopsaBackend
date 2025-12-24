@@ -25,6 +25,9 @@ export class DashboardService {
     async getPopularItems(userId: number,query: any) {
         let { state='', zip='', jurisdiction='' ,salesCategory=[]} = query;
         console.log(userId, 'userId')
+        if(userId){
+           salesCategory = await getAllowedSalesCategories(userId);
+        }
         const homeSetting = await HomeSettings.findOne();
         const currentYear = new Date().getFullYear();
         const startOfYear = new Date(currentYear, 0, 1); // January 1st of current year
@@ -1599,6 +1602,10 @@ export class DashboardService {
 
         // Get current date
         const today = new Date();
+        if(customerNumber){
+            salesCategory = await getAllowedSalesCategories(customerNumber);
+            console.log(salesCategory, 'salesCategory')
+        }
 
         const currentDate = today.toISOString().split("T")[0];  // "2025-08-25"
 

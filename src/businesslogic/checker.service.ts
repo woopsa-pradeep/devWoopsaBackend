@@ -9,6 +9,7 @@ import { OrderPickScan } from "../models/postgres/epickOrderScan.model";
 import { OrderDetail } from "../models/mmsql/orderDetail.model";
 import { Inventory } from "../models/mmsql/inventory.model";
 import { InventoryUPC } from "../models/mmsql/inventoryUpc.model";
+import { PriceClass } from "../models/mmsql/priceClass.model";
 import { ProductImage } from "../models/postgres/product.model";
 import { Users } from "../models/mmsql/user.model";
 import { OverrideRequest } from "../models/postgres/overrideRequest.model";
@@ -449,6 +450,26 @@ export class CheckerService {
     const orderNumbers = Array.from(new Set(scans.map((s: any) => s.orderNumber)));
     const itemNumbers = Array.from(new Set(scans.map((s: any) => s.itemNumber)));
 
+    // Get OrderDetail to get Quantity_Ordered for items in these orders
+    const orderDetails = await OrderDetail.findAll({
+      where: {
+        Order_Number: { [Op.in]: orderNumbers },
+        Item_Number: { [Op.in]: itemNumbers }
+      },
+      attributes: ['Order_Number', 'Item_Number', 'Quantity_Ordered', 'Quantity_Shipped'],
+      raw: true
+    });
+
+    // Create order detail map: `${orderNumber}_${itemNumber}` -> { qtyOrdered, qtyShipped }
+    const orderDetailMap: any = {};
+    orderDetails.forEach((detail: any) => {
+      const key = `${detail.Order_Number}_${detail.Item_Number}`;
+      orderDetailMap[key] = {
+        qtyOrdered: Number(detail.Quantity_Ordered) || 0,
+        qtyShipped: Number(detail.Quantity_Shipped) || 0
+      };
+    });
+
     // Get Inventory details for all items
     const inventories = await Inventory.findAll({
       where: {
@@ -461,13 +482,20 @@ export class CheckerService {
         'Section',
         'Pack',
         'CaseCount',
-        'UOM'
+        'UOM',
+        'Price_Class'
       ],
       include: [
         {
           model: InventoryUPC,
           as: 'UPCList',
           attributes: ['UPC_Number'],
+          required: false
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
           required: false
         }
       ]
@@ -499,8 +527,12 @@ export class CheckerService {
         const itemNumber = scan.itemNumber;
         const orderNumber = scan.orderNumber;
         
-        // Use actual scan qty from OrderPickScan (box-specific)
-        const qty = scan.qty || 0;
+        // Use actual scan qty from OrderPickScan (box-specific, this is the shipped quantity)
+        const qtyShipped = scan.qty || 0;
+        
+        // Get order detail info (Quantity_Ordered)
+        const orderDetailKey = `${orderNumber}_${itemNumber}`;
+        const orderDetail = orderDetailMap[orderDetailKey] || { qtyOrdered: 0, qtyShipped: 0 };
         
         // Get inventory details
         const inventory = inventoryMap[itemNumber] || null;
@@ -519,7 +551,8 @@ export class CheckerService {
         return {
           orderNumber: orderNumber,
           itemNumber: itemNumber,
-          qty: qty, // Quantity_Shipped as qty
+          qtyOrdered: orderDetail.qtyOrdered,
+          qtyShipped: qtyShipped,
           isSubsitute: scan.isSubsitute || false,
           description: inventory?.Description || null,
           location: inventory?.Location || null,
@@ -527,6 +560,8 @@ export class CheckerService {
           pack: inventory?.Pack || null,
           caseCount: inventory?.CaseCount || null,
           uom: inventory?.UOM || null,
+          priceClass: inventory?.Price_Class || null,
+          priceClassDescription: inventory?.PriceClass?.Class_Desc || null,
           inventoryOnHand: inventoryOnHand,
           masterImage: masterImage,
           isDistributorImageShow: productImage?.isAllow ?? false,
@@ -796,17 +831,35 @@ export class CheckerService {
       throw new AppError("Order not found", 404);
     }
 
+    // Get ALL order items from OrderDetail (not just scanned ones)
+    const orderDetails = await OrderDetail.findAll({
+      where: {
+        Order_Number: orderNumber
+      },
+      attributes: ['Item_Number', 'Quantity_Ordered', 'Quantity_Shipped'],
+      raw: true
+    });
+
+    if (!orderDetails || orderDetails.length === 0) {
+      return groupByBox ? {} : [];
+    }
+
     // Get all scans for this order across all boxes
     const scans = await OrderPickScan.findAll({
       where: { orderNumber },
       attributes: ['orderNumber', 'itemNumber', 'qty', 'isSubsitute', 'boxId'],
-      order: [['itemNumber', 'ASC']], // Order by itemNumber ascending
       raw: true,
     });
 
-    if (!scans || scans.length === 0) {
-      return groupByBox ? {} : [];
-    }
+    // Create scan map: itemNumber -> scan data (for items that were scanned)
+    const scanMap: any = {};
+    scans.forEach((scan: any) => {
+      const itemNumber = scan.itemNumber;
+      if (!scanMap[itemNumber]) {
+        scanMap[itemNumber] = [];
+      }
+      scanMap[itemNumber].push(scan);
+    });
 
     // Get all boxes for this order
     const boxes = await OrderPickBox.findAll({
@@ -821,8 +874,17 @@ export class CheckerService {
       boxMap[box.id] = box;
     });
 
-    // Get unique item numbers
-    const itemNumbers = Array.from(new Set(scans.map((s: any) => s.itemNumber)));
+    // Get unique item numbers from ALL order items
+    const itemNumbers = Array.from(new Set(orderDetails.map((d: any) => d.Item_Number)));
+
+    // Create order detail map: itemNumber -> { Quantity_Ordered, Quantity_Shipped }
+    const orderDetailMap: any = {};
+    orderDetails.forEach((detail: any) => {
+      orderDetailMap[detail.Item_Number] = {
+        qtyOrdered: Number(detail.Quantity_Ordered) || 0,
+        qtyShipped: Number(detail.Quantity_Shipped) || 0
+      };
+    });
 
     // Get Inventory details for all items
     const inventories = await Inventory.findAll({
@@ -836,13 +898,20 @@ export class CheckerService {
         'Section',
         'Pack',
         'CaseCount',
-        'UOM'
+        'UOM',
+        'Price_Class'
       ],
       include: [
         {
           model: InventoryUPC,
           as: 'UPCList',
           attributes: ['UPC_Number'],
+          required: false
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
           required: false
         }
       ]
@@ -868,14 +937,23 @@ export class CheckerService {
       imageMap[img.product_number] = img;
     });
 
-    // Build final response
+    // Build final response - include ALL order items (scanned and unscanned)
     const finalData = await Promise.all(
-      scans.map(async (scan: any) => {
-        const itemNumber = scan.itemNumber;
-        const box = boxMap[scan.boxId] || null;
+      orderDetails.map(async (orderDetail: any) => {
+        const itemNumber = orderDetail.Item_Number;
+        
+        // Get scan data for this item (if it was scanned)
+        const itemScans = scanMap[itemNumber] || [];
+        const firstScan = itemScans[0] || null;
+        
+        // Use scan qty if scanned, otherwise use Quantity_Shipped from OrderDetail
+        const qtyShipped = firstScan ? (firstScan.qty || 0) : (orderDetailMap[itemNumber]?.qtyShipped || 0);
+        
+        // Get box info if item was scanned
+        const box = firstScan ? (boxMap[firstScan.boxId] || null) : null;
 
-        // Use actual scan qty from OrderPickScan
-        const qty = scan.qty || 0;
+        // Get order detail info
+        const detail = orderDetailMap[itemNumber] || { qtyOrdered: 0, qtyShipped: 0 };
 
         // Get inventory details
         const inventory = inventoryMap[itemNumber] || null;
@@ -892,11 +970,12 @@ export class CheckerService {
           : null;
 
         return {
-          orderNumber: scan.orderNumber,
+          orderNumber: orderNumber,
           itemNumber: itemNumber,
-          qty: qty,
-          isSubsitute: scan.isSubsitute || false,
-          boxId: scan.boxId,
+          qtyOrdered: detail.qtyOrdered,
+          qtyShipped: qtyShipped,
+          isSubsitute: firstScan ? (firstScan.isSubsitute || false) : false,
+          boxId: firstScan ? firstScan.boxId : null,
           boxType: box?.type || null,
           description: inventory?.Description || null,
           location: inventory?.Location || null,
@@ -904,6 +983,8 @@ export class CheckerService {
           pack: inventory?.Pack || null,
           caseCount: inventory?.CaseCount || null,
           uom: inventory?.UOM || null,
+          priceClass: inventory?.Price_Class || null,
+          priceClassDescription: inventory?.PriceClass?.Class_Desc || null,
           inventoryOnHand: inventoryOnHand,
           masterImage: masterImage,
           isDistributorImageShow: productImage?.isAllow ?? false,

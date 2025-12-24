@@ -2781,10 +2781,20 @@ export class RetailerService {
       throw new AppError(`Item not found for UPC: ${barcode}`, 404);
     }
 
+    let whereCondition :any ={ Item_Number: upcRecord.Item_Number,I_Inactive: false,
+      ShortOrderForm: true }
+
+      if(userId != null){
+        const salesCategoryArray = await getAllowedSalesCategories(userId);
+        if(Array.isArray(salesCategoryArray) && salesCategoryArray.length > 0){
+          whereCondition.Sales_Category = { [Op.in]: salesCategoryArray };
+        }
+
+      }
+
     // Step 2: Fetch item details from Inventory
     const item = await Inventory.findOne({
-      where: { Item_Number: upcRecord.Item_Number,I_Inactive: false,
-        ShortOrderForm: true, },
+      where: whereCondition,
       attributes: [
         "Pack", "Description", "Item_Number", "CaseCount", "UOM",
         "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
