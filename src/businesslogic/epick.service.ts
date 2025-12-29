@@ -51,10 +51,25 @@ export class EpickService {
     switch (itemSortBy) {
       case 'section_location':
         // Sort by Sales_Category ASC first, then Section ASC, then Location ASC within each section
+        // NULL/empty/0 values for Section and Location appear last
         return [
           [{ model: Inventory, as: 'inventory' }, 'Sales_Category', 'ASC'],
-          [{ model: Inventory, as: 'inventory' }, 'Section', 'ASC'],
-          [{ model: Inventory, as: 'inventory' }, 'Location', 'ASC']
+          [
+            literal(`CASE 
+              WHEN [inventory].[Section] IS NULL OR [inventory].[Section] = '' 
+              THEN 'ZZZZZ' 
+              ELSE [inventory].[Section] 
+            END`),
+            'ASC'
+          ],
+          [
+            literal(`CASE 
+              WHEN [inventory].[Location] IS NULL OR [inventory].[Location] = 0 
+              THEN 999999 
+              ELSE [inventory].[Location] 
+            END`),
+            'ASC'
+          ]
         ];
       case 'alphabetically':
         // Sort by Description ASC (numeric prefixes naturally come before alphabetic)
