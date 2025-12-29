@@ -3773,7 +3773,6 @@ export class ManagerService {
     if (!retailerRequest) {
       throw new AppError('Retailer request not found', 404);
     }
-
     await retailerRequest.update(body);
     return retailerRequest;
   }

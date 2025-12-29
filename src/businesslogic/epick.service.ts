@@ -44,14 +44,15 @@ export class EpickService {
 
   /**
    * Helper function: Get order clause for item sorting
-   * @param itemSortBy - Sort type: 'section_location' (Section+Location) | 'alphabetically' | 'item_number' | 'short_number' | 'line_number'
+   * @param itemSortBy - Sort type: 'section_location' (Category+Section+Location) | 'alphabetically' | 'item_number' | 'short_number' | 'line_number'
    * @returns Sequelize order clause
    */
   private getOrderItemSortOrder(itemSortBy: string): any[] {
     switch (itemSortBy) {
       case 'section_location':
-        // Sort by Section ASC first, then Location ASC within each section
+        // Sort by Sales_Category ASC first, then Section ASC, then Location ASC within each section
         return [
+          [{ model: Inventory, as: 'inventory' }, 'Sales_Category', 'ASC'],
           [{ model: Inventory, as: 'inventory' }, 'Section', 'ASC'],
           [{ model: Inventory, as: 'inventory' }, 'Location', 'ASC']
         ];
