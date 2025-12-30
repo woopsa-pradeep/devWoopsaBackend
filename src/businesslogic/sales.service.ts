@@ -3983,7 +3983,7 @@ const newSalesRepArray = salesRepList.map(Number);
    
     let { salesCategoryId, search, priceClassId } = body;
 
-    if(!search) throw new AppError("Search is required", 400);
+    // if(!search) throw new AppError("Search is required", 400);
 
     let whereClause: any = {
       I_Inactive: false,

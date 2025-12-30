@@ -1602,10 +1602,10 @@ export class DashboardService {
 
         // Get current date
         const today = new Date();
-        if(customerNumber){
-            salesCategory = await getAllowedSalesCategories(customerNumber);
-            console.log(salesCategory, 'salesCategory')
-        }
+        // if(customerNumber){
+        //     salesCategory = await getAllowedSalesCategories(customerNumber);
+        //     console.log(salesCategory, 'salesCategory')
+        // }
 
         const currentDate = today.toISOString().split("T")[0];  // "2025-08-25"
 
