@@ -703,6 +703,9 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
           const endDate = new Date(findAllowance.End_Date);
           endDate.setHours(0, 0, 0, 0);
 
+          console.log(currentDate, 'currentDate')
+          console.log(startDate, 'startDate')
+          console.log(endDate, 'endDate')
           // Check if current date is between start and end date (inclusive)
           if (currentDate >= startDate && currentDate <= endDate) {
 

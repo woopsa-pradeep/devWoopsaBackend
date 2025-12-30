@@ -108,6 +108,13 @@ export const Manager = {
   WEBVIEW_NOT_FOUND: "Web view image not found",
   WEBVIEW_IMAGE_REQUIRED: "Web view image is required",
   WEBVIEW_GROUPED_FETCHED_SUCCESSFULLY: "Web view images grouped by section fetched successfully",
+  // FuturePricing messages
+  FUTURE_PRICING_CREATED_SUCCESSFULLY: "Future pricing created successfully",
+  FUTURE_PRICING_UPDATED_SUCCESSFULLY: "Future pricing updated successfully",
+  FUTURE_PRICING_DELETED_SUCCESSFULLY: "Future pricing deleted successfully",
+  FUTURE_PRICING_FETCHED_SUCCESSFULLY: "Future pricing fetched successfully",
+  FUTURE_PRICING_LIST_FETCHED_SUCCESSFULLY: "Future pricing list fetched successfully",
+  FUTURE_PRICING_NOT_FOUND: "Future pricing not found",
 }
 
 export const AuthMessage = {

@@ -106,7 +106,7 @@ OrderHeader.init(
     Delivery_Charge_Select: DataTypes.BOOLEAN,
     Other_Charge_Select: DataTypes.BOOLEAN,
     Invoice_Time: { type: DataTypes.DATE},
-    Picklist_Time: { type: DataTypes.DATE },
+    Picklist_Time: { type: DataTypes.STRING  },
     Manifest_Printed: DataTypes.BOOLEAN,
     Manifest_Time: { type: DataTypes.DATE },
     CardType_ID_Credit: DataTypes.TINYINT,

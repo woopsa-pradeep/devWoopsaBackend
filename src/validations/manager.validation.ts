@@ -1665,6 +1665,188 @@ export const getDriverRouteAssignmentsQuerySchema = Joi.object({
   })
 });
 
+// Picklist validation schemas
+export const createPicklistSchema = Joi.object({
+  name: Joi.string().trim().required().messages({
+    'string.base': 'Name must be a string',
+    'string.empty': 'Name cannot be empty',
+    'any.required': 'Name is required'
+  }),
+  selectedFields: Joi.object({
+    lineNumber: Joi.boolean().optional().default(true),
+    orderedQty: Joi.boolean().required().messages({
+      'any.required': 'orderedQty is required in selectedFields',
+      'boolean.base': 'orderedQty must be a boolean'
+    }),
+    scannedQty: Joi.boolean().required().messages({
+      'any.required': 'scannedQty is required in selectedFields',
+      'boolean.base': 'scannedQty must be a boolean'
+    }),
+    description: Joi.boolean().optional().default(true),
+    itemNumber: Joi.boolean().optional().default(true),
+    pack: Joi.boolean().optional().default(true),
+    size: Joi.boolean().optional().default(true),
+    upc: Joi.boolean().optional().default(true),
+    onhand: Joi.boolean().optional().default(true),
+    salesCategory: Joi.boolean().optional().default(true),
+    priceClass: Joi.boolean().optional().default(true),
+    unitCost: Joi.boolean().optional().default(true),
+    extendedCost: Joi.boolean().optional().default(true),
+    retail: Joi.boolean().optional().default(true),
+    section: Joi.boolean().optional().default(true),
+    location: Joi.boolean().optional().default(true),
+    vendorItem: Joi.boolean().optional().default(true),
+    sequence: Joi.boolean().optional().default(true)
+  }).required().messages({
+    'any.required': 'selectedFields is required',
+    'object.base': 'selectedFields must be an object'
+  }),
+  groupBy: Joi.string().trim().required().min(1).messages({
+    'string.base': 'groupBy must be a string',
+    'string.empty': 'groupBy cannot be empty',
+    'any.required': 'groupBy is required',
+    'string.min': 'groupBy cannot be an empty string'
+  }),
+  newCategoryOnNewPage: Joi.boolean().optional().default(true),
+  headerPosition: Joi.string().trim().allow(null, '').optional(),
+  footerPosition: Joi.string().trim().allow(null, '').optional(),
+  pickedByPosition: Joi.string().trim().allow(null, '').optional(),
+  checkedByPosition: Joi.string().trim().allow(null, '').optional(),
+  showTotalCartons: Joi.boolean().optional().default(true),
+  showTotalPieces: Joi.boolean().optional().default(true),
+  showTotalLines: Joi.boolean().optional().default(true),
+  showPickedBy: Joi.boolean().optional().default(true),
+  showCheckedBy: Joi.boolean().optional().default(true),
+  showBundles: Joi.boolean().optional().default(true)
+});
+
+export const updatePicklistSchema = Joi.object({
+  name: Joi.string().trim().optional().messages({
+    'string.base': 'Name must be a string',
+    'string.empty': 'Name cannot be empty'
+  }),
+  selectedFields: Joi.object({
+    lineNumber: Joi.boolean().optional(),
+    orderedQty: Joi.boolean().required().messages({
+      'any.required': 'orderedQty is required in selectedFields',
+      'boolean.base': 'orderedQty must be a boolean'
+    }),
+    scannedQty: Joi.boolean().required().messages({
+      'any.required': 'scannedQty is required in selectedFields',
+      'boolean.base': 'scannedQty must be a boolean'
+    }),
+    description: Joi.boolean().optional(),
+    itemNumber: Joi.boolean().optional(),
+    pack: Joi.boolean().optional(),
+    size: Joi.boolean().optional(),
+    upc: Joi.boolean().optional(),
+    onhand: Joi.boolean().optional(),
+    salesCategory: Joi.boolean().optional(),
+    priceClass: Joi.boolean().optional(),
+    unitCost: Joi.boolean().optional(),
+    extendedCost: Joi.boolean().optional(),
+    retail: Joi.boolean().optional(),
+    section: Joi.boolean().optional(),
+    location: Joi.boolean().optional(),
+    vendorItem: Joi.boolean().optional(),
+    sequence: Joi.boolean().optional()
+  }).optional().messages({
+    'object.base': 'selectedFields must be an object'
+  }),
+  groupBy: Joi.string().trim().min(1).optional().messages({
+    'string.base': 'groupBy must be a string',
+    'string.empty': 'groupBy cannot be empty',
+    'string.min': 'groupBy cannot be an empty string'
+  }),
+  newCategoryOnNewPage: Joi.boolean().optional(),
+  headerPosition: Joi.string().trim().allow(null, '').optional(),
+  footerPosition: Joi.string().trim().allow(null, '').optional(),
+  pickedByPosition: Joi.string().trim().allow(null, '').optional(),
+  checkedByPosition: Joi.string().trim().allow(null, '').optional(),
+  showTotalCartons: Joi.boolean().optional(),
+  showTotalPieces: Joi.boolean().optional(),
+  showTotalLines: Joi.boolean().optional(),
+  showPickedBy: Joi.boolean().optional(),
+  showCheckedBy: Joi.boolean().optional(),
+  showBundles: Joi.boolean().optional()
+});
+
+// FuturePricing validation schemas
+const futurePricingItemSchema = Joi.object({
+  itemNumber: Joi.number().integer().positive().required().messages({
+    'number.base': 'Item number must be a number',
+    'number.integer': 'Item number must be an integer',
+    'number.positive': 'Item number must be positive',
+    'any.required': 'Item number is required',
+  }),
+  effectiveAt: Joi.date().required().messages({
+    'date.base': 'Effective date must be a valid date',
+    'any.required': 'Effective date is required',
+  }),
+  changedFields: Joi.array().items(Joi.object()).min(1).required().messages({
+    'array.base': 'Changed fields must be an array',
+    'array.min': 'Changed fields must contain at least one field change',
+    'any.required': 'Changed fields is required',
+  }),
+  isApplied: Joi.boolean().optional().default(false).messages({
+    'boolean.base': 'Is applied must be a boolean',
+  }),
+  changedBy: Joi.string().valid('admin', 'user').required().messages({
+    'string.base': 'Changed by must be a string',
+    'any.only': 'Changed by must be either "admin" or "user"',
+    'any.required': 'Changed by is required',
+  }),
+  changedUserId: Joi.number().integer().positive().allow(null).optional().messages({
+    'number.base': 'Changed user ID must be a number',
+    'number.integer': 'Changed user ID must be an integer',
+    'number.positive': 'Changed user ID must be positive',
+  }),
+});
+
+export const createFuturePricingSchema = Joi.object({
+  futurePricings: Joi.array().items(futurePricingItemSchema).min(1).required().messages({
+    'array.base': 'Future pricings must be an array',
+    'array.min': 'At least one future pricing entry is required',
+    'any.required': 'Future pricings array is required',
+  }),
+});
+
+export const updateFuturePricingSchema = Joi.object({
+  itemNumber: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Item number must be a number',
+    'number.integer': 'Item number must be an integer',
+    'number.positive': 'Item number must be positive',
+  }),
+  effectiveAt: Joi.date().optional().messages({
+    'date.base': 'Effective date must be a valid date',
+  }),
+  changedFields: Joi.array().items(Joi.object()).min(1).optional().messages({
+    'array.base': 'Changed fields must be an array',
+    'array.min': 'Changed fields must contain at least one field change',
+  }),
+  isApplied: Joi.boolean().optional().messages({
+    'boolean.base': 'Is applied must be a boolean',
+  }),
+  changedBy: Joi.string().valid('admin', 'user').optional().messages({
+    'string.base': 'Changed by must be a string',
+    'any.only': 'Changed by must be either "admin" or "user"',
+  }),
+  changedUserId: Joi.number().integer().positive().allow(null).optional().messages({
+    'number.base': 'Changed user ID must be a number',
+    'number.integer': 'Changed user ID must be an integer',
+    'number.positive': 'Changed user ID must be positive',
+  }),
+});
+
+export const getFuturePricingQuerySchema = Joi.object({
+  page: Joi.number().integer().positive().optional().default(1),
+  limit: Joi.number().integer().positive().optional().default(10),
+  search: Joi.string().optional().allow(''),
+  itemNumber: Joi.number().integer().positive().optional(),
+  isApplied: Joi.boolean().optional(),
+  changedBy: Joi.string().valid('admin', 'user').optional(),
+});
+
 
 
 

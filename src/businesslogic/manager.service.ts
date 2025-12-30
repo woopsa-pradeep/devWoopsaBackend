@@ -9,6 +9,7 @@ import { InventoryUPC } from "../models/mmsql/inventoryUpc.model";
 import { RetailerDevice } from "../models/postgres/device.model";
 import { ProductImage } from "../models/postgres/product.model";
 import { AppError } from "../utils/AppError";
+import { Operations } from "../utils/operations";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
 import { cast, col, literal, Op, Order, Sequelize, where } from 'sequelize';
@@ -91,6 +92,8 @@ import {  PODetail } from "../models/mmsql/poDetail.model";
 import { now } from "moment";
 import { Driver } from "../models/postgres/driver.model";
 import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.model";
+import { Picklist } from "../models/postgres/picklist.model";
+import { FuturePricing } from "../models/postgres/futurePricing.model";
 
 export class ManagerService {
 
@@ -2125,7 +2128,8 @@ export class ManagerService {
         'Order_Number',
         'C_Number',
         'Order_Source',
-        'Order_Date'
+        'Order_Date',
+        'Picklist_Printed'
       ],
       where: whereCondition,
       include: [
@@ -2189,6 +2193,7 @@ export class ManagerService {
         Order_Source: order.Order_Source,
         Order_Source_Name: orderSourceName,
         Order_Date: order.Order_Date,
+        Picklist_Printed: order.Picklist_Printed,
         customerName: order.customer?.C_Name || 'N/A',
         address: order.customer?.C_Address || 'N/A',
         city: order.customer?.C_City || 'N/A',
@@ -2222,6 +2227,7 @@ export class ManagerService {
         'User_ID',
         'Order_Source',
         'Delivery_Charge',
+        'Picklist_Printed'
       ]
     });
 
@@ -2477,13 +2483,36 @@ export class ManagerService {
             'Description',
             'Pack',
             'CaseCount',
-            'UOM'
+            'UOM',
+            'BaseCost',
+            'NetCost',
+            'Section',
+            'Location',
+            'Section2',
+            'Location2',
+            'Sequence',
+            'Vendor_ItemNumberAlpha'
+            
           ],
           include: [
             {
               model: SalesCategory,
               as: 'SalesCategory',
               attributes: ['Sales_Category', 'Category_Desc'],
+            },
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: ['Price_Class', 'Class_Desc'],
+            },
+            {
+              model:InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              where: {
+                Status: 0,
+              },
+              required: false,
             }
           ]
         }
@@ -5975,6 +6004,229 @@ export class ManagerService {
       where: { PM_ID: id }
     });
     return updateDistributor;
+
+  }
+  // Picklist CRUD methods
+  async createPicklist(data: any) {
+    // Ensure boolean fields default to true if not provided
+    const picklistData = {
+      name: data.name,
+      selectedFields: data.selectedFields,
+      groupBy: data.groupBy,
+      newCategoryOnNewPage: data.newCategoryOnNewPage ?? true,
+      headerPosition: data.headerPosition ?? null,
+      footerPosition: data.footerPosition ?? null,
+      pickedByPosition: data.pickedByPosition ?? null,
+      checkedByPosition: data.checkedByPosition ?? null,
+      showTotalCartons: data.showTotalCartons ?? true,
+      showTotalPieces: data.showTotalPieces ?? true,
+      showTotalLines: data.showTotalLines ?? true,
+      showPickedBy: data.showPickedBy ?? true,
+      showCheckedBy: data.showCheckedBy ?? true,
+      showBundles: data.showBundles ?? true,
+    };
+
+    return await Picklist.create(picklistData);
+  }
+
+  async getAllPicklists(query: PaginationOptions) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const search = query.search as string;
+
+    const where: any = {};
+    if (search) {
+      where.name = { [Op.like]: `%${search}%` };
+    }
+
+    const { count: totalCount, rows: picklists } = await Picklist.findAndCountAll({
+      where,
+      limit,
+      offset: (page - 1) * limit,
+      order: [['createdAt', 'DESC']],
+    });
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      picklists,
+    };
+  }
+
+  async getPicklistById(id: number) {
+    const picklist = await Operations.findById(Picklist, id);
+    if (!picklist) {
+      throw new AppError("Picklist not found", 404);
+    }
+    return picklist;
+  }
+
+  async updatePicklist(id: number, data: any) {
+    // If selectedFields is being updated, ensure orderedQty and scannedQty are present
+    if (data.selectedFields) {
+      if (data.selectedFields.orderedQty === undefined || data.selectedFields.scannedQty === undefined) {
+        // Get existing picklist to merge with existing selectedFields
+        const existingPicklist = await Picklist.findByPk(id);
+        if (existingPicklist) {
+          data.selectedFields = {
+            ...existingPicklist.selectedFields,
+            ...data.selectedFields,
+            orderedQty: data.selectedFields.orderedQty ?? existingPicklist.selectedFields.orderedQty,
+            scannedQty: data.selectedFields.scannedQty ?? existingPicklist.selectedFields.scannedQty,
+          };
+        }
+      }
+    }
+
+    // If groupBy is being updated and is empty string, throw error
+    if (data.groupBy !== undefined && data.groupBy === '') {
+      throw new AppError("groupBy cannot be an empty string", 400);
+    }
+
+    return await Picklist.update(data, { where: { id } });
+  }
+
+  async deletePicklist(id: number) {
+    await Picklist.destroy({ where: { id } });
+    return { message: "Picklist deleted successfully" };
+  }
+
+  async makePickListPrinted(orderNumber: number) {
+    const now = new Date();
+
+    const formatted =
+    now.toISOString().slice(0, 19).replace("T", " "); // 
+    await OrderHeader.update({ Picklist_Printed: true, Picklist_Time: formatted}, { where: { Order_Number: orderNumber } });
+    return { message: "Picklist printed successfully" };
+  }
+
+  // FuturePricing CRUD methods
+  async createFuturePricing(body: {
+    futurePricings: Array<{
+      itemNumber: number;
+      effectiveAt: Date;
+      changedFields: Array<Record<string, any>>;
+      isApplied?: boolean;
+      changedBy: 'admin' | 'user';
+      changedUserId?: number | null;
+    }>;
+  }) {
+    const results = [];
+    
+    for (const futurePricingData of body.futurePricings) {
+      // Check if a future pricing already exists for this itemNumber
+      const existingFuturePricing = await FuturePricing.findOne({
+        where: { itemNumber: futurePricingData.itemNumber,isApplied:false }
+      });
+
+      if (existingFuturePricing) {
+        // Update the existing record
+        await existingFuturePricing.update({
+          effectiveAt: futurePricingData.effectiveAt,
+          changedFields: futurePricingData.changedFields,
+          isApplied: futurePricingData.isApplied ?? existingFuturePricing.isApplied,
+          changedBy: futurePricingData.changedBy,
+          changedUserId: futurePricingData.changedUserId ?? existingFuturePricing.changedUserId,
+        });
+        results.push(existingFuturePricing);
+      } else {
+        // Create a new record
+        const newFuturePricing = await FuturePricing.create(futurePricingData);
+        results.push(newFuturePricing);
+      }
+    }
+
+    return {
+      count: results.length,
+      futurePricings: results,
+    };
+  }
+
+  async getFuturePricingById(id: number) {
+    const futurePricing = await FuturePricing.findByPk(id);
+
+    if (!futurePricing) {
+      throw new AppError(Manager.FUTURE_PRICING_NOT_FOUND, 404);
+    }
+
+    return futurePricing;
+  }
+
+  async getAllFuturePricings(query: PaginationOptions & {
+    search?: string;
+    itemNumber?: number;
+    isApplied?: boolean;
+    changedBy?: 'admin' | 'user';
+  }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const search = query.search || '';
+
+    const whereCondition: any = {};
+
+    if (search) {
+      const searchNum = parseInt(search);
+      if (!isNaN(searchNum)) {
+        whereCondition.itemNumber = searchNum;
+      }
+    }
+
+    if (query.itemNumber) {
+      whereCondition.itemNumber = query.itemNumber;
+    }
+
+    if (query.isApplied !== undefined) {
+      whereCondition.isApplied = query.isApplied;
+    }
+
+    if (query.changedBy) {
+      whereCondition.changedBy = query.changedBy;
+    }
+
+    const { count: totalCount, rows: futurePricings } = await FuturePricing.findAndCountAll({
+      where: whereCondition,
+      limit,
+      offset: (page - 1) * limit,
+      order: [['id', 'DESC']],
+    });
+
+    return {
+      totalCount,
+      page,
+      limit,
+      futurePricings,
+    };
+  }
+
+  async updateFuturePricing(id: number, body: Partial<{
+    itemNumber: number;
+    effectiveAt: Date;
+    changedFields: Array<Record<string, any>>;
+    isApplied: boolean;
+    changedBy: 'admin' | 'user';
+    changedUserId: number | null;
+  }>) {
+    const futurePricing = await FuturePricing.findByPk(id);
+
+    if (!futurePricing) {
+      throw new AppError(Manager.FUTURE_PRICING_NOT_FOUND, 404);
+    }
+
+    await futurePricing.update(body);
+    return futurePricing;
+  }
+
+  async deleteFuturePricing(id: number) {
+    const futurePricing = await FuturePricing.findByPk(id);
+
+    if (!futurePricing) {
+      throw new AppError(Manager.FUTURE_PRICING_NOT_FOUND, 404);
+    }
+
+    await futurePricing.destroy();
+    return { success: true, message: 'Future pricing deleted successfully' };
   }
 
 } 

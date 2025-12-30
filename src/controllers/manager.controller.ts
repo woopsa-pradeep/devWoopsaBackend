@@ -1119,4 +1119,65 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const data = await this.managerService.distributorUpdate(Number(pmId), req.body);
     sendResponse(res, 200, true, data, 'Distributor updated successfully');
   }
+  // Picklist CRUD Controller Methods
+  async createPicklist(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createPicklist(req.body);
+    sendResponse(res, 201, true, data, 'Picklist created successfully');
+  }
+
+  async getAllPicklists(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllPicklists(req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, 'Picklists retrieved successfully');
+  }
+
+  async getPicklistById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPicklistById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Picklist retrieved successfully');
+  }
+
+  async updatePicklist(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updatePicklist(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Picklist updated successfully');
+  }
+
+  async deletePicklist(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deletePicklist(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Picklist deleted successfully');
+  }
+
+  async makePickListPrinted(req: AuthRequest, res: Response) {
+    const data = await this.managerService.makePickListPrinted(Number(req.params.orderNumber));
+    sendResponse(res, 200, true, data, 'Picklist printed successfully');
+  }
+
+  // FuturePricing CRUD controller methods
+  async createFuturePricing(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createFuturePricing(req.body);
+    sendResponse(res, 201, true, data, Manager.FUTURE_PRICING_CREATED_SUCCESSFULLY);
+  }
+
+  async getFuturePricingById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getFuturePricingById(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.FUTURE_PRICING_FETCHED_SUCCESSFULLY);
+  }
+
+  async getAllFuturePricings(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllFuturePricings(req.query as PaginationOptions & {
+      search?: string;
+      itemNumber?: number;
+      isApplied?: boolean;
+      changedBy?: 'admin' | 'user';
+    });
+    sendResponse(res, 200, true, data, Manager.FUTURE_PRICING_LIST_FETCHED_SUCCESSFULLY);
+  }
+
+  async updateFuturePricing(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateFuturePricing(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, Manager.FUTURE_PRICING_UPDATED_SUCCESSFULLY);
+  }
+
+  async deleteFuturePricing(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteFuturePricing(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.FUTURE_PRICING_DELETED_SUCCESSFULLY);
+  }
 }

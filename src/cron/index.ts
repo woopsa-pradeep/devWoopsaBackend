@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { bulkUpdateRetailers, updateRetailerOrderDate } from './retailer.cron';
 import {  getUpcomingNotifications } from './notificationSchedular.cron';
+import { processFuturePricingUpdates } from './futurePricing.cron';
 
 // cron.ts
 export const startCronJobs = () => {
@@ -27,6 +28,28 @@ export const startCronJobs = () => {
         console.log('[Cron] Notification scheduler completed.');
       } catch (error) {
         console.error('[Cron] Error during notification scheduler:', error);
+      }
+    });
+
+    // Future Pricing update cron job (runs every hour)
+    cron.schedule('0 * * * *', async () => {
+      try {
+        console.log('[Cron] Starting future pricing updates...');
+        await processFuturePricingUpdates();
+        console.log('[Cron] Future pricing updates completed.');
+      } catch (error) {
+        console.error('[Cron] Error during future pricing updates:', error);
+      }
+    });
+    
+
+    cron.schedule('5 0 * * *', async () => {
+      try {
+        console.log('[Cron] Starting future pricing updates...');
+        await processFuturePricingUpdates();
+        console.log('[Cron] Future pricing updates completed.');
+      } catch (error) {
+        console.error('[Cron] Error during future pricing updates:', error);
       }
     });
     

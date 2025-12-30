@@ -453,7 +453,8 @@ export class SalesService {
       'Order_Number',
       'Order_Date',
       'User_ID',
-      'Order_Source'
+      'Order_Source',
+      'Picklist_Printed'
     ],
     include: [
       {
@@ -513,6 +514,7 @@ export class SalesService {
       Order_Date: header.Order_Date,
       User_ID: header.User_ID,
       Order_Source: source,
+      Picklist_Printed: header.Picklist_Printed,
       totalQuantity: quantityMap.get(header.Order_Number) || 0
     };
   });
@@ -540,7 +542,8 @@ export class SalesService {
         'Order_Date',
         'User_ID',
         'Order_Source',
-        'Delivery_Charge'
+        'Delivery_Charge',
+        'Picklist_Printed'
       ]
     });
 

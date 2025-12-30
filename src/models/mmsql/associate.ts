@@ -157,6 +157,8 @@ Vendor.hasMany(Inventory, {
     constraints: false,
   });
 
+ 
+
   // --- FIX APPLIED HERE ---
   // Changed sourceKey and targetKey to 'P_Number' which is likely the primary key
   // for CustReceivables, ensuring a valid join.

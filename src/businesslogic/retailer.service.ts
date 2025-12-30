@@ -1812,19 +1812,13 @@ export class RetailerService {
     // Get order headers with pagination
     const { count: totalCount, rows: orderHeaders } = await OrderHeader.findAndCountAll({
       where: whereClause,
-      include: [
-        {
-          model: SalesCategory,
-          as: 'SalesCategory',
-          attributes: ['Category_Desc','Sales_Category'],
-          required: false
-        }
-      ],
+     
       attributes: [
         'Order_Number',
         'Order_Date',
         'User_ID',
-        'Order_Source'
+        'Order_Source',
+        'Picklist_Printed'
       ],
       order: [['Order_Number', 'DESC']],
       limit,
@@ -1836,8 +1830,10 @@ export class RetailerService {
 
     const orderDetailsWithSums = await OrderDetail.findAll({
       where: {
-        Order_Number: { [Op.in]: orderNumbers }
+        Order_Number: { [Op.in]: orderNumbers },
+        
       },
+
       attributes: [
         'Order_Number',
         [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
@@ -1866,6 +1862,7 @@ export class RetailerService {
         Order_Date: header.Order_Date,
         User_ID: header.User_ID,
         Order_Source: header.Order_Source,
+        Picklist_Printed: header.Picklist_Printed,
         Order_Source_Name: orderSourceName,
         totalQuantity: quantityMap.get(header.Order_Number) || 0
       };
@@ -1894,7 +1891,8 @@ export class RetailerService {
         'Order_Date',
         'User_ID',
         'Order_Source',
-        'Delivery_Charge'
+        'Delivery_Charge',
+        'Picklist_Printed'
       ]
     });
 
