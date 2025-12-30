@@ -705,6 +705,8 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
 
           // Check if current date is between start and end date (inclusive)
           if (currentDate >= startDate && currentDate <= endDate) {
+
+            console.log('GOES IN DISCOUNT ALLOWANCE',findAllowance)
             if (findAllowance.AllowanceType === '$') {
               discountPrice += findAllowance.Allowance;
             } else if (findAllowance.AllowanceType === '%') {

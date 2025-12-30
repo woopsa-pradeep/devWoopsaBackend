@@ -1075,7 +1075,7 @@ export class SalesService {
         if (!price) {
           price = await getFirstValidPrice(e);
         }
-        price = Math.ceil(price * 100) / 100;
+        // price = Math.ceil(price * 100) / 100;
       const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
       const productLimit = await getProductLimit(e.Item_Number);
       let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
@@ -1336,7 +1336,7 @@ export class SalesService {
   
         // Price & discount checks
         let price = discountMap[e.Item_Number] ?? (await getFirstValidPrice(e));
-        price = Math.ceil(price * 100) / 100;
+        // price = Math.ceil(price * 100) / 100;
         let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
         taxRate = Math.ceil(taxRate * 100) / 100;
 
@@ -1479,7 +1479,7 @@ export class SalesService {
         const data = await Inventory.findByPk(e.Item_Number)
         price = await getFirstValidPrice(data?.dataValues)
       }
-      price = Math.ceil(price * 100) / 100;
+      // price = Math.ceil(price * 100) / 100;
       let product: any = await Inventory.findOne({
         where: {
           Item_Number: e.Item_Number
@@ -3148,7 +3148,7 @@ const newSalesRepArray = salesRepList.map(Number);
       let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
       const userJurisdiction = await getJurisdiction(userId);
       const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
-      price = Math.ceil(price * 100) / 100;
+      // price = Math.ceil(price * 100) / 100;
   
       let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
       taxRate = Math.ceil(taxRate * 100) / 100;
@@ -4296,7 +4296,7 @@ const newSalesRepArray = salesRepList.map(Number);
         const data = await Inventory.findByPk(e.Item_Number)
         price = await getFirstValidPrice(data?.dataValues)
       }
-      price = Math.ceil(price * 100) / 100;
+      // price = Math.ceil(price * 100) / 100;
       let product: any = await Inventory.findOne({
         where: {
           Item_Number: e.Item_Number

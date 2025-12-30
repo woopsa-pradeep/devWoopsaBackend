@@ -171,7 +171,7 @@ export class DashboardService {
                     if (!price) {
                         price = await getFirstValidPrice(e);
                     }
-                    price = Math.ceil(price * 100) / 100;
+                    // price = Math.ceil(price * 100) / 100;
 
                     if (userJurisdiction) {
                         taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
@@ -410,7 +410,7 @@ export class DashboardService {
                             if (!price) {
                                 price = await getFirstValidPrice(e);
                             }
-                            price = Math.ceil(price * 100) / 100;
+                            // price = Math.ceil(price * 100) / 100;
                             if (userJurisdiction) {
                                 taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
                                 taxRate = Math.ceil(taxRate * 100) / 100;
@@ -639,7 +639,7 @@ export class DashboardService {
                     if (!price) {
                         price = await getFirstValidPrice(e);
                     }
-                    price = Math.ceil(price * 100) / 100;
+                    // price = Math.ceil(price * 100) / 100;
                     const userJurisdiction = await getJurisdiction(Number(userId));
                     if (userJurisdiction) {
                         taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
@@ -845,7 +845,7 @@ export class DashboardService {
 
                 }
             }
-            price = Math.ceil(price * 100) / 100;
+            // price = Math.ceil(price * 100) / 100;
             let wareHouseSetting: any = await Setting.findOne({});
             wareHouseSetting = wareHouseSetting?.dataValues || null;
             console.log(wareHouseSetting, 'wareHouseSetting')
@@ -1060,7 +1060,7 @@ export class DashboardService {
 
             let taxRate = 0;
             let price = await getFirstValidPrice(e);
-            price = Math.ceil(price * 100) / 100;
+            // price = Math.ceil(price * 100) / 100;
 
             let prepaidTaxRate = 0
 
@@ -1645,7 +1645,19 @@ export class DashboardService {
             }
           }
 
-          const userExcluded = await excludeItemByUser(customerId);
+          let userExcluded : any[] = [];
+
+          
+     
+          if(customerId && role !='sales'){
+            console.log(customerId, 'customerId----->')
+            userExcluded = await excludeItemByUser(customerId);
+          }else if(customerNumber){
+            console.log(customerNumber, 'customerNumber----->')
+             userExcluded = await excludeItemByUser(Number(customerNumber));
+          }
+
+
           if (userExcluded && userExcluded.length > 0) {
             allExcludedItems = allExcludedItems.concat(userExcluded);
           }
@@ -1706,6 +1718,11 @@ export class DashboardService {
 
         });
 
+
+
+
+
+        console.log(specialsList, 'specialsList----->')
         // Get the item numbers to fetch additional data
         const itemNumbers = specialsList.map((special: any) => special.Item_Number);
 
@@ -1777,7 +1794,7 @@ export class DashboardService {
                 if (userJurisdiction != null && salesCategory) {
                     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, salesCategory);
                 }
-                price = Math.ceil(price * 100) / 100;
+                // price = Math.ceil(price * 100) / 100;
                 taxRate = await getTaxRateV1(special.inventory.OTP_Number, userJurisdiction as number, special.inventory.Item_Number, price);
                 taxRate = Math.ceil(taxRate * 100) / 100;
                 hasQtyDiscount = await checkQtyDiscount(special.inventory.Item_Number, customerId, price + taxRate);
@@ -1785,7 +1802,7 @@ export class DashboardService {
             } else if (role === 'sales' && customerNumber) {
                 const userJurisdiction = await getJurisdiction(customerNumber);
                 price = await getDiscount(special.inventory.Item_Number, customerNumber) || price;
-                price = Math.ceil(price * 100) / 100;
+                // price = Math.ceil(price * 100) / 100;
                 taxRate = await getTaxRateV1(special.inventory.OTP_Number, userJurisdiction as number, special.inventory.Item_Number, price);
                 taxRate = Math.ceil(taxRate * 100) / 100;
                 hasQtyDiscount = await checkQtyDiscount(special.inventory.Item_Number, customerNumber, price + taxRate);

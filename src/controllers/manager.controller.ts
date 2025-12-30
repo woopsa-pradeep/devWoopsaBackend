@@ -1113,4 +1113,10 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const data = await this.managerService.getAllOrderNumbers();
     sendResponse(res, 200, true, data, 'Order numbers retrieved successfully');
   }
+
+  async distributorUpdate(req: AuthRequest, res: Response) {
+    const pmId = req.user.id; 
+    const data = await this.managerService.distributorUpdate(Number(pmId), req.body);
+    sendResponse(res, 200, true, data, 'Distributor updated successfully');
+  }
 }

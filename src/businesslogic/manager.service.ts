@@ -5970,4 +5970,11 @@ export class ManagerService {
     return orderNumbers;
   }
 
+  async distributorUpdate(id: number, body: any) {
+    const updateDistributor = await Distributor.update(body, {
+      where: { PM_ID: id }
+    });
+    return updateDistributor;
+  }
+
 } 

@@ -311,4 +311,7 @@ router.get('/drivers/:driverId/route-assignments', verifyRole(ROLES.MANAGER), ca
 // Order Numbers routes
 router.get('/order-numbers', verifyRole(ROLES.MANAGER), catchAsync(managerController.getAllOrderNumbers.bind(managerController)));
 
+// Distributor Update routes
+router.put('/distributorUpdate', verifyRole(ROLES.MANAGER), catchAsync(managerController.distributorUpdate.bind(managerController)));
+
 export default router; 

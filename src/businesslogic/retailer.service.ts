@@ -476,7 +476,7 @@ export class RetailerService {
 
       let price = discountMap[e.Item_Number] ?? await getFirstValidPrice(e);
       const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
-      price = Math.ceil(price * 100) / 100;
+      // price = Math.ceil(price * 100) / 100;
       const productLimit = await getProductLimit(e.Item_Number);
       let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
       taxRate = Math.ceil(taxRate * 100) / 100;
@@ -885,7 +885,7 @@ export class RetailerService {
       else if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
-      price = Math.ceil(price * 100) / 100;
+      // price = Math.ceil(price * 100) / 100;
       const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
       const topLatestItems = await getTopLatestItems();
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
@@ -2817,7 +2817,7 @@ export class RetailerService {
     // Step 3: Pricing & Tax
     let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
     const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
-    price = Math.ceil(price * 100) / 100;
+    // price = Math.ceil(price * 100) / 100;
 
     let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
     taxRate = Math.ceil(taxRate * 100) / 100;
