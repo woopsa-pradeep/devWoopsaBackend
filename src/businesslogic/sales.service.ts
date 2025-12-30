@@ -3980,50 +3980,55 @@ const newSalesRepArray = salesRepList.map(Number);
   }
 
   async getItemForUpc(body: any) {
-   
-    let { salesCategoryId, search, priceClassId } = body;
-
-    // if(!search) throw new AppError("Search is required", 400);
-
-    let whereClause: any = {
+    const {
+      salesCategoryIds = [],   // array of category IDs from payload
+      search = '',
+      priceClassId = [],       // array of price class IDs
+    } = body;
+  
+    const whereClause: any = {
       I_Inactive: false,
       ShortOrderForm: true,
     };
-
-
-     
-      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
-        // Both filters exist → use OR condition
-        whereClause[Op.or] = [
-          { Sales_Category: { [Op.in]: salesCategoryId } },
-          { Price_Class: { [Op.in]: priceClassId } }
-        ];
-      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
-        // Only Sales_Category filter
-        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
-        // Only Price_Class filter
-        whereClause.Price_Class = { [Op.in]: priceClassId };
+  
+    // 1) PRIMARY FILTER: Sales_Category wins
+    if (Array.isArray(salesCategoryIds) && salesCategoryIds.length > 0) {
+      // Only these categories
+      whereClause.Sales_Category = { [Op.in]: salesCategoryIds };
+    } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      // Only if category filter is NOT provided
+      whereClause.Price_Class = { [Op.in]: priceClassId };
+    }
+  
+    // 2) SEARCH: must be AND-ed with above filters
+    const trimmed = search.trim();
+    if (trimmed !== '') {
+      const likeAnywhere = `%${trimmed}%`;
+      const likePrefix   = `${trimmed}%`;
+  
+      if (!whereClause[Op.and]) {
+        whereClause[Op.and] = [];
       }
-
-      if (search) {
-        const likePrefix   = `${search}%`;
-          const searchValue = `${search}%`;
-          whereClause[Op.or] = [
-            { Item_Number: { [Op.like]: likePrefix } },
-            { Description: { [Op.like]: likePrefix } },
-            { ALT_Description2: { [Op.like]: likePrefix} }
-          ];
-        
-      }
-      
-
+  
+      whereClause[Op.and].push({
+        [Op.or]: [
+          { Item_Number:      { [Op.like]: likePrefix } },   // starts with "se"
+          { Description:      { [Op.like]: likeAnywhere } }, // contains "se"
+          { ALT_Description2: { [Op.like]: likeAnywhere } },
+          // uncomment if you want UPC search too:
+          // { '$UPCList.UPC_Number$': { [Op.like]: likePrefix } },
+        ],
+      });
+    }
+  
+    console.log('WHERE:', JSON.stringify(whereClause, null, 2));
+  
     const product = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces',
       ],
       where: whereClause,
       include: [
@@ -4031,29 +4036,24 @@ const newSalesRepArray = salesRepList.map(Number);
           model: SalesCategory,
           as: 'SalesCategory',
           attributes: ['Category_Desc'],
-          required: false
+          required: false,
         },
         {
           model: PriceClass,
           as: 'PriceClass',
           attributes: ['Class_Desc'],
-          required: false
+          required: false,
         },
-       
         {
           model: InventoryUPC,
           as: 'UPCList',
-          attributes: ['UPC_Number', 'myKey','Status'],
-          required: false
+          attributes: ['UPC_Number', 'myKey', 'Status'],
+          required: false,
         },
       ],
-     
     });
-
-
-    return {
-      product: product || [],
-    };
+  
+    return { product: product || [] };
   }
 
 
