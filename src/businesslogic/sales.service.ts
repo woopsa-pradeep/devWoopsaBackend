@@ -4007,12 +4007,12 @@ const newSalesRepArray = salesRepList.map(Number);
       }
 
       if (search) {
-       
+        const likePrefix   = `${search}%`;
           const searchValue = `${search}%`;
           whereClause[Op.or] = [
-            { Item_Number: { [Op.like]: searchValue } },
-            { Description: { [Op.like]: `%${search}%` } },
-            { ALT_Description2: { [Op.like]: `%${search}%` } }
+            { Item_Number: { [Op.like]: likePrefix } },
+            { Description: { [Op.like]: likePrefix } },
+            { ALT_Description2: { [Op.like]: likePrefix} }
           ];
         
       }
