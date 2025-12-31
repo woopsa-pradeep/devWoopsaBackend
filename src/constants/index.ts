@@ -115,6 +115,13 @@ export const Manager = {
   FUTURE_PRICING_FETCHED_SUCCESSFULLY: "Future pricing fetched successfully",
   FUTURE_PRICING_LIST_FETCHED_SUCCESSFULLY: "Future pricing list fetched successfully",
   FUTURE_PRICING_NOT_FOUND: "Future pricing not found",
+  // RetailerDocuments messages
+  RETAILER_DOCUMENTS_CREATED_SUCCESSFULLY: "Retailer documents created successfully",
+  RETAILER_DOCUMENTS_UPDATED_SUCCESSFULLY: "Retailer documents updated successfully",
+  RETAILER_DOCUMENTS_DELETED_SUCCESSFULLY: "Retailer documents deleted successfully",
+  RETAILER_DOCUMENTS_FETCHED_SUCCESSFULLY: "Retailer documents fetched successfully",
+  RETAILER_DOCUMENTS_LIST_FETCHED_SUCCESSFULLY: "Retailer documents list fetched successfully",
+  RETAILER_DOCUMENTS_NOT_FOUND: "Retailer documents not found",
 }
 
 export const AuthMessage = {

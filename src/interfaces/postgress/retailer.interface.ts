@@ -14,4 +14,5 @@ export interface IRetailer {
   minOrderAmount?: number | null;
   enableMaxOrderQtyControl?: boolean;
   enableMinOrderAmountControl?: boolean;
+ 
 }

@@ -17,7 +17,7 @@ import {
 } from '../validations/retailer.validation';
 import { placeOrderSchema } from '../validations/order.validation';
 import { multerUpload } from '../middlewares/upload.middleware';
-import { createInventoryLocationSchema, updateInventoryLocationSchema } from '../validations/manager.validation';
+import { createInventoryLocationSchema, createRetailerDocumentsSchema, updateInventoryLocationSchema, updateRetailerDocumentsSchema } from '../validations/manager.validation';
 
 
 const  router = Router();
@@ -188,5 +188,10 @@ router.get('/getSalesCategoryPriceClassByCustomer/:customerNumber',verifyRole(RO
 
 // get sales category by customer
 router.get('/getSalesCategoryByCustomer/:customerNumber',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getSalesCategoryByCustomer.bind(retailerController)));
+
+// retailer documents
+router.put('/retailer-documents/:id',verifyRole(ROLES.RETAILER),validateRequest(updateRetailerDocumentsSchema),catchAsync(retailerController.updateRetailerDocuments.bind(retailerController)));
+router.delete('/retailer-documents/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.deleteRetailerDocuments.bind(retailerController)));
+router.post('/retailer-documents',verifyRole(ROLES.RETAILER),validateRequest(createRetailerDocumentsSchema),catchAsync(retailerController.createRetailerDocuments.bind(retailerController)));
 
 export default router; 

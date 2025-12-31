@@ -321,4 +321,19 @@ export class RetailerController {
     const data = await this.retailerService.getSalesCategoryByCustomer(Number(customerNumber));
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
+
+  async updateRetailerDocuments(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.updateRetailerDocuments(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async deleteRetailerDocuments(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.deleteRetailerDocuments(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async createRetailerDocuments(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.createRetailerDocuments(req.body);
+    sendResponse(res, 201, true, data, General.SUCCESS);
+  } 
 }

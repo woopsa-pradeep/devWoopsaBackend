@@ -3976,7 +3976,6 @@ const newSalesRepArray = salesRepList.map(Number);
   async addUpc(body:any){
     const result = await InventoryUPC.create(body);
     return result;
-
   }
 
   async getItemForUpc(body: any) {

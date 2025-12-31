@@ -1847,6 +1847,55 @@ export const getFuturePricingQuerySchema = Joi.object({
   changedBy: Joi.string().valid('admin', 'user').optional(),
 });
 
+// RetailerDocuments validation schemas
+export const createRetailerDocumentsSchema = Joi.object({
+  customerNumber: Joi.number().integer().positive().required().messages({
+    'number.base': 'Customer number must be a number',
+    'number.integer': 'Customer number must be an integer',
+    'number.positive': 'Customer number must be positive',
+    'any.required': 'Customer number is required',
+  }),
+  attachments: Joi.array().items(Joi.string()).optional().allow(null).messages({
+    'array.base': 'Attachments must be an array',
+  }),
+  salesTaxDoc: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Sales tax document must be a string',
+  }),
+  CigTaxDoc: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Cig tax document must be a string',
+  }),
+  licenseAttachments: Joi.array().items(Joi.string()).optional().allow(null).messages({
+    'array.base': 'License attachments must be an array',
+  }),
+});
+
+export const updateRetailerDocumentsSchema = Joi.object({
+  customerNumber: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Customer number must be a number',
+    'number.integer': 'Customer number must be an integer',
+    'number.positive': 'Customer number must be positive',
+  }),
+  attachments: Joi.array().items(Joi.string()).optional().allow(null).messages({
+    'array.base': 'Attachments must be an array',
+  }),
+  salesTaxDoc: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Sales tax document must be a string',
+  }),
+  CigTaxDoc: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Cig tax document must be a string',
+  }),
+  licenseAttachments: Joi.array().items(Joi.string()).optional().allow(null).messages({
+    'array.base': 'License attachments must be an array',
+  }),
+});
+
+export const getRetailerDocumentsQuerySchema = Joi.object({
+  page: Joi.number().integer().positive().optional().default(1),
+  limit: Joi.number().integer().positive().optional().default(10),
+  search: Joi.string().optional().allow(''),
+  customerNumber: Joi.number().integer().positive().optional(),
+});
+
 
 
 

@@ -370,6 +370,11 @@ async deleteItemLimit(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Customer limit set successfully');
   }
 
+  async updateRetailer(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateRetailer(req.body, Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Retailer updated successfully');
+  }
+
   // Link CRUD controller methods
   async createLink(req: AuthRequest, res: Response) {
     const data = await this.managerService.createLink(req.body as ICreateLink, req);
@@ -1179,5 +1184,39 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async deleteFuturePricing(req: AuthRequest, res: Response) {
     const data = await this.managerService.deleteFuturePricing(Number(req.params.id));
     sendResponse(res, 200, true, data, Manager.FUTURE_PRICING_DELETED_SUCCESSFULLY);
+  }
+
+  async uploadImages(req: AuthRequest, res: Response) {
+    const data = await this.managerService.uploadImages(req);
+    sendResponse(res, 200, true, data, 'Images uploaded successfully');
+  }
+
+  // RetailerDocuments CRUD controller methods
+  async createRetailerDocuments(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createRetailerDocuments(req.body);
+    sendResponse(res, 201, true, data, Manager.RETAILER_DOCUMENTS_CREATED_SUCCESSFULLY);
+  }
+
+  async getRetailerDocumentsById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getRetailerDocumentsById(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.RETAILER_DOCUMENTS_FETCHED_SUCCESSFULLY);
+  }
+
+  async getAllRetailerDocuments(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllRetailerDocuments(req.query as PaginationOptions & {
+      search?: string;
+      customerNumber?: number;
+    });
+    sendResponse(res, 200, true, data, Manager.RETAILER_DOCUMENTS_LIST_FETCHED_SUCCESSFULLY);
+  }
+
+  async updateRetailerDocuments(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateRetailerDocuments(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, Manager.RETAILER_DOCUMENTS_UPDATED_SUCCESSFULLY);
+  }
+
+  async deleteRetailerDocuments(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteRetailerDocuments(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.RETAILER_DOCUMENTS_DELETED_SUCCESSFULLY);
   }
 }

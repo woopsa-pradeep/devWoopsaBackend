@@ -57,6 +57,7 @@ import { sendResponse } from "../utils/sendResponse";
 import e, { Request, Response } from "express"
 import { Token } from "../models/postgres/token.model";
 import InventoryLocation from '../models/postgres/inventoryLocation';
+import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 
 
 
@@ -3788,6 +3789,45 @@ async getSalesCategoryByCustomer(customerNumber: number){
   console.log(customerNumber,'customerNumber')
   const data = await getAllowedSalesCategories(customerNumber);
   return data;
+}
+
+async updateRetailerDocuments(id: number, body: Partial<{
+  customerNumber: number;
+  attachments: string[] | null;
+  salesTaxDoc: string | null;
+  CigTaxDoc: string | null;
+  licenseAttachments: string[] | null;
+}>) {
+  const retailerDocuments = await RetailerDocuments.findByPk(id);
+
+  if (!retailerDocuments) {
+    throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+  }
+
+  await retailerDocuments.update(body);
+  return retailerDocuments;
+}
+
+async deleteRetailerDocuments(id: number) {
+  const retailerDocuments = await RetailerDocuments.findByPk(id);
+
+  if (!retailerDocuments) {
+    throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+  }
+
+  await retailerDocuments.destroy();
+  return { success: true, message: 'Retailer documents deleted successfully' };
+}
+
+async createRetailerDocuments(body: {
+  customerNumber: number;
+  attachments?: string[] | null;
+  salesTaxDoc?: string | null;
+  CigTaxDoc?: string | null;
+  licenseAttachments?: string[] | null;
+}) {
+  const retailerDocuments = await RetailerDocuments.create(body);
+  return retailerDocuments;
 }
 
 

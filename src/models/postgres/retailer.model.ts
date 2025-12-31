@@ -15,6 +15,7 @@ export class Retailer extends Model<IRetailer, RetailerCreationAttributes> imple
   public maxOrderLimit!: number | null;
   public minOrderAmount!: number | null;
   public todayOrderCount!: number;
+
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -74,10 +75,7 @@ Retailer.init(
       allowNull: false,
       defaultValue: true,
     },
-  
-  
-
-
+ 
   },
   {
     sequelize: postgresSequelize,

@@ -94,6 +94,7 @@ import { Driver } from "../models/postgres/driver.model";
 import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.model";
 import { Picklist } from "../models/postgres/picklist.model";
 import { FuturePricing } from "../models/postgres/futurePricing.model";
+import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 
 export class ManagerService {
 
@@ -3081,6 +3082,15 @@ export class ManagerService {
       minOrderAmount
     }, { where: { Customer_Number: id } });
     return updateCustomer;
+  }
+
+  async updateRetailer(body: any, id: number) {
+    const retailer = await Retailer.findOne({ where: { Customer_Number: id } });
+    if (!retailer) {
+      throw new AppError('Retailer not found', 404);
+    }
+    const updateRetailer = await Retailer.update(body, { where: { Customer_Number: id } });
+    return updateRetailer;
   }
 
   async getSupportTicket(query: PaginationOptions, status: string) {
@@ -6229,4 +6239,103 @@ export class ManagerService {
     return { success: true, message: 'Future pricing deleted successfully' };
   }
 
+  async uploadImages(req: Request) {
+    const file = req.file;
+    if (!file) {
+      throw new AppError('File not found', 404);
+    }
+    const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, 'retailer-attachments');
+    if (!result.success) {
+      throw new AppError(result.error || 'Failed to upload image', 500);
+    }
+    return result;
+  }
+
+  // RetailerDocuments CRUD methods
+  
+
+  async getRetailerDocumentsById(id: number) {
+    const retailerDocuments = await RetailerDocuments.findByPk(id);
+
+    if (!retailerDocuments) {
+      throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+    }
+
+    return retailerDocuments;
+  }
+
+  async getAllRetailerDocuments(query: PaginationOptions & {
+    search?: string;
+    customerNumber?: number;
+  }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const search = query.search || '';
+
+    const whereCondition: any = {};
+
+    if (search) {
+      const searchNum = parseInt(search);
+      if (!isNaN(searchNum)) {
+        whereCondition.customerNumber = searchNum;
+      }
+    }
+
+    if (query.customerNumber) {
+      whereCondition.customerNumber = query.customerNumber;
+    }
+
+    const { count: totalCount, rows: retailerDocuments } = await RetailerDocuments.findAndCountAll({
+      where: whereCondition,
+      limit,
+      offset: (page - 1) * limit,
+      order: [['id', 'DESC']],
+    });
+
+    return {
+      totalCount,
+      page,
+      limit,
+      retailerDocuments,
+    };
+  }
+
+  async updateRetailerDocuments(id: number, body: Partial<{
+    customerNumber: number;
+    attachments: string[] | null;
+    salesTaxDoc: string | null;
+    CigTaxDoc: string | null;
+    licenseAttachments: string[] | null;
+  }>) {
+    const retailerDocuments = await RetailerDocuments.findByPk(id);
+
+    if (!retailerDocuments) {
+      throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+    }
+
+    await retailerDocuments.update(body);
+    return retailerDocuments;
+  }
+
+  async deleteRetailerDocuments(id: number) {
+    const retailerDocuments = await RetailerDocuments.findByPk(id);
+
+    if (!retailerDocuments) {
+      throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+    }
+
+    await retailerDocuments.destroy();
+    return { success: true, message: 'Retailer documents deleted successfully' };
+  }
+
+  async createRetailerDocuments(body: {
+    customerNumber: number;
+    attachments?: string[] | null;
+    salesTaxDoc?: string | null;
+    CigTaxDoc?: string | null;
+    licenseAttachments?: string[] | null;
+  }) {
+    const retailerDocuments = await RetailerDocuments.create(body);
+    return retailerDocuments;
+  }
 } 
