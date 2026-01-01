@@ -410,6 +410,23 @@ export class ManagerService {
 
     const registerSet = new Set(registeredCustomers.map((r) => r.Customer_Number));
 
+    const retailerDocuments = await RetailerDocuments.findAll({
+      where: { customerNumber: { [Op.in]: customerNumbers } },
+      attributes: ['customerNumber', 'feinDocument', 'attachments', 'salesTaxDoc', 'CigTaxDoc', 'licenseAttachments'],
+      raw: true,
+    });
+
+    const documentsMap = new Map();
+    retailerDocuments.forEach((doc: any) => {
+      documentsMap.set(doc.customerNumber, {
+        feinDocument: doc.feinDocument,
+        attachments: doc.attachments,
+        salesTaxDoc: doc.salesTaxDoc,
+        CigTaxDoc: doc.CigTaxDoc,
+        licenseAttachments: doc.licenseAttachments,
+      });
+    });
+
     const customerListWithStats = customerList.map((customer: any) => {
       const cNum = customer.C_Number;
 
@@ -418,6 +435,7 @@ export class ManagerService {
         isRegisterCustomer: registerSet.has(cNum),
         orderStats: statsMap.get(cNum) || { ERP: 0, Mobile: 0, Web: 0 },
         customerLimit: limitMap.get(cNum) || { maxOrderLimit: null, minOrderAmount: null },
+        retailerDocuments: documentsMap.get(cNum) || null,
       };
     });
 
@@ -5504,6 +5522,9 @@ export class ManagerService {
   }
 
   async createCustomer(data: any) {
+
+    console.log(data, 'data----->');
+    const {documents} = data
     const nextCustomerNumber = await getNextCustomerNumber();
 
     const finalData = {
@@ -5512,6 +5533,14 @@ export class ManagerService {
       ...data
     }
     const customer = await Customer.create(finalData);
+
+    console.log(documents, 'documents');
+    if(documents){
+      await RetailerDocuments.create({
+        customerNumber: nextCustomerNumber,
+        ...documents
+      });
+    }
     return customer;
   }
 
