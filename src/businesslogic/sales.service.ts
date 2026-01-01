@@ -5403,4 +5403,437 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     const data = await getAllowedSalesCategories(customerNumber);
     return data;
   }
+
+async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?: string, masterSearch?: string }, customerNumber: number){
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='', salesCategory=[] } = query;
+
+    const userJurisdiction = await getJurisdiction(customerNumber);
+
+    let wareHouseSetting: any = await Setting.findOne({});
+    wareHouseSetting = wareHouseSetting?.dataValues || null;
+
+    page = Number(page);
+    limit = Number(limit);
+
+    let whereClause: any = {
+      I_Inactive: false,
+      ShortOrderForm: true,
+    };
+
+    const excludeItem = await excludeItemByUser(customerNumber);
+    if(excludeItem.length > 0){
+      whereClause.Item_Number = { [Op.notIn]: excludeItem };
+    }
+    if(state || zip || jurisdiction){
+      const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+      whereClause.Item_Number = { [Op.notIn]: excludeItem };
+    }
+
+
+
+    let searchInUPC = false;
+    let orderClause: Order = [['Date_Created', 'DESC'] as const]; 
+
+    if (masterSearch && typeof masterSearch === 'string') {
+      const masterArray = masterSearch.split(',').map(i => i.trim());
+      whereClause.Item_Number = { [Op.in]: masterArray };
+    } else {
+
+      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Both filters exist → use OR condition
+        whereClause[Op.or] = [
+          { Sales_Category: { [Op.in]: salesCategoryId } },
+          { Price_Class: { [Op.in]: priceClassId } }
+        ];
+      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+        // Only Sales_Category filter
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Only Price_Class filter
+        whereClause.Price_Class = { [Op.in]: priceClassId };
+      }
+
+
+      if (search) {
+        if (/^\d{8,}$/.test(search)) {
+          searchInUPC = true;
+        } 
+        else {
+        
+          const term = search.toLowerCase();
+          const anywhere = `%${term}%`;
+          const starts = `${term}%`
+
+          
+  whereClause[Op.or] = [
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("Description")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+      { [Op.like]: anywhere }
+    )
+  ];
+
+  // ORDER RULE:
+  // 1. Items starting with search term first
+  // 2. Then items containing it anywhere
+  // 3. Finally alphabetical
+  orderClause = [
+    [
+      Sequelize.literal(`
+        CASE 
+          WHEN LOWER("Description") LIKE '${starts}' THEN 0
+          WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
+          ELSE 2
+        END
+      `),
+      'ASC'
+    ],
+    ['Description', 'ASC']
+  ];
+}
+
+
+        
+      }
+
+    }
+
+    if(salesCategory.length > 0){
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    }
+
+    // === UPC JOIN logic ===
+    const includeUPC = {
+      model: InventoryUPC,
+      as: 'UPCList',
+      attributes: ['UPC_Number'],
+      where: {
+        Status: 0,
+        ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {})
+      },
+      required: searchInUPC
+    };
+
+
+    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
+
+    if (shortBy && Number(shortBy) === 1) {
+      orderClause = [[col('Description'), 'ASC']];
+    }
+
+    if (shortBy && Number(shortBy) === 2) {
+      orderClause = [[col('Description'), 'DESC']];
+    }
+
+    let totalCount = 0;
+
+    if (searchInUPC) {
+      const counted = await Inventory.findAll({
+        attributes: ['Item_Number'],
+        where: whereClause,
+        include: [
+          {
+            ...includeUPC,
+            attributes: []
+          }
+        ],
+        group: ['Inventory.Item_Number'],
+        raw: true,
+        logging: false
+      });
+
+      totalCount = counted.length;
+    } else {
+      totalCount = await Inventory.count({
+        where: whereClause,
+        logging: false
+      });
+    }
+    const topLatestItems = await getTopLatestItems();
+    const productList = await Inventory.findAll({
+      attributes: [
+        'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
+        'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
+        'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
+      ],
+      where: whereClause,
+      include: [
+        {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Category_Desc','Sales_Category'],
+          required: false
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
+          required: false
+        },
+        // {
+        //   model: InventoryStatus,
+        //   as: 'inventoryStatus',
+        //   attributes: ['Inventory_OnHand'],
+        //   required: false
+        // },
+        includeUPC
+      ],
+      order: orderClause,
+      limit,
+      offset: (page - 1) * limit,
+      logging: false
+    });
+
+    const itemNumbers = productList.map(e => e.Item_Number);
+    const otpNumbers = productList.map(e => e.OTP_Number);
+
+    const productImages = await ProductImage.findAll({
+      where: {
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
+      }
+    });
+    const imageMap = new Map(productImages.map(img => [img.product_number, img]));
+    const discountMap = await getDiscountsForItemNumbers(itemNumbers, customerNumber);
+
+    // === Final mapping ===
+    const finalProductList = await Promise.all(productList.map(async (e: any) => {
+      const itemStr = e.Item_Number.toString();
+      const productImage = imageMap.get(itemStr) || null;
+      const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
+
+      let price = discountMap[e.Item_Number] ?? await getFirstValidPrice(e);
+      const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
+      // price = Math.ceil(price * 100) / 100;
+      const productLimit = await getProductLimit(e.Item_Number);
+      let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
+      taxRate = Math.ceil(taxRate * 100) / 100;
+
+      const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerNumber, price + taxRate);
+
+      let allowToOrder = true;
+      if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+        allowToOrder = false;
+      }
+      const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+
+      let prepaidTaxRate = 0
+      if(userJurisdiction !=null && e.SalesCategory){
+
+        console.log(e?.SalesCategory,'e.Sales_Category')
+       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
+      }
+    
+
+
+      return {
+        Pack: e.Pack,
+        Description: e.Description,
+        Item_Number: e.Item_Number,
+        CaseCount: e.CaseCount,
+        UOM: e.UOM,
+        isDiscounted,
+        Price1: e.Price1,
+        Tax_Rate: taxRate,
+        OTP_Number: e.OTP_Number,
+        price,
+        isNewItem,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
+        priceWithTax: price + taxRate,
+        BaseCost: e.BaseCost,
+        Invoice_Cost: e.Invoice_Cost,
+        AvgCost: e.AvgCost,
+        NetCost: e.NetCost,
+        hasProductLimit: productLimit ? true : false,
+        productLimit,
+        EBT: e.EBT,
+        UPCList: e.UPCList,
+        Inventory_OnHand: inventoryOnHand,
+        UnitOunces: e.UnitOunces,
+        allowToOrder,
+        salesCategory: e.SalesCategory || null,
+        hasQtyDiscount: hasQtyDiscount.allowToDiscount,
+        qtyDiscount: hasQtyDiscount,
+        showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
+        showLowStock: wareHouseSetting?.retailer?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+        showWithOutPrice: wareHouseSetting?.retailer?.showWithOutPrice || false,
+        // SalesCategory: e.SalesCategory?.Category_Desc || null,
+        PriceClass: e.PriceClass?.Class_Desc || null,
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+      };
+    }));
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      finalProductList
+    };
+  
+ 
+}
+ 
+
+  async placeOrderForCustomer(orderData: any, customerId: number) {
+   
+    const { orderPlayload ,orderNumber} = orderData;
+
+    // Get customer and route info
+
+    let customer = await Customer.findOne({ where: { C_Number: customerId } });
+
+
+    console.log(customer?.dataValues, 'customer-->---->')
+    customer=customer?.dataValues as any;
+
+
+
+    if (!customer) {
+      throw new AppError("Customer not found", 404);
+    }
+   
+
+
+    // Fetch products and options
+    const itemNumbers = orderPlayload.map((item:any) => item.Item_Number);
+    const [products] = await Promise.all([
+      Inventory.findAll({ where: { Item_Number: itemNumbers }, raw: true }),
+    ]);
+
+
+
+    const productMap = new Map(products.map(product => [product.Item_Number, product]));
+
+    const orderDetails = orderPlayload.map(async (item:any, index:number) => {
+      const product = productMap.get(item.Item_Number);
+
+      if (!product) {
+        throw new AppError(`Product with Item_Number ${item.Item_Number} not found`, 404);
+      }
+
+      if (item.Qty <= 0) {
+        throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
+      }
+
+      console.log(item.Price, 'item.Price-->','item.Sales_Category',product.Sales_Category,'item.OTP_Number',product.OTP_Number)
+
+      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.Sales_Category}, raw: true })
+
+      if(!optionDefsValues){
+        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.OTP_Number}, raw: true })
+      }
+
+      console.log(optionDefsValues, 'optionDefsValues-->')
+      if(!optionDefsValues){
+        optionDefsValues = 0
+      }else {
+        optionDefsValues = Number(item.Qty)
+      }
+
+      let PPD_PackType = 0
+      let PPD_Packs = 0
+
+      if(product.OTP_Number == 255){
+        if(product.Cig_Pack == 20){
+          PPD_PackType = 20
+          PPD_Packs = 10
+        }
+        else if(product.Cig_Pack == 10){
+          PPD_PackType = 10
+          PPD_Packs = 20
+        }
+       
+      }
+
+      let adjprice =  Number(item.Price);
+      const orderDetail = {
+        PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
+        Order_Number: orderNumber,
+        Item_Number: item.Item_Number,
+        Line_Number: item.Line_Number,
+        Sales_Category: product.Sales_Category,
+        OTP_Number: product.OTP_Number,
+        Quantity_Ordered: Number(item.Qty),
+        Quantity_Shipped: item.Qty,
+        Pack: product.Pack,
+        UOM: product.UOM,
+        Price: Number(adjprice),
+        Price_Reference:Number(adjprice),
+        Retail: product.Retail1,
+        NetCost: product.NetCost,
+        BaseCost: product.BaseCost,
+        Confirmed:true,
+        Invoice_Cost: product.Invoice_Cost,
+        AvgCost: product.AvgCost,
+       OTP_Amount_State: Number(item.Tax_Rate ?? 0),
+       
+        OTP_Amount_County: 0,
+        OTP_Amount_City: 0,
+        Item_Message: product.Item_Message ? product.Item_Message :  ' ',
+
+        DepositAmount: product.DepositAmount,
+        Price_Subclass: product.Price_Subclass,
+        OffInvoice_Amount: 0,
+        OffInvoice_OffCost: 0,
+        OffInvoice_Special: false,
+        EBT: product.EBT,
+        Points: product.Points,
+        Stamp_Qty: optionDefsValues || 0,
+        ItemDescription: product.Description,
+        CaseWeight: product.CaseWeight,
+        CaseCount: product.CaseCount,
+        PPD_PackType:PPD_PackType,
+        PPD_Packs:PPD_Packs,
+        // CasesPerPallet: product.CasesPerPallet,
+      };
+
+      return {
+        ...getDefaultOrderDetailValues(),
+        ...orderDetail
+      };
+    });
+
+
+    try {
+      const resolvedOrderDetails = await Promise.all(orderDetails);
+    
+      await OrderDetail.bulkCreate(resolvedOrderDetails);
+    
+      
+    
+      console.log('Order details created successfully');
+    } catch (error) {
+      console.log(error, 'error-->')
+      throw new AppError('Failed to create order details', 500);
+    }
+    
+
+
+    console.log(customer, 'customer-->---->------------------------>')
+  
+
+    return {
+      orderDetails,
+      message: "Order placed successfully"
+    };
+  
+}
+
+
 }

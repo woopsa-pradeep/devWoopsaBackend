@@ -421,4 +421,14 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getInventoryItemsForOrderConfirmation(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getInventoryItemsForOrderConfirmation(req.query as PaginationOptions & { search?: string, masterSearch?: string }, Number(req.query.customerNumber));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async placeOrderForCustomer(req: AuthRequest, res: Response) {
+        const data = await this.salesService.placeOrderForCustomer(req.body,  Number(req.params.customerId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
 }

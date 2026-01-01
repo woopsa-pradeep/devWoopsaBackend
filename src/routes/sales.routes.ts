@@ -96,6 +96,10 @@ router.get('/orderHistoryByProductNumber',
   router.get('/order-confirmation/list',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.orderConfirmation.bind(listController)));
   router.post('/order-confirmation',verifyRole(ROLES.CHECKER, ROLES.SALES),validateRequest(createOrderConfirmationSchema),catchAsync(listController.createOrderConfirmation.bind(listController)));
  
+
+
+
+
   router.post('/restart-order-confirmation',verifyRole(ROLES.CHECKER, ROLES.SALES),validateRequest(createOrderConfirmationSchema),catchAsync(listController.restartOrderConfirmation.bind(listController)));
 
   router.put('/order-confirmation/:id',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.updateOrderConfirmation.bind(listController)));
@@ -107,4 +111,7 @@ router.get('/orderHistoryByProductNumber',
   router.get('/getSalesCategoryPriceClassByCustomer/:customerNumber',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.getSalesCategoryPriceClassByCustomer.bind(listController)));
   router.get('/getSalesCategoryByCustomer/:customerNumber',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.getSalesCategoryByCustomer.bind(listController)));
 
+  router.get('/getInventoryItemsForOrderConfirmation',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.getInventoryItemsForOrderConfirmation.bind(listController)));
+
+  router.post('/placeOrderForCustomer/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.placeOrderForCustomer.bind(listController)));
  export default router;

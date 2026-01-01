@@ -97,8 +97,14 @@ export class RetailerService {
       ],
     });
     let finalData = data?.dataValues || null;
+    const documents = await RetailerDocuments.findOne({
+      where: {
+        customerNumber: id
+      }
+    });
     return {
       ...finalData,
+      documents: documents?.dataValues || null,
       logo: logo?.warehouseImage || null
     }
   }
@@ -267,8 +273,6 @@ export class RetailerService {
     let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='', salesCategory=[] } = query;
 
     const userJurisdiction = await getJurisdiction(user.id);
-
-    
 
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;

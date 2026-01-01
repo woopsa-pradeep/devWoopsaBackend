@@ -5560,6 +5560,20 @@ export class ManagerService {
       ...data
     }
     const customer = await Customer.update(finalData, { where: { C_Number: id } });
+    if(data.documents){
+      const retailerDocuments = await RetailerDocuments.findOne({ where: { customerNumber: id } });
+      if(retailerDocuments){
+      await RetailerDocuments.update({
+        ...data.documents
+      }, { where: { customerNumber: id } });
+      }else{
+        await RetailerDocuments.create({
+          customerNumber: id,
+          ...data.documents
+        });
+      }
+    
+  }
     return customer;
   }
 
@@ -5582,9 +5596,13 @@ export class ManagerService {
   }
 
   async getCustomerDetailsById(id: number) {
-    const customer = await Customer.findOne({ where: { C_Number: id } });
+    const customer :any = await Customer.findOne({ where: { C_Number: id } });
     if (!customer) {
       throw new AppError('Customer not found', 404);
+    }
+    const retailerDocuments = await RetailerDocuments.findOne({ where: { customerNumber: id } });
+    if (retailerDocuments) {
+      customer.dataValues.retailerDocuments = retailerDocuments;
     }
     return customer;
   }
