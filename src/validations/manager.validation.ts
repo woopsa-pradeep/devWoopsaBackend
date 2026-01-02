@@ -133,7 +133,7 @@ export const createEpickUserSchema = Joi.object({
 
   shortby: Joi.string().valid('Asc', 'Des').optional().default('Des'),
 
-  item_sort_by: Joi.string().valid('section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
+  item_sort_by: Joi.string().valid('sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
 
   status: Joi.boolean().optional().default(true),
 
@@ -160,13 +160,13 @@ export const updateEpickUserSchema = Joi.object({
     }),
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
-  item_sort_by: Joi.string().valid('section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
+  item_sort_by: Joi.string().valid('sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
 });
 
 export const updateEpickUserPreferencesSchema = Joi.object({
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
-  item_sort_by: Joi.string().valid('section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
+  item_sort_by: Joi.string().valid('sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
 }).or('order_type', 'shortby', 'item_sort_by').messages({
   'object.missing': 'At least one of order_type, shortby, or item_sort_by must be provided'
 });
@@ -184,9 +184,9 @@ export const updateEpickUserCategoriesSchema = Joi.object({
 });
 
 export const updateEpickUserItemSortSchema = Joi.object({
-  item_sort_by: Joi.string().valid('section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').required().messages({
+  item_sort_by: Joi.string().valid('sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').required().messages({
     'any.required': 'item_sort_by is required',
-    'any.only': 'item_sort_by must be one of: section_location, alphabetically, item_number, short_number, line_number'
+    'any.only': 'item_sort_by must be one of: sales_location, sales_section_location, alphabetically, item_number, short_number, line_number'
   }),
 });
 
@@ -1894,6 +1894,73 @@ export const getRetailerDocumentsQuerySchema = Joi.object({
   limit: Joi.number().integer().positive().optional().default(10),
   search: Joi.string().optional().allow(''),
   customerNumber: Joi.number().integer().positive().optional(),
+});
+
+// RetailerLocation validation schemas
+export const createRetailerLocationSchema = Joi.object({
+  C_Number: Joi.number().integer().positive().required().messages({
+    'number.base': 'Customer number must be a number',
+    'number.integer': 'Customer number must be an integer',
+    'number.positive': 'Customer number must be positive',
+    'any.required': 'Customer number is required',
+  }),
+  lat: Joi.number().optional().allow(null).messages({
+    'number.base': 'Latitude must be a number',
+  }),
+  long: Joi.number().optional().allow(null).messages({
+    'number.base': 'Longitude must be a number',
+  }),
+  City: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'City must be a string',
+  }),
+  Country: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Country must be a string',
+  }),
+  Address: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Address must be a string',
+  }),
+  State: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'State must be a string',
+  }),
+  Zip: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Zip must be a string',
+  }),
+});
+
+export const updateRetailerLocationSchema = Joi.object({
+  C_Number: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Customer number must be a number',
+    'number.integer': 'Customer number must be an integer',
+    'number.positive': 'Customer number must be positive',
+  }),
+  lat: Joi.number().optional().allow(null).messages({
+    'number.base': 'Latitude must be a number',
+  }),
+  long: Joi.number().optional().allow(null).messages({
+    'number.base': 'Longitude must be a number',
+  }),
+  City: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'City must be a string',
+  }),
+  Country: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Country must be a string',
+  }),
+  Address: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Address must be a string',
+  }),
+  State: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'State must be a string',
+  }),
+  Zip: Joi.string().optional().allow(null, '').messages({
+    'string.base': 'Zip must be a string',
+  }),
+});
+
+export const getRetailerLocationQuerySchema = Joi.object({
+  page: Joi.number().integer().positive().optional().default(1),
+  limit: Joi.number().integer().positive().optional().default(10),
+  search: Joi.string().optional().allow(''),
+  C_Number: Joi.number().integer().positive().optional(),
 });
 
 

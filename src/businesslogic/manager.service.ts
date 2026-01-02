@@ -95,6 +95,7 @@ import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.
 import { Picklist } from "../models/postgres/picklist.model";
 import { FuturePricing } from "../models/postgres/futurePricing.model";
 import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
+import { RetailerLocation } from "../models/postgres/retailerLocation.model";
 
 export class ManagerService {
 
@@ -1362,7 +1363,7 @@ export class ManagerService {
       throw new AppError(Manager.USER_ALREADY_EXISTS, 400);
     }
     const checkEmail = await WebUsers.findOne({
-      where: { email: body.email }
+      where: { email: body.email.toLowerCase() }
     });
     if (checkEmail) {
       throw new AppError(Manager.EMAIL_ALREADY_EXISTS, 400);
@@ -1373,6 +1374,7 @@ export class ManagerService {
 
     body.password = hashedPassword;
     const companyName = await Distributor.findOne({ attributes: ["D_Name"] });
+    body.email = body.email.toLowerCase()
 
     const user = await WebUsers.create(body);
 
@@ -1529,6 +1531,9 @@ export class ManagerService {
   }
 
   async updateUser(id: number, body: any) {
+    if(body.email){
+      body.email = body.email.toLowerCase()
+    }
     const updateUser = await WebUsers.update(body, {
       where: { id: id }
     });
@@ -1628,7 +1633,7 @@ export class ManagerService {
     
     // Handle item_sort_by update
     if (body.item_sort_by !== undefined) {
-      const validSortOptions = ['section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      const validSortOptions = ['sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
       if (!validSortOptions.includes(body.item_sort_by)) {
         throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
       }
@@ -1673,7 +1678,7 @@ export class ManagerService {
 
     // Validate item_sort_by if provided
     if (preferences.item_sort_by !== undefined) {
-      const validSortOptions = ['section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      const validSortOptions = ['sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
       if (!validSortOptions.includes(preferences.item_sort_by)) {
         throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
       }
@@ -5524,7 +5529,7 @@ export class ManagerService {
   async createCustomer(data: any) {
 
     console.log(data, 'data----->');
-    const {documents} = data
+    const {documents ,address} = data
     const nextCustomerNumber = await getNextCustomerNumber();
 
     const finalData = {
@@ -5539,6 +5544,12 @@ export class ManagerService {
       await RetailerDocuments.create({
         customerNumber: nextCustomerNumber,
         ...documents
+      });
+    }
+    if(address){
+      await RetailerLocation.create({
+        C_Number: nextCustomerNumber,
+        ...address
       });
     }
     return customer;
@@ -5574,6 +5585,20 @@ export class ManagerService {
       }
     
   }
+
+  if(data.address){
+    const retailerLocation = await RetailerLocation.findOne({ where: { C_Number: id } });
+    if(retailerLocation){
+      await RetailerLocation.update({
+        ...data.address
+      }, { where: { C_Number: id } });
+    }else{
+      await RetailerLocation.create({
+        C_Number: id,
+        ...data.address
+      });
+    }
+  }
     return customer;
   }
 
@@ -5603,6 +5628,10 @@ export class ManagerService {
     const retailerDocuments = await RetailerDocuments.findOne({ where: { customerNumber: id } });
     if (retailerDocuments) {
       customer.dataValues.retailerDocuments = retailerDocuments;
+    }
+    const retailerLocation = await RetailerLocation.findOne({ where: { C_Number: id } });
+    if (retailerLocation) {
+      customer.dataValues.retailerLocation = retailerLocation;
     }
     return customer;
   }
@@ -6384,5 +6413,104 @@ export class ManagerService {
   }) {
     const retailerDocuments = await RetailerDocuments.create(body);
     return retailerDocuments;
+  }
+
+  // RetailerLocation CRUD methods
+  async createRetailerLocation(body: {
+    C_Number: number;
+    lat?: number | null;
+    long?: number | null;
+    City?: string | null;
+    Country?: string | null;
+    Address?: string | null;
+    State?: string | null;
+    Zip?: string | null;
+  }) {
+    const retailerLocation = await RetailerLocation.create(body);
+    return retailerLocation;
+  }
+
+  async getRetailerLocationById(id: number) {
+    const retailerLocation = await RetailerLocation.findByPk(id);
+
+    if (!retailerLocation) {
+      throw new AppError(Manager.RETAILER_LOCATION_NOT_FOUND, 404);
+    }
+
+    return retailerLocation;
+  }
+
+  async getAllRetailerLocations(query: PaginationOptions & {
+    search?: string;
+    C_Number?: number;
+  }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const search = query.search || '';
+
+    const whereCondition: any = {};
+
+    if (search) {
+      const searchNum = parseInt(search);
+      if (!isNaN(searchNum)) {
+        whereCondition.C_Number = searchNum;
+      } else {
+        whereCondition[Op.or] = [
+          { City: { [Op.like]: `%${search}%` } },
+          { Country: { [Op.like]: `%${search}%` } },
+          { Address: { [Op.like]: `%${search}%` } },
+          { State: { [Op.like]: `%${search}%` } },
+        ];
+      }
+    }
+
+    if (query.C_Number) {
+      whereCondition.C_Number = query.C_Number;
+    }
+
+    const { count: totalCount, rows: retailerLocations } = await RetailerLocation.findAndCountAll({
+      where: whereCondition,
+      limit,
+      offset: (page - 1) * limit,
+      order: [['id', 'DESC']],
+    });
+
+    return {
+      totalCount,
+      page,
+      limit,
+      retailerLocations,
+    };
+  }
+
+  async updateRetailerLocation(id: number, body: Partial<{
+    C_Number: number;
+    lat: number | null;
+    long: number | null;
+    City: string | null;
+    Country: string | null;
+    Address: string | null;
+    State: string | null;
+    Zip: string | null;
+  }>) {
+    const retailerLocation = await RetailerLocation.findByPk(id);
+
+    if (!retailerLocation) {
+      throw new AppError(Manager.RETAILER_LOCATION_NOT_FOUND, 404);
+    }
+
+    await retailerLocation.update(body);
+    return retailerLocation;
+  }
+
+  async deleteRetailerLocation(id: number) {
+    const retailerLocation = await RetailerLocation.findByPk(id);
+
+    if (!retailerLocation) {
+      throw new AppError(Manager.RETAILER_LOCATION_NOT_FOUND, 404);
+    }
+
+    await retailerLocation.destroy();
+    return { success: true, message: 'Retailer location deleted successfully' };
   }
 } 

@@ -374,9 +374,10 @@ export class RetailerService {
 
     }
 
-    if(salesCategory.length > 0){
+    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
       whereClause.Sales_Category = { [Op.in]: salesCategory };
     }
+    
 
     // === UPC JOIN logic ===
     const includeUPC = {
@@ -2306,7 +2307,7 @@ export class RetailerService {
       whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
     }
 
-    if(userSalesCategory.length > 0){
+    if(Array.isArray(userSalesCategory) && userSalesCategory?.length > 0){
       whereClause.Sales_Category = { [Op.in]: userSalesCategory };
     }
     if (search) {

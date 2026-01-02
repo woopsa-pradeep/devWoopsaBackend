@@ -694,7 +694,7 @@ export class AuthService {
 
   async loginSalesUser(body: IUserLogin) {
     const isUserExist = await WebUsers.findOne({
-      where: { email: body.email, status: true, role: 'sales', isActive: true, },
+      where: { email: body.email.toLowerCase(), status: true, role: 'sales', isActive: true, },
     })
 
     if(isUserExist){

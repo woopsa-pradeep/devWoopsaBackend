@@ -1219,4 +1219,33 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const data = await this.managerService.deleteRetailerDocuments(Number(req.params.id));
     sendResponse(res, 200, true, data, Manager.RETAILER_DOCUMENTS_DELETED_SUCCESSFULLY);
   }
+
+  // RetailerLocation CRUD controller methods
+  async createRetailerLocation(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createRetailerLocation(req.body);
+    sendResponse(res, 201, true, data, Manager.RETAILER_LOCATION_CREATED_SUCCESSFULLY);
+  }
+
+  async getRetailerLocationById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getRetailerLocationById(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.RETAILER_LOCATION_FETCHED_SUCCESSFULLY);
+  }
+
+  async getAllRetailerLocations(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllRetailerLocations(req.query as PaginationOptions & {
+      search?: string;
+      C_Number?: number;
+    });
+    sendResponse(res, 200, true, data, Manager.RETAILER_LOCATION_LIST_FETCHED_SUCCESSFULLY);
+  }
+
+  async updateRetailerLocation(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateRetailerLocation(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, Manager.RETAILER_LOCATION_UPDATED_SUCCESSFULLY);
+  }
+
+  async deleteRetailerLocation(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteRetailerLocation(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.RETAILER_LOCATION_DELETED_SUCCESSFULLY);
+  }
 }

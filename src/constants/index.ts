@@ -122,6 +122,13 @@ export const Manager = {
   RETAILER_DOCUMENTS_FETCHED_SUCCESSFULLY: "Retailer documents fetched successfully",
   RETAILER_DOCUMENTS_LIST_FETCHED_SUCCESSFULLY: "Retailer documents list fetched successfully",
   RETAILER_DOCUMENTS_NOT_FOUND: "Retailer documents not found",
+  // RetailerLocation messages
+  RETAILER_LOCATION_CREATED_SUCCESSFULLY: "Retailer location created successfully",
+  RETAILER_LOCATION_UPDATED_SUCCESSFULLY: "Retailer location updated successfully",
+  RETAILER_LOCATION_DELETED_SUCCESSFULLY: "Retailer location deleted successfully",
+  RETAILER_LOCATION_FETCHED_SUCCESSFULLY: "Retailer location fetched successfully",
+  RETAILER_LOCATION_LIST_FETCHED_SUCCESSFULLY: "Retailer location list fetched successfully",
+  RETAILER_LOCATION_NOT_FOUND: "Retailer location not found",
 }
 
 export const AuthMessage = {
