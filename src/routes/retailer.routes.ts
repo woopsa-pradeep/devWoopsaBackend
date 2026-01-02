@@ -194,4 +194,7 @@ router.put('/retailer-documents/:id',verifyRole(ROLES.RETAILER),validateRequest(
 router.delete('/retailer-documents/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.deleteRetailerDocuments.bind(retailerController)));
 router.post('/retailer-documents',verifyRole(ROLES.RETAILER),validateRequest(createRetailerDocumentsSchema),catchAsync(retailerController.createRetailerDocuments.bind(retailerController)));
 
+// upload images
+router.post('/uploadImages',verifyRole(ROLES.RETAILER),multerUpload.single('image'),catchAsync(retailerController.uploadImages.bind(retailerController)));
+
 export default router; 

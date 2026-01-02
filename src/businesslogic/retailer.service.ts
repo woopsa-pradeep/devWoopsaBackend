@@ -3836,4 +3836,17 @@ async createRetailerDocuments(body: {
 }
 
 
+
+async uploadImages(req: Request) {
+  const file = req.file;
+  if (!file) {
+    throw new AppError('File not found', 404);
+  }
+  const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, 'retailer-attachments');
+  if (!result.success) {
+    throw new AppError(result.error || 'Failed to upload image', 500);
+  }
+  return result;
+}
+
 }
