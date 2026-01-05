@@ -182,7 +182,7 @@ testConnections()
     await seedInvoiceSetting();
     await seedPolicies();
     console.log('✅ Policies seeded');
-    app.listen(PORT, () => {
+    app.listen(Number(PORT),'localhost', () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
       console.log(`📊 Dual database setup: MSSQL + PostgreSQL`);
       console.log(`📧 Redis Queue UI available at http://localhost:${PORT}/admin/queues`);
