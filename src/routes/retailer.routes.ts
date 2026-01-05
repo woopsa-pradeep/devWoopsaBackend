@@ -190,7 +190,7 @@ router.get('/getSalesCategoryPriceClassByCustomer/:customerNumber',verifyRole(RO
 router.get('/getSalesCategoryByCustomer/:customerNumber',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getSalesCategoryByCustomer.bind(retailerController)));
 
 // retailer documents
-router.put('/retailer-documents/:id',verifyRole(ROLES.RETAILER),validateRequest(updateRetailerDocumentsSchema),catchAsync(retailerController.updateRetailerDocuments.bind(retailerController)));
+router.put('/retailer-documents/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.updateRetailerDocuments.bind(retailerController)));
 router.delete('/retailer-documents/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.deleteRetailerDocuments.bind(retailerController)));
 router.post('/retailer-documents',verifyRole(ROLES.RETAILER),validateRequest(createRetailerDocumentsSchema),catchAsync(retailerController.createRetailerDocuments.bind(retailerController)));
 
