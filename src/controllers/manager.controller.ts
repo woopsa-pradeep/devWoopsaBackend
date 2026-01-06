@@ -6,6 +6,7 @@ import { sendResponse } from "../utils/sendResponse";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { IGetProductInformation, ICreateLink, ICreateNotificationScheduler, ICreateStory, IUpdateLink, IUpdateNotificationScheduler, IUpdateStory, IGetNotificationSchedulers, IGetStories, ICreateRetailerProductCatalog, IGetRetailerProductCatalogs, IUpdateRetailerProductCatalog, ICreateWebView, IUpdateWebView, IGetWebViews, IWebViewGroupedResponse } from "../interfaces/request.body.interface";
 import { uploadFileToAzure } from "../utils/azureUploader";
+import { parseReportFilters } from "../utils/parseReportFilters";
 import { number } from "joi";
 
 
@@ -1189,6 +1190,42 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async uploadImages(req: AuthRequest, res: Response) {
     const data = await this.managerService.uploadImages(req);
     sendResponse(res, 200, true, data, 'Images uploaded successfully');
+  }
+
+  async createInventoryItemGroup(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createInventoryItemGroup(req.body);
+    sendResponse(res, 201, true, data, 'Inventory item group created successfully');
+  }
+
+  
+  async updateInventoryItemGroup(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateInventoryItemGroup(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Inventory item group updated successfully');
+  }
+
+  async createInventoryBrand(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createInventoryBrand(req.body);
+    sendResponse(res, 201, true, data, 'Inventory brand created successfully'); 
+  }
+
+  async updateInventoryBrand(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateInventoryBrand(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Inventory brand updated successfully');
+  }
+
+  async updatePriceClass(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updatePriceClass(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Web price class updated successfully');
+  }
+
+  async getLossQuantityReport(req: AuthRequest, res: Response) {
+    const filters = {...parseReportFilters(req.query),
+      groupBy: (req.query.groupBy as any) || 'item',
+    };
+
+    const data = await this.managerService.getLossQuantityReport(filters);
+
+    sendResponse(res, 200, true, data, 'Loss quantity report fetched successfully');
   }
 
   // RetailerDocuments CRUD controller methods

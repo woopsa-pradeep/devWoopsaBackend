@@ -5836,4 +5836,17 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
 }
 
 
+
+  async updateSalesCategory(id: number, body: any) {
+    const salesCategory = await SalesCategory.findByPk(id);
+    if (!salesCategory) {
+      throw new AppError('Sales category not found', 404);
+    }
+    if (salesCategory.Sales_Category === 1) {
+      throw new AppError('Cigarette sales category cannot be modified',403);
+    }
+    await salesCategory.update(body);
+
+    return salesCategory;
+  }
 }

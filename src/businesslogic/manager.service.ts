@@ -12,7 +12,7 @@ import { AppError } from "../utils/AppError";
 import { Operations } from "../utils/operations";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
-import { cast, col, literal, Op, Order, Sequelize, where } from 'sequelize';
+import { cast, col, literal, Op, fn, Order, Sequelize, where } from 'sequelize';
 import { PriceClass } from "../models/mmsql/priceClass.model";
 import Banner from "../models/postgres/banner.model";
 import { SalesCategory } from "../models/mmsql/salesCategory.model";
@@ -95,7 +95,12 @@ import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.
 import { Picklist } from "../models/postgres/picklist.model";
 import { FuturePricing } from "../models/postgres/futurePricing.model";
 import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
+import { Inventory_ItemGroups } from "../models/mmsql/inventoryItemGroup.model";
+import { InventoryBrands,getNextInventoryBrand } from "../models/mmsql/inventoryBrand.model";
 import { RetailerLocation } from "../models/postgres/retailerLocation.model";
+import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
+import { formatItemOrderBreakdown,formatCustomerItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
+
 
 export class ManagerService {
 
@@ -424,6 +429,8 @@ export class ManagerService {
         attachments: doc.attachments,
         salesTaxDoc: doc.salesTaxDoc,
         CigTaxDoc: doc.CigTaxDoc,
+        id: doc.id,
+        customerNumber: doc.customerNumber,
         licenseAttachments: doc.licenseAttachments,
       });
     });
@@ -6513,4 +6520,173 @@ export class ManagerService {
     await retailerLocation.destroy();
     return { success: true, message: 'Retailer location deleted successfully' };
   }
-} 
+  async createInventoryItemGroup(body: any) {
+    // const inventoryItemGroup = await Inventory_ItemGroups.create(body);
+    const exists = await Inventory_ItemGroups.findOne({
+      where: {
+        Item_GroupDescription: body.Item_GroupDescription
+      }
+    });
+
+    if (exists) {
+      throw new AppError(
+        'Item_GroupDescription already exists',
+        409
+      );
+    }
+    return Inventory_ItemGroups.create(body);
+  }
+
+  async updateInventoryItemGroup(id: number, body: any) {
+    const inventoryItemGroup = await Inventory_ItemGroups.findByPk(id);
+    if (!inventoryItemGroup) {
+      throw new AppError('Inventory Item Group not found', 404);
+    }
+
+    // Check if Item_GroupDescription is already used
+    const existingGroup = await Inventory_ItemGroups.findOne({
+      where: {
+        Item_GroupDescription: body.Item_GroupDescription,
+        Item_GroupID: { [Op.ne]: id } // Exclude the current item being updated
+      }
+    });
+    if (existingGroup) {
+      throw new AppError('Item_GroupDescription is already in use', 400);
+    }
+
+    await inventoryItemGroup.update(body);
+    return inventoryItemGroup;
+  }
+
+  async createInventoryBrand(body: any) {
+    const brand_Id = await getNextInventoryBrand();
+    body.Brand_ID = brand_Id;
+    const inventoryBrand = await InventoryBrands.create(body);
+    console.log(inventoryBrand, 'inventoryBrand');
+    return inventoryBrand;
+  }
+
+  async updateInventoryBrand(id: number, body: any) {
+    const inventoryBrand = await InventoryBrands.findByPk(id);
+    if (!inventoryBrand) {
+      throw new AppError('Inventory Brand not found', 404);
+    }
+
+    await inventoryBrand.update(body);
+    return inventoryBrand;
+  }
+
+  async updatePriceClass(id: number, body: any) {
+    const priceClass = await PriceClass.findByPk(id);
+    if (!priceClass) {
+      throw new AppError('Price Class not found', 404);
+    }
+    await priceClass.update(body);
+    return priceClass;
+  } 
+
+  async getLossQuantityReport(filters: CommonReportFilters & {groupBy: 'customer' | 'item' | 'order';}) {
+      const { inventoryWhere, orderHeaderWhere, customerWhere } = buildItemFilters(filters);
+
+      orderHeaderWhere.Invoice_Total = { [Op.gt]: 0 }; 
+
+      /** BASE ATTRIBUTES (PER ORDER PER ITEM) */
+      const attributes: any[] = [
+        'Item_Number',
+        'Order_Number',
+
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.Pack'), 'Pack'],
+
+        [fn('SUM', col('Quantity_Ordered')), 'Quantity_Ordered'],
+        [fn('SUM', col('Quantity_Shipped')), 'Quantity_Shipped'],
+        [
+          fn(
+            'SUM',
+            literal('(OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)')
+          ),
+          'Loss_Qty',
+        ],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+      ];
+
+      /** GROUP BY — THIS IS THE MOST IMPORTANT PART */
+      const group: string[] = [
+        'OrderDetail.Item_Number',
+        'OrderDetail.Order_Number',
+
+        'inventory.Item_Number',
+        'inventory.Description',
+        'inventory.Pack',
+
+        'orderHeader.Invoice_Date',
+        'orderHeader.C_Number',
+        'orderHeader.customer.C_Name',
+      ];
+
+      /** OPTIONAL CUSTOMER VIEW (still safe) */
+      if (filters.groupBy === 'customer') {
+        // Already grouped correctly, no change needed
+      }
+
+      /** OPTIONAL ORDER VIEW (same structure) */
+      if (filters.groupBy === 'order') {
+        // Already grouped correctly, no change needed
+      }
+
+      const result = await OrderDetail.findAll({
+        attributes,
+
+        where: {
+          Quantity_Ordered: { [Op.gt]: col('Quantity_Shipped') },
+        },
+
+        include: [
+          {
+            model: OrderHeader,
+            as: 'orderHeader',
+            attributes: [],
+            where: orderHeaderWhere,
+            include: [
+              {
+                model: Customer,
+                as: 'customer',
+                attributes: [],
+                where: customerWhere,
+                required: Object.keys(customerWhere).length > 0,
+              },
+            ],
+          },
+          {
+            model: Inventory,
+            as: 'inventory',
+            attributes: [],
+            where: inventoryWhere,
+            required: Object.keys(inventoryWhere).length > 0,
+          },
+        ],
+
+        group,
+        order: [[literal('Loss_Qty'), 'DESC']],
+        subQuery: false,
+      });
+
+      const rows = result.map(r => r.get({ plain: true }));
+
+      if (filters.groupBy === 'customer') {
+        return formatCustomerItemBreakdown(rows);
+      }
+
+      if (filters.groupBy === 'item') {
+        return formatItemOrderBreakdown(rows);
+      }
+
+      // default (order-wise flat)
+      return rows;
+    }
+
+
+}

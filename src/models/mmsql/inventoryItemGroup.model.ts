@@ -18,6 +18,7 @@ Inventory_ItemGroups.init(
     Item_GroupDescription: {
       type: DataTypes.STRING,
       allowNull: true,
+      unique: true,
     },
   },
   {

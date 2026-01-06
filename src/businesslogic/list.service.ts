@@ -34,6 +34,7 @@ import { POHeader } from "../models/mmsql/poHeader.model";
 import { POType } from "../models/mmsql/poType.model";
 import { QBBills } from "../models/mmsql/qbBills.model";
 import { Route } from "../models/mmsql/routes.model";
+import Sequelize from "sequelize";
 
 export class ListService {
 
@@ -535,6 +536,106 @@ export class ListService {
     return routes;
   }
 
-  
+  async getListForUpdatePriceClass() {
+    const salesCategory = await SalesCategory.findAll({
+      attributes: ['Sales_Category', 'Category_Desc'],
+    });
+
+    const msaCategory = await MSA_CategoryCodes.findAll({
+      attributes: ['MSA_Category_Code', 'MSA_Description'],
+      order: [['MSA_Category_Code','ASC']]
+    })
+
+    return { salesCategory, msaCategory };
+  }
+
+  async getListOfLossQuantityReport() {
+    const [salesCategory,priceClass,manufacturerVendor,items,pickRightAreas,customers,salesRep,routes,taxRates,taxRateCity,taxRateCounty,location,section,OTP_Type] = await Promise.all([
+
+     SalesCategory.findAll({
+      attributes: ['Sales_Category', 'Category_Desc'],
+    }),
+
+     PriceClass.findAll({
+     attributes: ['Price_Class', 'Class_Desc'],
+     order: [['Price_Class','ASC']]
+    }),
+
+     Vendor.findAll({
+      attributes: ['Primary_Vendor', 'V_Description'],
+      order: [['V_Description','ASC']]
+    }),
+
+     Inventory.findAll({
+      attributes: ['I_Inactive', 'Description'],
+      order: [['Description','ASC']]
+    }),
+
+     PickRightAreaDefinition.findAll({
+      attributes: ['PickArea', 'PickArea_Description'],
+      order: [['PickArea_Description','ASC']]
+    }),
+
+     Customer.findAll({
+      attributes: ['C_Inactive', 'C_Name','C_Number'],
+      order: [['C_Name','ASC']]
+    }),
+
+     SalesRep.findAll({
+      attributes: ['S_Number', 'S_Desc'],
+      order: [['S_Desc','ASC']]
+    }),
+
+     Route.findAll({
+      attributes: ['Route_Number'],
+      order: [['Route_Number','ASC']]
+    }),
+
+     TaxRates.findAll({
+      attributes: ['Jurisdiction_State', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    }),
+
+    TaxRates_City.findAll({
+      attributes: ['Jurisdiction_City', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    }),
+
+    TaxRates_County.findAll({
+      attributes: ['Jurisdiction_County', 'TaxDescription'],
+      order: [['TaxDescription','ASC']]
+    }),
+
+    Inventory.findAll({
+      attributes: ['location'],
+      where: { location: { [Op.ne]: null } },
+      group: ['location'],
+      order: [['location','ASC']],
+    }),
+
+    Inventory.findAll({
+      attributes: ['section'],
+      where: { section: { [Op.ne]: null } },
+      group: ['section'],
+      order: [['section','ASC']]
+    }),
+
+    OtherTaxes.findAll({
+      attributes: ['OTP_Number', 'OTP_Description'],
+      order: [['OTP_Number','ASC']]
+    })
+    ]);
+
+     return { salesCategory,priceClass,manufacturerVendor,items,pickRightAreas,customers,salesRep,routes,taxRates,taxRateCity,taxRateCounty,location,section,OTP_Type };
+    
+  }
+
+  async getListOfSalesCategories() {
+    const salesCategory = await SalesCategory.findAll({
+      attributes: ['Sales_Category', 'Category_Desc'],
+      order: [['Category_Desc','ASC']]
+    })
+    return salesCategory;
+  }
 
 } 

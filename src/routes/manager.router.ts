@@ -10,6 +10,8 @@ import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, role
 // import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, roleUdatePermissionRequestSchema , updateWarehouseSettingSchema, createItemLimitSchema, updateItemLimitSchema, createNotificationSchedulerSchema, updateNotificationSchedulerSchema, getNotificationSchedulerSchema, createLinkSchema, updateLinkSchema, getLinksQuerySchema, createStorySchema, updateStorySchema, getStoriesQuerySchema, createWebViewSchema, updateWebViewSchema, getWebViewsQuerySchema, createRetailerRequestSchema, createPoliciesSchema, updatePoliciesSchema, updateRefundPoliciesSchema, createWebCategorySchema, updateWebCategorySchema, createWebQuickLinkSchema, updateWebQuickLinkSchema, createWebLocationSchema, updateWebLocationSchema, getWebLocationsQuerySchema, createContactUsSchema, updateContactUsSchema, getContactUsQuerySchema, createEmailConfigSchema, updateEmailConfigSchema, createEmailMarketingSchema, getEmailMarketingQuerySchema, createInventoryUPCSchema, updateInventoryUPCSchema, createEpickSettingSchema, getEpickSettingsQuerySchema, updateEpickSettingSchema, createErpUserSchema, updateErpUserSchema, createPOHeaderSchema } from '../validations/manager.validation';
 import { itemGlobalSchema, retailerSchema, salesRepSchema, warehouseProfileSchema } from '../validations/setting.validation';
 import { createRetailerProductCatalogSchema, updateRetailerProductCatalogSchema } from '../validations/retailer.validation';
+import { createInventoryItemGroupSchema, updateInventoryItemGroupSchema } from '../validations/manager.validation';
+import { createInventoryBrandSchema, updateInventoryBrandSchema,updateDistributorSchema,updatePriceClassSchema } from '../validations/manager.validation';
 
 
 const router = Router();
@@ -313,7 +315,7 @@ router.get('/drivers/:driverId/route-assignments', verifyRole(ROLES.MANAGER), ca
 router.get('/order-numbers', verifyRole(ROLES.MANAGER), catchAsync(managerController.getAllOrderNumbers.bind(managerController)));
 
 // Distributor Update routes
-router.put('/distributorUpdate', verifyRole(ROLES.MANAGER), catchAsync(managerController.distributorUpdate.bind(managerController)));
+router.put('/distributorUpdate', verifyRole(ROLES.MANAGER), validateRequest(updateDistributorSchema),catchAsync(managerController.distributorUpdate.bind(managerController)));
 // Picklist CRUD routes
 router.post('/picklists', verifyRole(ROLES.MANAGER), validateRequest(createPicklistSchema), catchAsync(managerController.createPicklist.bind(managerController)));
 router.get('/picklists', verifyRole(ROLES.MANAGER), catchAsync(managerController.getAllPicklists.bind(managerController)));
@@ -329,14 +331,27 @@ router.get('/future-pricing/:id', verifyRole(ROLES.MANAGER), catchAsync(managerC
 router.put('/future-pricing/:id', verifyRole(ROLES.MANAGER),  catchAsync(managerController.updateFuturePricing.bind(managerController)));
 router.delete('/future-pricing/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteFuturePricing.bind(managerController)));
 
+// Inventory_ItemGroups CRUD routes
+router.post('/inventory-item-groups', verifyRole(ROLES.MANAGER), validateRequest(createInventoryItemGroupSchema), catchAsync(managerController.createInventoryItemGroup.bind(managerController)));
+router.put('/inventory-item-groups/:id', verifyRole(ROLES.MANAGER), validateRequest(updateInventoryItemGroupSchema), catchAsync(managerController.updateInventoryItemGroup.bind(managerController)));
+
+//Inventory_Brands  CRUD routes
+router.post('/inventory-brands', verifyRole(ROLES.MANAGER), validateRequest(createInventoryBrandSchema), catchAsync(managerController.createInventoryBrand.bind(managerController)));
+router.put('/inventory-brands/:id', verifyRole(ROLES.MANAGER), validateRequest(updateInventoryBrandSchema), catchAsync(managerController.updateInventoryBrand.bind(managerController)));
+
 // Images routes
 router.post('/uploadImages', verifyRole(ROLES.MANAGER), multerUpload.single('image'), catchAsync(managerController.uploadImages.bind(managerController)));
 
+//Price Class update route
+router.put('/updatePriceClass/:id', verifyRole(ROLES.MANAGER), validateRequest(updatePriceClassSchema), catchAsync(managerController.updatePriceClass.bind(managerController)));
+
+//Loss Quantity
+router.get('/lossQuantityReport', verifyRole(ROLES.MANAGER), catchAsync(managerController.getLossQuantityReport.bind(managerController)));
 // RetailerDocuments CRUD routes
 router.post('/retailer-documents', verifyRole(ROLES.MANAGER), validateRequest(createRetailerDocumentsSchema), catchAsync(managerController.createRetailerDocuments.bind(managerController)));
 router.get('/retailer-documents', verifyRole(ROLES.MANAGER),  catchAsync(managerController.getAllRetailerDocuments.bind(managerController)));
 router.get('/retailer-documents/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.getRetailerDocumentsById.bind(managerController)));
-router.put('/retailer-documents/:id', verifyRole(ROLES.MANAGER), validateRequest(updateRetailerDocumentsSchema), catchAsync(managerController.updateRetailerDocuments.bind(managerController)));
+router.put('/retailer-documents/:id', verifyRole(ROLES.MANAGER),  catchAsync(managerController.updateRetailerDocuments.bind(managerController)));
 router.delete('/retailer-documents/:id', verifyRole(ROLES.MANAGER), catchAsync(managerController.deleteRetailerDocuments.bind(managerController)));
 
 // RetailerLocation CRUD routes

@@ -1537,6 +1537,56 @@ export const createDriverSchema = Joi.object({
   })
 });
 
+export const updateDistributorSchema = Joi.object({
+  PM_ID: Joi.forbidden(),
+  RJR_Whole_ID: Joi.string().max(7),
+  RJR_Ship_ID: Joi.string().max(7),
+  RJR_Descriptor: Joi.string().max(1),
+  D_Name: Joi.string().max(32),
+
+  D_Addr1: Joi.string().max(32),
+  D_Addr2: Joi.string().max(32),
+
+  D_City: Joi.string().max(24),
+  D_State: Joi.string().max(2),
+  D_Zip: Joi.string().max(9),
+
+  D_Lcontact: Joi.string().max(20),
+  D_Fcontact: Joi.string().max(20),
+
+  D_Phone: Joi.string().max(10),
+  D_Fax: Joi.string().max(10),
+
+  D_Logo: Joi.string().max(50),
+
+  ClientID: Joi.string().max(10),
+
+  PO_ShipTo1: Joi.string().max(50),
+  PO_ShipTo2: Joi.string().max(50),
+  PO_ShipTo3: Joi.string().max(50),
+  PO_ShipTo4: Joi.string().max(50),
+
+  PO_BillTo1: Joi.string().max(50),
+  PO_BillTo2: Joi.string().max(50),
+  PO_BillTo3: Joi.string().max(50),
+  PO_BillTo4: Joi.string().max(50),
+
+  D_Email: Joi.string().email().max(100),
+
+  D_OtherName: Joi.string().max(200),
+  D_OtherAddr1: Joi.string(),
+  D_OtherAddr2: Joi.string(),
+
+  D_OtherCity: Joi.string().max(200),
+  D_OtherState: Joi.string().max(200),
+  D_OtherZip: Joi.string().max(200),
+
+  D_OtherPhone: Joi.string().max(20),
+  D_OtherFax: Joi.string().max(100)
+
+}).min(1);
+
+
 export const updateDriverSchema = Joi.object({
   firstName: Joi.string().trim().optional().messages({
     'string.base': 'First name must be a string',
@@ -1847,6 +1897,18 @@ export const getFuturePricingQuerySchema = Joi.object({
   changedBy: Joi.string().valid('admin', 'user').optional(),
 });
 
+export const createInventoryItemGroupSchema = Joi.object({
+  Item_GroupID: Joi.number().integer().required().messages({
+    'number.base': 'Item_GroupID must be a number',
+    'number.integer': 'Item_GroupID must be an integer',
+    'any.required': 'Item_GroupID is required'
+  }),
+  Item_GroupDescription: Joi.string().trim().required().messages({
+    'string.base': 'Item_GroupDescription must be a string',
+    'string.empty': 'Item_GroupDescription cannot be empty',
+    'any.required': 'Item_GroupDescription is required'
+  })
+});
 // RetailerDocuments validation schemas
 export const createRetailerDocumentsSchema = Joi.object({
   customerNumber: Joi.number().integer().positive().required().messages({
@@ -1964,6 +2026,82 @@ export const getRetailerLocationQuerySchema = Joi.object({
 });
 
 
+export const updateInventoryItemGroupSchema = Joi.object({
+  Item_GroupID: Joi.number().integer().optional().messages({
+    'number.base': 'Item_GroupID must be a number',
+    'number.integer': 'Item_GroupID must be an integer'
+  }), 
+  Item_GroupDescription: Joi.string().trim().optional().messages({
+    'string.base': 'Item_GroupDescription must be a string',
+  })
+});
 
+export const createInventoryBrandSchema = Joi.object({
+  Brand_ID: Joi.number().integer().messages({
+    'number.base': 'BrandID must be a number',
+    'number.integer': 'BrandID must be an integer',
+    // 'any.required': 'BrandID is required'
+  }),
+  Brand_Family: Joi.string().trim().required().messages({
+    'string.base': 'Brand_Family must be a string',
+    'string.empty': 'Brand_Family cannot be empty',
+    'any.required': 'Brand_Family is required'
+  }),
+  Brand_PM_Status: Joi.string().trim().messages({
+    'string.base': 'Brand_PM_Status must be a string',
+    'string.empty': 'Brand_PM_Status cannot be empty',
+  }),
+  Brand_ReceivedStamped: Joi.boolean().optional().messages({
+    'boolean.base': 'Brand_ReceivedStamped must be a boolean',
+  })
+});
 
+export const updateInventoryBrandSchema = Joi.object({
+  Brand_ID: Joi.number().integer().optional().messages({
+    'number.base': 'BrandID must be a number',
+    'number.integer': 'BrandID must be an integer'
+  }),
+  Brand_Family: Joi.string().trim().optional().messages({
+    'string.base': 'Brand_Family must be a string',
+  }),
+  Brand_PM_Status: Joi.string().trim().optional().messages({
+    'string.base': 'Brand_PM_Status must be a string',
+  }),
+  Brand_ReceivedStamped: Joi.boolean().optional().messages({
+    'boolean.base': 'Brand_ReceivedStamped must be a boolean',
+  })
+});
 
+export const updatePriceClassSchema = Joi.object({
+  Class_Desc: Joi.string().trim().optional().messages({ 
+    'string.base': 'Class_Desc must be a string',
+  }),
+  MSA_Default: Joi.string().trim().optional().messages({
+    'string.base': 'MSA_Default must be a string',
+  }),
+   Price_Class: Joi.forbidden().messages({
+    'any.unknown': 'Price_Class cannot be updated',
+    'any.forbidden': 'Price_Class cannot be updated',
+  }),
+  Rebate_Amount: Joi.number().precision(2).min(0).optional().messages({
+    'number.base': 'Rebate_Amount must be a number',
+    'number.min': 'Rebate_Amount must be greater than or equal to 0',
+  }),
+  SelectionVisible: Joi.boolean().optional().messages({
+    'boolean.base': 'SelectionVisible must be a boolean',
+  }),
+  Allow_Price_Change: Joi.boolean().optional().messages({
+    'boolean.base': 'Allow_Price_Change must be a boolean',
+  }),
+  Allow_Price_Change_Remote : Joi.boolean().optional().messages({
+    'boolean.base': 'Allow_Price_Change_Remote must be a boolean',
+  }),
+  Sales_Category_Group: Joi.string().trim().optional().messages({
+    'string.base': 'Sales_Category_Group must be a string',
+  }),
+  Product_ExpDays: Joi.number().integer().min(0).optional().messages({
+    'number.base': 'Product_ExpDays must be a number',
+    'number.integer': 'Product_ExpDays must be an integer',
+    'number.min': 'Product_ExpDays must be greater than or equal to 0',
+  })
+});

@@ -25,6 +25,10 @@ router.get('/listOfVendorsCreate',verifyToken,catchAsync(listController.getListO
 router.get('/listOfPurchaseOrdersCreate',verifyToken,catchAsync(listController.getListOfPurchaseOrdersCreate.bind(listController)));
 router.get('/listOfRoutesForDriver',verifyToken,catchAsync(listController.getListOfRoutesForDriver.bind(listController)));
 
+router.get('/listOfUpdatePriceClass',verifyToken,catchAsync(listController.getListForUpdatePriceClass.bind(listController)));
+router.get('/listofLossQuantityReport',verifyToken,catchAsync(listController.getListOfLossQuantityReport.bind(listController)));
+router.get('/listOfSalesCategories',verifyToken,catchAsync(listController.getListOfSalesCategories.bind(listController)));
+
 
 
  export default router;

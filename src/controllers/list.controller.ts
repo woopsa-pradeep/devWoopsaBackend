@@ -92,4 +92,19 @@ export class ListController {
         const data = await this.listService.getListOfRoutesForDriver();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getListForUpdatePriceClass(req: Request, res: Response) {
+        const data = await this.listService.getListForUpdatePriceClass();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getListOfLossQuantityReport(req: Request, res: Response) {
+        const data = await this.listService.getListOfLossQuantityReport();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getListOfSalesCategories(req: Request, res: Response) {
+        const data = await this.listService.getListOfSalesCategories();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

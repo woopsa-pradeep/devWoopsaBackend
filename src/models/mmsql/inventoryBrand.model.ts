@@ -3,6 +3,13 @@
 import { Model, DataTypes } from 'sequelize';
 import { sequelize } from '../../db'; // adjust path based on your project
 
+export async function getNextInventoryBrand() {
+  const maxBrand_ID = await InventoryBrands.max("Brand_ID");
+  const nextBrand_ID = (maxBrand_ID as number) + 1;
+  console.log(nextBrand_ID, 'nextBrand_ID');
+  return nextBrand_ID;
+}
+
 export class InventoryBrands extends Model {
   public Brand_ID!: number;                // smallint
   public Brand_Family!: string;            // nvarchar

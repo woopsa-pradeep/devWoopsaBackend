@@ -431,4 +431,10 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async updateSalesCategory(req: AuthRequest, res: Response) {
+        const id = Number(req.params.id);
+        const data = await this.salesService.updateSalesCategory(id, req.body);
+        sendResponse(res, 200, true, data, "Sales category updated successfully");
+    }
+
 }

@@ -110,4 +110,6 @@ router.get('/orderHistoryByProductNumber',
   router.get('/getInventoryItemsForOrderConfirmation',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.getInventoryItemsForOrderConfirmation.bind(listController)));
 
   router.post('/placeOrderForCustomer/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.placeOrderForCustomer.bind(listController)));
+  router.put('/updateSalesCategory/:id',verifyRole(ROLES.MANAGER, ROLES.SALES),catchAsync(listController.updateSalesCategory.bind(listController)));
+
  export default router;
