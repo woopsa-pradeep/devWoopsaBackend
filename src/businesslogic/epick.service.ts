@@ -404,17 +404,71 @@ export class EpickService {
           (orderNum: number) => !epickConfirmationOrderNumbers.includes(orderNum)
         );
         
-        // Step 1.5: Get orders that have items matching user's categories
-        // This ensures users only see orders they can actually work on
-        // Only include orders where user's category items are NOT confirmed (still scannable)
+        // OPTIMIZATION: Step 1.5 - Query Order_Header FIRST to filter by Order_Updated = 0 and Invoice_Number = 0
+        // This reduces the dataset significantly before checking Order_Detail
+        // This prevents timeout by working with a much smaller set of orders
+        const validOrderHeaders = await OrderHeader.findAll({
+          where: {
+            [Op.and]: [
+              { Order_Updated: false },
+              {Order_Deleted: false},
+              { Invoice_Number: 0 }
+            ]
+          },
+          attributes: ['Order_Number'],
+          raw: true,
+        });
+
+        let validOrderNumbers = validOrderHeaders
+          .map((order: any) => order.Order_Number)
+          .filter((v: any) => v !== null && v !== undefined)
+          .map((v: any) => Number(v));
+
+        console.log(`Found ${validOrderNumbers.length} orders with Order_Updated = 0 and Invoice_Number = 0`);
+
+        // Exclude locked orders (locked only in RecordLock, not in epick_confirmation)
+        if (lockedOnlyInRecordLock.length > 0) {
+          validOrderNumbers = validOrderNumbers.filter(
+            (orderNum: number) => !lockedOnlyInRecordLock.includes(orderNum)
+          );
+        }
+
+        // Exclude fully completed orders (where all user categories are completed)
+        if (ordersWithAllUserCategoriesCompleted.length > 0) {
+          validOrderNumbers = validOrderNumbers.filter(
+            (orderNum: number) => !ordersWithAllUserCategoriesCompleted.includes(orderNum)
+          );
+        }
+
+        // If no valid orders after filtering, return empty paginated response
+        if (validOrderNumbers.length === 0) {
+          return {
+            data: [],
+            pagination: {
+              page: page,
+              limit: limit,
+              total: 0,
+              totalPages: 0,
+              hasNextPage: false,
+              hasPreviousPage: false
+            }
+          };
+        }
+
+        // Step 1.6: Now check Order_Detail for matching categories from the filtered valid orders
+        // This is much faster because we're only checking a smaller set of orders
         const ordersWithMatchingCategories = await sequelize.query(
           `SELECT DISTINCT od.Order_Number 
            FROM Order_Detail od
            INNER JOIN Inventory inv ON od.Item_Number = inv.Item_Number
-           WHERE inv.Sales_Category IN (:userCategories)
+           WHERE od.Order_Number IN (:validOrderNumbers)
+           AND inv.Sales_Category IN (:userCategories)
            AND (od.Confirmed = 0 OR od.Confirmed IS NULL)`,
           {
-            replacements: { userCategories: userCategories },
+            replacements: { 
+              validOrderNumbers: validOrderNumbers,
+              userCategories: userCategories 
+            },
             type: QueryTypes.SELECT,
             raw: true,
           }
@@ -425,10 +479,11 @@ export class EpickService {
           .filter((v: any) => v !== null && v !== undefined)
           .map((v: any) => Number(v));
 
-        console.log(`Found ${matchingOrderNumbers.length} orders with unconfirmed items matching user categories ${userCategories}`);
+        console.log(`Found ${matchingOrderNumbers.length} orders with unconfirmed items matching user categories ${userCategories} from ${validOrderNumbers.length} valid orders`);
 
         // Also include orders where user has active (in_progress) confirmation
         // These should always be visible, even if items are confirmed
+        // BUT: Must still meet Order_Updated = 0 and Invoice_Number = 0 criteria
         const userActiveConfirmations = await EpickConfirmation.findAll({
           where: {
             pickerUserId: userId,
@@ -438,30 +493,38 @@ export class EpickService {
           raw: true
         });
 
-        const userActiveOrderNumbers = userActiveConfirmations
+        let userActiveOrderNumbers = userActiveConfirmations
           .map((conf: any) => conf.orderNumber)
           .filter((v: any) => v !== null && v !== undefined)
           .map((v: any) => Number(v));
 
+        // Filter user's active orders to only include those with Order_Updated = 0 and Invoice_Number = 0
+        // This ensures we don't include orders that don't meet the criteria
+        if (userActiveOrderNumbers.length > 0) {
+          const validUserActiveOrders = await OrderHeader.findAll({
+            where: {
+              [Op.and]: [
+                { Order_Updated: false },
+                { Invoice_Number: 0 },
+                { Order_Number: { [Op.in]: userActiveOrderNumbers } }
+              ]
+            },
+            attributes: ['Order_Number'],
+            raw: true,
+          });
+
+          userActiveOrderNumbers = validUserActiveOrders
+            .map((order: any) => order.Order_Number)
+            .filter((v: any) => v !== null && v !== undefined)
+            .map((v: any) => Number(v));
+        }
+
         // Merge both lists (orders with unconfirmed items + user's active orders)
+        // Both lists now only contain orders with Order_Updated = 0 and Invoice_Number = 0
         const allMatchingOrderNumbers = new Set([...matchingOrderNumbers, ...userActiveOrderNumbers]);
         matchingOrderNumbers = Array.from(allMatchingOrderNumbers);
 
         console.log(`After including user's active orders: ${matchingOrderNumbers.length} total orders`);
-
-        // Pre-filter matchingOrderNumbers to exclude locked and completed orders
-        // This simplifies the SQL query by reducing Op.in/Op.notIn complexity
-        if (lockedOnlyInRecordLock.length > 0) {
-          matchingOrderNumbers = matchingOrderNumbers.filter(
-            (orderNum: number) => !lockedOnlyInRecordLock.includes(orderNum)
-          );
-        }
-        
-        if (ordersWithAllUserCategoriesCompleted.length > 0) {
-          matchingOrderNumbers = matchingOrderNumbers.filter(
-            (orderNum: number) => !ordersWithAllUserCategoriesCompleted.includes(orderNum)
-          );
-        }
 
         // If no orders have items in user's categories after filtering, return empty paginated response
         if (matchingOrderNumbers.length === 0) {
@@ -479,14 +542,13 @@ export class EpickService {
         }
         
         // Step 2: Query Order_Header (MSSQL) with simplified filters
-        // Filter: Order_Updated = 0 AND Invoice_Number = 0
-        // Include only pre-filtered orders (already excludes locked and completed)
-        // Note: matchingOrderNumbers already ensures orders have Order_Detail items, so no need for literal clause
+        // Filter: Order_Updated = 0 AND Invoice_Number = 0 (already filtered above)
+        // Include only matching orders (with user's categories)
         const headerWhere: any = {
           [Op.and]: [
             { Order_Updated: false },
             { Invoice_Number: 0 },
-            // Only include pre-filtered orders (simplified - single Op.in condition)
+            // Only include matching orders (already filtered by Order_Updated and Invoice_Number above)
             { Order_Number: { [Op.in]: matchingOrderNumbers } }
           ]
         };

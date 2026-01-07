@@ -32,7 +32,7 @@ export const startCronJobs = () => {
     });
 
     // Future Pricing update cron job (runs every hour)
-    cron.schedule('0 * * * *', async () => {
+    cron.schedule('30 0 * * *', async () => {
       try {
         console.log('[Cron] Starting future pricing updates...');
         await processFuturePricingUpdates();
@@ -43,7 +43,7 @@ export const startCronJobs = () => {
     });
     
 
-    cron.schedule('5 0 * * *', async () => {
+    cron.schedule('30 0 * * *', async () => {
       try {
         console.log('[Cron] Starting future pricing updates...');
         await processFuturePricingUpdates();

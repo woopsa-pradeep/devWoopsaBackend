@@ -416,12 +416,13 @@ export class AuthService {
           attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone"],
         });
         if (record.customerId != null) {
-          const storeDetail = await Customer.findOne({
+          let storeDetail :any = await Customer.findOne({
             where: { C_Number: record.customerId },
             attributes: [
               "C_CoName",
               "C_Number",
               "C_Address",
+              "C_Name",
               "C_City",
               "C_State",
               "C_Phone",
@@ -459,7 +460,7 @@ export class AuthService {
 
           })
           const salesCategory = await getAllowedSalesCategories(Number(record.customerId));
-
+          storeDetail.C_CoName = storeDetail.C_Name || "";
 
           return {
             wareHouseDetail,
