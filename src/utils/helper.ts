@@ -1961,7 +1961,7 @@ export async function getAllowedSalesCategoriesAndPriceClasses(customerNumber: n
   // 4) Fetch Price Classes that belong to those groups (only needed columns)
   const priceClasses = await PriceClass.findAll({
     where: { Sales_Category_Group: { [Op.in]: allowedCategories } },
-    attributes: ["Price_Class", "Class_Desc"],
+    attributes: ["Price_Class", "Class_Desc","Sales_Category_Group"],
     order: [["Price_Class", "ASC"]],
     raw: true,
   });

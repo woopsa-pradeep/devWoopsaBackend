@@ -1020,6 +1020,8 @@ export class SalesService {
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+        'Retail1','Retail2','Retail3',
+        'CasesPerPallet',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
         'OTP_Number', 'Price_Subclass', 'UnitOunces','Sales_Category','EBT'
@@ -1107,6 +1109,10 @@ export class SalesService {
         UOM: e.UOM,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
         prepaidTaxRate: prepaidTaxRate,
+        Retail1: e.Retail1,
+        Retail2: e.Retail2,
+        Retail3: e.Retail3,
+        CasesPerPallet: e.CasesPerPallet,
         isDiscounted,
         Price1: e.Price1,
         Tax_Rate: taxRate,

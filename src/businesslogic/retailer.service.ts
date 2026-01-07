@@ -430,6 +430,8 @@ export class RetailerService {
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+        "Retail1","Retail2","Retail3",
+        "CasesPerPallet",
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
         'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
@@ -525,6 +527,10 @@ export class RetailerService {
         NetCost: e.NetCost,
         hasProductLimit: productLimit ? true : false,
         productLimit,
+        Retail1: e.Retail1,
+        Retail2: e.Retail2,
+        Retail3: e.Retail3,
+        CasesPerPallet: e.CasesPerPallet,
         EBT: e.EBT,
         UPCList: e.UPCList,
         Inventory_OnHand: inventoryOnHand,
