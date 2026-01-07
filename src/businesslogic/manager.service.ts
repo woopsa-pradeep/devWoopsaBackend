@@ -2141,7 +2141,9 @@ export class ManagerService {
     const offset = (page - 1) * limit;
 
     // Build where condition
-    const whereCondition: any = {};
+    const whereCondition: any = {
+      Order_Deleted: false,
+    };
 
     if (customerNumber) {
       whereCondition.C_Number = Number(customerNumber);
@@ -2160,7 +2162,8 @@ export class ManagerService {
         'C_Number',
         'Order_Source',
         'Order_Date',
-        'Picklist_Printed'
+        'Picklist_Printed',
+        'Order_Deleted'
       ],
       where: whereCondition,
       include: [
@@ -2222,6 +2225,7 @@ export class ManagerService {
         Order_Number: order.Order_Number,
         C_Number: order.C_Number,
         Order_Source: order.Order_Source,
+        Order_Deleted: order.Order_Deleted,
         Order_Source_Name: orderSourceName,
         Order_Date: order.Order_Date,
         Picklist_Printed: order.Picklist_Printed,

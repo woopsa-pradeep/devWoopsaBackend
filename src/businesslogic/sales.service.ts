@@ -413,7 +413,7 @@ export class SalesService {
   const offset = (page - 1) * limit;
 
   // Build where clause for OrderHeader
-  let whereClause: any = { C_Number: customerNumber };
+  let whereClause: any = { C_Number: customerNumber, Order_Deleted: false };
 
   // Add search functionality if provided
   if (search) {
@@ -471,7 +471,7 @@ export class SalesService {
 
   // Count total records
   const totalCount = await OrderHeader.count({
-    where: whereClause,
+    where: { ...whereClause, Order_Deleted: false },
     include: [
       {
         model: OrderDetail,
