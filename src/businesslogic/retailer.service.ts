@@ -2179,16 +2179,27 @@ export class RetailerService {
     query: PaginationOptions & {
       search?: string,
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week',
-      salesCategory?: number[],
-      priceClass?: number[],
+      salesCategoryId?: number[],
+      priceClassId?: number[],
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='',priceClass=[] , salesCategory=[],userSalesCategory=[]} = query;
+    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='',priceClassId=[] , salesCategoryIds=[],userSalesCategory=[]} = query;
     page = Number(page);
     limit = Number(limit);
 
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
+
+    if (Array.isArray(priceClassId)) {
+      priceClassId = priceClassId.map(Number);
+    }
+    
+    if (Array.isArray(salesCategoryIds)) {
+      salesCategoryIds = salesCategoryIds
+        .map(Number)
+        .filter((id) => !isNaN(id));
+    }
+
 
     // Calculate date range based on filter
     let dateFilter: any = {};
@@ -2247,7 +2258,6 @@ export class RetailerService {
       }
     }
 
-  console.log(priceClass,'priceClass--->')
 
     // First, get all order numbers that match the date filter and customer
     // Join OrderHeader to OrderDetail and only include OrderHeaders where OrderDetail exists
@@ -2265,16 +2275,16 @@ export class RetailerService {
           attributes: [],
           where: {
         // Simple sales category filter
-              ...(salesCategory && salesCategory.length > 0
-                ? { Sales_Category: { [Op.in]: salesCategory } }
+              ...(salesCategoryIds && salesCategoryIds.length > 0
+                ? { Sales_Category: { [Op.in]: salesCategoryIds } }
                 : {})
             },
             include: [{
               model:Inventory,
               as: 'inventory',
               where: {
-                ...(priceClass && priceClass.length > 0
-                  ? { Price_Class: { [Op.in]: priceClass } }
+                ...(priceClassId && priceClassId.length > 0
+                  ? { Price_Class: { [Op.in]: priceClassId } }
                   : {})
               }
             }],

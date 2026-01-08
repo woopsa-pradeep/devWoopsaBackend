@@ -40,8 +40,10 @@ export interface PaginationOptions {
     customerNumber?:number;
     driverId?:number;
     pending?:string;
-    salesCategoryId?: number;
-    priceClassId?: number;
+    salesCategoryId?: any;
+    salesCategoryIds?: any;
+    priceClassId?: any;
+    priceClassIds?: any;
     isAllow?:string;
     filter?:any;
     role?:string;

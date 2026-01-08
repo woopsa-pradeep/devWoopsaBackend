@@ -2124,12 +2124,19 @@ const newSalesRepArray = salesRepList.map(Number);
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction=''} = query;
+    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='',salesCategoryId=[],priceClassId=[]} = query;
     page = Number(page);
     limit = Number(limit);
 
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
+
+    if (Array.isArray(salesCategoryId)) {
+      salesCategoryId = salesCategoryId.map(Number);
+    }
+    if (Array.isArray(priceClassId)) {
+      priceClassId = priceClassId.map(Number);
+    }
 
     // Calculate date range based on filter
     let dateFilter: any = {};
@@ -2199,7 +2206,21 @@ const newSalesRepArray = salesRepList.map(Number);
           model: OrderDetail,
           as: 'orderDetails', 
           required: true, 
-          attributes: []
+          attributes: [],
+          where: {
+            ...(salesCategoryId && salesCategoryId.length > 0
+              ? { Sales_Category: { [Op.in]: salesCategoryId } }
+              : {})
+          },
+          include: [{
+            model:Inventory,
+            as: 'inventory',
+            where: {
+              ...(priceClassId && priceClassId.length > 0
+                ? { Price_Class: { [Op.in]: priceClassId } }
+                : {})
+            }
+          }]
         }
       ],
       attributes: ['Order_Number', 'Order_Date', 'Invoice_Total', 'Order_Source'],
@@ -2445,7 +2466,7 @@ const newSalesRepArray = salesRepList.map(Number);
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction=''} = query;
+    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='',salesCategoryId=[],priceClassId=[]} = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -2509,6 +2530,13 @@ const newSalesRepArray = salesRepList.map(Number);
       }
     }
 
+    if (Array.isArray(salesCategoryId)) {
+      salesCategoryId = salesCategoryId.map(Number);
+    }
+    if (Array.isArray(priceClassId)) {
+      priceClassId = priceClassId.map(Number);
+    }
+
     // First, get all order numbers that match the date filter and customer
     const allMatchingOrderHeaders = await OrderHeader.findAll({
       where: {
@@ -2520,7 +2548,21 @@ const newSalesRepArray = salesRepList.map(Number);
           model: OrderDetail,
           as: 'orderDetails', 
           required: true, 
-          attributes: []
+          attributes: [],
+          where: {
+            ...(salesCategoryId && salesCategoryId.length > 0
+              ? { Sales_Category: { [Op.in]: salesCategoryId } }
+              : {})
+          },
+          include: [{
+            model:Inventory,
+            as: 'inventory',
+            where: {
+              ...(priceClassId && priceClassId.length > 0
+                ? { Price_Class: { [Op.in]: priceClassId } }
+                : {})
+            }
+          }]
         }
       ],
       attributes: ['Order_Number', 'Order_Date', 'Invoice_Total', 'Order_Source'],
