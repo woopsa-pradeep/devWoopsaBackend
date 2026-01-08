@@ -57,4 +57,5 @@ export const warehouseProfileSchema = Joi.object({
             })
           ).optional()
     }).required(),
+    orderEmailNotification: Joi.string().email().optional().allow(null,false),
 });
