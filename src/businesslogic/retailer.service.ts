@@ -2360,8 +2360,8 @@ export class RetailerService {
       ...whereClause,
     };
 
-    if (salesCategory && salesCategory.length > 0) {
-      orderDetailWhereClause.Sales_Category = { [Op.in]: salesCategory };
+    if (userSalesCategory && userSalesCategory.length > 0) {
+      orderDetailWhereClause.Sales_Category = { [Op.in]: userSalesCategory };
     }
 
     if (matchingItemNumbers && matchingItemNumbers.length > 0) {

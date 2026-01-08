@@ -24,7 +24,7 @@ import { OrderHeader } from './models/mmsql/orderHeader.model';
 startCronJobs();
 
 
-console.log('test')
+
 dotenv.config();
 
 const app = express();
