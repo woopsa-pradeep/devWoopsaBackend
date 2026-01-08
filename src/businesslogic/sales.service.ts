@@ -2438,6 +2438,327 @@ const newSalesRepArray = salesRepList.map(Number);
     };
   }
 
+  async getCustomerOrderedProductsV1(
+    customerId: number,
+    query: PaginationOptions & {
+      search?: string,
+      filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
+    }
+  ) {
+    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction=''} = query;
+    page = Number(page);
+    limit = Number(limit);
+
+    let wareHouseSetting: any = await Setting.findOne({});
+    wareHouseSetting = wareHouseSetting?.dataValues || null;
+
+    // Calculate date range based on filter
+    let dateFilter: any = {};
+    if (filter) {
+      const currentDate = new Date();
+      let startDate: Date | undefined;
+
+      switch (filter) {
+        case '1week':
+          startDate = new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '2week':
+          startDate = new Date(currentDate.getTime() - 14 * 24 * 60 * 60 * 1000);
+          break;
+        case '3week':
+          startDate = new Date(currentDate.getTime() - 21 * 24 * 60 * 60 * 1000);
+          break;
+        case '4week':
+          startDate = new Date(currentDate.getTime() - 28 * 24 * 60 * 60 * 1000);
+          break;
+        case '5week':
+          startDate = new Date(currentDate.getTime() - 35 * 24 * 60 * 60 * 1000);
+          break;
+        case '6week':
+          startDate = new Date(currentDate.getTime() - 42 * 24 * 60 * 60 * 1000);
+          break;
+        case '7week':
+          startDate = new Date(currentDate.getTime() - 49 * 24 * 60 * 60 * 1000);
+          break;
+        case '8week':
+          startDate = new Date(currentDate.getTime() - 56 * 24 * 60 * 60 * 1000);
+          break;
+        case '9week':
+          startDate = new Date(currentDate.getTime() - 63 * 24 * 60 * 60 * 1000);
+          break;
+        case '10week':
+          startDate = new Date(currentDate.getTime() - 70 * 24 * 60 * 60 * 1000);
+          break;
+        case '11week':
+          startDate = new Date(currentDate.getTime() - 77 * 24 * 60 * 60 * 1000);
+          break;
+        case '12week':
+          startDate = new Date(currentDate.getTime() - 84 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          // No filter applied
+          break;
+      }
+
+      if (startDate) {
+        dateFilter = {
+          Order_Date: {
+            [Op.gte]: startDate
+          }
+        };
+      }
+    }
+
+    // First, get all order numbers that match the date filter and customer
+    const allMatchingOrderHeaders = await OrderHeader.findAll({
+      where: {
+        C_Number: customerId,
+        ...dateFilter
+      },
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails', 
+          required: true, 
+          attributes: []
+        }
+      ],
+      attributes: ['Order_Number', 'Order_Date', 'Invoice_Total', 'Order_Source'],
+      order: [['Order_Date', 'DESC']],
+      raw: true
+    });
+
+    const allOrderNumbers = allMatchingOrderHeaders.map((header: any) => header.Order_Number);
+
+    if (allOrderNumbers.length === 0) {
+      return {
+        totalCount: 0,
+        page,
+        limit,
+        totalPages: 0,
+        data: [],
+        filter: filter || 'all',
+        search: search || ''
+      };
+    }
+
+    // Build where clause for OrderDetail
+
+    let matchingInventoryItems: any = [];
+    // Add search functionality for OrderDetail
+    let matchingItemNumbers: number[] | undefined = undefined;
+
+    let allExcludedItems: any[] = [];
+    let whereClause: any = {};
+    if (state || zip || jurisdiction) {
+      const customerExcluded = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+      if (customerExcluded && customerExcluded.length > 0) {
+        allExcludedItems = allExcludedItems.concat(customerExcluded);
+      }
+    }
+    const userExcluded = await excludeItemByUser(Number(customerId));
+    if (userExcluded && userExcluded.length > 0) {
+      allExcludedItems = allExcludedItems.concat(userExcluded);
+    }
+
+    if (allExcludedItems.length > 0) {
+      const uniqueExcluded = [...new Set(allExcludedItems)];
+      whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+    }
+    if (search) {
+      const matchingInventoryItems = await Inventory.findAll({
+
+        where: {
+          I_Inactive: 0,
+          ...whereClause,
+          [Op.or]: [
+            { Item_Number: { [Op.like]: `%${search}%` } },
+           
+          ],
+        },
+        attributes: ['Item_Number'],
+        raw: true,
+      });
+
+      matchingItemNumbers = matchingInventoryItems.map(item => item.Item_Number);
+    }
+
+
+    let orderDetailWhereClause: any = {
+      Order_Number: { [Op.in]: allOrderNumbers },
+      ...whereClause,
+    };
+
+    if (matchingItemNumbers && matchingItemNumbers.length > 0) {
+      orderDetailWhereClause.Item_Number = { [Op.in]: matchingItemNumbers };
+    }
+    // Get total count of order details
+    const totalCount = await OrderDetail.count({
+      where: orderDetailWhereClause,
+      distinct: true,
+      col: 'Item_Number'
+    });
+
+
+    const orderDetails: any = await OrderDetail.findAll({
+      where: orderDetailWhereClause,
+      attributes: [
+        ['Item_Number', 'Item_Number'],
+        [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'total_Ordered'],
+      ],
+      group: ['OrderDetail.Item_Number'],
+      order: [['total_Ordered', 'ASC']],
+      limit,
+      offset: (page - 1) * limit,
+      raw: true,
+    });
+
+
+    await Promise.all(
+      orderDetails.map(async (detail: any) => {
+        const inventoryData = await getInventoryFullItemNumber(detail.Item_Number);
+        detail.inventory = inventoryData;
+      })
+    );
+
+
+
+
+
+    const itemNumbers = orderDetails.map((e: any) => e.Item_Number);
+    const otpNumbers = orderDetails.map((e: any) => e.inventory.OTP_Number);
+
+    console.log(otpNumbers, 'otpNumbers')
+
+    const productImages = await ProductImage.findAll({
+      where: {
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
+      }
+    });
+    const imageMap = new Map(productImages.map(img => [img.product_number, img]));
+    const discountMap = await getDiscountsForItemNumbers(itemNumbers, customerId);
+    const userJurisdiction = await getJurisdiction(customerId);
+    const topLatestItems = await getTopLatestItems();
+
+    // Process the results to include product images and format the data
+    const finalOrderDetails = await Promise.all(orderDetails.map(async (detail: any) => {
+      console.log(detail, 'detail--->')
+      const itemStr = detail.Item_Number.toString();
+      const productImage = imageMap.get(itemStr) || null;
+      const inventoryOnHand = await getInventoryOnHand(detail.Item_Number) || 0;
+      let price = await getDiscount(detail.Item_Number, customerId) ?? await getFirstValidPrice(detail);
+
+      if(!price){
+        let tempDetail :any = await Inventory.findOne({
+          where: {
+            Item_Number: detail.Item_Number
+          },
+        });
+        price = await getFirstValidPrice(tempDetail);
+      }
+
+
+
+    
+
+
+      const taxRate = await getTaxRateV1(detail.inventory.OTP_Number, userJurisdiction as number, detail.Item_Number, price);
+
+
+      const isDiscounted = await hasDiscountedItem(detail.Item_Number, detail.inventory.Price_Subclass);
+      let allowToOrder = true;
+      if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+        allowToOrder = false;
+      }
+      const productLimit = await getProductLimit(detail.Item_Number);
+      let hasQtyDiscount = await checkQtyDiscount(detail.Item_Number, customerId,price + taxRate);
+      // Find the corresponding order header
+      const orderHeader = allMatchingOrderHeaders.find((header: any) => header.Order_Number === detail.Order_Number);
+
+      const isNewItem = topLatestItems.some((item: any) => item.Item_Number === detail.Item_Number);
+
+      let prepaidTaxRate = 0
+      if(userJurisdiction !=null && detail.inventory.Sales_Category){
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
+      }
+
+       
+
+      return {
+        isNewItem,
+        // Order information
+        Order_Number: detail.Order_Number,
+        Order_Date: (orderHeader as any)?.Order_Date,
+        Invoice_Total: (orderHeader as any)?.Invoice_Total,
+
+        price,
+        priceWithTax: price + taxRate,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
+        isDiscounted,
+        Tax_Rate: taxRate,
+        ProductInActive: detail.inventory.I_Inactive,
+        showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
+        showLowStock: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+        showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+        Pack: detail.inventory.Pack,
+        Inventory_OnHand: inventoryOnHand,
+
+        // Order detail information
+        Line_Number: detail.Line_Number,
+        Item_Number: detail.Item_Number,
+        Quantity_Ordered: detail.Quantity_Ordered,
+        Quantity_Shipped: detail.Quantity_Shipped,
+        Price: detail.Price,
+        ItemDescription: detail.ItemDescription,
+        CaseCount: detail.inventory.CaseCount,
+        allowToOrder,
+        // Inventory information
+        Description: detail.inventory.Description,
+        ALT_Description2: detail.inventory.ALT_Description2,
+        UOM: detail.inventory.UOM,
+        Price1: detail.inventory.Price1,
+        Price2: detail.inventory.Price2,
+        BaseCost: detail.inventory.BaseCost,
+        Invoice_Cost: detail.inventory.Invoice_Cost,
+        AvgCost: detail.inventory.AvgCost,
+        NetCost: detail.inventory.NetCost,
+        eCommerce: detail.inventory.eCommerce,
+        I_Inactive: detail.inventory.I_Inactive,
+        Date_Created: detail.inventory.Date_Created,
+        OTP_Number: detail.inventory.OTP_Number,
+
+        // Calculated fields        hasProductLimit: productLimit ? true : false,
+        hasProductLimit: productLimit ? true : false,
+        productLimit: productLimit,
+        totalOrder: detail.total_Ordered,
+        // Category information
+        SalesCategory: detail.inventory.SalesCategory?.Category_Desc || null,
+        PriceClass: detail.inventory.PriceClass?.Class_Desc || null,
+        hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+        qtyDiscount: hasQtyDiscount,
+        // UPC information
+        UPCList: detail.inventory.UPCList,
+        UnitOunces: detail.inventory.UnitOunces,
+        // Image information
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory.UPCList?.[0]?.UPC_Number}.jpg`
+      };
+    }));
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      data: finalOrderDetails,
+      filter: filter || 'all',
+      search: search || ''
+    };
+  }
+
 
   async getOrderDeliveryStatus(orderNumber: number) {
     const status: any = await OrderHeader.findOne({
@@ -4964,10 +5285,19 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
               attributes: ['status','id','current_orderline','startTime','endTime','sales_id'],
               raw: true,
             });
+
+            const orderConfirmedByEpick = await OrderPick.findOne({
+              where: {
+                orderNumber: order.Order_Number,
+                status: 'completed'
+              },
+              raw: true,
+            });
       
             return {
               Order_Number: order.Order_Number,
               C_Number: order.C_Number,
+              orderConfirmedByEpick: orderConfirmedByEpick ? true : false,
               isLocked: lockOrderNumbers.includes(order.Order_Number) ? true : false,
               status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
               Order_Source: order.Order_Source,
@@ -5180,9 +5510,18 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     
           const confirmFromErp = confirmFromErpMap.get(order.Order_Number) ?? false;
 
+          const orderConfirmedByEpick = await OrderPick.findOne({
+            where: {
+              orderNumber: order.Order_Number,
+              status: 'completed'
+            },
+            raw: true,
+          });
+
           return {
             Order_Number: order.Order_Number,
             C_Number: order.C_Number,
+            orderConfirmedByEpick: orderConfirmedByEpick ? true : false,
             isLocked: lockOrderNumbers.includes(order.Order_Number) ? true : false,
             status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
             Order_Source: order.Order_Source,

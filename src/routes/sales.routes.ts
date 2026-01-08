@@ -49,6 +49,8 @@ router.get('/orderHistoryByProductNumber',
   router.get('/deliveryCharge/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getDeliveryCharge.bind(listController)));
   router.get('/customerListPaginated',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getCustomerListAsPerSalesRep.bind(listController)));    
   router.get('/customerOrderedProducts/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getCustomerOrderedProducts.bind(listController)));
+
+  router.post('/customerOrderedProductsV1/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getCustomerOrderedProductsV1.bind(listController)));
   router.get('/bannerList',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getBannerList.bind(listController)));
   router.get('/accountReceivablesList/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getAccountReceivablesList.bind(listController)));
 

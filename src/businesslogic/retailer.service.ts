@@ -2180,9 +2180,10 @@ export class RetailerService {
       search?: string,
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week',
       salesCategory?: number[],
+      priceClass?: number[],
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='' , salesCategory,userSalesCategory=[]} = query;
+    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='',priceClass=[] , salesCategory=[],userSalesCategory=[]} = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -2246,14 +2247,15 @@ export class RetailerService {
       }
     }
 
-  
+  console.log(priceClass,'priceClass--->')
 
     // First, get all order numbers that match the date filter and customer
     // Join OrderHeader to OrderDetail and only include OrderHeaders where OrderDetail exists
     const allMatchingOrderHeaders = await OrderHeader.findAll({
       where: {
         C_Number: customerId,
-        ...dateFilter
+        ...dateFilter,
+        Order_Deleted: false
       },
       include: [
         {
@@ -2266,7 +2268,16 @@ export class RetailerService {
               ...(salesCategory && salesCategory.length > 0
                 ? { Sales_Category: { [Op.in]: salesCategory } }
                 : {})
-            }
+            },
+            include: [{
+              model:Inventory,
+              as: 'inventory',
+              where: {
+                ...(priceClass && priceClass.length > 0
+                  ? { Price_Class: { [Op.in]: priceClass } }
+                  : {})
+              }
+            }],
         }
       ],
       attributes: ['Order_Number', 'Order_Date', 'Invoice_Total', 'Order_Source'],
@@ -2440,7 +2451,7 @@ export class RetailerService {
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === detail.Item_Number);
 
       let prepaidTaxRate = 0
-      console.log(detail?.inventory,'detail?.inventory?.Sales_Category')
+      // console.log(detail?.inventory,'detail?.inventory?.Sales_Category')
       if(userJurisdiction !=null && detail?.inventory?.Sales_Category){
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
       }

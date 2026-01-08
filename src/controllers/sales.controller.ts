@@ -166,6 +166,11 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+
+    async getCustomerOrderedProductsV1(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getCustomerOrderedProductsV1(Number(req.params.customerId), req.body as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
     async getOrderDeliveryStatus(req: AuthRequest, res: Response) {
         const data = await this.salesService.getOrderDeliveryStatus(Number(req.params.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
