@@ -131,7 +131,7 @@ export class SalesService {
 
   async placeOrder(orderData: PlaceOrder, req: any, customerId: any) {
     const { shippingDetails , hasDiscount ,discountAmount} = orderData;
-
+    const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
 
@@ -371,6 +371,7 @@ export class SalesService {
     await OrderHistory.create({
       C_Number: customerId,
       type: 'order',
+      orderPrice: totalPrice,
       Order_Number: orderHeaderCreated.Order_Number,
       order_Source: isWeb ? 'Web' : 'App',
       orderPlaceBy: 'sales',
@@ -896,6 +897,10 @@ export class SalesService {
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
+       if(salesCategory.length > 0){
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    }
+
     } else {
       if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
         // Both filters exist → use OR condition
@@ -921,7 +926,10 @@ export class SalesService {
           const anywhere = `%${term}%`;
           const starts = `${term}%`
 
-          
+           if(salesCategory.length > 0){
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    }
+
   whereClause[Op.or] = [
     Sequelize.where(
       Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
@@ -979,6 +987,12 @@ export class SalesService {
       },
       required: searchInUPC
     };
+    if(searchInUPC){
+      if(salesCategory.length > 0){
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    }
+
+    }
 
 
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
@@ -1014,10 +1028,7 @@ export class SalesService {
         logging: false
       });
     }
-    if(salesCategory.length > 0){
-      whereClause.Sales_Category = { [Op.in]: salesCategory };
-    }
-
+   
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
@@ -1474,6 +1485,29 @@ export class SalesService {
       order: [['createdAt', 'DESC']]
     });
 
+    let todayTotalAmount = 0;
+
+    const start = moment().startOf("week").toDate(); // start of this week
+    const end = moment().endOf("week").toDate();     // end of this week
+    
+    const weekUserOrders: any[] = await OrderHistory.findAll({
+      where: {
+        C_Number: customerNumber,
+        isActive: true,
+        type: "order",
+        createdAt: {
+          [Op.between]: [start, end],
+        },
+      },
+      order: [["createdAt", "DESC"]],
+    });
+
+    if(weekUserOrders && weekUserOrders?.length > 0){
+      todayTotalAmount = weekUserOrders.reduce(
+        (sum: any, item: any) => sum + Number(item.orderPrice),
+        0
+      );
+    }
 
     const finalCartItems = await Promise.all(cartItems.map(async (es: any) => {
       const e: any = es.dataValues
@@ -1589,7 +1623,7 @@ export class SalesService {
       totalItems,
       totalAmountWithTax,
       userItemLimitQty: findTheLimit?.maxOrderLimit,
-      userLimitMinOrderAmount: findTheLimit?.minOrderAmount,
+      userLimitMinOrderAmount: (findTheLimit?.minOrderAmount || 0) - todayTotalAmount,
       totalAmount
     };
   }
@@ -4653,7 +4687,29 @@ const newSalesRepArray = salesRepList.map(Number);
       order: [['createdAt', 'DESC']]
     });
 
+    let todayTotalAmount = 0;
+    const start = moment().startOf("week").toDate(); // start of this week
+    const end = moment().endOf("week").toDate();     // end of this week
+    
+    const weekUserOrders: any[] = await OrderHistory.findAll({
+      where: {
+        C_Number: customerNumber,
+        isActive: true,
+        type: "order",
+        createdAt: {
+          [Op.between]: [start, end],
+        },
+      },
+      order: [["createdAt", "DESC"]],
+    });
+    if(weekUserOrders && weekUserOrders?.length > 0){
+      todayTotalAmount = weekUserOrders.reduce(
+        (sum: any, item: any) => sum + Number(item.orderPrice),
+        0
+      );
+    }
 
+    console.log(todayTotalAmount, 'todayTotalAmount---->')
     const finalCartItems = await Promise.all(cartItems.map(async (es: any) => {
       const e: any = es.dataValues
       const productImage = await ProductImage.findOne({
@@ -4745,7 +4801,7 @@ const newSalesRepArray = salesRepList.map(Number);
         oldPrice: Number(e?.originalPrice),
         newPrice: price,
         showDistributorImage: productImage?.isAllow ?? false,
-        distributorImage: productImage?.img_url || null,
+          distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
         Product: e,
         hasQtyDiscount: hasQtyDiscount.allowToDiscount,
@@ -4766,10 +4822,10 @@ const newSalesRepArray = salesRepList.map(Number);
       totalItems,
       totalAmountWithTax,
       userItemLimitQty: findTheLimit?.maxOrderLimit,
-      userLimitMinOrderAmount: findTheLimit?.minOrderAmount,
+      userLimitMinOrderAmount: (findTheLimit?.minOrderAmount || 0) - todayTotalAmount,
       totalAmount
     };
-  }
+  } 
 
 
   async addToReturnCart(cartData: AddToCartRequest & { Customer_Number: number }, salesId: number) {  

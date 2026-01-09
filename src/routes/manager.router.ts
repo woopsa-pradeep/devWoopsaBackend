@@ -337,6 +337,7 @@ router.post('/inventory-item-groups', verifyRole(ROLES.MANAGER,ROLES.SALES), val
 router.put('/inventory-item-groups/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateInventoryItemGroupSchema), catchAsync(managerController.updateInventoryItemGroup.bind(managerController)));
 
 //Inventory_Brands  CRUD routes
+router.get('/getinventory-brands', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getinventorybrands.bind(managerController)));
 router.post('/inventory-brands', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(createInventoryBrandSchema), catchAsync(managerController.createInventoryBrand.bind(managerController)));
 router.put('/inventory-brands/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateInventoryBrandSchema), catchAsync(managerController.updateInventoryBrand.bind(managerController)));
 
@@ -344,6 +345,7 @@ router.put('/inventory-brands/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), valid
 router.post('/uploadImages', verifyRole(ROLES.MANAGER,ROLES.SALES), multerUpload.single('image'), catchAsync(managerController.uploadImages.bind(managerController)));
 
 //Price Class update route
+router.get('/getPriceClass', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getPriceClass.bind(managerController)));
 router.put('/updatePriceClass/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updatePriceClassSchema), catchAsync(managerController.updatePriceClass.bind(managerController)));
 
 // Loss Quantity

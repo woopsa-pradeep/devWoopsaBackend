@@ -6528,7 +6528,7 @@ export class ManagerService {
   async getInventoryItemGroups(){
     const inventoryItemGroup = Inventory_ItemGroups.findAll({
       attributes: [
-        'Item_GroupID','Item_GroupDescription'
+        'Item_GroupID','Item_GroupDescription','Allow_Price_Change','Allow_Price_Change_Ramote'
       ]
     })
 
@@ -6573,6 +6573,17 @@ export class ManagerService {
     return inventoryItemGroup;
   }
 
+  
+  async getinventorybrands(){
+    const inventoryBrand = InventoryBrands.findAll({
+      attributes: [
+        'Brand_ID','Brand_Family','Brand_ReceivedStamped','Brand_PM_Status'
+      ]
+    })
+
+    return inventoryBrand
+  }
+
   async createInventoryBrand(body: any) {
     const brand_Id = await getNextInventoryBrand();
     body.Brand_ID = brand_Id;
@@ -6589,6 +6600,15 @@ export class ManagerService {
 
     await inventoryBrand.update(body);
     return inventoryBrand;
+  }
+
+  async getPriceClass(){
+    const priceClass = PriceClass.findAll({
+      attributes: [
+        'Price_Class','Class_Desc','MSA_Default','Rebate_Amount','SelectionVisible','Allow_Price_Change','Allow_Price_Change_Remote','Sales_Category_Group','Product_ExpDays'
+      ]
+    })
+    return priceClass
   }
 
   async updatePriceClass(id: number, body: any) {
@@ -7142,7 +7162,11 @@ async getShortShipmentReport(
       'OTP_Amount_City',
       [
           literal('(OrderDetail.Price * OrderDetail.Quantity_Ordered ) '),
-          'Ext_Price',
+          'Price_Class_Price',
+      ],
+      [
+          literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) '),
+          'EXT_Price',
       ],
 
       [col('inventory.Description'), 'Description'],
@@ -7204,7 +7228,7 @@ async getShortShipmentReport(
       ],
 
       order: [
-        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Invoice_Date'), 'DESC'],
         [col('orderHeader.Order_Number'), 'ASC'],
       ],
 

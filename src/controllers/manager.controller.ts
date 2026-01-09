@@ -1194,7 +1194,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
 
   async getInventoryItemGroups(req: AuthRequest, res: Response) {
     const data = await this.managerService.getInventoryItemGroups();
-    sendResponse(res, 201, true, data, 'Inventory item group created successfully');
+    sendResponse(res, 201, true, data, 'Inventory item group get successfully');
   }
 
   async createInventoryItemGroup(req: AuthRequest, res: Response) {
@@ -1208,6 +1208,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Inventory item group updated successfully');
   }
 
+  async getinventorybrands(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getinventorybrands();
+    sendResponse(res, 201, true, data, 'Inventory Brand get successfully');
+  }
+
   async createInventoryBrand(req: AuthRequest, res: Response) {
     const data = await this.managerService.createInventoryBrand(req.body);
     sendResponse(res, 201, true, data, 'Inventory brand created successfully'); 
@@ -1216,6 +1221,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async updateInventoryBrand(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateInventoryBrand(Number(req.params.id), req.body);
     sendResponse(res, 200, true, data, 'Inventory brand updated successfully');
+  }
+  
+  async getPriceClass(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPriceClass();
+    sendResponse(res, 201, true, data, 'Price Class get successfully');
   }
 
   async updatePriceClass(req: AuthRequest, res: Response) {
@@ -1316,7 +1326,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
     const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
     const page = typeof req.query.page === 'string' ? Math.max(parseInt(req.query.page, 10), 1) : 1;
-    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10), 500) : 5000; // hard cap for safety
+    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10), 500) : 50000; // hard cap for safety
     const data = await this.managerService.getVelocityReportCustomer({ startDate,endDate,page,limit,});
     sendResponse(res, 200, true, data, 'Customer Velocity report fetched successfully');
   }

@@ -302,6 +302,10 @@ export class RetailerService {
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
+
+      if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
     } else {
 
       if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
@@ -324,7 +328,9 @@ export class RetailerService {
           searchInUPC = true;
         } 
         else {
-        
+          if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+            whereClause.Sales_Category = { [Op.in]: salesCategory };
+          }
           const term = search.toLowerCase();
           const anywhere = `%${term}%`;
           const starts = `${term}%`
@@ -374,8 +380,10 @@ export class RetailerService {
 
     }
 
-    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
-      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    if(searchInUPC){
+      if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
     }
     
 
@@ -832,6 +840,7 @@ export class RetailerService {
     return await this.getCartItems(userId);
   }
   async getCartItems(customerNumber: number) {
+    let todayTotalAmount = 0;
     const cartItems: any = await CustomerCart.findAll({
       where: {
         Customer_Number: customerNumber,
@@ -846,6 +855,27 @@ export class RetailerService {
       }
     })
 
+    const start = moment().startOf("week").toDate(); // start of this week
+    const end = moment().endOf("week").toDate();     // end of this week
+    
+    const weekUserOrders: any[] = await OrderHistory.findAll({
+      where: {
+        C_Number: customerNumber,
+        isActive: true,
+        type: "order",
+        createdAt: {
+          [Op.between]: [start, end],
+        },
+      },
+      order: [["createdAt", "DESC"]],
+    });
+    
+    if(weekUserOrders && weekUserOrders?.length > 0){
+      todayTotalAmount = weekUserOrders.reduce(
+        (sum, item) => sum + Number(item.orderPrice),
+        0
+      );
+  }
     const finalCartItems = await Promise.all(cartItems.map(async (es: any) => {
       const e: any = es.dataValues
       const productImage = await ProductImage.findOne({
@@ -959,7 +989,7 @@ export class RetailerService {
       totalItems,
       totalAmountWithTax,
       userItemLimitQty: findTheLimit?.maxOrderLimit,
-      userLimitMinOrderAmount: findTheLimit?.minOrderAmount,
+      userLimitMinOrderAmount: (findTheLimit?.minOrderAmount || 0) - todayTotalAmount,
       totalAmount
     };
   }
@@ -1051,7 +1081,7 @@ export class RetailerService {
     const { shippingDetails } = orderData;
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
-
+    const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
 
     const {method} = shippingDetails;
     let deliveryId = 0;
@@ -1305,6 +1335,7 @@ export class RetailerService {
       type: 'order',
       Order_Number: orderHeaderCreated.Order_Number,
       order_Source: isWeb ? 'Web' : 'App',
+      orderPrice: totalPrice,
       isActive: true
     });
 

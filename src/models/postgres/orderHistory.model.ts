@@ -53,6 +53,11 @@ OrderHistory.init(
       allowNull: true,
       defaultValue: null,
     },
+    orderPrice:{
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
+    },
     discount:{
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
