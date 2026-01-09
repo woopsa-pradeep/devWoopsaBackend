@@ -114,4 +114,6 @@ router.get('/orderHistoryByProductNumber',
   router.post('/placeOrderForCustomer/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.placeOrderForCustomer.bind(listController)));
   router.put('/updateSalesCategory/:id',verifyRole(ROLES.MANAGER, ROLES.SALES),catchAsync(listController.updateSalesCategory.bind(listController)));
 
+  router.get('/getDistributorContactDetails/:id',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.getDistributorContactDetails.bind(listController)));
+
  export default router;

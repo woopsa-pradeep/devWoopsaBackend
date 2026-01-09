@@ -418,7 +418,7 @@ export class ManagerService {
 
     const retailerDocuments = await RetailerDocuments.findAll({
       where: { customerNumber: { [Op.in]: customerNumbers } },
-      attributes: ['customerNumber', 'feinDocument', 'attachments', 'salesTaxDoc', 'CigTaxDoc', 'licenseAttachments'],
+      attributes: ['customerNumber', 'feinDocument', 'attachments', 'id','salesTaxDoc', 'CigTaxDoc', 'licenseAttachments'],
       raw: true,
     });
 
@@ -427,9 +427,9 @@ export class ManagerService {
       documentsMap.set(doc.customerNumber, {
         feinDocument: doc.feinDocument,
         attachments: doc.attachments,
+        id: doc.id,
         salesTaxDoc: doc.salesTaxDoc,
         CigTaxDoc: doc.CigTaxDoc,
-        id: doc.id,
         customerNumber: doc.customerNumber,
         licenseAttachments: doc.licenseAttachments,
       });

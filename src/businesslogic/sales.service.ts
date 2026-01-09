@@ -47,6 +47,7 @@ import { QueryTypes } from "sequelize";
 import { OrderPick } from "../models/postgres/epickOrder.model";
 import { generateRandomBarCode } from "../utils/barCodeGenerate";
 import { DriverPickupOrder } from "../models/postgres/driverPickerOrder.model";
+import { ContactUs } from "../models/postgres/contactUs.model";
 
 export class SalesService {
 
@@ -6235,5 +6236,27 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
     await salesCategory.update(body);
 
     return salesCategory;
+  }
+
+
+  async getDistributorContactDetails(userId: number) {
+    const salesRep = await Customer.findOne({
+      where: {
+        C_Number: userId
+      },
+      attributes: ['C_Salesman'],
+      include: [
+        {
+          model: SalesRep,
+          as: 'salesRep',
+          attributes: ['S_Desc']
+        }
+      ]
+    });
+    const contact = await ContactUs.findOne({})
+    return {
+      salesRep: salesRep?.dataValues,
+      contact: contact?.dataValues
+    }
   }
 }

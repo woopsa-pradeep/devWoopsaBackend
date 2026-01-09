@@ -442,4 +442,9 @@ export class SalesController {
         sendResponse(res, 200, true, data, "Sales category updated successfully");
     }
 
+
+    async getDistributorContactDetails(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getDistributorContactDetails(Number(req.params.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }
