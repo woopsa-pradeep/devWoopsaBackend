@@ -332,6 +332,7 @@ router.put('/future-pricing/:id', verifyRole(ROLES.MANAGER,ROLES.SALES),  catchA
 router.delete('/future-pricing/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteFuturePricing.bind(managerController)));
 
 // Inventory_ItemGroups CRUD routes
+router.get('/getInventoryItemGroups', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getInventoryItemGroups.bind(managerController)));
 router.post('/inventory-item-groups', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(createInventoryItemGroupSchema), catchAsync(managerController.createInventoryItemGroup.bind(managerController)));
 router.put('/inventory-item-groups/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateInventoryItemGroupSchema), catchAsync(managerController.updateInventoryItemGroup.bind(managerController)));
 
@@ -345,8 +346,9 @@ router.post('/uploadImages', verifyRole(ROLES.MANAGER,ROLES.SALES), multerUpload
 //Price Class update route
 router.put('/updatePriceClass/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updatePriceClassSchema), catchAsync(managerController.updatePriceClass.bind(managerController)));
 
-//Loss Quantity
-router.get('/lossQuantityReport', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getLossQuantityReport.bind(managerController)));
+// Loss Quantity
+// router.get('/lossQuantityReport', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getLossQuantityReport.bind(managerController)));
+
 // RetailerDocuments CRUD routes
 router.post('/retailer-documents', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(createRetailerDocumentsSchema), catchAsync(managerController.createRetailerDocuments.bind(managerController)));
 router.get('/retailer-documents', verifyRole(ROLES.MANAGER,ROLES.SALES),  catchAsync(managerController.getAllRetailerDocuments.bind(managerController)));
@@ -360,5 +362,11 @@ router.get('/retailer-location', verifyRole(ROLES.MANAGER,ROLES.SALES), validate
 router.get('/retailer-location/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getRetailerLocationById.bind(managerController)));
 router.put('/retailer-location/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateRetailerLocationSchema), catchAsync(managerController.updateRetailerLocation.bind(managerController)));
 router.delete('/retailer-location/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteRetailerLocation.bind(managerController)));
+
+// Velocity Report - Customer Group route
+// router.get('/velocityReportCustomerGroup', verifyRole(ROLES.MANAGER), catchAsync(managerController.getVelocityReportCustomerGroup.bind(managerController)));
+
+router.get('/getShortShipmentReport', verifyRole(ROLES.MANAGER), catchAsync(managerController.getShortShipmentReport.bind(managerController)));
+router.get('/getVelocityReportCustomer', verifyRole(ROLES.MANAGER), catchAsync(managerController.getVelocityReportCustomer.bind(managerController)));
 
 export default router; 

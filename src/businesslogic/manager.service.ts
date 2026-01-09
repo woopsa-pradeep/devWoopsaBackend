@@ -98,8 +98,8 @@ import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 import { Inventory_ItemGroups } from "../models/mmsql/inventoryItemGroup.model";
 import { InventoryBrands,getNextInventoryBrand } from "../models/mmsql/inventoryBrand.model";
 import { RetailerLocation } from "../models/postgres/retailerLocation.model";
-import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
-import { formatItemOrderBreakdown,formatCustomerItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
+// import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
+import { formatCustomerVelocityItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
 
 
 export class ManagerService {
@@ -6524,6 +6524,17 @@ export class ManagerService {
     await retailerLocation.destroy();
     return { success: true, message: 'Retailer location deleted successfully' };
   }
+
+  async getInventoryItemGroups(){
+    const inventoryItemGroup = Inventory_ItemGroups.findAll({
+      attributes: [
+        'Item_GroupID','Item_GroupDescription'
+      ]
+    })
+
+    return inventoryItemGroup
+  }
+
   async createInventoryItemGroup(body: any) {
     // const inventoryItemGroup = await Inventory_ItemGroups.create(body);
     const exists = await Inventory_ItemGroups.findOne({
@@ -6589,63 +6600,431 @@ export class ManagerService {
     return priceClass;
   } 
 
-  async getLossQuantityReport(filters: CommonReportFilters & {groupBy: 'customer' | 'item' | 'order';}) {
-      const { inventoryWhere, orderHeaderWhere, customerWhere } = buildItemFilters(filters);
+  // async getLossQuantityReport(
+  //     filters: CommonReportFilters & {
+  //       groupBy: 'customer' | 'item' | 'order' | 'date';
+  //     }
+  //   ) {
+  //     const { inventoryWhere, orderHeaderWhere, customerWhere } =
+  //       buildItemFilters(filters);
 
-      orderHeaderWhere.Invoice_Total = { [Op.gt]: 0 }; 
+  //     // Mandatory condition
+  //     orderHeaderWhere.Invoice_Total = { [Op.gt]: 0 };
 
-      /** BASE ATTRIBUTES (PER ORDER PER ITEM) */
+  //     /** BASE ATTRIBUTES (PER ORDER PER ITEM) */
+  //     let attributes: any[] = [
+  //       'Item_Number',
+  //       'Order_Number',
+
+  //       [col('inventory.Description'), 'Description'],
+  //       [col('inventory.Pack'), 'Pack'],
+
+  //       [fn('SUM', col('Quantity_Ordered')), 'Quantity_Ordered'],
+  //       [fn('SUM', col('Quantity_Shipped')), 'Quantity_Shipped'],
+  //       [
+  //         fn(
+  //           'SUM',
+  //           literal('(OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)')
+  //         ),
+  //         'Loss_Qty',
+  //       ],
+
+  //       [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+  //       [col('orderHeader.C_Number'), 'C_Number'],
+  //       [col('orderHeader.customer.C_Name'), 'C_Name'],
+  //     ];
+
+  //     /** BASE GROUP BY */
+  //     let group: string[] = [
+  //       'OrderDetail.Item_Number',
+  //       'OrderDetail.Order_Number',
+
+  //       'inventory.Item_Number',
+  //       'inventory.Description',
+  //       'inventory.Pack',
+
+  //       'orderHeader.Invoice_Date',
+  //       'orderHeader.C_Number',
+  //       'orderHeader.customer.C_Name',
+  //     ];
+
+  //     if (filters.groupBy === 'date') {
+  //       attributes = [
+  //         'Item_Number',
+  //         'Order_Number',
+
+  //         [col('inventory.Description'), 'Description'],
+
+  //         [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+  //         [col('orderHeader.C_Number'), 'C_Number'],
+  //         [col('orderHeader.customer.C_Name'), 'C_Name'],
+
+  //         [fn('SUM', col('Quantity_Shipped')), 'Quantity_Shipped'],
+  //         [fn('SUM', col('Quantity_Ordered')), 'Quantity_Ordered'],
+  //         [
+  //           fn(
+  //             'SUM',
+  //             literal('(OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)')
+  //           ),
+  //           'Loss_Qty',
+  //         ],
+
+  //         // ✅ aggregate unit values
+  //         [fn('AVG', col('OrderDetail.Price')), 'Price'],
+  //         [fn('AVG', col('OrderDetail.OTP_Amount_State')), 'OTP_Amount_State'],
+  //         [fn('AVG', col('OrderDetail.AvgCost')), 'AvgCost'],
+  //         [
+  //           fn('dbo.getInventoryOnHand', col('OrderDetail.Item_Number')),
+  //           'On_Hand',
+  //         ]
+  //       ];
+
+  //       group = [
+  //         'OrderDetail.Item_Number',
+  //         'OrderDetail.Order_Number',
+
+  //         'inventory.Description',
+
+  //         'orderHeader.Invoice_Date',
+  //         'orderHeader.C_Number',
+  //         'orderHeader.customer.C_Name',
+  //       ];
+  //     }
+
+
+  //     const result = await OrderDetail.findAll({
+  //       attributes,
+
+  //       where: {
+  //         Quantity_Ordered: { [Op.gt]: col('Quantity_Shipped') },
+  //       },
+
+  //       include: [
+  //         {
+  //           model: OrderHeader,
+  //           as: 'orderHeader',
+  //           attributes: [],
+  //           where: orderHeaderWhere,
+  //           include: [
+  //             {
+  //               model: Customer,
+  //               as: 'customer',
+  //               attributes: [],
+  //               where: customerWhere,
+  //               required: Object.keys(customerWhere).length > 0,
+  //             },
+  //           ],
+  //         },
+  //         {
+  //           model: Inventory,
+  //           as: 'inventory',
+  //           attributes: [],
+  //           where: inventoryWhere,
+  //           required: Object.keys(inventoryWhere).length > 0,
+  //         },
+  //       ],
+
+  //       group,
+  //       order: [[literal('Loss_Qty'), 'DESC']],
+  //       subQuery: false,
+  //     });
+
+  //     const rows = result.map(r => r.get({ plain: true }));
+
+  //     if (filters.groupBy === 'customer') {
+  //       return formatCustomerItemBreakdown(rows);
+  //     }
+
+  //     if (filters.groupBy === 'item') {
+  //       return formatItemOrderBreakdown(rows);
+  //     }
+
+  //     if (filters.groupBy === 'date') {
+  //       return formatDateItemBreakdown(rows)
+  //     }
+
+  //     if (filters.groupBy === 'order') {
+  //       return formatItemOrderBreakdown(rows)
+  //     }
+  //     // order & date both return flat rows
+  //     return rows;
+  //   }
+
+
+  
+  // async getVelocityReportCustomerGroup(
+  //     filters: CommonReportFilters ) {
+  //     /**
+  //      * 1️⃣ Common filters
+  //      */
+  //     const { inventoryWhere, orderHeaderWhere, customerWhere } =
+  //       buildItemFilters(filters);
+
+  //     /**
+  //      * 2️⃣ Mandatory condition
+  //      */
+  //     orderHeaderWhere.Invoice_Total = { [Op.gt]: 0 };
+
+  //     /**
+  //      * 3️⃣ BASE ATTRIBUTES (detail-level fields)
+  //      */
+  //     const attributes: any[] = [
+  //       // OrderDetail
+  //       'Item_Number',
+  //       'Order_Number',
+  //       'Quantity_Shipped',
+  //       'Price',
+  //       'AvgCost',
+  //       'OTP_Amount_State',
+
+  //       // Inventory
+  //       [col('inventory.Description'), 'Description'],
+  //       [col('inventory.Pack'), 'Pack'],
+  //       [col('inventory.UOM'), 'UOM'],
+
+  //       // OrderHeader
+  //       [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+  //       [col('orderHeader.C_Number'), 'C_Number'],
+
+  //       // Customer
+  //       [col('orderHeader.customer.C_Name'), 'C_Name'],
+  //       [col('orderHeader.customer.C_Address'), 'C_Address'],
+  //       [col('orderHeader.customer.C_City'), 'C_City'],
+  //       [col('orderHeader.customer.C_State'), 'C_State'],
+  //       [col('orderHeader.customer.C_Zip'), 'C_Zip'],
+  //       [col('orderHeader.customer.C_Phone'), 'C_Phone'],
+
+  //       /**
+  //        * ✅ EXT_Price and Profit calculation
+  //        */
+  //       [
+  //         literal('OrderDetail.Price + OrderDetail.OTP_Amount_State'),
+  //         'Price',
+  //       ],
+  //       [
+  //         literal('OrderDetail.AvgCost + OrderDetail.OTP_Amount_State'),
+  //         'AvgCost',
+  //       ],
+  //       [
+  //         literal('(OrderDetail.Price+ OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped'),
+  //         'Ext_Price',
+  //       ],
+  //       [
+  //         literal('(OrderDetail.AvgCost + OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped'),
+  //         'Ext_Cost',
+  //       ],
+  //       [
+  //         literal('((OrderDetail.Price+ OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped) - ((OrderDetail.AvgCost + OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped)'),
+  //         'Profit',
+  //       ],
+  //       [
+  //         literal(`
+  //           (
+  //             ( (OrderDetail.Price + OrderDetail.OTP_Amount_State) - (OrderDetail.AvgCost + OrderDetail.OTP_Amount_State) )
+  //             / (OrderDetail.Price + OrderDetail.OTP_Amount_State)
+  //           ) * 100
+  //         `),
+  //         'Profit_Percent',
+  //       ],
+
+
+  //     ];
+
+  //     /**
+  //      * 5️⃣ GROUP BY
+  //      * (ONLY non-aggregated fields)
+  //      */
+  //     const group: string[] = [
+  //       // OrderDetail
+  //       'OrderDetail.Item_Number',
+  //       'OrderDetail.Order_Number',
+  //       'OrderDetail.Quantity_Shipped',
+  //       'OrderDetail.Price',
+  //       'OrderDetail.OTP_Amount_State',
+  //       'OrderDetail.AvgCost',
+
+  //       // Inventory
+  //       'inventory.Item_Number',
+  //       'inventory.Description',
+  //       'inventory.Pack',
+  //       'inventory.UOM',
+
+  //       // OrderHeader
+  //       'orderHeader.Invoice_Date',
+  //       'orderHeader.C_Number',
+
+  //       // Customer
+  //       'orderHeader.customer.C_Name',
+  //       'orderHeader.customer.C_Address',
+  //       'orderHeader.customer.C_City',
+  //       'orderHeader.customer.C_State',
+  //       'orderHeader.customer.C_Zip',
+  //       'orderHeader.customer.C_Phone',
+  //     ];
+
+  //     /**
+  //      * 6️⃣ QUERY
+  //      */
+  //     const result = await OrderDetail.findAll({
+  //       attributes,
+  //       include: [
+  //         {
+  //           model: OrderHeader,
+  //           as: 'orderHeader',
+  //           attributes: [],
+  //           where: orderHeaderWhere,
+  //           include: [
+  //             {
+  //               model: Customer,
+  //               as: 'customer',
+  //               attributes: [],
+  //               where: customerWhere,
+  //               required: Object.keys(customerWhere).length > 0,
+  //             },
+  //           ],
+  //         },
+  //         {
+  //           model: Inventory,
+  //           as: 'inventory',
+  //           attributes: [],
+  //           where: inventoryWhere,
+  //           required: Object.keys(inventoryWhere).length > 0,
+  //         },
+  //       ],
+  //       group,
+  //       subQuery: false,
+  //     });
+
+  //     /**
+  //      * 7️⃣ FLATTEN
+  //      */
+  //     const rows = result.map(r => r.get({ plain: true }));
+
+  //     return formatCustomerVelocityItemBreakdown(rows);
+
+  //   }
+
+  // service
+async getShortShipmentReport(
+      filters: { fromDate?: string; toDate?: string }
+    ) {
+      const orderHeaderWhere: any = {
+        Order_Updated: true,
+        Order_Deleted: false,
+      };
+
+      if (filters.fromDate && filters.toDate) {
+        orderHeaderWhere.Invoice_Date = {
+          [Op.between]: [filters.fromDate, filters.toDate],
+        };
+      }
+
+      /** BASE ATTRIBUTES */
       const attributes: any[] = [
-        'Item_Number',
-        'Order_Number',
-
-        [col('inventory.Description'), 'Description'],
-        [col('inventory.Pack'), 'Pack'],
-
-        [fn('SUM', col('Quantity_Ordered')), 'Quantity_Ordered'],
-        [fn('SUM', col('Quantity_Shipped')), 'Quantity_Shipped'],
         [
-          fn(
-            'SUM',
-            literal('(OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)')
-          ),
-          'Loss_Qty',
+          literal(`
+            IIF(
+              orderHeader.Invoice_Number_Legacy <> 0,
+              CONVERT(varchar(10), orderHeader.Invoice_Number_Legacy),
+              IIF(
+                orderHeader.Invoice_Number > 1,
+                CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+                CONVERT(varchar(10), orderHeader.Order_Number)
+              )
+            )
+          `),
+          'Document_Number',
         ],
 
         [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
         [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+
+        'Order_Number',
+        'Promo_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+
+        // ✅ Loss Quantity
+        [
+          literal('(OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)'),
+          'Loss_Qty',
+        ],
+
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+
+        // ✅ Extended Price (Price + OTP)
+        [
+          literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State)'),
+          'Ext_Price',
+        ],
+
+        // ✅ Extended Loss = LossQty * (Price + OTP)
+        [
+          literal(`
+            (OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)
+            * (OrderDetail.Price + OrderDetail.OTP_Amount_State)
+          `),
+          'Ext_Loss',
+        ],
+
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.UOM'), 'UOM'],
+        [col('inventory.Pack'), 'Pack'],
+        [col('inventory.UnitOunces'), 'UnitOunces'],
+        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('inventory.Cig_Pack'), 'Cig_Pack'],
+        [col('inventory.OTP_Number'), 'OTP_Number'],
+
+        [
+          literal(`
+            ISNULL(
+              (
+                SELECT SUM(Inventory_OnHand)
+                FROM Inventory_Status
+                WHERE Inventory_Status.Code = 0
+                AND Inventory_Status.Item_Number = OrderDetail.Item_Number
+              ),
+              0
+            )
+          `),
+          'OnHand',
+        ],
+
         [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
       ];
 
-      /** GROUP BY — THIS IS THE MOST IMPORTANT PART */
-      const group: string[] = [
-        'OrderDetail.Item_Number',
-        'OrderDetail.Order_Number',
-
-        'inventory.Item_Number',
-        'inventory.Description',
-        'inventory.Pack',
-
-        'orderHeader.Invoice_Date',
-        'orderHeader.C_Number',
-        'orderHeader.customer.C_Name',
-      ];
-
-      /** OPTIONAL CUSTOMER VIEW (still safe) */
-      if (filters.groupBy === 'customer') {
-        // Already grouped correctly, no change needed
-      }
-
-      /** OPTIONAL ORDER VIEW (same structure) */
-      if (filters.groupBy === 'order') {
-        // Already grouped correctly, no change needed
-      }
 
       const result = await OrderDetail.findAll({
         attributes,
 
         where: {
-          Quantity_Ordered: { [Op.gt]: col('Quantity_Shipped') },
+          Quantity_Shipped: {
+            [Op.gte]: 0,
+            [Op.lt]: col('Quantity_Ordered'),
+          },
+          [Op.and]: literal('(Quantity_Ordered - Quantity_Shipped) > 0'),
         },
 
         include: [
@@ -6659,8 +7038,7 @@ export class ManagerService {
                 model: Customer,
                 as: 'customer',
                 attributes: [],
-                where: customerWhere,
-                required: Object.keys(customerWhere).length > 0,
+                required: true,
               },
             ],
           },
@@ -6668,29 +7046,184 @@ export class ManagerService {
             model: Inventory,
             as: 'inventory',
             attributes: [],
-            where: inventoryWhere,
-            required: Object.keys(inventoryWhere).length > 0,
+            required: true,
           },
         ],
 
-        group,
-        order: [[literal('Loss_Qty'), 'DESC']],
+        order: [
+          [col('orderHeader.Invoice_Date'), 'ASC'],
+          [col('orderHeader.Order_Number'), 'ASC'],
+        ],
+
         subQuery: false,
       });
 
       const rows = result.map(r => r.get({ plain: true }));
 
-      if (filters.groupBy === 'customer') {
-        return formatCustomerItemBreakdown(rows);
-      }
+      const grandTotals = rows.reduce(
+        (acc, row) => {
+          acc.Grand_Loss_Qty += Number(row.Loss_Qty || 0);
+          acc.Grand_Ext_Loss += Number(row.Ext_Loss || 0);
+          return acc;
+        },
+        {
+          Grand_Loss_Qty: 0,
+          Grand_Ext_Loss: 0,
+        }
+      );
 
-      if (filters.groupBy === 'item') {
-        return formatItemOrderBreakdown(rows);
-      }
-
-      // default (order-wise flat)
-      return rows;
+      return {
+        rows,
+        ...grandTotals,
+      };
     }
 
+ async getVelocityReportCustomer(filters: {
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { startDate, endDate, page = 1,limit = 10, } = filters;
+    const offset = (page - 1) * limit;
+
+    /**
+     * Order Header Filters
+     */
+    const orderHeaderWhere: any = {
+      Order_Updated: 'True',
+      Order_Deleted: 'False',
+      Invoice_Date: {
+        [Op.between]: [startDate, endDate],
+      },
+    };
+
+    /**
+     * Selected Attributes
+     */
+    const attributes: any[] = [
+      [
+        literal(`
+              IIF(
+                orderHeader.Invoice_Number_Legacy <> 0,
+                CONVERT(varchar(10), orderHeader.Invoice_Number_Legacy),
+                IIF(
+                  orderHeader.Invoice_Number > 1,
+                  CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+                  CONVERT(varchar(10), orderHeader.Order_Number)
+                )
+              )
+            `),
+        'Document_Number',
+      ],
+
+      [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+      [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+      [col('orderHeader.C_Number'), 'C_Number'],
+      [col('orderHeader.S_Number'), 'S_Number'],
+      [col('orderHeader.Route_Number'), 'Route_Number'],
+
+      'Order_Number',
+      'Promo_Number',
+      'Item_Number',
+      'Quantity_Ordered',
+      'Quantity_Shipped',
+      'Unit_Code',
+      'OrderDetail_Code',
+      'Delivered',
+      'Credit_ReturnToStock',
+      'Price',
+      'NetCost',
+      'BaseCost',
+      'AvgCost',
+      'Invoice_Cost',
+      'OTP_Amount_State',
+      'OTP_Amount_County',
+      'OTP_Amount_City',
+      [
+          literal('(OrderDetail.Price * OrderDetail.Quantity_Ordered ) '),
+          'Ext_Price',
+      ],
+
+      [col('inventory.Description'), 'Description'],
+      [col('inventory.UOM'), 'UOM'],
+      [col('inventory.Pack'), 'Pack'],
+      [col('inventory.UnitOunces'), 'UnitOunces'],
+      [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+      [col('inventory.Points'), 'Points'],
+      [col('inventory.Cig_Pack'), 'Cig_Pack'],
+      [col('inventory.Price_Class'), 'Price_Class_Number'],
+      [col('inventory.PriceClass.Class_Desc'), 'Class_Desc'],
+
+      [col('orderHeader.customer.C_Name'), 'C_Name'],
+      [col('orderHeader.customer.c_address'), 'c_address'],
+      [col('orderHeader.customer.c_city'), 'c_city'],
+      [col('orderHeader.customer.c_state'), 'c_state'],
+      [col('orderHeader.customer.c_zip'), 'c_zip'],
+      [col('orderHeader.customer.c_phone'), 'c_phone'],
+      [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+      [col('orderHeader.customer.c_memo'), 'c_memo'],
+
+    ];
+
+    /**
+     * Query Execution
+     */
+    const { rows, count } = await OrderDetail.findAndCountAll({
+      attributes,
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          required: true,
+          where: orderHeaderWhere,
+          attributes: [],
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              // required: true,
+              attributes: [],
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          required: true,
+          attributes: [],
+          include:[
+                    {
+                      model: PriceClass,
+                      as: 'PriceClass',
+                      attributes: [],
+                    },
+                  ]
+        },
+      ],
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
+
+      limit,
+      offset,
+
+      raw: true,
+      distinct: true,
+    });
+
+    return {
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        totalRecords: count,
+        totalPages: Math.ceil(count / limit),
+      },
+    };
+  }
 
 }

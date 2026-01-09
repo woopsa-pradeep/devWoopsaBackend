@@ -550,7 +550,7 @@ export class ListService {
   }
 
   async getListOfLossQuantityReport() {
-    const [salesCategory,priceClass,manufacturerVendor,items,pickRightAreas,customers,salesRep,routes,taxRates,taxRateCity,taxRateCounty,location,section,OTP_Type] = await Promise.all([
+    const [salesCategory,priceClass,manufacturerVendor,items,pickRightAreas,customers,salesRep,routes,taxRates,taxRateCity,taxRateCounty,location,section,OTP_Type,classOfTrade] = await Promise.all([
 
      SalesCategory.findAll({
       attributes: ['Sales_Category', 'Category_Desc'],
@@ -623,10 +623,14 @@ export class ListService {
     OtherTaxes.findAll({
       attributes: ['OTP_Number', 'OTP_Description'],
       order: [['OTP_Number','ASC']]
+    }),
+    ClassOfTrade.findAll({
+      attributes: ['Trade_Code', 'Trade_Desc'],
+      order: [['Trade_Desc','ASC']]
     })
     ]);
 
-     return { salesCategory,priceClass,manufacturerVendor,items,pickRightAreas,customers,salesRep,routes,taxRates,taxRateCity,taxRateCounty,location,section,OTP_Type };
+     return { salesCategory,priceClass,manufacturerVendor,items,pickRightAreas,customers,salesRep,routes,taxRates,taxRateCity,taxRateCounty,location,section,OTP_Type ,classOfTrade};
     
   }
 

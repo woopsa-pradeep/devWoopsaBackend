@@ -53,5 +53,7 @@ export const parseReportFilters = (query: any) => {
     route: parseArray(query.route),
     location: parseArray(query.location),
     section: parseArray(query.section),
+    otpType: parseArray(query.otpType),
+
   };
 };

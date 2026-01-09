@@ -1192,6 +1192,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Images uploaded successfully');
   }
 
+  async getInventoryItemGroups(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryItemGroups();
+    sendResponse(res, 201, true, data, 'Inventory item group created successfully');
+  }
+
   async createInventoryItemGroup(req: AuthRequest, res: Response) {
     const data = await this.managerService.createInventoryItemGroup(req.body);
     sendResponse(res, 201, true, data, 'Inventory item group created successfully');
@@ -1218,15 +1223,15 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Web price class updated successfully');
   }
 
-  async getLossQuantityReport(req: AuthRequest, res: Response) {
-    const filters = {...parseReportFilters(req.query),
-      groupBy: (req.query.groupBy as any) || 'item',
-    };
+  // async getLossQuantityReport(req: AuthRequest, res: Response) {
+  //   const filters = {...parseReportFilters(req.query),
+  //     groupBy: (req.query.groupBy as any) || 'item',
+  //   };
 
-    const data = await this.managerService.getLossQuantityReport(filters);
+  //   const data = await this.managerService.getLossQuantityReport(filters);
 
-    sendResponse(res, 200, true, data, 'Loss quantity report fetched successfully');
-  }
+  //   sendResponse(res, 200, true, data, 'Loss quantity report fetched successfully');
+  // }
 
   // RetailerDocuments CRUD controller methods
   async createRetailerDocuments(req: AuthRequest, res: Response) {
@@ -1285,4 +1290,36 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const data = await this.managerService.deleteRetailerLocation(Number(req.params.id));
     sendResponse(res, 200, true, data, Manager.RETAILER_LOCATION_DELETED_SUCCESSFULLY);
   }
+
+
+  // async getVelocityReportCustomerGroup(req: AuthRequest, res: Response) {
+  //   const parsedFilters = parseReportFilters(req.query);
+
+  //   const filters = {
+  //     ...parsedFilters,
+  //   } as CommonReportFilters;
+
+  //   const data = await this.managerService.getVelocityReportCustomerGroup(filters);
+
+  //   sendResponse(res, 200, true, data, 'Velocity report fetched successfully');
+  // }
+
+  // controller
+  async getShortShipmentReport(req: AuthRequest, res: Response) {
+    const fromDate = typeof req.query.fromDate === 'string' ? req.query.fromDate : undefined;
+    const toDate = typeof req.query.toDate === 'string' ? req.query.toDate : undefined;
+    const data = await this.managerService.getShortShipmentReport({ fromDate, toDate });
+    sendResponse(res,200,true,data,'Short shipment report fetched successfully');
+  }
+
+  async getVelocityReportCustomer(req: AuthRequest, res: Response) {
+    const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+    const page = typeof req.query.page === 'string' ? Math.max(parseInt(req.query.page, 10), 1) : 1;
+    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10), 500) : 5000; // hard cap for safety
+    const data = await this.managerService.getVelocityReportCustomer({ startDate,endDate,page,limit,});
+    sendResponse(res, 200, true, data, 'Customer Velocity report fetched successfully');
+  }
+
+
 }
