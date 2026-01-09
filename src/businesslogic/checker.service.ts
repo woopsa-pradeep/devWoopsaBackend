@@ -14,6 +14,8 @@ import { ProductImage } from "../models/postgres/product.model";
 import { Users } from "../models/mmsql/user.model";
 import { OverrideRequest } from "../models/postgres/overrideRequest.model";
 import { WebUsers } from "../models/postgres/users.model";
+import { EpickConfirmation } from "../models/postgres/epickConfirmation.model";
+import SalesCategory from "../models/mmsql/salesCategory.model";
 import { getInventoryOnHand, generatePDFFromHTML } from "../utils/helper";
 import { AppError } from "../utils/AppError";
 import { uploadFileToAzure, deleteFileFromAzure } from "../utils/azureUploader";
@@ -656,7 +658,8 @@ export class CheckerService {
             'CaseCount',
             'UOM',
             'Section',
-            'Location'
+            'Location',
+            'Sales_Category'
           ],
           required: false,
           include: [
@@ -772,7 +775,7 @@ export class CheckerService {
     const customer = orderHeaderData.customer;
     const customerRoute = customer?.Routes?.[0];
 
-    // Get picker name if available
+    // Get picker name if available (last picker from Order_Header)
     let pickerName = null;
     if (orderHeaderData.Picker_ID) {
       const picker = await Users.findOne({
@@ -782,6 +785,115 @@ export class CheckerService {
       });
       pickerName = (picker as any)?.UserName || null;
     }
+
+    // Get all pickers who worked on this order from EpickConfirmation
+    const allEpickConfirmations = await EpickConfirmation.findAll({
+      where: {
+        orderNumber: orderNumber,
+        status: 'completed' // Only get completed confirmations
+      },
+      order: [['completedAt', 'ASC']], // Order by completion time
+      raw: true
+    });
+
+    // Get all unique picker user IDs and category numbers
+    const pickerUserIds = Array.from(
+      new Set(
+        allEpickConfirmations
+          .map((conf: any) => conf.pickerUserId)
+          .filter((id: any) => id !== null && id !== undefined)
+      )
+    );
+
+    const allCategoryNumbers = new Set<number>();
+    allEpickConfirmations.forEach((confirmation: any) => {
+      const categories = confirmation.category || [];
+      categories.forEach((cat: number) => allCategoryNumbers.add(cat));
+    });
+
+    // Fetch picker user information from WebUsers
+    const pickerUsers = await WebUsers.findAll({
+      where: {
+        id: { [Op.in]: pickerUserIds }
+      },
+      attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
+      raw: true
+    });
+
+    const pickerMap: any = {};
+    pickerUsers.forEach((picker: any) => {
+      pickerMap[picker.id] = picker;
+    });
+
+    // Fetch category names from SalesCategory table
+    const categoryMap: { [key: number]: string } = {};
+    if (allCategoryNumbers.size > 0) {
+      const categoryNumbersArray = Array.from(allCategoryNumbers);
+      const salesCategories = await SalesCategory.findAll({
+        where: {
+          Sales_Category: { [Op.in]: categoryNumbersArray }
+        },
+        attributes: ['Sales_Category', 'Category_Desc'],
+        raw: true
+      });
+
+      salesCategories.forEach((cat: any) => {
+        categoryMap[cat.Sales_Category] = cat.Category_Desc || `Category ${cat.Sales_Category}`;
+      });
+
+      // For any category numbers not found in database, use fallback
+      categoryNumbersArray.forEach((catNum: number) => {
+        if (!categoryMap[catNum]) {
+          categoryMap[catNum] = `Category ${catNum}`;
+        }
+      });
+    }
+
+    // Format all pickers with their categories, orderItems, and overrideRequests
+    const allPickers = allEpickConfirmations.map((confirmation: any) => {
+      const picker = pickerMap[confirmation.pickerUserId];
+      const categories = confirmation.category || [];
+      const categoryNames = categories.map((cat: number) => 
+        categoryMap[cat] || `Category ${cat}`
+      );
+
+      // Filter orderItems for this picker based on their categories
+      // Items are filtered by Inventory.Sales_Category matching the picker's categories
+      const pickerOrderItems = orderDetailsWithImages.filter((item: any) => {
+        // Find the corresponding order detail to get the inventory Sales_Category
+        const orderDetail = orderDetails.find((detail: any) => 
+          detail.Item_Number === item.itemNumber
+        );
+        if (!orderDetail) {
+          return false;
+        }
+        const orderDetailData = orderDetail as any;
+        const inventory = orderDetailData.inventory;
+        if (!inventory) {
+          return false;
+        }
+        const itemSalesCategory = inventory.Sales_Category;
+        return itemSalesCategory && categories.includes(itemSalesCategory);
+      });
+
+      // Filter overrideRequests for this picker by pickerUserNumber
+      const pickerOverrideRequests = formattedOverrideRequests.filter((req: any) => 
+        req.pickerUserNumber === confirmation.pickerUserNumber
+      );
+
+      return {
+        pickerId: confirmation.pickerUserId || null,
+        pickerUserNumber: confirmation.pickerUserNumber || null,
+        pickerName: picker ? `${picker.firstName} ${picker.lastName}`.trim() : null,
+        pickerEmail: picker?.email || null,
+        categories: categories,
+        categoryNames: categoryNames,
+        startedAt: confirmation.startedAt || null,
+        completedAt: confirmation.completedAt || null,
+        orderItems: pickerOrderItems,
+        overrideRequests: pickerOverrideRequests
+      };
+    });
 
     return {
       orderInfo: {
@@ -805,7 +917,8 @@ export class CheckerService {
           stop: customerRoute?.Stop_Number || orderHeaderData.Stop_Number || null
         } : null,
         startedAt: orderPick.startedAt,
-        completedAt: orderPick.completedAt
+        completedAt: orderPick.completedAt,
+        allPickers: allPickers // All pickers who worked on this order
       },
       orderItems: orderDetailsWithImages,
       overrideRequests: formattedOverrideRequests,

@@ -1400,8 +1400,16 @@ export class ManagerService {
    * Returns a map: categoryNumber -> array of user IDs who have it
    */
   private async getAssignedCategories(excludeUserId?: number): Promise<{ [key: number]: number[] }> {
+    const whereCondition: any = {
+      isActive: true // Only check active users, exclude deleted users
+    };
+    
+    if (excludeUserId) {
+      whereCondition.id = { [Op.ne]: excludeUserId };
+    }
+    
     const allUsers = await EpickUser.findAll({
-      where: excludeUserId ? { id: { [Op.ne]: excludeUserId } } : {},
+      where: whereCondition,
       attributes: ['id', 'category']
     });
 

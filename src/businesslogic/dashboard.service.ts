@@ -4,7 +4,7 @@ import { OrderDetail } from "../models/mmsql/orderDetail.model";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Customer } from "../models/mmsql/customer.model";
 import { SalesRep } from "../models/mmsql/salesrep.model";
-import { Sequelize, Op, col, cast, where } from "sequelize";
+import { Sequelize, Op, col, cast, where, QueryTypes } from "sequelize";
 import { checkQtyDiscount, excludeItemByUser, getAllowedSalesCategories, getCustomerExcludeItem, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
 import { ProductImage } from "../models/postgres/product.model";
 import { getDiscount } from "../utils/helper";
@@ -18,6 +18,11 @@ import Setting from "../models/postgres/setting.model";
 import { OrderHistory } from "../models/postgres/orderHistory.model";
 import { OrderPick } from "../models/postgres/epickOrder.model";
 import { WebUsers } from "../models/postgres/users.model";
+import { EpickUser } from "../models/postgres/epickUser.model";
+import { EpickConfirmation } from "../models/postgres/epickConfirmation.model";
+import { OverrideRequest } from "../models/postgres/overrideRequest.model";
+import { OrderPickScan } from "../models/postgres/epickOrderScan.model";
+import { sequelize } from "../db";
 
 
 export class DashboardService {
@@ -2012,6 +2017,84 @@ export class DashboardService {
             Order_Deleted: false
         };
 
+        // Get total orders from Order_Header with all conditions
+        const totalOrdersFromHeader = await OrderHeader.count({
+            where: {
+                ...dateFilter,
+              Order_Updated: false,  // This means Order_Updated = 0 (false)
+                Invoice_Number: 0,
+                 Order_Deleted: false
+            }
+        });
+
+        // Get total completed orders from Order_Header
+        // Step 1: First filter Order_Header by Invoice_Number > 0, Order_Updated = false, Order_Deleted = false
+        const completedOrderHeaders = await OrderHeader.findAll({
+            where: {
+                ...dateFilter,
+                      Invoice_Number: 0 ,
+                // Invoice_Number: { [Op.gt]: 0 }, // Invoice_Number > 0
+                 Order_Updated: false, // Order_Updated = 0 (false)
+                 Order_Deleted: false
+            },
+            attributes: ['Order_Number'],
+            raw: true
+        });
+
+        const completedOrderNumbers = completedOrderHeaders
+            .map((order: any) => order.Order_Number)
+            .filter((v: any) => v !== null && v !== undefined)
+            .map((v: any) => Number(v));
+
+        console.log(`Found ${completedOrderNumbers.length} orders with Invoice_Number > 0 and Order_Updated = false`);
+
+        // Step 2: Check Order_Detail to ensure ALL items have Confirmed = 1 for these orders
+        let totalCompletedOrders = 0;
+        if (completedOrderNumbers.length > 0) {
+            // First, get detailed info about each order's confirmation status
+            const orderDetailStatus = await sequelize.query(
+                `SELECT 
+                    Order_Number,
+                    COUNT(*) as totalItems,
+                    SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END) as confirmedItems,
+                    SUM(CASE WHEN Confirmed = 0 OR Confirmed IS NULL THEN 1 ELSE 0 END) as unconfirmedItems
+                 FROM Order_Detail
+                 WHERE Order_Number IN (:orderNumbers)
+                 GROUP BY Order_Number`,
+                {
+                    replacements: { orderNumbers: completedOrderNumbers },
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            ) as any[];
+
+            // Log details for each order
+            orderDetailStatus.forEach((order: any) => {
+                console.log(`Order ${order.Order_Number}: Total items: ${order.totalItems}, Confirmed: ${order.confirmedItems}, Unconfirmed: ${order.unconfirmedItems}`);
+            });
+
+            // Query to find orders where ALL items have Confirmed = 1
+            // This query returns orders where total items = confirmed items
+            const confirmedOrdersQuery = await sequelize.query(
+                `SELECT Order_Number
+                 FROM Order_Detail
+                 WHERE Order_Number IN (:orderNumbers)
+                 GROUP BY Order_Number
+                 HAVING COUNT(*) = SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END)`,
+                {
+                    replacements: { orderNumbers: completedOrderNumbers },
+                    type: QueryTypes.SELECT,
+                    raw: true,
+                }
+            ) as any[];
+
+            // Count orders where all items are confirmed
+            totalCompletedOrders = confirmedOrdersQuery.length;
+            console.log(`Found ${totalCompletedOrders} orders where all items have Confirmed = 1 out of ${completedOrderNumbers.length} orders`);
+        } else {
+            console.log('No orders found with Invoice_Number > 0 and Order_Updated = false');
+        }
+
         // Get all OrderPick records and join with OrderHeader to filter by date
         // First, get all order numbers within date range
         const ordersInDateRange = await OrderHeader.findAll({
@@ -2026,8 +2109,23 @@ export class DashboardService {
             return {
                 orderStatistics: {
                     totalOrders: 0,
+                    totalOrdersFromHeader: totalOrdersFromHeader,
+                    totalCompletedOrders: totalCompletedOrders,
                     completedByEpick: 0,
-                    pendingFromEpick: 0
+                    pendingFromEpick: 0,
+                    totalCheckerOrders: 0, // NEW: Orders ready for checker
+                    ordersCompletedByChecker: 0 // NEW: Orders completed by checker
+                },
+                scanningStatistics: {
+                    totalScannedItems: 0,
+                    totalScannedLines: 0,
+                    totalTimeSeconds: 0,
+                    totalTimeFormatted: '00:00:00'
+                },
+                overrideRequestStatistics: {
+                    totalRequests: 0,
+                    totalAcceptedRequests: 0,
+                    totalRejectedRequests: 0
                 },
                 pickerWiseOrders: [],
                 averageOrderTime: {
@@ -2051,47 +2149,245 @@ export class DashboardService {
         });
 
         // 1. Order Statistics: Total orders assigned to epick, Completed by epick, Pending from epick
-        const totalOrders = allOrderPicks.length; // Total orders assigned to epick
-        const completedByEpick = allOrderPicks.filter((pick: any) => pick.status === 'completed').length;
+        const completedByEpick = allOrderPicks.filter((pick: any) => pick.status === 'completed' || pick.status === 'ready_for_delivery').length;
+        // Calculate totalOrders using formula: totalOrdersFromHeader + completedByEpick - totalCompletedOrders
+        const totalOrders = totalOrdersFromHeader + completedByEpick - totalCompletedOrders;
         const pendingFromEpick = allOrderPicks.filter((pick: any) => 
             pick.status === 'pending' || pick.status === 'in_progress'
         ).length;
 
-        // 2. Picker-wise total orders and average time (completed orders only)
-        const completedOrderPicks = allOrderPicks.filter((pick: any) => pick.status === 'completed');
-        
-        // Group by pickerUserNumber - count orders and calculate time
-        const pickerOrderCount: { [key: number]: number } = {};
-        const pickerTimeData: { [key: number]: { totalTime: number; orderCount: number } } = {};
+        // Calculate total checker orders (orders ready for checker)
+        const totalCheckerOrders = allOrderPicks.filter((pick: any) => pick.status === 'ready_for_delivery').length;
 
-        completedOrderPicks.forEach((pick: any) => {
-            const pickerId = pick.pickerUserNumber;
-            pickerOrderCount[pickerId] = (pickerOrderCount[pickerId] || 0) + 1;
-            
-            // Calculate time for this order
-            if (pick.startedAt && pick.completedAt) {
-                const startTime = new Date(pick.startedAt).getTime();
-                const endTime = new Date(pick.completedAt).getTime();
-                const timeDiff = (endTime - startTime) / 1000; // Convert to seconds
-                if (timeDiff > 0) {
-                    if (!pickerTimeData[pickerId]) {
-                        pickerTimeData[pickerId] = { totalTime: 0, orderCount: 0 };
-                    }
-                    pickerTimeData[pickerId].totalTime += timeDiff;
-                    pickerTimeData[pickerId].orderCount += 1;
+        // Calculate orders completed by checker (same logic as totalCompletedOrders but for checker completion)
+        // Orders where Invoice_Number > 0, Order_Updated = false, Order_Deleted = false, and all items Confirmed = 1
+        let ordersCompletedByChecker = 0;
+        const checkerCompletedOrderHeaders = await OrderHeader.findAll({
+            where: {
+                ...dateFilter,
+                Invoice_Number: { [Op.gt]: 0 }, // Invoice_Number > 0 (invoice created by checker)
+                Order_Updated: false, // Order_Updated = 0 (false)
+                Order_Deleted: false
+            },
+            attributes: ['Order_Number'],
+            raw: true
+        });
+
+        const checkerCompletedOrderNumbers = checkerCompletedOrderHeaders
+            .map((order: any) => order.Order_Number)
+            .filter((v: any) => v !== null && v !== undefined)
+            .map((v: any) => Number(v));
+
+        if (checkerCompletedOrderNumbers.length > 0) {
+            // Check Order_Detail to ensure ALL items have Confirmed = 1 for these orders
+            const checkerOrderDetailStatus = await sequelize.query(
+                `SELECT 
+                    Order_Number,
+                    COUNT(*) as totalItems,
+                    SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END) as confirmedItems
+                 FROM Order_Detail
+                 WHERE Order_Number IN (:orderNumbers)
+                 GROUP BY Order_Number`,
+                {
+                    replacements: { orderNumbers: checkerCompletedOrderNumbers },
+                    type: QueryTypes.SELECT,
+                    raw: true,
                 }
+            ) as any[];
+
+            // Count orders where all items are confirmed
+            checkerOrderDetailStatus.forEach((order: any) => {
+                if (order.totalItems === order.confirmedItems && order.totalItems > 0) {
+                    ordersCompletedByChecker++;
+                }
+            });
+        }
+
+        // 2. Picker-wise total orders and average time (completed orders only)
+        // Use EpickConfirmation instead of OrderPick to get accurate picker-wise data
+        const completedOrderPicks = allOrderPicks.filter((pick: any) => pick.status === 'completed' || pick.status === 'ready_for_delivery');
+        const completedOrderNumbersForQty = completedOrderPicks.map((pick: any) => pick.orderNumber);
+        
+        // Get all completed EpickConfirmations for orders in date range
+        const completedConfirmations = await EpickConfirmation.findAll({
+            where: {
+                orderNumber: { [Op.in]: orderNumbers },
+                status: 'completed'
+            },
+            attributes: ['orderNumber', 'pickerUserId', 'category', 'startedAt', 'completedAt'],
+            raw: true
+        });
+
+        // Get all order details to calculate quantity per picker based on categories
+        let orderDetailsMap: { [key: number]: any[] } = {};
+        if (completedOrderNumbersForQty.length > 0) {
+            const allOrderDetails = await OrderDetail.findAll({
+                where: {
+                    Order_Number: { [Op.in]: completedOrderNumbersForQty }
+                },
+                include: [
+                    {
+                        model: Inventory,
+                        as: 'inventory',
+                        attributes: ['Sales_Category'],
+                        required: false
+                    }
+                ],
+                raw: true,
+                nest: true
+            });
+
+            // Group order details by order number
+            allOrderDetails.forEach((detail: any) => {
+                const orderNum = detail.Order_Number;
+                if (!orderDetailsMap[orderNum]) {
+                    orderDetailsMap[orderNum] = [];
+                }
+                orderDetailsMap[orderNum].push(detail);
+            });
+        }
+
+        // Group by pickerUserId - count orders and calculate time using EpickConfirmation
+        const pickerOrderCount: { [key: number]: number } = {};
+        const pickerTimeData: { [key: number]: { totalTime: number; orderCount: number; totalQuantity: number } } = {};
+        const pickerOrderSet: { [key: number]: Set<number> } = {}; // Track unique orders per picker
+
+        completedConfirmations.forEach((confirmation: any) => {
+            const pickerId = confirmation.pickerUserId;
+            if (!pickerId) return;
+
+            // Initialize sets and data structures
+            if (!pickerOrderSet[pickerId]) {
+                pickerOrderSet[pickerId] = new Set();
+            }
+            if (!pickerTimeData[pickerId]) {
+                pickerTimeData[pickerId] = { totalTime: 0, orderCount: 0, totalQuantity: 0 };
+            }
+
+            // Count unique orders per picker
+            pickerOrderSet[pickerId].add(confirmation.orderNumber);
+            
+            // Calculate quantity for this picker based on their categories
+            let pickerQuantity = 0;
+            const orderDetails = orderDetailsMap[confirmation.orderNumber] || [];
+            const pickerCategories = confirmation.category || [];
+            
+            orderDetails.forEach((detail: any) => {
+                const itemCategory = detail.inventory?.Sales_Category;
+                if (itemCategory && pickerCategories.includes(itemCategory)) {
+                    pickerQuantity += parseFloat(detail.Quantity_Ordered) || 0;
+                }
+            });
+
+            // Calculate time for this confirmation
+            console.log(`\n=== Order ${confirmation.orderNumber} - Picker ${pickerId} ===`);
+            console.log('startedAt:', confirmation.startedAt);
+            console.log('completedAt:', confirmation.completedAt);
+            console.log('categories:', pickerCategories);
+            console.log('quantity (category-specific):', pickerQuantity);
+            
+            if (confirmation.startedAt && confirmation.completedAt) {
+                const startTime = new Date(confirmation.startedAt).getTime();
+                const endTime = new Date(confirmation.completedAt).getTime();
+                const timeDiff = (endTime - startTime) / 1000; // Convert to seconds
+                
+                console.log('timeDiff (seconds):', timeDiff);
+                console.log('timeDiff (minutes):', (timeDiff / 60).toFixed(2));
+                if (pickerQuantity > 0) {
+                    console.log('time per quantity (seconds/qty):', (timeDiff / pickerQuantity).toFixed(2));
+                }
+                
+                if (timeDiff > 0) {
+                    pickerTimeData[pickerId].totalTime += timeDiff;
+                    pickerTimeData[pickerId].totalQuantity += pickerQuantity;
+                    console.log(`Added to picker ${pickerId}: totalTime = ${pickerTimeData[pickerId].totalTime}s, totalQuantity = ${pickerTimeData[pickerId].totalQuantity}`);
+                } else {
+                    console.log('WARNING: timeDiff <= 0, skipping this confirmation');
+                }
+            } else {
+                console.log('WARNING: Missing startedAt or completedAt');
             }
         });
 
-        // Get user details for all pickers
+        // Set order count from unique orders per picker
+        Object.keys(pickerOrderSet).forEach((pickerIdStr: string) => {
+            const pickerId = Number(pickerIdStr);
+            pickerOrderCount[pickerId] = pickerOrderSet[pickerId].size;
+            pickerTimeData[pickerId].orderCount = pickerOrderSet[pickerId].size;
+        });
+
+        // Get user details for all pickers from EpickUser table
         const pickerUserIds = Object.keys(pickerOrderCount).map(Number);
-        const pickerUsers = await WebUsers.findAll({
+        const pickerUsers = await EpickUser.findAll({
             where: {
                 id: { [Op.in]: pickerUserIds }
             },
             attributes: ['id', 'firstName', 'lastName', 'userNumber'],
             raw: true
         });
+
+        // Calculate total scanned quantity for each picker
+        // Get all scans for completed orders and sum by picker using EpickConfirmation mapping
+        const pickerScannedQty: { [key: number]: number } = {};
+        if (completedOrderNumbersForQty.length > 0) {
+            // Create mapping from orderNumber to pickerUserIds using EpickConfirmation
+            const orderToPickersMap: { [key: number]: number[] } = {};
+            completedConfirmations.forEach((conf: any) => {
+                if (!orderToPickersMap[conf.orderNumber]) {
+                    orderToPickersMap[conf.orderNumber] = [];
+                }
+                if (conf.pickerUserId && !orderToPickersMap[conf.orderNumber].includes(conf.pickerUserId)) {
+                    orderToPickersMap[conf.orderNumber].push(conf.pickerUserId);
+                }
+            });
+
+            // Get all scans for these orders
+            const allScans = await OrderPickScan.findAll({
+                where: {
+                    orderNumber: { [Op.in]: completedOrderNumbersForQty }
+                },
+                attributes: ['orderNumber', 'qty'],
+                raw: true
+            });
+
+            // Distribute scanned quantity evenly among pickers who worked on the order
+            allScans.forEach((scan: any) => {
+                const pickerIds = orderToPickersMap[scan.orderNumber] || [];
+                const scanQty = parseFloat(scan.qty) || 0;
+                if (pickerIds.length > 0) {
+                    const qtyPerPicker = scanQty / pickerIds.length;
+                    pickerIds.forEach((pickerId: number) => {
+                        pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + qtyPerPicker;
+                    });
+                }
+            });
+
+            console.log('Picker scanned quantities:', pickerScannedQty);
+        }
+
+        // Calculate total override requests for each picker
+        const pickerOverrideCount: { [key: number]: number } = {};
+        if (pickerUserIds.length > 0 && completedOrderNumbersForQty.length > 0) {
+            // Get all override requests for orders in date range
+            const overrideRequests = await OverrideRequest.findAll({
+                where: {
+                    orderNumber: { [Op.in]: completedOrderNumbersForQty },
+                    pickerUserId: { [Op.in]: pickerUserIds }
+                },
+                attributes: ['pickerUserId'],
+                raw: true
+            });
+
+            // Count override requests by picker (using pickerUserId which matches user.id)
+            overrideRequests.forEach((req: any) => {
+                const pickerId = req.pickerUserId;
+                if (pickerId) {
+                    pickerOverrideCount[pickerId] = (pickerOverrideCount[pickerId] || 0) + 1;
+                }
+            });
+
+            console.log('Picker override request counts:', pickerOverrideCount);
+        }
 
         // Helper function to format time
         const formatTime = (seconds: number) => {
@@ -2109,6 +2405,11 @@ export class DashboardService {
                 ? Math.round(timeData.totalTime / timeData.orderCount) 
                 : 0;
             
+            // Calculate average time per quantity
+            const averageTimePerQty = timeData && timeData.totalQuantity > 0
+                ? parseFloat((timeData.totalTime / timeData.totalQuantity).toFixed(2))
+                : 0;
+            
             return {
                 pickerId: user.id,
                 pickerName: fullName || user.userNumber || `User ${user.id}`,
@@ -2116,44 +2417,147 @@ export class DashboardService {
                 averageOrderTime: {
                     averageTimeSeconds: averageTimeSeconds,
                     averageTimeFormatted: formatTime(averageTimeSeconds)
-                }
+                },
+                averageTimePerQuantity: {
+                    secondsPerQty: averageTimePerQty,
+                    formatted: `${averageTimePerQty.toFixed(2)}s/qty`
+                },
+                totalScannedQuantity: pickerScannedQty[user.id] || 0,
+                totalOverrideRequests: pickerOverrideCount[user.id] || 0
             };
         }).sort((a, b) => b.totalCompletedOrders - a.totalCompletedOrders);
 
-        // 3. Overall average time of orders for all epick users
+        // 3. Overall average time of orders for all epick users using EpickConfirmation
         let totalTimeSeconds = 0;
-        let ordersWithTime = 0;
+        let totalQuantity = 0;
+        let confirmationsWithTime = 0;
 
-        completedOrderPicks.forEach((pick: any) => {
-            if (pick.startedAt && pick.completedAt) {
-                const startTime = new Date(pick.startedAt).getTime();
-                const endTime = new Date(pick.completedAt).getTime();
+        console.log('\n=== Overall Average Time Calculation ===');
+        completedConfirmations.forEach((confirmation: any) => {
+            if (confirmation.startedAt && confirmation.completedAt) {
+                const startTime = new Date(confirmation.startedAt).getTime();
+                const endTime = new Date(confirmation.completedAt).getTime();
                 const timeDiff = (endTime - startTime) / 1000; // Convert to seconds
+                
+                // Calculate quantity for this picker based on their categories
+                let pickerQuantity = 0;
+                const orderDetails = orderDetailsMap[confirmation.orderNumber] || [];
+                const pickerCategories = confirmation.category || [];
+                
+                orderDetails.forEach((detail: any) => {
+                    const itemCategory = detail.inventory?.Sales_Category;
+                    if (itemCategory && pickerCategories.includes(itemCategory)) {
+                        pickerQuantity += parseFloat(detail.Quantity_Ordered) || 0;
+                    }
+                });
+                
                 if (timeDiff > 0) {
                     totalTimeSeconds += timeDiff;
-                    ordersWithTime++;
+                    totalQuantity += pickerQuantity;
+                    confirmationsWithTime++;
                 }
             }
         });
+        
+        console.log(`Total confirmations with valid time: ${confirmationsWithTime} out of ${completedConfirmations.length}`);
+        console.log(`Total time (seconds): ${totalTimeSeconds}`);
+        console.log(`Total time (minutes): ${(totalTimeSeconds / 60).toFixed(2)}`);
+        console.log(`Total time (hours): ${(totalTimeSeconds / 3600).toFixed(2)}`);
+        console.log(`Total quantity: ${totalQuantity}`);
+        if (totalQuantity > 0) {
+            console.log(`Average time per quantity: ${(totalTimeSeconds / totalQuantity).toFixed(2)} seconds/qty`);
+        }
+        
+        // Log picker-wise summary
+        console.log('\n=== Picker-wise Time Summary ===');
+        Object.keys(pickerTimeData).forEach((pickerId: string) => {
+            const data = pickerTimeData[Number(pickerId)];
+            console.log(`Picker ${pickerId}:`);
+            console.log(`  - Total orders: ${data.orderCount}`);
+            console.log(`  - Total time: ${data.totalTime} seconds (${(data.totalTime / 60).toFixed(2)} minutes, ${(data.totalTime / 3600).toFixed(2)} hours)`);
+            console.log(`  - Total quantity: ${data.totalQuantity}`);
+            console.log(`  - Average time: ${data.orderCount > 0 ? (data.totalTime / data.orderCount).toFixed(2) : 0} seconds per order`);
+            if (data.totalQuantity > 0) {
+                console.log(`  - Average time per quantity: ${(data.totalTime / data.totalQuantity).toFixed(2)} seconds/qty`);
+            }
+        });
 
-        const averageTimeSeconds = ordersWithTime > 0 ? Math.round(totalTimeSeconds / ordersWithTime) : 0;
+        const averageTimeSeconds = confirmationsWithTime > 0 ? Math.round(totalTimeSeconds / confirmationsWithTime) : 0;
+        const averageTimePerQty = totalQuantity > 0 ? parseFloat((totalTimeSeconds / totalQuantity).toFixed(2)) : 0;
         
         // Format average time as HH:MM:SS
         const hours = Math.floor(averageTimeSeconds / 3600);
         const minutes = Math.floor((averageTimeSeconds % 3600) / 60);
-        const seconds = averageTimeSeconds % 60;
-        const averageTimeFormatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        const secs = averageTimeSeconds % 60;
+        const averageTimeFormatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+        // Calculate total scanned items and scanned lines from OrderPickScan
+        let totalScannedItems = 0;
+        let totalScannedLines = 0;
+        if (completedOrderNumbersForQty.length > 0) {
+            const allScans = await OrderPickScan.findAll({
+                where: {
+                    orderNumber: { [Op.in]: completedOrderNumbersForQty }
+                },
+                attributes: ['qty'],
+                raw: true
+            });
+
+            totalScannedLines = allScans.length;
+            totalScannedItems = allScans.reduce((sum: number, scan: any) => {
+                return sum + (parseFloat(scan.qty) || 0);
+            }, 0);
+            console.log(`Total scanned lines: ${totalScannedLines}, Total scanned items: ${totalScannedItems}`);
+        }
+
+        // Calculate total override requests (all statuses)
+        let totalOverrideRequests = 0;
+        let totalRejectedRequests = 0;
+        let totalAcceptedRequests = 0;
+        if (completedOrderNumbersForQty.length > 0) {
+            const allOverrideRequests = await OverrideRequest.findAll({
+                where: {
+                    orderNumber: { [Op.in]: completedOrderNumbersForQty }
+                },
+                attributes: ['status'],
+                raw: true
+            });
+
+            totalOverrideRequests = allOverrideRequests.length;
+            totalRejectedRequests = allOverrideRequests.filter((req: any) => req.status === 'rejected').length;
+            totalAcceptedRequests = allOverrideRequests.filter((req: any) => req.status === 'approved').length;
+            console.log(`Total override requests: ${totalOverrideRequests}, Rejected: ${totalRejectedRequests}, Accepted: ${totalAcceptedRequests}`);
+        }
 
         return {
             orderStatistics: {
                 totalOrders,
+                totalOrdersFromHeader,
+                totalCompletedOrders,
                 completedByEpick,
-                pendingFromEpick
+                pendingFromEpick,
+                totalCheckerOrders, // NEW: Orders ready for checker
+                ordersCompletedByChecker // NEW: Orders completed by checker
+            },
+            scanningStatistics: {
+                totalScannedItems,
+                totalScannedLines,
+                totalTimeSeconds: totalTimeSeconds,
+                totalTimeFormatted: formatTime(totalTimeSeconds)
+            },
+            overrideRequestStatistics: {
+                totalRequests: totalOverrideRequests,
+                totalAcceptedRequests,
+                totalRejectedRequests
             },
             pickerWiseOrders,
             averageOrderTime: {
                 averageTimeSeconds,
-                averageTimeFormatted
+                averageTimeFormatted,
+                averageTimePerQuantity: {
+                    secondsPerQty: averageTimePerQty,
+                    formatted: `${averageTimePerQty.toFixed(2)}s/qty`
+                }
             },
             dateRange: {
                 fromDate: startDate.toISOString().split('T')[0],
