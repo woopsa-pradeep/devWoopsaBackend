@@ -6536,7 +6536,7 @@ export class ManagerService {
   async getInventoryItemGroups(){
     const inventoryItemGroup = Inventory_ItemGroups.findAll({
       attributes: [
-        'Item_GroupID','Item_GroupDescription','Allow_Price_Change','Allow_Price_Change_Ramote'
+        'Item_GroupID','Item_GroupDescription'
       ]
     })
 

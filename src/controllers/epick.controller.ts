@@ -396,7 +396,7 @@ export class EpickController {
     }
  
     /**
-     * Create override request (Epick user) - Pass type
+     * Create override request (Epick user) - Supports both 'pass' and 'scan' types
      */
     async createOverrideRequest(req: AuthRequest, res: Response) {
         const userId = req.user?.id;
@@ -404,14 +404,24 @@ export class EpickController {
             return sendResponse(res, 401, false, null, "User not authenticated");
         }
 
-        const { orderNumber, itemNumber, qty, note } = req.body;
+        const { orderNumber, itemNumber, requestType, qty, note } = req.body;
 
         if (!orderNumber || !itemNumber) {
             return sendResponse(res, 400, false, null, "orderNumber and itemNumber are required");
         }
 
+        // Validate requestType if provided
+        if (requestType && requestType !== 'scan' && requestType !== 'pass') {
+            return sendResponse(res, 400, false, null, "requestType must be either 'scan' or 'pass'");
+        }
+
+        // Validate qty for scan type
+        if (requestType === 'scan' && (!qty || qty <= 0)) {
+            return sendResponse(res, 400, false, null, "qty is required and must be greater than 0 for scan type requests");
+        }
+
         const data = await this.epickService.createOverrideRequest(
-            { orderNumber, itemNumber, qty, note },
+            { orderNumber, itemNumber, requestType, qty, note },
             userId
         );
 

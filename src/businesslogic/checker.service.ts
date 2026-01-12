@@ -252,6 +252,8 @@ export class CheckerService {
     const headerWhere: any = {
       // Exclude orders where Order_Updated = 1
       Order_Updated: { [Op.ne]: true },
+      // Exclude deleted orders
+      Order_Deleted: false,
       // Only get orders that are completed (already picked)
       Order_Number: { [Op.in]: completedOrderNumbers }
     };

@@ -1540,7 +1540,7 @@ export class DashboardService {
                 return {
                     salesRepNumber: salesPerson['orderHeader.S_Number'],
                     salesRepName: salesRep?.S_Desc || 'Unknown',
-                    totalSales: Number(salesPerson.totalSales || 0),
+                    totalSales: Number(salesPerson.totalSales * salesPerson.totalQuantity || 0),
                     orderCount: parseInt(salesPerson.orderCount || 0),
                     totalQuantity: Number(salesPerson.totalQuantity || 0)
                 };
@@ -2159,48 +2159,58 @@ export class DashboardService {
         // Calculate total checker orders (orders ready for checker)
         const totalCheckerOrders = allOrderPicks.filter((pick: any) => pick.status === 'ready_for_delivery').length;
 
-        // Calculate orders completed by checker (same logic as totalCompletedOrders but for checker completion)
-        // Orders where Invoice_Number > 0, Order_Updated = false, Order_Deleted = false, and all items Confirmed = 1
-        let ordersCompletedByChecker = 0;
-        const checkerCompletedOrderHeaders = await OrderHeader.findAll({
-            where: {
-                ...dateFilter,
-                Invoice_Number: { [Op.gt]: 0 }, // Invoice_Number > 0 (invoice created by checker)
-                Order_Updated: false, // Order_Updated = 0 (false)
-                Order_Deleted: false
-            },
-            attributes: ['Order_Number'],
-            raw: true
-        });
-
-        const checkerCompletedOrderNumbers = checkerCompletedOrderHeaders
-            .map((order: any) => order.Order_Number)
+        // Calculate orders completed by checker
+        // Step 1: First check PostgreSQL OrderPick for orders with status = 'ready_for_delivery'
+        const readyForDeliveryOrders = allOrderPicks
+            .filter((pick: any) => pick.status === 'ready_for_delivery')
+            .map((pick: any) => pick.orderNumber)
             .filter((v: any) => v !== null && v !== undefined)
             .map((v: any) => Number(v));
 
-        if (checkerCompletedOrderNumbers.length > 0) {
-            // Check Order_Detail to ensure ALL items have Confirmed = 1 for these orders
-            const checkerOrderDetailStatus = await sequelize.query(
-                `SELECT 
-                    Order_Number,
-                    COUNT(*) as totalItems,
-                    SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END) as confirmedItems
-                 FROM Order_Detail
-                 WHERE Order_Number IN (:orderNumbers)
-                 GROUP BY Order_Number`,
-                {
-                    replacements: { orderNumbers: checkerCompletedOrderNumbers },
-                    type: QueryTypes.SELECT,
-                    raw: true,
-                }
-            ) as any[];
+        let ordersCompletedByChecker = 0;
 
-            // Count orders where all items are confirmed
-            checkerOrderDetailStatus.forEach((order: any) => {
-                if (order.totalItems === order.confirmedItems && order.totalItems > 0) {
-                    ordersCompletedByChecker++;
-                }
+        if (readyForDeliveryOrders.length > 0) {
+            // Step 2: Check those orders in MSSQL OrderHeader to verify Invoice_Number > 0, Order_Updated = 0, Order_Deleted = 0
+            const checkerCompletedOrderHeaders = await OrderHeader.findAll({
+                where: {
+                    Order_Number: { [Op.in]: readyForDeliveryOrders },
+                    Invoice_Number: { [Op.gt]: 0 }, // Invoice_Number > 0 (invoice created by checker)
+                    Order_Updated: false, // Order_Updated = 0 (false)
+                    Order_Deleted: false
+                },
+                attributes: ['Order_Number'],
+                raw: true
             });
+
+            const checkerCompletedOrderNumbers = checkerCompletedOrderHeaders
+                .map((order: any) => order.Order_Number)
+                .filter((v: any) => v !== null && v !== undefined)
+                .map((v: any) => Number(v));
+
+            if (checkerCompletedOrderNumbers.length > 0) {
+                // Step 3: Check Order_Detail to ensure ALL items have Confirmed = 1 for these orders
+                const checkerOrderDetailStatus = await sequelize.query(
+                    `SELECT 
+                        Order_Number,
+                        COUNT(*) as totalItems,
+                        SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END) as confirmedItems
+                     FROM Order_Detail
+                     WHERE Order_Number IN (:orderNumbers)
+                     GROUP BY Order_Number`,
+                    {
+                        replacements: { orderNumbers: checkerCompletedOrderNumbers },
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                    }
+                ) as any[];
+
+                // Count orders where all items are confirmed
+                checkerOrderDetailStatus.forEach((order: any) => {
+                    if (order.totalItems === order.confirmedItems && order.totalItems > 0) {
+                        ordersCompletedByChecker++;
+                    }
+                });
+            }
         }
 
         // 2. Picker-wise total orders and average time (completed orders only)
@@ -2326,74 +2336,130 @@ export class DashboardService {
             raw: true
         });
 
-        // Calculate total scanned quantity for each picker
-        // Get all scans for completed orders and sum by picker using EpickConfirmation mapping
+        // Calculate total scanned quantity and scanned lines for each picker (category-based)
+        // Get all scans for completed orders and sum by picker based on item categories
         const pickerScannedQty: { [key: number]: number } = {};
+        const pickerScannedLines: { [key: number]: Set<string> } = {}; // Track unique item scans per picker
         if (completedOrderNumbersForQty.length > 0) {
-            // Create mapping from orderNumber to pickerUserIds using EpickConfirmation
-            const orderToPickersMap: { [key: number]: number[] } = {};
+            // Create mapping from orderNumber to picker confirmations (with categories)
+            const orderToPickersMap: { [key: number]: Array<{ pickerUserId: number; categories: number[] }> } = {};
             completedConfirmations.forEach((conf: any) => {
                 if (!orderToPickersMap[conf.orderNumber]) {
                     orderToPickersMap[conf.orderNumber] = [];
                 }
-                if (conf.pickerUserId && !orderToPickersMap[conf.orderNumber].includes(conf.pickerUserId)) {
-                    orderToPickersMap[conf.orderNumber].push(conf.pickerUserId);
+                if (conf.pickerUserId) {
+                    // Check if this picker is already in the map for this order
+                    const existingPicker = orderToPickersMap[conf.orderNumber].find(
+                        (p: any) => p.pickerUserId === conf.pickerUserId
+                    );
+                    if (!existingPicker) {
+                        orderToPickersMap[conf.orderNumber].push({
+                            pickerUserId: conf.pickerUserId,
+                            categories: conf.category || []
+                        });
+                    } else {
+                        // Merge categories if picker already exists
+                        const existingCategories = existingPicker.categories || [];
+                        const newCategories = conf.category || [];
+                        existingPicker.categories = [...new Set([...existingCategories, ...newCategories])];
+                    }
                 }
             });
 
-            // Get all scans for these orders
+            // Get all scans for these orders with itemNumber
             const allScans = await OrderPickScan.findAll({
                 where: {
                     orderNumber: { [Op.in]: completedOrderNumbersForQty }
                 },
-                attributes: ['orderNumber', 'qty'],
+                attributes: ['orderNumber', 'itemNumber', 'qty'],
                 raw: true
             });
 
-            // Distribute scanned quantity evenly among pickers who worked on the order
+            // Distribute scanned quantity based on item categories matching picker categories
             allScans.forEach((scan: any) => {
-                const pickerIds = orderToPickersMap[scan.orderNumber] || [];
+                const orderNum = scan.orderNumber;
+                const itemNum = scan.itemNumber;
                 const scanQty = parseFloat(scan.qty) || 0;
-                if (pickerIds.length > 0) {
-                    const qtyPerPicker = scanQty / pickerIds.length;
-                    pickerIds.forEach((pickerId: number) => {
-                        pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + qtyPerPicker;
-                    });
+                
+                // Get order details for this order to find item's Sales_Category
+                const orderDetails = orderDetailsMap[orderNum] || [];
+                const itemDetail = orderDetails.find((detail: any) => detail.Item_Number === itemNum);
+                
+                if (itemDetail) {
+                    const itemCategory = itemDetail.inventory?.Sales_Category;
+                    
+                    if (itemCategory) {
+                        // Find pickers who worked on this order AND have this item's category
+                        const pickersForOrder = orderToPickersMap[orderNum] || [];
+                        pickersForOrder.forEach((pickerInfo: any) => {
+                            if (pickerInfo.categories.includes(itemCategory)) {
+                                const pickerId = pickerInfo.pickerUserId;
+                                
+                                // Add scanned quantity
+                                pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + scanQty;
+                                
+                                // Track unique scanned lines (orderNumber_itemNumber per picker)
+                                if (!pickerScannedLines[pickerId]) {
+                                    pickerScannedLines[pickerId] = new Set();
+                                }
+                                pickerScannedLines[pickerId].add(`${orderNum}_${itemNum}`);
+                            }
+                        });
+                    }
                 }
             });
 
-            console.log('Picker scanned quantities:', pickerScannedQty);
+            console.log('Picker scanned quantities (category-based):', pickerScannedQty);
+            console.log('Picker scanned lines:', Object.keys(pickerScannedLines).map(id => ({
+                pickerId: id,
+                lines: pickerScannedLines[Number(id)].size
+            })));
         }
 
-        // Calculate total override requests for each picker
+        // Calculate total override requests for each picker (with status breakdown)
         const pickerOverrideCount: { [key: number]: number } = {};
+        const pickerAcceptedRequests: { [key: number]: number } = {};
+        const pickerRejectedRequests: { [key: number]: number } = {};
         if (pickerUserIds.length > 0 && completedOrderNumbersForQty.length > 0) {
-            // Get all override requests for orders in date range
+            // Get all override requests for orders in date range with status
             const overrideRequests = await OverrideRequest.findAll({
                 where: {
                     orderNumber: { [Op.in]: completedOrderNumbersForQty },
                     pickerUserId: { [Op.in]: pickerUserIds }
                 },
-                attributes: ['pickerUserId'],
+                attributes: ['pickerUserId', 'status'],
                 raw: true
             });
 
-            // Count override requests by picker (using pickerUserId which matches user.id)
+            // Count override requests by picker and status (using pickerUserId which matches user.id)
             overrideRequests.forEach((req: any) => {
                 const pickerId = req.pickerUserId;
                 if (pickerId) {
+                    // Total requests
                     pickerOverrideCount[pickerId] = (pickerOverrideCount[pickerId] || 0) + 1;
+                    
+                    // Accepted requests
+                    if (req.status === 'approved') {
+                        pickerAcceptedRequests[pickerId] = (pickerAcceptedRequests[pickerId] || 0) + 1;
+                    }
+                    
+                    // Rejected requests
+                    if (req.status === 'rejected') {
+                        pickerRejectedRequests[pickerId] = (pickerRejectedRequests[pickerId] || 0) + 1;
+                    }
                 }
             });
 
             console.log('Picker override request counts:', pickerOverrideCount);
+            console.log('Picker accepted requests:', pickerAcceptedRequests);
+            console.log('Picker rejected requests:', pickerRejectedRequests);
         }
 
         // Helper function to format time
         const formatTime = (seconds: number) => {
             const hours = Math.floor(seconds / 3600);
             const minutes = Math.floor((seconds % 3600) / 60);
-            const secs = seconds % 60;
+            const secs = Math.floor(seconds % 60); // Use Math.floor to get whole seconds only
             return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         };
 
@@ -2410,6 +2476,13 @@ export class DashboardService {
                 ? parseFloat((timeData.totalTime / timeData.totalQuantity).toFixed(2))
                 : 0;
             
+            // Get total time for this picker
+            const totalTimeSeconds = timeData ? timeData.totalTime : 0;
+            
+            // Get scanned lines count
+            const scannedLinesSet = pickerScannedLines[user.id];
+            const totalScannedLinesCount = scannedLinesSet ? scannedLinesSet.size : 0;
+            
             return {
                 pickerId: user.id,
                 pickerName: fullName || user.userNumber || `User ${user.id}`,
@@ -2418,12 +2491,21 @@ export class DashboardService {
                     averageTimeSeconds: averageTimeSeconds,
                     averageTimeFormatted: formatTime(averageTimeSeconds)
                 },
+                totalOrderTime: {
+                    totalTimeSeconds: totalTimeSeconds,
+                    totalTimeFormatted: formatTime(totalTimeSeconds)
+                },
                 averageTimePerQuantity: {
                     secondsPerQty: averageTimePerQty,
                     formatted: `${averageTimePerQty.toFixed(2)}s/qty`
                 },
                 totalScannedQuantity: pickerScannedQty[user.id] || 0,
-                totalOverrideRequests: pickerOverrideCount[user.id] || 0
+                totalScannedLines: totalScannedLinesCount,
+                totalOverrideRequests: pickerOverrideCount[user.id] || 0,
+                totalRequests: pickerOverrideCount[user.id] || 0,
+                totalAcceptedRequests: pickerAcceptedRequests[user.id] || 0,
+                totalRejectedRequests: pickerRejectedRequests[user.id] || 0,
+                totalTimeFormatted: formatTime(totalTimeSeconds)
             };
         }).sort((a, b) => b.totalCompletedOrders - a.totalCompletedOrders);
 
