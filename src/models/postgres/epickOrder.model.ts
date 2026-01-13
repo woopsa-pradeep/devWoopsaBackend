@@ -12,6 +12,8 @@ export class OrderPick extends Model {
   declare status: 'pending' | 'in_progress' | 'completed' | 'ready_for_delivery' | 'cancelled';
   declare startedAt: Date | null;
   declare completedAt: Date | null;
+  declare checkerCompletedAt: Date | null;
+  declare chcekerUserId: number | null;
  
   declare notes: string | null;
   declare images: any[] | null; // JSONB array of image URLs
@@ -42,7 +44,8 @@ OrderPick.init({
 
   startedAt: { type: DataTypes.DATE, allowNull: true },
   completedAt: { type: DataTypes.DATE, allowNull: true },
-
+ checkerCompletedAt: { type: DataTypes.DATE, allowNull: true },
+  chcekerUserId: { type: DataTypes.INTEGER, allowNull: true },
   notes: { type: DataTypes.TEXT, allowNull: true },
   images: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
 

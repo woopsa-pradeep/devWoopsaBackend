@@ -47,7 +47,7 @@ export class EpickService {
    * @param itemSortBy - Sort type: 'sales_location' (Section+Location) | 'sales_section_location' (Category+Section+Location) | 'alphabetically' | 'item_number' | 'short_number' | 'line_number'
    * @returns Sequelize order clause
    */
-  private getOrderItemSortOrder(itemSortBy: string): any[] {
+ private getOrderItemSortOrder(itemSortBy: string): any[] {
     switch (itemSortBy) {
       case 'sales_location':
         // Sort by Section ASC, then Location ASC within each section
@@ -404,17 +404,71 @@ export class EpickService {
           (orderNum: number) => !epickConfirmationOrderNumbers.includes(orderNum)
         );
         
-        // Step 1.5: Get orders that have items matching user's categories
-        // This ensures users only see orders they can actually work on
-        // Only include orders where user's category items are NOT confirmed (still scannable)
+        // OPTIMIZATION: Step 1.5 - Query Order_Header FIRST to filter by Order_Updated = 0 and Invoice_Number = 0
+        // This reduces the dataset significantly before checking Order_Detail
+        // This prevents timeout by working with a much smaller set of orders
+        const validOrderHeaders = await OrderHeader.findAll({
+          where: {
+            [Op.and]: [
+              { Order_Updated: false },
+              {Order_Deleted: false},
+              { Invoice_Number: 0 }
+            ]
+          },
+          attributes: ['Order_Number'],
+          raw: true,
+        });
+
+        let validOrderNumbers = validOrderHeaders
+          .map((order: any) => order.Order_Number)
+          .filter((v: any) => v !== null && v !== undefined)
+          .map((v: any) => Number(v));
+
+        console.log(`Found ${validOrderNumbers.length} orders with Order_Updated = 0 and Invoice_Number = 0`);
+
+        // Exclude locked orders (locked only in RecordLock, not in epick_confirmation)
+        if (lockedOnlyInRecordLock.length > 0) {
+          validOrderNumbers = validOrderNumbers.filter(
+            (orderNum: number) => !lockedOnlyInRecordLock.includes(orderNum)
+          );
+        }
+
+        // Exclude fully completed orders (where all user categories are completed)
+        if (ordersWithAllUserCategoriesCompleted.length > 0) {
+          validOrderNumbers = validOrderNumbers.filter(
+            (orderNum: number) => !ordersWithAllUserCategoriesCompleted.includes(orderNum)
+          );
+        }
+
+        // If no valid orders after filtering, return empty paginated response
+        if (validOrderNumbers.length === 0) {
+          return {
+            data: [],
+            pagination: {
+              page: page,
+              limit: limit,
+              total: 0,
+              totalPages: 0,
+              hasNextPage: false,
+              hasPreviousPage: false
+            }
+          };
+        }
+
+        // Step 1.6: Now check Order_Detail for matching categories from the filtered valid orders
+        // This is much faster because we're only checking a smaller set of orders
         const ordersWithMatchingCategories = await sequelize.query(
           `SELECT DISTINCT od.Order_Number 
            FROM Order_Detail od
            INNER JOIN Inventory inv ON od.Item_Number = inv.Item_Number
-           WHERE inv.Sales_Category IN (:userCategories)
+           WHERE od.Order_Number IN (:validOrderNumbers)
+           AND inv.Sales_Category IN (:userCategories)
            AND (od.Confirmed = 0 OR od.Confirmed IS NULL)`,
           {
-            replacements: { userCategories: userCategories },
+            replacements: { 
+              validOrderNumbers: validOrderNumbers,
+              userCategories: userCategories 
+            },
             type: QueryTypes.SELECT,
             raw: true,
           }
@@ -425,10 +479,11 @@ export class EpickService {
           .filter((v: any) => v !== null && v !== undefined)
           .map((v: any) => Number(v));
 
-        console.log(`Found ${matchingOrderNumbers.length} orders with unconfirmed items matching user categories ${userCategories}`);
+        console.log(`Found ${matchingOrderNumbers.length} orders with unconfirmed items matching user categories ${userCategories} from ${validOrderNumbers.length} valid orders`);
 
         // Also include orders where user has active (in_progress) confirmation
         // These should always be visible, even if items are confirmed
+        // BUT: Must still meet Order_Updated = 0 and Invoice_Number = 0 criteria
         const userActiveConfirmations = await EpickConfirmation.findAll({
           where: {
             pickerUserId: userId,
@@ -438,30 +493,38 @@ export class EpickService {
           raw: true
         });
 
-        const userActiveOrderNumbers = userActiveConfirmations
+        let userActiveOrderNumbers = userActiveConfirmations
           .map((conf: any) => conf.orderNumber)
           .filter((v: any) => v !== null && v !== undefined)
           .map((v: any) => Number(v));
 
+        // Filter user's active orders to only include those with Order_Updated = 0 and Invoice_Number = 0
+        // This ensures we don't include orders that don't meet the criteria
+        if (userActiveOrderNumbers.length > 0) {
+          const validUserActiveOrders = await OrderHeader.findAll({
+            where: {
+              [Op.and]: [
+                { Order_Updated: false },
+                { Invoice_Number: 0 },
+                { Order_Number: { [Op.in]: userActiveOrderNumbers } }
+              ]
+            },
+            attributes: ['Order_Number'],
+            raw: true,
+          });
+
+          userActiveOrderNumbers = validUserActiveOrders
+            .map((order: any) => order.Order_Number)
+            .filter((v: any) => v !== null && v !== undefined)
+            .map((v: any) => Number(v));
+        }
+
         // Merge both lists (orders with unconfirmed items + user's active orders)
+        // Both lists now only contain orders with Order_Updated = 0 and Invoice_Number = 0
         const allMatchingOrderNumbers = new Set([...matchingOrderNumbers, ...userActiveOrderNumbers]);
         matchingOrderNumbers = Array.from(allMatchingOrderNumbers);
 
         console.log(`After including user's active orders: ${matchingOrderNumbers.length} total orders`);
-
-        // Pre-filter matchingOrderNumbers to exclude locked and completed orders
-        // This simplifies the SQL query by reducing Op.in/Op.notIn complexity
-        if (lockedOnlyInRecordLock.length > 0) {
-          matchingOrderNumbers = matchingOrderNumbers.filter(
-            (orderNum: number) => !lockedOnlyInRecordLock.includes(orderNum)
-          );
-        }
-        
-        if (ordersWithAllUserCategoriesCompleted.length > 0) {
-          matchingOrderNumbers = matchingOrderNumbers.filter(
-            (orderNum: number) => !ordersWithAllUserCategoriesCompleted.includes(orderNum)
-          );
-        }
 
         // If no orders have items in user's categories after filtering, return empty paginated response
         if (matchingOrderNumbers.length === 0) {
@@ -479,14 +542,13 @@ export class EpickService {
         }
         
         // Step 2: Query Order_Header (MSSQL) with simplified filters
-        // Filter: Order_Updated = 0 AND Invoice_Number = 0
-        // Include only pre-filtered orders (already excludes locked and completed)
-        // Note: matchingOrderNumbers already ensures orders have Order_Detail items, so no need for literal clause
+        // Filter: Order_Updated = 0 AND Invoice_Number = 0 (already filtered above)
+        // Include only matching orders (with user's categories)
         const headerWhere: any = {
           [Op.and]: [
             { Order_Updated: false },
             { Invoice_Number: 0 },
-            // Only include pre-filtered orders (simplified - single Op.in condition)
+            // Only include matching orders (already filtered by Order_Updated and Invoice_Number above)
             { Order_Number: { [Op.in]: matchingOrderNumbers } }
           ]
         };
@@ -833,6 +895,7 @@ export class EpickService {
         };
       }
 
+
   async getOrderHistory(id: number) {
     const data = await OrderPick.findAll({
       where: {
@@ -1065,7 +1128,7 @@ export class EpickService {
     return data;
   }
 
-    async getOrderItem(orderNumber: number, userId: number) {
+  async getOrderItem(orderNumber: number, userId: number) {
       // Get user's categories and item_sort_by preference
       const user = await EpickUser.findOne({
         where: { id: userId },
@@ -1125,7 +1188,7 @@ export class EpickService {
               {
                 model: InventoryUPC,
                 as: "UPCList",
-                attributes: ["UPC_Number"],
+                attributes: ["UPC_Number", "Status"],
                 required: false, // optional relation, it will work even if there are no matching records
               },
               {
@@ -1320,15 +1383,55 @@ export class EpickService {
             // Get markAsBundle from ItemLimits (default to false if not found)
             const markAsBundle = itemLimitMap[item.Item_Number] || false;
 
+            // Transform UPCList to group by Status: 0=primary, 2=retail, 1 or 3=case
+            const upcList = item?.inventory?.UPCList || [];
+            const groupedUPC: any = {
+              primaryUPC: null,
+              retailUPC: null,
+              caseUPC: null
+            };
+
+            upcList.forEach((upc: any) => {
+              const upcNumber = upc.UPC_Number || upc.dataValues?.UPC_Number;
+              const status = upc.Status !== undefined ? upc.Status : upc.dataValues?.Status;
+              
+              if (status === 0) {
+                groupedUPC.primaryUPC = upcNumber;
+              } else if (status === 2) {
+                groupedUPC.retailUPC = upcNumber;
+              } else if (status === 1 || status === 3) {
+                groupedUPC.caseUPC = upcNumber;
+              }
+            });
+
+            // Use primaryUPC for masterImage, fallback to first UPC if no primary
+            const primaryUPCForImage = groupedUPC.primaryUPC || upcList[0]?.UPC_Number || upcList[0]?.dataValues?.UPC_Number || '';
+
+            // Extract data values to avoid circular reference issues
+            const inventoryData = item?.inventory?.dataValues || item?.inventory || {};
+            const salesCategoryData = item?.inventory?.SalesCategory?.dataValues || item?.inventory?.SalesCategory || {};
+
             return {
                 ...item,
                 inventoryOnHand: inventoryOnHand,
-                masterImage: `${process.env.AZUREIMAGESERVER}${item?.inventory?.UPCList?.[0]?.UPC_Number || ''}.jpg`,
+                masterImage: `${process.env.AZUREIMAGESERVER}${primaryUPCForImage}.jpg`,
                 isDistributorImageShow: productImage?.isAllow ?? false,
                 distributorImage: productImage?.img_url || null,
                 substituteProduct: substituteProduct,
-                SalesCategory: item?.inventory?.SalesCategory?.Category_Desc || null,
-                markAsBundle: markAsBundle
+                SalesCategory: salesCategoryData?.Category_Desc || null,
+                markAsBundle: markAsBundle,
+                inventory: {
+                  Item_Number: inventoryData.Item_Number,
+                  Description: inventoryData.Description,
+                  Section: inventoryData.Section,
+                  Location: inventoryData.Location,
+                  Sales_Category: inventoryData.Sales_Category,
+                  Sequence: inventoryData.Sequence,
+                  UPCList: groupedUPC.primaryUPC || groupedUPC.retailUPC || groupedUPC.caseUPC ? [groupedUPC] : [],
+                  SalesCategory: salesCategoryData?.Category_Desc ? {
+                    Category_Desc: salesCategoryData.Category_Desc
+                  } : null
+                }
             }
 
         }))
@@ -3154,59 +3257,56 @@ export class EpickService {
    * @param orderNumber - Order number to get details for
    */
   async getOrderDetailsByOrderNumber(orderNumber: number) {
-    // Validate order exists and is completed
-    const order = await OrderPick.findOne({
-      where: {
-        orderNumber: orderNumber,
-        status: 'completed'
-      },
+    // Validate order exists
+    const orderPick = await OrderPick.findOne({
+      where: { orderNumber }
+    });
+
+    if (!orderPick) {
+      throw new AppError("Order not found", 404);
+    }
+
+    // Get order header with customer information
+    const orderHeader = await OrderHeader.findOne({
+      where: { Order_Number: orderNumber },
       attributes: [
-        'id',
-        'orderNumber',
-        'customerNumber',
-        'pickerUserNumber',
-        'status',
-        'startedAt',
-        'completedAt',
-        'totalLines',
-        'totalQty',
-        'scannedLines',
-        'scannedQty',
-        'OutOfStockItem',
-        'notes'
+        'Order_Number',
+        'Order_Date',
+        'C_Number',
+        'Route_Number',
+        'Stop_Number',
+        'Invoice_Number',
+        'Bundles',
+        'Totes',
+        'Picker_ID',
+        'Confirmed',
+        'Invoice_Total'
+      ],
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip'],
+          required: false,
+          include: [
+            {
+              model: CustomerRoute,
+              as: 'Routes',
+              attributes: ['Route_Number', 'Stop_Number'],
+              required: false,
+            }
+          ]
+        }
       ]
     });
 
-    if (!order) {
-      throw new AppError('Order not found or not completed', 404);
+    if (!orderHeader) {
+      throw new AppError("Order header not found", 404);
     }
 
-    const orderData = order.get({ plain: true });
-
-    // Get all override requests for this order
-    const overrideRequests = await OverrideRequest.findAll({
-      where: {
-        orderNumber: orderNumber
-      },
-      attributes: [
-        'id',
-        'orderNumber',
-        'itemNumber',
-        'pickerUserNumber',
-        'status',
-        'note',
-        'rejectionReason',
-        'createdAt',
-        'updatedAt'
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    // Get all order items for this order
-    const allOrderItems = await OrderDetail.findAll({
-      where: {
-        Order_Number: orderNumber
-      },
+    // Get all order details with items
+    const orderDetails = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
       attributes: [
         'Order_Number',
         'Line_Number',
@@ -3215,92 +3315,383 @@ export class EpickService {
         'Quantity_Shipped',
         'Pack',
         'CaseCount',
+        'ItemDescription',
+        'Price',
+        'NetCost',
+        'Invoice_Cost',
         'Confirmed'
       ],
       include: [
         {
           model: Inventory,
           as: 'inventory',
-          attributes: ['Item_Number', 'Description', 'Section', 'Location'],
+          attributes: [
+            'Item_Number',
+            'Description',
+            'Pack',
+            'CaseCount',
+            'UOM',
+            'Section',
+            'Location',
+            'Sales_Category'
+          ],
           required: false,
           include: [
             {
-              model: SalesCategory,
-              as: 'SalesCategory',
-              attributes: ['Category_Desc', 'Sales_Category'],
-              required: false
+              model: InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              where: { Status: 0 },
+              required: false,
             }
           ]
         }
       ],
-      order: [['Line_Number', 'ASC']]
+      order: [['Line_Number', 'ASC']],
     });
 
-    // Get picker user information
-    const picker = await WebUsers.findOne({
+    // Get product images for all items
+    const itemNumbers = orderDetails.map((detail: any) => detail.Item_Number);
+    const productImages = await ProductImage.findAll({
       where: {
-        id: orderData.pickerUserNumber
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
+      },
+      attributes: ['product_number', 'img_url', 'isAllow']
+    });
+
+    const imageMap: any = {};
+    productImages.forEach((img: any) => {
+      imageMap[img.product_number] = img;
+    });
+
+    // Format order details with images
+    const orderDetailsWithImages = await Promise.all(
+      orderDetails.map(async (detail: any) => {
+        const itemNumber = detail.Item_Number;
+        const inventory = detail.inventory;
+        const productImage = imageMap[itemNumber.toString()] || null;
+
+        // Build master image if UPC exists
+        const masterImage = inventory?.UPCList?.[0]?.UPC_Number
+          ? `${process.env.AZUREIMAGESERVER}${inventory.UPCList[0].UPC_Number}.jpg`
+          : null;
+
+        return {
+          lineNumber: detail.Line_Number,
+          itemNumber: detail.Item_Number,
+          itemDescription: detail.ItemDescription || inventory?.Description || null,
+          quantityOrdered: detail.Quantity_Ordered || 0,
+          quantityShipped: detail.Quantity_Shipped || 0,
+          pack: detail.Pack || inventory?.Pack || null,
+          caseCount: detail.CaseCount || inventory?.CaseCount || null,
+          uom: inventory?.UOM || null,
+          section: inventory?.Section || null,
+          location: inventory?.Location || null,
+          price: detail.Price || null,
+          netCost: detail.NetCost || null,
+          invoiceCost: detail.Invoice_Cost || null,
+          confirmed: detail.Confirmed || false,
+          upcList: inventory?.UPCList?.map((upc: any) => ({ UPC_Number: upc.UPC_Number })) || [],
+          masterImage: masterImage,
+          distributorImage: productImage?.img_url || null,
+          isDistributorImageShow: productImage?.isAllow ?? false
+        };
+      })
+    );
+
+    // Get all override requests for this order (all statuses)
+    const overrideRequests = await OverrideRequest.findAll({
+      where: { orderNumber: orderNumber },
+      include: [
+        {
+          model: WebUsers,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
+          required: false,
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Get item descriptions for override requests
+    const overrideItemNumbers = overrideRequests.map(req => req.itemNumber);
+    const overrideInventories = overrideItemNumbers.length > 0 ? await Inventory.findAll({
+      where: {
+        Item_Number: { [Op.in]: overrideItemNumbers },
+      },
+      attributes: ['Item_Number', 'Description'],
+    }) : [];
+
+    const inventoryMap = new Map(overrideInventories.map(inv => [inv.Item_Number, inv.Description]));
+
+    // Format override requests
+    const formattedOverrideRequests = overrideRequests.map((req: any) => {
+      const user = req.user as WebUsers | undefined;
+      return {
+        requestId: req.id,
+        orderNumber: req.orderNumber,
+        itemNumber: req.itemNumber,
+        itemDescription: inventoryMap.get(req.itemNumber) || null,
+        pickerId: req.pickerUserId, // Add pickerId (database ID)
+        pickerUserNumber: req.pickerUserNumber,
+        userName: user ? `${user.firstName} ${user.lastName}` : null,
+        userEmail: user?.email || null,
+        status: req.status,
+        note: req.note,
+        rejectionReason: req.rejectionReason,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt,
+      };
+    });
+
+    // Format customer information
+    const orderHeaderData = orderHeader as any;
+    const customer = orderHeaderData.customer;
+    const customerRoute = customer?.Routes?.[0];
+
+    // Get picker name if available (last picker from Order_Header)
+    let pickerName = null;
+    if (orderHeaderData.Picker_ID) {
+      const picker = await WebUsers.findOne({
+        where: { userNumber: String(orderHeaderData.Picker_ID) }, // Cast to string since userNumber is STRING type
+        attributes: ['firstName', 'lastName'],
+        raw: true
+      });
+      pickerName = picker ? `${(picker as any).firstName} ${(picker as any).lastName}`.trim() : null;
+    }
+
+    // Get all pickers who worked on this order from EpickConfirmation
+    const allEpickConfirmations = await EpickConfirmation.findAll({
+      where: {
+        orderNumber: orderNumber,
+        status: 'completed' // Only get completed confirmations
+      },
+      order: [['completedAt', 'ASC']], // Order by completion time
+      raw: true
+    });
+
+    // Get all unique picker user IDs and category numbers
+    const pickerUserIds = Array.from(
+      new Set(
+        allEpickConfirmations
+          .map((conf: any) => conf.pickerUserId)
+          .filter((id: any) => id !== null && id !== undefined)
+      )
+    );
+
+    const allCategoryNumbers = new Set<number>();
+    allEpickConfirmations.forEach((confirmation: any) => {
+      const categories = confirmation.category || [];
+      categories.forEach((cat: number) => allCategoryNumbers.add(cat));
+    });
+
+    // Fetch picker user information from WebUsers
+    const pickerUsers = await WebUsers.findAll({
+      where: {
+        id: { [Op.in]: pickerUserIds }
       },
       attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
       raw: true
     });
 
-    // Get customer information
-    const customer = await Customer.findOne({
-      where: {
-        C_Number: orderData.customerNumber
-      },
-      attributes: ['C_Number', 'C_Name'],
-      include: [
-        {
-          model: CustomerRoute,
-          as: 'Routes',
-          attributes: ['Route_Number', 'Stop_Number'],
-          required: false
-        }
-      ]
+    const pickerMap: any = {};
+    pickerUsers.forEach((picker: any) => {
+      pickerMap[picker.id] = picker;
     });
 
-    // Calculate picking time for this order in seconds
-    let pickingTimeSeconds = 0;
-    if (orderData.startedAt && orderData.completedAt) {
-      const startTime = moment(orderData.startedAt);
-      const endTime = moment(orderData.completedAt);
-      pickingTimeSeconds = endTime.diff(startTime, 'seconds');
+    // Fetch category names from SalesCategory table
+    const categoryMap: { [key: number]: string } = {};
+    if (allCategoryNumbers.size > 0) {
+      const categoryNumbersArray = Array.from(allCategoryNumbers);
+      const salesCategories = await SalesCategory.findAll({
+        where: {
+          Sales_Category: { [Op.in]: categoryNumbersArray }
+        },
+        attributes: ['Sales_Category', 'Category_Desc'],
+        raw: true
+      });
+
+      salesCategories.forEach((cat: any) => {
+        categoryMap[cat.Sales_Category] = cat.Category_Desc || `Category ${cat.Sales_Category}`;
+      });
+
+      // For any category numbers not found in database, use fallback
+      categoryNumbersArray.forEach((catNum: number) => {
+        if (!categoryMap[catNum]) {
+          categoryMap[catNum] = `Category ${catNum}`;
+        }
+      });
     }
 
-    // Format picking time as HH:MM:SS
-    const hours = Math.floor(pickingTimeSeconds / 3600);
-    const minutes = Math.floor((pickingTimeSeconds % 3600) / 60);
-    const seconds = pickingTimeSeconds % 60;
-    const pickingTimeFormatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    // Format all pickers with their categories, orderItems, and overrideRequests
+    const allPickers = allEpickConfirmations.map((confirmation: any) => {
+      const picker = pickerMap[confirmation.pickerUserId];
+      const categories = confirmation.category || [];
+      const categoryNames = categories.map((cat: number) => 
+        categoryMap[cat] || `Category ${cat}`
+      );
 
-    // Format order items
-    const orderItems = allOrderItems.map((item: any) => item.get({ plain: true }));
+      // Filter orderItems for this picker based on their categories
+      // Items are filtered by Inventory.Sales_Category matching the picker's categories
+      const pickerOrderItems = orderDetailsWithImages.filter((item: any) => {
+        // Find the corresponding order detail to get the inventory Sales_Category
+        const orderDetail = orderDetails.find((detail: any) => 
+          detail.Item_Number === item.itemNumber
+        );
+        if (!orderDetail) {
+          return false;
+        }
+        const orderDetailData = orderDetail as any;
+        const inventory = orderDetailData.inventory;
+        if (!inventory) {
+          return false;
+        }
+        const itemSalesCategory = inventory.Sales_Category;
+        return itemSalesCategory && categories.includes(itemSalesCategory);
+      });
 
-    // Format override requests
-    const formattedOverrideRequests = overrideRequests.map((req: any) => req.get({ plain: true }));
+      // Filter overrideRequests for this picker by pickerUserNumber
+      const pickerOverrideRequests = formattedOverrideRequests.filter((req: any) => 
+        req.pickerUserNumber === confirmation.pickerUserNumber
+      );
 
-    // Get distributor information
-    const distributor = await Distributor.findOne({
-      attributes: ['D_Name', 'D_Addr1', 'D_Addr2', 'D_City', 'D_State', 'D_Zip', 'D_Phone', 'D_Email'],
+      return {
+        pickerId: confirmation.pickerUserId || null,
+        pickerUserNumber: confirmation.pickerUserNumber || null,
+        pickerName: picker ? `${picker.firstName} ${picker.lastName}`.trim() : null,
+        pickerEmail: picker?.email || null,
+        categories: categories,
+        categoryNames: categoryNames,
+        startedAt: confirmation.startedAt || null,
+        completedAt: confirmation.completedAt || null,
+        orderItems: pickerOrderItems,
+        overrideRequests: pickerOverrideRequests
+      };
     });
 
-    // Get warehouse logo
-    const getProfileImage: any = await Setting.findOne({});
-
     return {
-      ...orderData,
-      picker: picker || null,
-      customer: customer ? customer.get({ plain: true }) : null,
-      overrideRequestCount: overrideRequests.length,
-      overrideRequests: formattedOverrideRequests,
-      orderItems: orderItems,
-      pickingTimeSeconds: pickingTimeSeconds,
-      pickingTimeFormatted: pickingTimeFormatted,
-      distributor: distributor ? distributor.get({ plain: true }) : null,
-      logo: getProfileImage?.dataValues ? getProfileImage.dataValues.warehouseImage : null
+      orderInfo: {
+        orderNumber: orderHeaderData.Order_Number,
+        orderDate: orderHeaderData.Order_Date,
+        invoiceNumber: orderHeaderData.Invoice_Number || 0,
+        bundles: orderHeaderData.Bundles || 0,
+        totes: orderHeaderData.Totes || 0,
+        pickerId: orderHeaderData.Picker_ID || null,
+        pickerName: pickerName,
+        confirmed: orderHeaderData.Confirmed || false,
+        invoiceTotal: orderHeaderData.Invoice_Total || null,
+        customer: customer ? {
+          customerNumber: customer.C_Number,
+          customerName: customer.C_Name,
+          address: customer.C_Address,
+          city: customer.C_City,
+          state: customer.C_State,
+          zip: customer.C_Zip,
+          route: customerRoute?.Route_Number || orderHeaderData.Route_Number || null,
+          stop: customerRoute?.Stop_Number || orderHeaderData.Stop_Number || null
+        } : null,
+        startedAt: orderPick.startedAt,
+        completedAt: orderPick.completedAt,
+        allPickers: allPickers // All pickers who worked on this order with their picker-wise data
+      },
+      orderItems: orderDetailsWithImages, // All order items (flat array)
+      overrideRequests: formattedOverrideRequests, // All override requests (flat array)
+      summary: {
+        totalItemsOrdered: orderDetails.reduce((sum, detail: any) => sum + (detail.Quantity_Ordered || 0), 0),
+        totalItemsShipped: orderDetails.reduce((sum, detail: any) => sum + (detail.Quantity_Shipped || 0), 0),
+        totalItems: orderDetails.length
+      },
+      salesCategorySummary: await this.getSalesCategorySummary(orderNumber, orderDetails)
     };
+  }
+
+  private async getSalesCategorySummary(orderNumber: number, orderDetails: any[]) {
+    // Get all scanned items for this order
+    const allScans = await OrderPickScan.findAll({
+      where: {
+        orderNumber: orderNumber
+      },
+      attributes: ['itemNumber', 'qty'],
+      raw: true
+    });
+
+    // Create a map of itemNumber to scanned quantity
+    const scannedQtyMap: { [key: number]: number } = {};
+    allScans.forEach((scan: any) => {
+      const itemNum = scan.itemNumber;
+      scannedQtyMap[itemNum] = (scannedQtyMap[itemNum] || 0) + (parseFloat(scan.qty) || 0);
+    });
+
+    // Get category names from SalesCategory table
+    const categoryNumbers = new Set<number>();
+    orderDetails.forEach((detail: any) => {
+      const category = detail.inventory?.Sales_Category;
+      if (category) {
+        categoryNumbers.add(category);
+      }
+    });
+
+    const categoryMap: { [key: number]: string } = {};
+    if (categoryNumbers.size > 0) {
+      const categoryNumbersArray = Array.from(categoryNumbers);
+      const salesCategories = await SalesCategory.findAll({
+        where: {
+          Sales_Category: { [Op.in]: categoryNumbersArray }
+        },
+        attributes: ['Sales_Category', 'Category_Desc'],
+        raw: true
+      });
+
+      salesCategories.forEach((cat: any) => {
+        categoryMap[cat.Sales_Category] = cat.Category_Desc || `Category ${cat.Sales_Category}`;
+      });
+
+      // For any category numbers not found in database, use fallback
+      categoryNumbersArray.forEach((catNum: number) => {
+        if (!categoryMap[catNum]) {
+          categoryMap[catNum] = `Category ${catNum}`;
+        }
+      });
+    }
+
+    // Group order details by Sales_Category
+    const categorySummary: { [key: number]: { totalItems: number; totalQty: number; scannedQty: number } } = {};
+
+    orderDetails.forEach((detail: any) => {
+      const category = detail.inventory?.Sales_Category;
+      if (!category) return;
+
+      if (!categorySummary[category]) {
+        categorySummary[category] = {
+          totalItems: 0,
+          totalQty: 0,
+          scannedQty: 0
+        };
+      }
+
+      categorySummary[category].totalItems += 1;
+      categorySummary[category].totalQty += parseFloat(detail.Quantity_Ordered) || 0;
+      
+      // Add scanned quantity for this item
+      const itemScannedQty = scannedQtyMap[detail.Item_Number] || 0;
+      categorySummary[category].scannedQty += itemScannedQty;
+    });
+
+    // Format the summary array
+    const salesCategorySummary = Object.keys(categorySummary).map((catNumStr: string) => {
+      const catNum = Number(catNumStr);
+      const summary = categorySummary[catNum];
+      return {
+        salesCategory: catNum,
+        salesCategoryName: categoryMap[catNum] || `Category ${catNum}`,
+        totalItems: summary.totalItems,
+        totalQty: summary.totalQty,
+        scannedQty: summary.scannedQty
+      };
+    }).sort((a, b) => a.salesCategory - b.salesCategory); // Sort by category number
+
+    return salesCategorySummary;
   }
 
   async getSubsituteProduct(data: any) {

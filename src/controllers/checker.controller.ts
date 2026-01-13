@@ -179,14 +179,19 @@ export class CheckerController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
-    async readyForDelivery(req: Request, res: Response) {
+    async readyForDelivery(req: AuthRequest, res: Response) {
         const orderNumber = Number(req.params.orderNumber || req.body.orderNumber);
         
         if (!orderNumber || isNaN(orderNumber)) {
             return sendResponse(res, 400, false, null, "Invalid order number");
         }
 
-        const data = await this.checkerService.readyForDelivery(orderNumber);
+        const userId = req.user?.id;
+        if (!userId) {
+            return sendResponse(res, 401, false, null, "User not authenticated");
+        }
+
+        const data = await this.checkerService.readyForDelivery(orderNumber, userId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 

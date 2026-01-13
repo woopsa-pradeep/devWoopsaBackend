@@ -4,7 +4,7 @@ import { OrderDetail } from "../models/mmsql/orderDetail.model";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Customer } from "../models/mmsql/customer.model";
 import { SalesRep } from "../models/mmsql/salesrep.model";
-import { Sequelize, Op, col, cast, where, QueryTypes } from "sequelize";
+import { Sequelize, Op, col, cast, where, QueryTypes, literal, fn } from "sequelize";
 import { checkQtyDiscount, excludeItemByUser, getAllowedSalesCategories, getCustomerExcludeItem, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1 } from "../utils/helper";
 import { ProductImage } from "../models/postgres/product.model";
 import { getDiscount } from "../utils/helper";
@@ -23,15 +23,16 @@ import { EpickConfirmation } from "../models/postgres/epickConfirmation.model";
 import { OverrideRequest } from "../models/postgres/overrideRequest.model";
 import { OrderPickScan } from "../models/postgres/epickOrderScan.model";
 import { sequelize } from "../db";
+import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model";
 
 
 export class DashboardService {
 
-    async getPopularItems(userId: number,query: any) {
-        let { state='', zip='', jurisdiction='' ,salesCategory=[]} = query;
+    async getPopularItems(userId: number, query: any) {
+        let { state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
         console.log(userId, 'userId')
-        if(userId){
-           salesCategory = await getAllowedSalesCategories(userId);
+        if (userId) {
+            salesCategory = await getAllowedSalesCategories(userId);
         }
         const homeSetting = await HomeSettings.findOne();
         const currentYear = new Date().getFullYear();
@@ -49,26 +50,26 @@ export class DashboardService {
         let whereClause: any = {};
         if (state || zip || jurisdiction) {
             const customerExcluded = await getCustomerExcludeItem(
-              state as string,
-              zip as string,
-              jurisdiction as number
+                state as string,
+                zip as string,
+                jurisdiction as number
             );
-          
-            if (customerExcluded && customerExcluded.length > 0) {
-              allExcludedItems = allExcludedItems.concat(customerExcluded);
-            }
-          }
-          const userExcluded = await excludeItemByUser(userId);
-          if (userExcluded && userExcluded.length > 0) {
-            allExcludedItems = allExcludedItems.concat(userExcluded);
-          }
 
-          if (allExcludedItems.length > 0) {
+            if (customerExcluded && customerExcluded.length > 0) {
+                allExcludedItems = allExcludedItems.concat(customerExcluded);
+            }
+        }
+        const userExcluded = await excludeItemByUser(userId);
+        if (userExcluded && userExcluded.length > 0) {
+            allExcludedItems = allExcludedItems.concat(userExcluded);
+        }
+
+        if (allExcludedItems.length > 0) {
             const uniqueExcluded = [...new Set(allExcludedItems)];
             whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
-          }
+        }
 
-        if(salesCategory.length > 0){
+        if (salesCategory.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
         }
 
@@ -291,22 +292,22 @@ export class DashboardService {
                     let whereClause: any = {};
                     if (state || zip || jurisdiction) {
                         const customerExcluded = await getCustomerExcludeItem(
-                          state as string,
-                          zip as string,
-                          jurisdiction as number
+                            state as string,
+                            zip as string,
+                            jurisdiction as number
                         );
-                      }
-                
+                    }
+
                     const userExcluded = await excludeItemByUser(Number(userId));
                     if (userExcluded && userExcluded.length > 0) {
-                      allExcludedItems = allExcludedItems.concat(userExcluded);
+                        allExcludedItems = allExcludedItems.concat(userExcluded);
                     }
                     if (allExcludedItems.length > 0) {
                         const uniqueExcluded = [...new Set(allExcludedItems)];
                         whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
-                      }
+                    }
 
-                    if(salesCategory.length > 0){
+                    if (salesCategory.length > 0) {
                         whereClause.Sales_Category = { [Op.in]: salesCategory };
                     }
                     // Get products that other customers in the same city buy
@@ -521,23 +522,23 @@ export class DashboardService {
             let whereClause: any = {};
             if (state || zip || jurisdiction) {
                 const customerExcluded = await getCustomerExcludeItem(
-                  state as string,
-                  zip as string,
-                  jurisdiction as number
+                    state as string,
+                    zip as string,
+                    jurisdiction as number
                 );
-              }
+            }
 
-              const userExcluded = await excludeItemByUser(Number(userId));
-              if (userExcluded && userExcluded.length > 0) {
+            const userExcluded = await excludeItemByUser(Number(userId));
+            if (userExcluded && userExcluded.length > 0) {
                 allExcludedItems = allExcludedItems.concat(userExcluded);
-              }
-             
-              if (allExcludedItems.length > 0) {
+            }
+
+            if (allExcludedItems.length > 0) {
                 const uniqueExcluded = [...new Set(allExcludedItems)];
                 whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
-              }
+            }
 
-            if(salesCategory.length > 0){
+            if (salesCategory.length > 0) {
                 whereClause.Sales_Category = { [Op.in]: salesCategory };
             }
 
@@ -706,7 +707,7 @@ export class DashboardService {
                         showPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
                         allowToOrderSalesRep: allowToOrderSalesRep || null,
                         showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
-                       
+
                         hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
                         qtyDiscount: hasQtyDiscount,
 
@@ -764,7 +765,7 @@ export class DashboardService {
     }
 
     async getPromotedItems(query: PaginationOptions) {
-        let { customerNumber,state='', zip='', jurisdiction='',salesCategory=[] } = query
+        let { customerNumber, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query
         const homeSetting: any = await HomeSettings.findOne({});
         const promotedItems = homeSetting?.promotedItems || [];
 
@@ -772,27 +773,27 @@ export class DashboardService {
         let whereClause: any = {};
         if (state || zip || jurisdiction) {
             const customerExcluded = await getCustomerExcludeItem(
-              state as string,
-              zip as string,
-              jurisdiction as number
+                state as string,
+                zip as string,
+                jurisdiction as number
             );
-          
-            if (customerExcluded && customerExcluded.length > 0) {
-              allExcludedItems = allExcludedItems.concat(customerExcluded);
-            }
-          }
 
-          const userExcluded = await excludeItemByUser(Number(customerNumber));
-          if (userExcluded && userExcluded.length > 0) {
+            if (customerExcluded && customerExcluded.length > 0) {
+                allExcludedItems = allExcludedItems.concat(customerExcluded);
+            }
+        }
+
+        const userExcluded = await excludeItemByUser(Number(customerNumber));
+        if (userExcluded && userExcluded.length > 0) {
             allExcludedItems = allExcludedItems.concat(userExcluded);
-          }
+        }
 
         if (allExcludedItems.length > 0) {
             const uniqueExcluded = [...new Set(allExcludedItems)];
             whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
-          }
+        }
 
-        if(salesCategory.length > 0){
+        if (salesCategory.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
         }
 
@@ -948,9 +949,9 @@ export class DashboardService {
     }
 
     async getNewItem(query: PaginationOptions, customerId: number) {
-        let { page = 1, limit = 30, search, role, customerNumber, state =' ', zip='', jurisdiction='',salesCategory=[] } = query;
+        let { page = 1, limit = 30, search, role, customerNumber, state = ' ', zip = '', jurisdiction = '', salesCategory = [] } = query;
 
-        if(customerNumber){
+        if (customerNumber) {
             salesCategory = await getAllowedSalesCategories(customerNumber);
             console.log(salesCategory, 'salesCategory')
         }
@@ -962,7 +963,7 @@ export class DashboardService {
             ShortOrderForm: true,
         };
 
-        if(salesCategory.length > 0){
+        if (salesCategory.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
         }
 
@@ -992,7 +993,7 @@ export class DashboardService {
         if (allExcludedItems.length > 0) {
             const uniqueExcluded = [...new Set(allExcludedItems)];
             whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
-          }
+        }
 
         if (search) {
             const searchValue = `%${search}%`;
@@ -1082,7 +1083,7 @@ export class DashboardService {
 
                 if (userJurisdiction != null && e.SalesCategory) {
 
-                    console.log(e,'the e',e?.SalesCategory?.Sales_Category,'e?.SalesCategory?.Sales_Category')
+                    console.log(e, 'the e', e?.SalesCategory?.Sales_Category, 'e?.SalesCategory?.Sales_Category')
                     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
                 }
             } else if (role === 'sales' && customerNumber) {
@@ -1373,7 +1374,7 @@ export class DashboardService {
     }
 
     async getDistributorDashboardV1(query: PaginationOptions & { fromDate?: string; toDate?: string; type?: string }) {
-        const { fromDate, toDate } = query;
+        const { fromDate, toDate, costType } = query;
 
         // Parse dates and create date range - using proper date parsing
         let startDate, endDate;
@@ -1547,6 +1548,8 @@ export class DashboardService {
             })
         );
 
+
+
         // Summary statistics
         const totalActiveCustomer = await Customer.count({ where: { C_Inactive: false } });
         const totalCustomer = await Customer.count();
@@ -1578,6 +1581,68 @@ export class DashboardService {
                 orderPlaceBy: 'retailer'
             }
         });
+        let valueCode = 0
+        if (costType === 'base') {
+            valueCode = 1
+        } else if (costType === 'avg') {
+            valueCode = 0
+        } else if (costType === 'net') {
+            valueCode = 2
+        }
+        const rows = await OrderHeader.findAll({
+            subQuery: false,
+            attributes: [
+                [col("salesRep.S_Number"), "S_Number"],
+                [col("salesRep.S_Desc"), "S_Desc"],
+
+                // Example aggregates (add what you need)
+                [fn("COUNT", col("OrderHeader.Order_Number")), "totalOrders"],
+                [fn("SUM", col("OrderHeader.Invoice_Total")), "totalInvoiceTotal"],
+
+                [fn("SUM", literal("[OrderHeader].[Sales01] + [OrderHeader].[Taxes01]")), "sumTotalSales01"],
+                [fn("SUM", literal("[OrderHeader].[Sales02] + [OrderHeader].[Taxes02]")), "sumTotalSales02"],
+                [fn("SUM", literal("[OrderHeader].[Sales03] + [OrderHeader].[Taxes03]")), "sumTotalSales03"],
+                [fn("SUM", literal("[OrderHeader].[Sales04] + [OrderHeader].[Taxes04]")), "sumTotalSales04"],
+                [fn("SUM", literal("[OrderHeader].[Sales05] + [OrderHeader].[Taxes05]")), "sumTotalSales05"],
+                [fn("SUM", literal("[OrderHeader].[Sales06] + [OrderHeader].[Taxes06]")), "sumTotalSales06"],
+                [fn("SUM", literal("[OrderHeader].[Sales07] + [OrderHeader].[Taxes07]")), "sumTotalSales07"],
+                [fn("SUM", literal("[OrderHeader].[Sales08] + [OrderHeader].[Taxes08]")), "sumTotalSales08"],
+                [fn("SUM", literal("[OrderHeader].[Sales09] + [OrderHeader].[Taxes09]")), "sumTotalSales09"],
+                [fn("SUM", literal("[OrderHeader].[Sales10] + [OrderHeader].[Taxes10]")), "sumTotalSales10"],
+                [fn("SUM", literal("[OrderHeader].[Sales11] + [OrderHeader].[Taxes11]")), "sumTotalSales11"],
+                [fn("SUM", literal("[OrderHeader].[Sales12] + [OrderHeader].[Taxes12]")), "sumTotalSales12"],
+
+                [fn("SUM", literal("[OrderHeader].[stax_State] + [OrderHeader].[stax_County] + [OrderHeader].[stax_City]")), "sumTotalSalesTax"],
+            ],
+
+            include: [
+                {
+                    model: SalesRep,
+                    as: "salesRep",
+                    attributes: [],
+                    required: false,
+                },
+                {
+                    model: Order_Header_Costs,
+                    as: "Order_Header_Costs",
+                    attributes: [],
+                    required: false,
+                    where: { Value_Code: valueCode },
+                },
+            ],
+
+            where: {
+                Order_Deleted: false,
+                Invoice_Number: { [Op.ne]: 0 },
+                Invoice_Date: { [Op.between]: [startDate, endDate] },
+                Order_Updated: "True",
+            },
+
+            group: [col("salesRep.S_Number"), col("salesRep.S_Desc")],
+            order: [[col("salesRep.S_Number"), "ASC"], [col("salesRep.S_Desc"), "ASC"]],
+            raw: true,
+        });
+
 
         return {
             summary: {
@@ -1586,6 +1651,7 @@ export class DashboardService {
                 totalInactiveCustomer,
                 totalOrder
             },
+            result: rows,
             orderPlatform,
             orderByUser: {
                 sales: orderBySales,
@@ -1601,7 +1667,7 @@ export class DashboardService {
     }
 
     async getDiscountedItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-        let { search, masterSearch, role, customerNumber ,state='', zip='', jurisdiction='',salesCategory=[]} = query;
+        let { search, masterSearch, role, customerNumber, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
         let wareHouseSetting: any = await Setting.findOne({});
         wareHouseSetting = wareHouseSetting?.dataValues || null;
 
@@ -1632,7 +1698,7 @@ export class DashboardService {
             ],
         };
 
-        if(salesCategory.length > 0){
+        if (salesCategory.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
         }
 
@@ -1640,39 +1706,39 @@ export class DashboardService {
 
         if (state || zip || jurisdiction) {
             const customerExcluded = await getCustomerExcludeItem(
-              state as string,
-              zip as string,
-              jurisdiction as number
+                state as string,
+                zip as string,
+                jurisdiction as number
             );
-          
+
             if (customerExcluded && customerExcluded.length > 0) {
-              allExcludedItems = allExcludedItems.concat(customerExcluded);
+                allExcludedItems = allExcludedItems.concat(customerExcluded);
             }
-          }
+        }
 
-          let userExcluded : any[] = [];
+        let userExcluded: any[] = [];
 
-          
-     
-          if(customerId && role !='sales'){
+
+
+        if (customerId && role != 'sales') {
             console.log(customerId, 'customerId----->')
             userExcluded = await excludeItemByUser(customerId);
-          }else if(customerNumber){
+        } else if (customerNumber) {
             console.log(customerNumber, 'customerNumber----->')
-             userExcluded = await excludeItemByUser(Number(customerNumber));
-          }
+            userExcluded = await excludeItemByUser(Number(customerNumber));
+        }
 
 
-          if (userExcluded && userExcluded.length > 0) {
+        if (userExcluded && userExcluded.length > 0) {
             allExcludedItems = allExcludedItems.concat(userExcluded);
-          }
+        }
 
-          if (allExcludedItems.length > 0) {
+        if (allExcludedItems.length > 0) {
             const uniqueExcluded = [...new Set(allExcludedItems)];
             whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
-          }
+        }
 
-        
+
 
         // Add search functionality if needed
         if (search) {
@@ -2017,13 +2083,11 @@ export class DashboardService {
             Order_Deleted: false
         };
 
-        // Get total orders from Order_Header with all conditions
+        // Get total orders from Order_Header with date range filter and Order_Deleted = false
         const totalOrdersFromHeader = await OrderHeader.count({
             where: {
                 ...dateFilter,
-              Order_Updated: false,  // This means Order_Updated = 0 (false)
-                Invoice_Number: 0,
-                 Order_Deleted: false
+                Order_Deleted: false
             }
         });
 
@@ -2032,10 +2096,10 @@ export class DashboardService {
         const completedOrderHeaders = await OrderHeader.findAll({
             where: {
                 ...dateFilter,
-                      Invoice_Number: 0 ,
+                Invoice_Number: 0,
                 // Invoice_Number: { [Op.gt]: 0 }, // Invoice_Number > 0
-                 Order_Updated: false, // Order_Updated = 0 (false)
-                 Order_Deleted: false
+                Order_Updated: false, // Order_Updated = 0 (false)
+                Order_Deleted: false
             },
             attributes: ['Order_Number'],
             raw: true
@@ -2139,30 +2203,128 @@ export class DashboardService {
             };
         }
 
-        // Get all OrderPick records for these orders (orders assigned to epick)
+        // Get all OrderPick records (orders assigned to epick) - filtered by date range
         const allOrderPicks = await OrderPick.findAll({
             where: {
                 orderNumber: { [Op.in]: orderNumbers }
             },
-            attributes: ['orderNumber', 'status', 'pickerUserNumber', 'startedAt', 'completedAt'],
+            attributes: ['orderNumber', 'status', 'pickerUserNumber', 'startedAt', 'completedAt', 'checkerCompletedAt'],
             raw: true
         });
 
         // 1. Order Statistics: Total orders assigned to epick, Completed by epick, Pending from epick
-        const completedByEpick = allOrderPicks.filter((pick: any) => pick.status === 'completed' || pick.status === 'ready_for_delivery').length;
-        // Calculate totalOrders using formula: totalOrdersFromHeader + completedByEpick - totalCompletedOrders
-        const totalOrders = totalOrdersFromHeader + completedByEpick - totalCompletedOrders;
-        const pendingFromEpick = allOrderPicks.filter((pick: any) => 
+        // Filter by status and date range (using completedAt)
+        const completedByEpickOrderPicks = allOrderPicks.filter((pick: any) => {
+            // Check status
+            if (pick.status !== 'completed' && pick.status !== 'ready_for_delivery') {
+                return false;
+            }
+
+            // Check completedAt is within date range
+            if (!pick.completedAt) {
+                return false;
+            }
+
+            const completedDate = new Date(pick.completedAt);
+            return completedDate >= startDate && completedDate <= endDate;
+        });
+
+        const completedByEpickOrderNumbers = completedByEpickOrderPicks
+            .map((pick: any) => pick.orderNumber)
+            .filter((v: any) => v !== null && v !== undefined)
+            .map((v: any) => Number(v));
+
+        let completedByEpick = 0;
+
+        if (completedByEpickOrderNumbers.length > 0) {
+            // Validate in MSSQL OrderHeader that Order_Deleted = false
+            const validatedOrderHeaders = await OrderHeader.findAll({
+                where: {
+                    Order_Number: { [Op.in]: completedByEpickOrderNumbers },
+                    Order_Deleted: false
+                },
+                attributes: ['Order_Number'],
+                raw: true
+            });
+
+            // Count orders that exist in OrderHeader with Order_Deleted = false
+            completedByEpick = validatedOrderHeaders.length;
+        }
+        // Total orders: count from OrderHeader with date range filter and Order_Deleted = false
+        const totalOrders = totalOrdersFromHeader;
+        const pendingFromEpick = allOrderPicks.filter((pick: any) =>
             pick.status === 'pending' || pick.status === 'in_progress'
         ).length;
 
-        // Calculate total checker orders (orders ready for checker)
-        const totalCheckerOrders = allOrderPicks.filter((pick: any) => pick.status === 'ready_for_delivery').length;
+        // Calculate total checker orders (same logic as checker getOrder API)
+        // Step 1: Get all completed orders from OrderPick (PostgreSQL)
+        const completedOrdersForChecker = allOrderPicks.filter((pick: any) => pick.status === 'completed');
+        const completedOrderNumbersForChecker = Array.from(
+            new Set(
+                completedOrdersForChecker
+                    .map((o: any) => o?.orderNumber)
+                    .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
+                    .map((v: any) => Number(v))
+            )
+        );
+
+        let totalCheckerOrders = 0;
+
+        if (completedOrderNumbersForChecker.length > 0) {
+            // Step 2: Validate in MSSQL OrderHeader (same as checker getOrder)
+            const checkerOrderHeaders = await OrderHeader.findAll({
+                where: {
+                    ...dateFilter,
+                    Order_Number: { [Op.in]: completedOrderNumbersForChecker },
+                    Order_Updated: { [Op.ne]: true }, // Order_Updated != true (or Order_Updated = 0)
+                    Order_Deleted: false
+                },
+                attributes: ['Order_Number'],
+                raw: true
+            });
+
+            const validatedOrderNumbers = checkerOrderHeaders
+                .map((order: any) => order.Order_Number)
+                .filter((v: any) => v !== null && v !== undefined)
+                .map((v: any) => Number(v));
+
+            if (validatedOrderNumbers.length > 0) {
+                // Step 3: Validate in MSSQL OrderDetail (all items must have Confirmed = 1)
+                const confirmedOrdersQuery = await sequelize.query(
+                    `SELECT Order_Number
+                     FROM Order_Detail
+                     WHERE Order_Number IN (:orderNumbers)
+                     GROUP BY Order_Number
+                     HAVING COUNT(*) = SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END)`,
+                    {
+                        replacements: { orderNumbers: validatedOrderNumbers },
+                        type: QueryTypes.SELECT,
+                        raw: true,
+                    }
+                ) as any[];
+
+                // Count orders where all items are confirmed
+                totalCheckerOrders = confirmedOrdersQuery.length;
+            }
+        }
 
         // Calculate orders completed by checker
-        // Step 1: First check PostgreSQL OrderPick for orders with status = 'ready_for_delivery'
+        // Step 1: Filter PostgreSQL OrderPick for orders with status = 'ready_for_delivery' and checkerCompletedAt within date range
         const readyForDeliveryOrders = allOrderPicks
-            .filter((pick: any) => pick.status === 'ready_for_delivery')
+            .filter((pick: any) => {
+                // Check status
+                if (pick.status !== 'ready_for_delivery') {
+                    return false;
+                }
+
+                // Check checkerCompletedAt is within date range
+                if (!pick.checkerCompletedAt) {
+                    return false;
+                }
+
+                const checkerDate = new Date(pick.checkerCompletedAt);
+                return checkerDate >= startDate && checkerDate <= endDate;
+            })
             .map((pick: any) => pick.orderNumber)
             .filter((v: any) => v !== null && v !== undefined)
             .map((v: any) => Number(v));
@@ -2170,54 +2332,25 @@ export class DashboardService {
         let ordersCompletedByChecker = 0;
 
         if (readyForDeliveryOrders.length > 0) {
-            // Step 2: Check those orders in MSSQL OrderHeader to verify Invoice_Number > 0, Order_Updated = 0, Order_Deleted = 0
+            // Step 2: Check those orders in MSSQL OrderHeader with Order_Deleted = false (no date filter - already filtered by checkerCompletedAt)
             const checkerCompletedOrderHeaders = await OrderHeader.findAll({
                 where: {
                     Order_Number: { [Op.in]: readyForDeliveryOrders },
-                    Invoice_Number: { [Op.gt]: 0 }, // Invoice_Number > 0 (invoice created by checker)
-                    Order_Updated: false, // Order_Updated = 0 (false)
                     Order_Deleted: false
                 },
                 attributes: ['Order_Number'],
                 raw: true
             });
 
-            const checkerCompletedOrderNumbers = checkerCompletedOrderHeaders
-                .map((order: any) => order.Order_Number)
-                .filter((v: any) => v !== null && v !== undefined)
-                .map((v: any) => Number(v));
-
-            if (checkerCompletedOrderNumbers.length > 0) {
-                // Step 3: Check Order_Detail to ensure ALL items have Confirmed = 1 for these orders
-                const checkerOrderDetailStatus = await sequelize.query(
-                    `SELECT 
-                        Order_Number,
-                        COUNT(*) as totalItems,
-                        SUM(CASE WHEN Confirmed = 1 THEN 1 ELSE 0 END) as confirmedItems
-                     FROM Order_Detail
-                     WHERE Order_Number IN (:orderNumbers)
-                     GROUP BY Order_Number`,
-                    {
-                        replacements: { orderNumbers: checkerCompletedOrderNumbers },
-                        type: QueryTypes.SELECT,
-                        raw: true,
-                    }
-                ) as any[];
-
-                // Count orders where all items are confirmed
-                checkerOrderDetailStatus.forEach((order: any) => {
-                    if (order.totalItems === order.confirmedItems && order.totalItems > 0) {
-                        ordersCompletedByChecker++;
-                    }
-                });
-            }
+            // Count orders that exist in OrderHeader
+            ordersCompletedByChecker = checkerCompletedOrderHeaders.length;
         }
 
         // 2. Picker-wise total orders and average time (completed orders only)
         // Use EpickConfirmation instead of OrderPick to get accurate picker-wise data
         const completedOrderPicks = allOrderPicks.filter((pick: any) => pick.status === 'completed' || pick.status === 'ready_for_delivery');
         const completedOrderNumbersForQty = completedOrderPicks.map((pick: any) => pick.orderNumber);
-        
+
         // Get all completed EpickConfirmations for orders in date range
         const completedConfirmations = await EpickConfirmation.findAll({
             where: {
@@ -2276,12 +2409,12 @@ export class DashboardService {
 
             // Count unique orders per picker
             pickerOrderSet[pickerId].add(confirmation.orderNumber);
-            
+
             // Calculate quantity for this picker based on their categories
             let pickerQuantity = 0;
             const orderDetails = orderDetailsMap[confirmation.orderNumber] || [];
             const pickerCategories = confirmation.category || [];
-            
+
             orderDetails.forEach((detail: any) => {
                 const itemCategory = detail.inventory?.Sales_Category;
                 if (itemCategory && pickerCategories.includes(itemCategory)) {
@@ -2295,18 +2428,18 @@ export class DashboardService {
             console.log('completedAt:', confirmation.completedAt);
             console.log('categories:', pickerCategories);
             console.log('quantity (category-specific):', pickerQuantity);
-            
+
             if (confirmation.startedAt && confirmation.completedAt) {
                 const startTime = new Date(confirmation.startedAt).getTime();
                 const endTime = new Date(confirmation.completedAt).getTime();
                 const timeDiff = (endTime - startTime) / 1000; // Convert to seconds
-                
+
                 console.log('timeDiff (seconds):', timeDiff);
                 console.log('timeDiff (minutes):', (timeDiff / 60).toFixed(2));
                 if (pickerQuantity > 0) {
                     console.log('time per quantity (seconds/qty):', (timeDiff / pickerQuantity).toFixed(2));
                 }
-                
+
                 if (timeDiff > 0) {
                     pickerTimeData[pickerId].totalTime += timeDiff;
                     pickerTimeData[pickerId].totalQuantity += pickerQuantity;
@@ -2380,24 +2513,24 @@ export class DashboardService {
                 const orderNum = scan.orderNumber;
                 const itemNum = scan.itemNumber;
                 const scanQty = parseFloat(scan.qty) || 0;
-                
+
                 // Get order details for this order to find item's Sales_Category
                 const orderDetails = orderDetailsMap[orderNum] || [];
                 const itemDetail = orderDetails.find((detail: any) => detail.Item_Number === itemNum);
-                
+
                 if (itemDetail) {
                     const itemCategory = itemDetail.inventory?.Sales_Category;
-                    
+
                     if (itemCategory) {
                         // Find pickers who worked on this order AND have this item's category
                         const pickersForOrder = orderToPickersMap[orderNum] || [];
                         pickersForOrder.forEach((pickerInfo: any) => {
                             if (pickerInfo.categories.includes(itemCategory)) {
                                 const pickerId = pickerInfo.pickerUserId;
-                                
+
                                 // Add scanned quantity
                                 pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + scanQty;
-                                
+
                                 // Track unique scanned lines (orderNumber_itemNumber per picker)
                                 if (!pickerScannedLines[pickerId]) {
                                     pickerScannedLines[pickerId] = new Set();
@@ -2437,12 +2570,12 @@ export class DashboardService {
                 if (pickerId) {
                     // Total requests
                     pickerOverrideCount[pickerId] = (pickerOverrideCount[pickerId] || 0) + 1;
-                    
+
                     // Accepted requests
                     if (req.status === 'approved') {
                         pickerAcceptedRequests[pickerId] = (pickerAcceptedRequests[pickerId] || 0) + 1;
                     }
-                    
+
                     // Rejected requests
                     if (req.status === 'rejected') {
                         pickerRejectedRequests[pickerId] = (pickerRejectedRequests[pickerId] || 0) + 1;
@@ -2467,22 +2600,22 @@ export class DashboardService {
         const pickerWiseOrders = pickerUsers.map((user: any) => {
             const fullName = `${user.firstName} ${user.lastName}`.trim();
             const timeData = pickerTimeData[user.id];
-            const averageTimeSeconds = timeData && timeData.orderCount > 0 
-                ? Math.round(timeData.totalTime / timeData.orderCount) 
+            const averageTimeSeconds = timeData && timeData.orderCount > 0
+                ? Math.round(timeData.totalTime / timeData.orderCount)
                 : 0;
-            
+
             // Calculate average time per quantity
             const averageTimePerQty = timeData && timeData.totalQuantity > 0
                 ? parseFloat((timeData.totalTime / timeData.totalQuantity).toFixed(2))
                 : 0;
-            
+
             // Get total time for this picker
             const totalTimeSeconds = timeData ? timeData.totalTime : 0;
-            
+
             // Get scanned lines count
             const scannedLinesSet = pickerScannedLines[user.id];
             const totalScannedLinesCount = scannedLinesSet ? scannedLinesSet.size : 0;
-            
+
             return {
                 pickerId: user.id,
                 pickerName: fullName || user.userNumber || `User ${user.id}`,
@@ -2499,7 +2632,7 @@ export class DashboardService {
                     secondsPerQty: averageTimePerQty,
                     formatted: `${averageTimePerQty.toFixed(2)}s/qty`
                 },
-                totalScannedQuantity: pickerScannedQty[user.id] || 0,
+                totalScannedQuantity: Math.round(pickerScannedQty[user.id] || 0),
                 totalScannedLines: totalScannedLinesCount,
                 totalOverrideRequests: pickerOverrideCount[user.id] || 0,
                 totalRequests: pickerOverrideCount[user.id] || 0,
@@ -2520,19 +2653,19 @@ export class DashboardService {
                 const startTime = new Date(confirmation.startedAt).getTime();
                 const endTime = new Date(confirmation.completedAt).getTime();
                 const timeDiff = (endTime - startTime) / 1000; // Convert to seconds
-                
+
                 // Calculate quantity for this picker based on their categories
                 let pickerQuantity = 0;
                 const orderDetails = orderDetailsMap[confirmation.orderNumber] || [];
                 const pickerCategories = confirmation.category || [];
-                
+
                 orderDetails.forEach((detail: any) => {
                     const itemCategory = detail.inventory?.Sales_Category;
                     if (itemCategory && pickerCategories.includes(itemCategory)) {
                         pickerQuantity += parseFloat(detail.Quantity_Ordered) || 0;
                     }
                 });
-                
+
                 if (timeDiff > 0) {
                     totalTimeSeconds += timeDiff;
                     totalQuantity += pickerQuantity;
@@ -2540,7 +2673,7 @@ export class DashboardService {
                 }
             }
         });
-        
+
         console.log(`Total confirmations with valid time: ${confirmationsWithTime} out of ${completedConfirmations.length}`);
         console.log(`Total time (seconds): ${totalTimeSeconds}`);
         console.log(`Total time (minutes): ${(totalTimeSeconds / 60).toFixed(2)}`);
@@ -2549,7 +2682,7 @@ export class DashboardService {
         if (totalQuantity > 0) {
             console.log(`Average time per quantity: ${(totalTimeSeconds / totalQuantity).toFixed(2)} seconds/qty`);
         }
-        
+
         // Log picker-wise summary
         console.log('\n=== Picker-wise Time Summary ===');
         Object.keys(pickerTimeData).forEach((pickerId: string) => {
@@ -2566,7 +2699,7 @@ export class DashboardService {
 
         const averageTimeSeconds = confirmationsWithTime > 0 ? Math.round(totalTimeSeconds / confirmationsWithTime) : 0;
         const averageTimePerQty = totalQuantity > 0 ? parseFloat((totalTimeSeconds / totalQuantity).toFixed(2)) : 0;
-        
+
         // Format average time as HH:MM:SS
         const hours = Math.floor(averageTimeSeconds / 3600);
         const minutes = Math.floor((averageTimeSeconds % 3600) / 60);

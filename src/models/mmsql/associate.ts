@@ -23,6 +23,7 @@ import { Terms } from "./invoiceTerm.model";
 import InventoryQtyDiscount from "./inventoryQtyDiscount.model";
 import { Vendor } from "./vendor.model";
 import { ClassOfTrade } from "./classOfTrade.model";
+import { Order_Header_Costs } from "./orderHeaderCost.model";
 
 
 
@@ -157,6 +158,30 @@ Vendor.hasMany(Inventory, {
     constraints: false,
   });
 
+
+  OrderHeader.hasMany(Order_Header_Costs, {
+    foreignKey: "Order_Number",
+    sourceKey: "Order_Number",
+    as: 'Order_Header_Costs',
+  });
+  
+  Order_Header_Costs.belongsTo(OrderHeader, {
+    foreignKey: "Order_Number",
+    targetKey: "Order_Number",
+  });
+  
+
+  OrderHeader.belongsTo(SalesRep, {
+    foreignKey: "S_Number",
+    targetKey: "S_Number",
+    as: "salesRep",
+  });
+
+  SalesRep.hasMany(OrderHeader, {
+    foreignKey: "S_Number",
+    sourceKey: "S_Number",
+    as: "orders",
+  });
  
 
   // --- FIX APPLIED HERE ---

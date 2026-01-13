@@ -75,6 +75,7 @@ export class CheckerService {
     const headerWhere: any = {
       // Exclude orders where Order_Updated = 1
       Order_Updated: { [Op.ne]: true },
+      Order_Deleted: false,
       // Only get orders that are ready for delivery
       Order_Number: { [Op.in]: readyForDeliveryOrderNumbers }
     };
@@ -3896,7 +3897,7 @@ export class CheckerService {
    * Mark order as ready for delivery
    * Changes status from 'completed' to 'ready_for_delivery' in PostgreSQL
    */
-  async readyForDelivery(orderNumber: number) {
+  async readyForDelivery(orderNumber: number, userId: number) {
     // Find the order in OrderPick
     const orderPick = await OrderPick.findOne({
       where: {
@@ -3915,7 +3916,9 @@ export class CheckerService {
 
     // Update status to 'ready_for_delivery'
     await orderPick.update({
-      status: 'ready_for_delivery'
+      status: 'ready_for_delivery',
+      checkerCompletedAt: new Date(),
+      chcekerUserId: userId
     });
 
     return {
