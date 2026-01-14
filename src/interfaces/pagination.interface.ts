@@ -1,6 +1,9 @@
 // interfaces/pagination.interface.ts
 export interface PaginationOptions {
+  I_Inactive?:boolean;
+  ShortOrderForm?:boolean;
   costType?:string;
+  Inactive?:string;
   status?:string;
   isIncludeAllImg?:any;
     page?: number;

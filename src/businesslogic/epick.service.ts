@@ -4018,7 +4018,9 @@ export class EpickService {
 
     // Get user info
     const user = await EpickUser.findOne({ where: { id: userId } });
-    const userNumber = user?.userNumber ? Number(user.userNumber) : 0;
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
 
     // Determine request type (default to 'pass' if not provided)
     const finalRequestType: 'scan' | 'pass' = requestType || 'pass';
@@ -4063,7 +4065,7 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
-      pickerUserNumber: userNumber,
+      pickerUserNumber: null, // No longer needed, using pickerUserId instead
       pickerUserId: userId,
       status: 'pending',
       requestType: finalRequestType,
@@ -4097,9 +4099,11 @@ export class EpickService {
   }, userId: number) {
     const { orderNumber, itemNumber, qty, note } = data;
 
-    // Get user info
-    const user = await EpickUser.findOne({ where: { id: userId } });
-    const userNumber = user?.userNumber ? Number(user.userNumber) : 0;
+    // Get EpickUser info
+    const epickUser = await EpickUser.findOne({ where: { id: userId } });
+    if (!epickUser) {
+      throw new AppError('User not found', 404);
+    }
 
     // Validate qty is positive
     if (!qty || qty <= 0) {
@@ -4137,7 +4141,7 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
-      pickerUserNumber: userNumber,
+      pickerUserNumber: null, // No longer needed, using pickerUserId instead
       pickerUserId: userId,
       status: 'pending',
       requestType: 'scan',
@@ -5424,7 +5428,7 @@ export class EpickService {
               requestId: overrideRequest.id.toString(),
               orderNumber: overrideRequest.orderNumber.toString(),
               itemNumber: overrideRequest.itemNumber.toString(),
-              pickerUserNumber: overrideRequest.pickerUserNumber.toString(),
+              pickerUserNumber: overrideRequest.pickerUserNumber?.toString() || '',
             },
           });
           console.log(`✅ Notification sent to distributor ${distributor.id} (${deviceTokens.length} devices)`);

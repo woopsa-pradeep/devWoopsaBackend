@@ -9,6 +9,7 @@ import { RolePermission } from './rolesPermission.model';
 import { StoryView } from './storyView.model';
 import { Story } from './Story.model';
 import { WebLocation } from './webLocation.model';
+
 import { OrderPickBox } from './epickOrderBox.model';
 import { OrderPick } from './epickOrder.model';
 import { OrderPickScan } from './epickOrderScan.model';
@@ -108,13 +109,13 @@ OrderPickScan.belongsTo(OrderPick, {
 });
 
 // OverrideRequest associations
-WebUsers.hasMany(OverrideRequest, {
-  foreignKey: 'pickerUserNumber',
+EpickUser.hasMany(OverrideRequest, {
+  foreignKey: 'pickerUserId',
   as: 'overrideRequests',
 });
 
-OverrideRequest.belongsTo(WebUsers, {
-  foreignKey: 'pickerUserNumber',
+OverrideRequest.belongsTo(EpickUser, {
+  foreignKey: 'pickerUserId',
   as: 'user',
 });
 

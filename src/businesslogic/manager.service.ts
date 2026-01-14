@@ -316,12 +316,14 @@ export class ManagerService {
     };
   }
 
-  async getCustomerList(query: PaginationOptions & { search?: string }) {
+
+  async getCustomerList(query: PaginationOptions & { search?: string, Inactive?:string }) {
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
     const search = query.search || '';
 
-    const whereCondition = search
+    
+    let whereCondition :any = search
       ? {
         [Op.or]: [
           { C_Number: { [Op.like]: `%${search}%` } },
@@ -332,6 +334,13 @@ export class ManagerService {
         ],
       }
       : {};
+
+      if(query.Inactive =='true'){
+        whereCondition.C_Inactive = true;
+      }else if(query.Inactive =='false'){
+        whereCondition.C_Inactive = false;
+      }
+      console.log(whereCondition, 'whereCondition')
 
     const { count: totalCount, rows: customerList } = await Customer.findAndCountAll({
       attributes: [
@@ -456,7 +465,6 @@ export class ManagerService {
     };
   }
 
-
   async getCustomerListWithOrderStats(query: PaginationOptions & { search?: string }) {
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
@@ -556,14 +564,24 @@ export class ManagerService {
   }
 
   async getProductList(query: PaginationOptions & { search?: string }) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId,I_Inactive,ShortOrderForm } = query;
 
     page = Number(page);
     limit = Number(limit);
+    if(!I_Inactive){
+      I_Inactive = false;
+    }else {
+      I_Inactive = true;
+    }
+    if(!ShortOrderForm){
+      ShortOrderForm = false;
+    }else {
+      ShortOrderForm = true;
+    }
 
     let whereClause: any = {
-      I_Inactive: false,
-      ShortOrderForm: true,
+      I_Inactive: I_Inactive,
+      ShortOrderForm: ShortOrderForm,
     };
 
 
@@ -6969,6 +6987,7 @@ async getShortShipmentReport(
         [col('orderHeader.C_Number'), 'C_Number'],
         [col('orderHeader.S_Number'), 'S_Number'],
         [col('orderHeader.Route_Number'), 'Route_Number'],
+        [col('orderHeader.Jurisdiction_County'), 'Jurisdiction_County'],
 
 
         'Order_Number',
@@ -6995,6 +7014,8 @@ async getShortShipmentReport(
         'OTP_Amount_State',
         'OTP_Amount_County',
         'OTP_Amount_City',
+        'Sales_Category',
+        'OTP_Number',
 
         // ✅ Extended Price (Price + OTP)
         [
@@ -7018,6 +7039,8 @@ async getShortShipmentReport(
         [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
         [col('inventory.Cig_Pack'), 'Cig_Pack'],
         [col('inventory.OTP_Number'), 'OTP_Number'],
+        [col('inventory.Price_Class'), 'Price_Class'],
+
 
         [
           literal(`
@@ -7038,9 +7061,11 @@ async getShortShipmentReport(
         [col('orderHeader.customer.c_address'), 'c_address'],
         [col('orderHeader.customer.c_city'), 'c_city'],
         [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.C_Country'), 'C_Country'],
         [col('orderHeader.customer.c_zip'), 'c_zip'],
         [col('orderHeader.customer.c_phone'), 'c_phone'],
         [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+        [col('orderHeader.customer.C_ClassOfTrade'), 'C_ClassOfTrade'],
       ];
 
 
@@ -7173,9 +7198,117 @@ async getShortShipmentReport(
           'Price_Class_Price',
       ],
       [
+          literal('(OrderDetail.Quantity_Shipped * inventory.Points ) '),
+          'Ext_Points',
+      ],
+      [
           literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) '),
           'EXT_Price',
       ],
+      [
+          literal('(OrderDetail.AvgCost + OrderDetail.OTP_Amount_State ) '),
+          'Ext_AvgCost',
+      ],
+      [
+          literal('(OrderDetail.AvgCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+          'Ext_Total_AvgCost',
+      ],
+      [
+          literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) '),
+          'Ext_BaseCost',
+      ],
+      [
+          literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+          'Ext_Total_BaseCost',
+      ],
+      [
+          literal('(OrderDetail.NetCost + OrderDetail.OTP_Amount_State ) '),
+          'Ext_NetCost',
+      ],
+      [
+          literal('(OrderDetail.NetCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+          'Ext_Total_NetCost',
+      ],
+      [
+          literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+          'Ext_Total_BaseCost',
+      ],
+      [
+          literal('(OrderDetail.Invoice_Cost + OrderDetail.OTP_Amount_State ) '),
+          'Ext_Invoice_Cost',
+      ],
+      [
+          literal('(OrderDetail.Invoice_Cost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+          'Ext_Total_Invoice_Cost',
+      ],
+      [
+          literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped'),
+          'EXT_Total_Price',
+      ],
+      [
+          literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+          'Ext_Price',
+      ],
+      [
+          literal('((OrderDetail.Price+ OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped) - ((OrderDetail.AvgCost + OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped)'),
+          'Profit',
+      ],
+      [
+          literal(`
+            (
+              (
+                (OrderDetail.Price + OrderDetail.OTP_Amount_State)
+                - (OrderDetail.AvgCost + OrderDetail.OTP_Amount_State)
+              )
+              / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
+            ) * 100
+          `),
+          'Profit_Percent',
+        ],
+      [
+          literal(`
+            (
+              (
+                (OrderDetail.Price + OrderDetail.OTP_Amount_State )- (OrderDetail.AvgCost + OrderDetail.OTP_Amount_State )
+              )
+              / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
+            ) * 100
+          `),
+          'AvgCost_Profit_Percent',
+        ], 
+      [
+          literal(`
+            (
+              (
+                (OrderDetail.Price + OrderDetail.OTP_Amount_State )- (OrderDetail.BaseCost + OrderDetail.OTP_Amount_State )
+              )
+              / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
+            ) * 100
+          `),
+          'BaseCost_Profit_Percent',
+        ], 
+      [
+          literal(`
+            (
+              (
+                (OrderDetail.Price + OrderDetail.OTP_Amount_State )- (OrderDetail.NetCost + OrderDetail.OTP_Amount_State )
+              )
+              / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
+            ) * 100
+          `),
+          'NetCost_Profit_Percent',
+        ], 
+      [
+          literal(`
+            (
+              (
+                (OrderDetail.Price + OrderDetail.OTP_Amount_State )- (OrderDetail.Invoice_Cost + OrderDetail.OTP_Amount_State )
+              )
+              / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
+            ) * 100
+          `),
+          'Invoice_Cost_Profit_Percent',
+        ], 
 
       [col('inventory.Description'), 'Description'],
       [col('inventory.UOM'), 'UOM'],

@@ -5,7 +5,7 @@ export interface IOverrideRequest {
   id: number;
   orderNumber: number;
   itemNumber: number;
-  pickerUserNumber: number;
+  pickerUserNumber: number | null;
   pickerUserId: number;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';
   requestType: 'scan' | 'pass';
@@ -16,7 +16,7 @@ export interface IOverrideRequest {
   updatedAt?: Date;
 }
 
-type OverrideRequestCreationAttributes = Optional<IOverrideRequest, 'id' | 'status' | 'note' | 'rejectionReason' | 'requestType' | 'qty'>;
+type OverrideRequestCreationAttributes = Optional<IOverrideRequest, 'id' | 'status' | 'note' | 'rejectionReason' | 'requestType' | 'qty' | 'pickerUserNumber'>;
 
 export class OverrideRequest
   extends Model<IOverrideRequest, OverrideRequestCreationAttributes>
@@ -25,7 +25,7 @@ export class OverrideRequest
   public id!: number;
   public orderNumber!: number;
   public itemNumber!: number;
-  public pickerUserNumber!: number;
+  public pickerUserNumber!: number | null;
   public pickerUserId!: number;
   public status!: 'pending' | 'approved' | 'rejected' | 'cancelled';
   public requestType!: 'scan' | 'pass';
@@ -56,7 +56,7 @@ OverrideRequest.init(
     },
     pickerUserNumber: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       field: 'picker_user_number',
     },
     pickerUserId: {
