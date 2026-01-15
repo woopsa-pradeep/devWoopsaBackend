@@ -1374,7 +1374,7 @@ export class DashboardService {
     }
 
     async getDistributorDashboardV1(query: PaginationOptions & { fromDate?: string; toDate?: string; type?: string }) {
-        const { fromDate, toDate, costType } = query;
+        const { fromDate, toDate, costType,salesReportType } = query;
 
         // Parse dates and create date range - using proper date parsing
         let startDate, endDate;
@@ -1589,6 +1589,14 @@ export class DashboardService {
         } else if (costType === 'net') {
             valueCode = 2
         }
+
+        let salesReportValue = 1
+        if(salesReportType ==='invoice'){
+            salesReportValue = 0
+        }else if (salesReportType === 'current'){
+            salesReportValue = 1
+        }
+
         const rows = await OrderHeader.findAll({
             subQuery: false,
             attributes: [
@@ -1635,7 +1643,7 @@ export class DashboardService {
                 Order_Deleted: false,
                 Invoice_Number: { [Op.ne]: 0 },
                 Invoice_Date: { [Op.between]: [startDate, endDate] },
-                Order_Updated: "True",
+                Order_Updated: salesReportValue,
             },
 
             group: [col("salesRep.S_Number"), col("salesRep.S_Desc")],

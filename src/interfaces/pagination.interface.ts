@@ -2,6 +2,7 @@
 export interface PaginationOptions {
   I_Inactive?:boolean;
   ShortOrderForm?:boolean;
+  salesReportType?:string;
   costType?:string;
   Inactive?:string;
   status?:string;

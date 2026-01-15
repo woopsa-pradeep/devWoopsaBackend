@@ -1528,6 +1528,7 @@ export class SalesService {
         where: {
           Item_Number: e.Item_Number
         },
+  
         include: [ {
           model: InventoryUPC,
     as: 'UPCList',
@@ -1537,7 +1538,22 @@ export class SalesService {
     },
     required: false,
   
-  }]
+  },
+  {
+    model: SalesCategory,
+    as: 'SalesCategory',
+    attributes: ['Category_Desc','Sales_Category'],
+    required: false
+  },
+  {
+    model: PriceClass,
+    as: 'PriceClass',
+    attributes: ['Class_Desc'],
+    required: false
+  }
+
+
+]
       })
     product = product?.dataValues || null;
 
@@ -1583,8 +1599,14 @@ export class SalesService {
         Item_Number: e.Item_Number,
         CaseCount: product.CaseCount,
         UOM: product.UOM,
+        pack: product.Pack,
+        size: product.Size,
         Price1: product.Price1,
+        upc:product?.UPCList,
         price: price,
+        salesCategory: product.SalesCategory?.Category_Desc,
+        priceClass: product.PriceClass?.Class_Desc,
+        unitOunces: product.UnitOunces,
         BaseCost: product.BaseCost,
         Invoice_Cost: product.Invoice_Cost,
         hasProductLimit: productLimit ? true : false,
