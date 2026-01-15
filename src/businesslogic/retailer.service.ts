@@ -903,6 +903,12 @@ export class RetailerService {
             required: false
           },
           {
+            model: PriceClass,
+            as: 'PriceClass',
+            attributes: ['Class_Desc','Price_Class'],
+            required: false
+          },
+          {
           model: InventoryUPC,
           as: 'UPCList',
           attributes: ['UPC_Number'],
@@ -951,7 +957,13 @@ export class RetailerService {
         Price1: product.Price1,
         price: price,
         itemInActive,
-
+        salesCategory: product.SalesCategory?.Category_Desc,
+        priceClass: product.PriceClass?.Class_Desc,
+        priceClassId: product.PriceClass?.Price_Class,
+        upc:product?.UPCList,
+        unitOunces: product.UnitOunces,
+        pack: product.Pack,
+        size: product.Size,
         hasProductLimit: productLimit ? true : false,
         productLimit,
 
