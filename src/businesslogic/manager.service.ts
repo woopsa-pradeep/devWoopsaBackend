@@ -1666,7 +1666,7 @@ export class ManagerService {
     
     // Handle item_sort_by update
     if (body.item_sort_by !== undefined) {
-      const validSortOptions = ['sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      const validSortOptions = ['sales_location', 'section_location','sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
       if (!validSortOptions.includes(body.item_sort_by)) {
         throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
       }
@@ -4991,8 +4991,11 @@ export class ManagerService {
         throw new AppError('subject and html are required', 400);
       }
 
-      const emailMarketing = await EmailMarketing.create(data);
-
+        // Set status to 'queued' when emails are being queued
+      const emailMarketing = await EmailMarketing.create({
+        ...data,
+        status: 'sent',
+      });
 
       const jobs: any[] = to.map((u: any) => ({
         to: u.toLowerCase(),      // adapt to your structure
@@ -5004,21 +5007,30 @@ export class ManagerService {
       }));
 
       // Add jobs to notification queue
-      await Promise.all(
-        jobs.map((job) =>
-          emailNotificationQueue.add('send-notification-email', job, {
-            attempts: 3,              // retry up to 3 times
-            backoff: { type: 'exponential', delay: 10000 }, // 10s, 20s, 40s
-            removeOnComplete: true,
-            removeOnFail: false,
-          })
-        )
-      );
+      try {
+        await Promise.all(
+          jobs.map((job) =>
+            emailNotificationQueue.add('send-notification-email', job, {
+              attempts: 3,              // retry up to 3 times
+              backoff: { type: 'exponential', delay: 10000 }, // 10s, 20s, 40s
+              removeOnComplete: true,
+              removeOnFail: false,
+            })
+          )
+        );
+        console.log(`✅ Queued ${jobs.length} email jobs for campaign ${emailMarketing.id}`);
+      } catch (queueError: any) {
+        console.error('❌ Failed to queue emails:', queueError);
+        // Update status to failed if queueing fails
+        await emailMarketing.update({ status: 'failed' });
+        throw new AppError('Failed to queue emails: ' + queueError.message, 500);
+      }
 
       // RESPONSE IS FAST – server not blocked.
       return {
         message: 'Notification emails queued successfully',
         queuedCount: jobs.length,
+        campaignId: emailMarketing.id,
       };
 
       // sendEmailToMarketing({

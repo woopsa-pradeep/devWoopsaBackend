@@ -95,7 +95,7 @@ EpickUser.init(
       allowNull: true,
       defaultValue: 'line_number',
       validate: {
-        isIn: [['sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number']],
+        isIn: [['sales_location','section_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number']],
       },
     },
     status: {

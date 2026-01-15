@@ -11,6 +11,7 @@ export class EmailMarketing extends Model {
   public status!: string;
   public body!: string;
   public attachments?: string[]; // array of URLs or file paths
+  public failed_emails?: string[]; // array of failed email addresses
 }
 
 EmailMarketing.init(

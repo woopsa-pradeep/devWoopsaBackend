@@ -1627,6 +1627,7 @@ export class SalesService {
         distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
         Product: e,
+        size1: product.Size,
         hasQtyDiscount: hasQtyDiscount.allowToDiscount,
         qtyDiscount: hasQtyDiscount,
       }

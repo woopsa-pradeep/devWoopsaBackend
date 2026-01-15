@@ -1,14 +1,9 @@
 // src/workers/emailWorker.ts
 import { Worker, Job } from 'bullmq';
-import { EMAIL_QUEUE_NAME } from '../configuration/config';
+import { EMAIL_QUEUE_NAME, redisConnection } from '../configuration/config';
 import { BulkEmailJobData } from '../interfaces/redis.interface';
 import { sendEmail } from '../utils/sendMail';
 import { EmailMarketing } from '../models/postgres/emailMarketing.model';
-
-const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number(process.env.REDIS_PORT || 6379),
-};
 
 const worker = new Worker(
   EMAIL_QUEUE_NAME,
@@ -32,7 +27,7 @@ const worker = new Worker(
     console.log(`✅ Email sent to: ${to}`);
   },
   {
-    connection,
+    connection: redisConnection,
     concurrency: 1, // send 1 email at a time
   }
 );
@@ -74,6 +69,24 @@ worker.on("drained", () => {
   // put your "all done" logic here (e.g., mark campaign finished, send summary, etc.)
 });
 
-console.log(`✅ Email worker started and listening for jobs on queue: ${EMAIL_QUEUE_NAME}`);
+worker.on("ready", () => {
+  console.log(`✅ Email worker is ready and listening for jobs on queue: ${EMAIL_QUEUE_NAME}`);
+  console.log(`🔒 This worker will ONLY process emails for this server's queue`);
+});
+
+worker.on("active", (job) => {
+  console.log(`🔄 Processing email job ${job.id} for: ${job.data.to}`);
+});
+
+worker.on("error", (error) => {
+  console.error('❌ Email worker error:', error);
+});
+
+worker.on("stalled", (jobId) => {
+  console.warn(`⚠️ Email job ${jobId} stalled`);
+});
+
+console.log(`🚀 Email worker initializing for queue: ${EMAIL_QUEUE_NAME}`);
+console.log(`🔒 Server-specific queue isolation enabled - this server will only process its own emails`);
 
 export default worker;

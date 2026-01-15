@@ -49,7 +49,7 @@ export class EpickService {
    */
  private getOrderItemSortOrder(itemSortBy: string): any[] {
     switch (itemSortBy) {
-      case 'sales_location':
+      case 'section_location':
         // Sort by Section ASC, then Location ASC within each section
         // NULL/empty/0 values for Section and Location appear last
         return [
@@ -3152,7 +3152,7 @@ export class EpickService {
     const customerNumbers = Array.from(new Set(orders.map((o: any) => o.customerNumber).filter((num: any) => num)));
 
     // Fetch user information
-    const users = await WebUsers.findAll({
+    const users = await EpickUser.findAll({
       where: {
         id: { [Op.in]: userIds }
       },
@@ -3405,7 +3405,7 @@ export class EpickService {
       where: { orderNumber: orderNumber },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
           required: false,
@@ -3427,7 +3427,7 @@ export class EpickService {
 
     // Format override requests
     const formattedOverrideRequests = overrideRequests.map((req: any) => {
-      const user = req.user as WebUsers | undefined;
+      const user = req.user as EpickUser | undefined;
       return {
         requestId: req.id,
         orderNumber: req.orderNumber,
@@ -3453,7 +3453,7 @@ export class EpickService {
     // Get picker name if available (last picker from Order_Header)
     let pickerName = null;
     if (orderHeaderData.Picker_ID) {
-      const picker = await WebUsers.findOne({
+      const picker = await EpickUser.findOne({
         where: { userNumber: String(orderHeaderData.Picker_ID) }, // Cast to string since userNumber is STRING type
         attributes: ['firstName', 'lastName'],
         raw: true
@@ -3487,7 +3487,7 @@ export class EpickService {
     });
 
     // Fetch picker user information from WebUsers
-    const pickerUsers = await WebUsers.findAll({
+    const pickerUsers = await EpickUser.findAll({
       where: {
         id: { [Op.in]: pickerUserIds }
       },
@@ -4271,7 +4271,7 @@ export class EpickService {
       },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email'],
         },
@@ -4315,7 +4315,7 @@ export class EpickService {
       },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email'],
         },
@@ -4390,7 +4390,7 @@ export class EpickService {
       },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email'],
         },
@@ -4410,7 +4410,7 @@ export class EpickService {
     const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
 
     return pendingRequests.map((req: any) => {
-      const user = req.user as WebUsers | undefined;
+      const user = req.user as EpickUser | undefined;
       return {
         requestId: req.id,
         orderNumber: req.orderNumber,
@@ -4724,7 +4724,7 @@ export class EpickService {
       where: { orderNumber: orderNumber },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
           required: false,
@@ -4746,7 +4746,7 @@ export class EpickService {
 
     // Format override requests
     const formattedOverrideRequests = overrideRequests.map((req: any) => {
-      const user = req.user as WebUsers | undefined;
+      const user = req.user as EpickUser | undefined;
       return {
         requestId: req.id,
         orderNumber: req.orderNumber,
@@ -5106,7 +5106,7 @@ export class EpickService {
       },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email'],
         },
@@ -5126,7 +5126,7 @@ export class EpickService {
     const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
 
     return approvedRequests.map((req: any) => {
-      const user = req.user as WebUsers | undefined;
+      const user = req.user as EpickUser | undefined;
       return {
         requestId: req.id,
         orderNumber: req.orderNumber,
@@ -5155,7 +5155,7 @@ export class EpickService {
       },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email'],
         },
@@ -5175,7 +5175,7 @@ export class EpickService {
     const inventoryMap = new Map(inventories.map(inv => [inv.Item_Number, inv.Description]));
 
     return cancelledRequests.map((req: any) => {
-      const user = req.user as WebUsers | undefined;
+      const user = req.user as EpickUser | undefined;
       return {
         requestId: req.id,
         orderNumber: req.orderNumber,
@@ -5205,7 +5205,7 @@ export class EpickService {
       },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email'],
         },
@@ -5299,7 +5299,7 @@ export class EpickService {
       },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email'],
         },
@@ -5334,7 +5334,7 @@ export class EpickService {
       },
       include: [
         {
-          model: WebUsers,
+          model: EpickUser,
           as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email'],
         },

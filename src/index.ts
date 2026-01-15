@@ -17,7 +17,7 @@ import './workers/emailNotificationWorker'; // Start the email notification work
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
-import { emailQueue, emailNotificationQueue } from './configuration/config';
+import { emailQueue, emailNotificationQueue, testRedisConnection } from './configuration/config';
 import { getNextVendorNumber } from './utils/vendor';
 import { OrderHeader } from './models/mmsql/orderHeader.model';
 
@@ -170,6 +170,12 @@ async function safeMssqlSync() {
 testConnections()
   .then(async () => {
     console.log('✅ Connected to both databases');
+
+    // Test Redis connection
+    const redisConnected = await testRedisConnection();
+    if (!redisConnected) {
+      console.warn('⚠️ Redis connection failed. Email queue may not work properly.');
+    }
 
     await syncPostgresModels();
     console.log('✅ PostgreSQL models synchronized');

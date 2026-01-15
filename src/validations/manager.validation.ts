@@ -133,7 +133,7 @@ export const createEpickUserSchema = Joi.object({
 
   shortby: Joi.string().valid('Asc', 'Des').optional().default('Des'),
 
-  item_sort_by: Joi.string().valid('sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
+  item_sort_by: Joi.string().valid('sales_location', 'section_location','sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
 
   status: Joi.boolean().optional().default(true),
 
@@ -160,7 +160,7 @@ export const updateEpickUserSchema = Joi.object({
     }),
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
-  item_sort_by: Joi.string().valid('sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
+  item_sort_by: Joi.string().valid('sales_location', 'section_location','sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
 });
 
 export const updateEpickUserPreferencesSchema = Joi.object({

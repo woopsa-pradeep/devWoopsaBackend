@@ -63,7 +63,7 @@ export class EpickController {
     }
 
     async OrderCompleted(req: AuthRequest, res: Response) {
-        const data = await this.epickService.OrderCompleted(Number(req.params.id), Number(req.user.id));
+        const data = await this.epickService.OrderCompleted(Number(req.params.id), Number(req.user.id) );
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 

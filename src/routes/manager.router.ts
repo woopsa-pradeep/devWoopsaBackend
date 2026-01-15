@@ -38,7 +38,7 @@ router.get('/userList', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(manage
 router.post('/createUser', verifyRole(ROLES.MANAGER,ROLES.SALES),validateRequest(createUserSchema), catchAsync(managerController.createUser.bind(managerController)));
 router.post('/createEpickUser', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(createEpickUserSchema), catchAsync(managerController.createEpickUser.bind(managerController)));
 router.put('/updateUser/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.updateUser.bind(managerController)));
-router.put('/updateEpickUser/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateEpickUserSchema), catchAsync(managerController.updateEpickUser.bind(managerController)));
+router.put('/updateEpickUser/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.updateEpickUser.bind(managerController)));
 router.delete('/deleteUser/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteUser.bind(managerController)));
 router.get('/epickUsers', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getEpickUserDetails.bind(managerController)));
 router.put('/epickUsers/:userId/preferences', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateEpickUserPreferencesSchema), catchAsync(managerController.updateEpickUserPreferences.bind(managerController)));
