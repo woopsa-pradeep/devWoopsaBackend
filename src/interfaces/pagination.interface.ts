@@ -6,6 +6,7 @@ export interface PaginationOptions {
   costType?:string;
   Inactive?:string;
   updated?:boolean;
+  currentStatus?:string;
   isDeleted?:boolean;
   status?:string;
   isIncludeAllImg?:any;

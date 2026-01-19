@@ -24,6 +24,7 @@ import InventoryQtyDiscount from "./inventoryQtyDiscount.model";
 import { Vendor } from "./vendor.model";
 import { ClassOfTrade } from "./classOfTrade.model";
 import { Order_Header_Costs } from "./orderHeaderCost.model";
+import { Record_Locks } from "./recordLock.model";
 
 
 
@@ -329,4 +330,24 @@ CustReceivables.belongsTo(ARDefinitions, {
   foreignKey: 'AR_Type',
   targetKey: 'AR_Type',
 });
+
+// Record_Locks -> Order_Header
+Record_Locks.belongsTo(OrderHeader, {
+  foreignKey: 'Lock_Number',     // Record_Locks column
+  targetKey: 'Order_Number',     // Order_Header column
+  as: 'orderHeader',
+  constraints: false,            // IMPORTANT for MSSQL legacy tables
+});
+
+// Order_Header -> Record_Locks
+OrderHeader.hasMany(Record_Locks, {
+  foreignKey: 'Lock_Number',
+  sourceKey: 'Order_Number',
+  as: 'recordLocks',
+  constraints: false,
+});
+
+
+
+
 }

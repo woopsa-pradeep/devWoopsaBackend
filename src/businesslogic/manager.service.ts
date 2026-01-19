@@ -100,6 +100,7 @@ import { InventoryBrands,getNextInventoryBrand } from "../models/mmsql/inventory
 import { RetailerLocation } from "../models/postgres/retailerLocation.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
 import { formatCustomerVelocityItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
+import { Record_Locks } from "../models/mmsql/recordLock.model";
 
 
 export class ManagerService {
@@ -2156,9 +2157,12 @@ export class ManagerService {
 
 
   async getOrderHistory(query: PaginationOptions) {
-    console.log(query, 'query--->')
-    const isDeleted = query.isDeleted || false;
-    const updated = query.updated || false;
+    
+    const currentStatus = query.currentStatus || 'all';
+
+   
+
+
 
     // Handle query parameters with potential trailing spaces
     const page = Number(query.page || (query as any)['page ']) || 1;
@@ -2169,11 +2173,320 @@ export class ManagerService {
 
     const offset = (page - 1) * limit;
 
+    if(currentStatus === 'recordLocks'){
+      const recordLocks = await Record_Locks.findAll({
+        where: {
+          Lock_Type: 0
+        },
+        attributes: ['Lock_Number'],
+        raw: true
+      });
+      const recordLocksOrderNumbers = recordLocks.map((lock: any) => lock.Lock_Number);
+      const whereCondition: any = {
+      };
+      if(recordLocksOrderNumbers.length > 0){
+        whereCondition.Order_Number = {
+          [Op.in]: recordLocksOrderNumbers
+        };
+      }else {
+        return {
+          totalCount: 0,
+          page: page,
+          limit: limit,
+          totalPages: 0,
+          orderList: [],
+        };
+      }
+      if(query.isDeleted){
+        whereCondition.Order_Deleted = query.isDeleted;
+      }
+      if(query.updated){
+        whereCondition.Order_Updated = query.updated;
+      }
+  
+  
+    
+      
+      if (customerNumber) {
+        whereCondition.C_Number = Number(customerNumber);
+      }
+  
+      if (startDate && endDate) {
+        whereCondition.Order_Date = {
+          [Op.between]: [startDate, endDate]
+        };
+      }
+  
+      // First, get the order headers with pagination
+      const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+        attributes: [
+          'Order_Number',
+          'C_Number',
+          'Order_Source',
+          'Order_Date',
+          'Picklist_Printed',
+          'Order_Deleted'
+        ],
+        where: whereCondition,
+        include: [
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: ['C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country'],
+            required: false,
+            include: [
+              {
+                model: CustomerRoute,
+                as: 'Routes',
+                attributes: ['Route_Number', 'Stop_Number'],
+                required: false
+              }
+            ]
+          }
+        ],
+        distinct: true,
+        col: 'Order_Number',
+  
+        order: [['Order_Number', 'DESC']],
+        limit,
+        offset,
+      });
+  
+      // Get the order numbers to fetch quantities
+      const orderNumbers = orderList.map((order: any) => order.Order_Number);
+  
+      // Get total quantities for these orders
+      let quantityMap = new Map();
+      if (orderNumbers.length > 0) {
+        const quantityResults = await OrderDetail.findAll({
+          attributes: [
+            'Order_Number',
+            [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+          ],
+          where: {
+            Order_Number: { [Op.in]: orderNumbers }
+          },
+          group: ['Order_Number'],
+          raw: true
+        });
+  
+        // Create a map for quick lookup
+        quantityResults.forEach((result: any) => {
+          quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
+        });
+      }
+  
+      // Format the response
+      const formattedOrderList = orderList.map((order: any) => {
+        // Map Order_Source to readable names
+        let orderSourceName = 'ERP';
+        if (order.Order_Source === 13) {
+          orderSourceName = 'Web';
+        } else if (order.Order_Source === 12) {
+          orderSourceName = 'App';
+        }
+        const route = order.customer?.Routes?.[0];
+        return {
+          Order_Number: order.Order_Number,
+          C_Number: order.C_Number,
+          Order_Source: order.Order_Source,
+          Order_Deleted: order.Order_Deleted,
+          Order_Source_Name: orderSourceName,
+          Order_Date: order.Order_Date,
+          Picklist_Printed: order.Picklist_Printed,
+          customerName: order.customer?.C_Name || 'N/A',
+          address: order.customer?.C_Address || 'N/A',
+          city: order.customer?.C_City || 'N/A',
+          state: order.customer?.C_State || 'N/A',
+          zip: order.customer?.C_Zip || 'N/A',
+          country: order.customer?.C_Country || 'N/A',
+          route: route?.Route_Number ?? null,
+          stop: route?.Stop_Number ?? null,
+          totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0
+        };
+      });
+  
+      return {
+        totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(Number(totalCount) / Number(limit)),
+        orderList: formattedOrderList,
+      };
+
+    }
+
+    else if(currentStatus === 'orderConfirmation') {
+
+      const whereCondition: any = {
+      };
+      if(query.isDeleted){
+        whereCondition.Order_Deleted = query.isDeleted;
+      }
+      if(query.updated){
+        whereCondition.Order_Updated = query.updated;
+      }
+  
+   
+  
+   
+      if (customerNumber) {
+        whereCondition.C_Number = Number(customerNumber);
+      }
+  
+      if (startDate && endDate) {
+        whereCondition.Order_Date = {
+          [Op.between]: [startDate, endDate]
+        };
+      }
+  
+      // First, get the order headers with pagination
+      const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+        attributes: [
+          'Order_Number',
+          'C_Number',
+          'Order_Source',
+          'Order_Date',
+          'Picklist_Printed',
+          'Order_Deleted'
+        ],
+        where: {
+          ...whereCondition,
+          [Op.and]: [
+            ...(whereCondition[Op.and] ?? []),
+            Sequelize.literal(`
+              EXISTS (
+                SELECT 1
+                FROM [Order_Detail] od
+                WHERE od.Order_Number = [OrderHeader].[Order_Number]
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM [Order_Detail] od2
+                WHERE od2.Order_Number = [OrderHeader].[Order_Number]
+                  AND (od2.Confirmed = 0 OR od2.Confirmed IS NULL)
+              )
+            `),
+          ],
+        },
+        include: [
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: ['C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country'],
+            required: false,
+            include: [
+              {
+                model: CustomerRoute,
+                as: 'Routes',
+                attributes: ['Route_Number', 'Stop_Number'],
+                required: false
+              }
+            ]
+          }
+        ],
+        distinct: true,
+        col: 'Order_Number',
+        order: [['Order_Number', 'DESC']],
+        limit,
+        offset,
+      });
+      
+  
+      // Get the order numbers to fetch quantities
+      const orderNumbers = orderList.map((order: any) => order.Order_Number);
+  
+      // Get total quantities for these orders
+      let quantityMap = new Map();
+      if (orderNumbers.length > 0) {
+        const quantityResults = await OrderDetail.findAll({
+          attributes: [
+            'Order_Number',
+            [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+          ],
+          where: {
+            Order_Number: { [Op.in]: orderNumbers }
+          },
+          group: ['Order_Number'],
+          raw: true
+        });
+  
+        // Create a map for quick lookup
+        quantityResults.forEach((result: any) => {
+          quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
+        });
+      }
+  
+      // Format the response
+      const formattedOrderList = orderList.map((order: any) => {
+        // Map Order_Source to readable names
+        let orderSourceName = 'ERP';
+        if (order.Order_Source === 13) {
+          orderSourceName = 'Web';
+        } else if (order.Order_Source === 12) {
+          orderSourceName = 'App';
+        }
+        const route = order.customer?.Routes?.[0];
+        return {
+          Order_Number: order.Order_Number,
+          C_Number: order.C_Number,
+          Order_Source: order.Order_Source,
+          Order_Deleted: order.Order_Deleted,
+          Order_Source_Name: orderSourceName,
+          Order_Date: order.Order_Date,
+          Picklist_Printed: order.Picklist_Printed,
+          customerName: order.customer?.C_Name || 'N/A',
+          address: order.customer?.C_Address || 'N/A',
+          city: order.customer?.C_City || 'N/A',
+          state: order.customer?.C_State || 'N/A',
+          zip: order.customer?.C_Zip || 'N/A',
+          country: order.customer?.C_Country || 'N/A',
+          route: route?.Route_Number ?? null,
+          stop: route?.Stop_Number ?? null,
+          totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0
+        };
+      });
+  
+      return {
+        totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(Number(totalCount) / Number(limit)),
+        orderList: formattedOrderList,
+      };
+
+    }
+    
+    else {
+
+    
+
     // Build where condition
     const whereCondition: any = {
-      Order_Deleted: false,
     };
+    if(query.isDeleted){
+      whereCondition.Order_Deleted = query.isDeleted;
+    }
+    if(query.updated){
+      whereCondition.Order_Updated = query.updated;
+    }
 
+ 
+
+    if(currentStatus === 'invoices'){
+      whereCondition.Invoice_Number = {
+        [Op.gt]: 0
+      };
+    } else if(currentStatus === 'non_invoices'){
+      whereCondition.Invoice_Number = {
+        [Op.eq]: 0
+      };
+    }else if(currentStatus === 'picklist'){
+      whereCondition.Picklist_Printed = true;
+    }else if(currentStatus === 'EpickStatusFromPicker'){
+      whereCondition.EpickStatusFromPicker ='completed'
+    }
+    
     if (customerNumber) {
       whereCondition.C_Number = Number(customerNumber);
     }
@@ -2211,6 +2524,9 @@ export class ManagerService {
           ]
         }
       ],
+      distinct: true,
+      col: 'Order_Number',
+
       order: [['Order_Number', 'DESC']],
       limit,
       offset,
@@ -2277,6 +2593,7 @@ export class ManagerService {
       totalPages: Math.ceil(Number(totalCount) / Number(limit)),
       orderList: formattedOrderList,
     };
+  }
   }
 
   async getOrderHistoryByOrderNumber(orderNumber: number, query: PaginationOptions) {
