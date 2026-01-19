@@ -5,6 +5,8 @@ export interface PaginationOptions {
   salesReportType?:string;
   costType?:string;
   Inactive?:string;
+  updated?:boolean;
+  isDeleted?:boolean;
   status?:string;
   isIncludeAllImg?:any;
     page?: number;

@@ -12,7 +12,7 @@ import { AppError } from "../utils/AppError";
 import { Operations } from "../utils/operations";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
-import { cast, col, literal, Op, fn, Order, Sequelize, where } from 'sequelize';
+import { cast, col, literal, Op, fn, Order, Sequelize, where, and } from 'sequelize';
 import { PriceClass } from "../models/mmsql/priceClass.model";
 import Banner from "../models/postgres/banner.model";
 import { SalesCategory } from "../models/mmsql/salesCategory.model";
@@ -79,7 +79,7 @@ import { markAsUntransferable } from "worker_threads";
 import { PriceSubclass_Defs } from "../models/mmsql/priceSubClassDefs.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { OrderPick } from "../models/postgres/epickOrder.model";
-import { postgresSequelize } from "../db";
+import { postgresSequelize, sequelize } from "../db";
 import { QueryTypes } from "sequelize";
 import InventoryHistory from "../models/mmsql/inventoryHistory.model";
 import { ClassOfTrade } from "../models/mmsql/classOfTrade.model";
@@ -2157,6 +2157,8 @@ export class ManagerService {
 
   async getOrderHistory(query: PaginationOptions) {
     console.log(query, 'query--->')
+    const isDeleted = query.isDeleted || false;
+    const updated = query.updated || false;
     // Handle query parameters with potential trailing spaces
     const page = Number(query.page || (query as any)['page ']) || 1;
     const limit = Number(query.limit || (query as any)['limit ']) || 10;
@@ -2168,7 +2170,8 @@ export class ManagerService {
 
     // Build where condition
     const whereCondition: any = {
-      Order_Deleted: false,
+      Order_Deleted: isDeleted,
+      Order_Updated: updated,
     };
 
     if (customerNumber) {
@@ -7403,4 +7406,92 @@ async getShortShipmentReport(
     };
   }
 
+ async getARreports(query: {
+    startDate: string;
+    endDate: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const {
+      startDate,
+      endDate,
+      page = 1,
+      limit = 50,
+    } = query;
+
+    const offset = (page - 1) * limit;
+
+    const total = await ARDeposits.count({
+      distinct: true,
+      col: 'Deposit_ID',
+      where: {
+        Deposit_Date: {
+          [Op.between]: [startDate, endDate],
+        },
+      },
+    });
+
+    const data = await ARDeposits.findAll({
+      where: {
+        Deposit_Date: {
+          [Op.between]: [startDate, endDate],
+        },
+      },
+
+      order: [['Deposit_ID', 'DESC']],
+      limit,
+      offset,
+      subQuery: false,
+
+      include: [
+        {
+          model: CustReceivables,
+          as: 'custReceivables',
+          required: false, 
+
+          include: [
+            
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: ['C_Name'],
+              required: false,
+            },
+
+            {
+              model: ARDefinitions,
+              as: 'arDefinition',
+              attributes: ['AR_SubTypeRef'],
+              required: false,
+
+              on: and(
+                where(
+                  col('custReceivables.AR_Type'),
+                  '=',
+                  col('custReceivables->arDefinition.AR_Type')
+                ),
+                where(
+                  col('custReceivables.AR_SubType'),
+                  '=',
+                  col('custReceivables->arDefinition.AR_SubType')
+                )
+              ),
+            },
+          ],
+        },
+      ],
+    });
+
+    return {total,page,limit,data,};
+  }
+
+  async getARreportsHistory(){
+    const arReportHistort = await ARDeposits.findAll({
+          attributes: ['Deposit_ID','Deposit_Date','Deposit_Reference','Deposit_Batch','QB_Transfer','QB_TransferDate','Deposit_Deleted','Deposit_DeleteDate','Deposit_DeleteUser',
+            'Payment_Total','Adjustment_Total','ReturnCheck_Total'
+          ]
+        })
+      
+    return arReportHistort
+  }
 }

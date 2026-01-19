@@ -28,7 +28,7 @@ router.get('/listOfRoutesForDriver',verifyToken,catchAsync(listController.getLis
 router.get('/listOfUpdatePriceClass',verifyToken,catchAsync(listController.getListForUpdatePriceClass.bind(listController)));
 router.get('/listofLossQuantityReport',verifyToken,catchAsync(listController.getListOfLossQuantityReport.bind(listController)));
 router.get('/listOfSalesCategories',verifyToken,catchAsync(listController.getListOfSalesCategories.bind(listController)));
-
+router.get('/listOfARreports', verifyToken,catchAsync(listController.getlistOfARreports.bind(listController)));
 
 
  export default router;

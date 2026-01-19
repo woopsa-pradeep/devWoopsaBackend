@@ -297,7 +297,8 @@ export class RetailerService {
 
 
     let searchInUPC = false;
-    let orderClause: Order = [['Date_Created', 'DESC'] as const];
+    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
+    let orderClause;
 
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
@@ -399,16 +400,27 @@ export class RetailerService {
       required: searchInUPC
     };
 
+    
+    orderClause = [['Date_Created', 'DESC']] as Order ;
+    
+        if (search && !searchInUPC && !masterSearch) {
+          orderClause = [[col('Description'), 'ASC']]as Order;
+        } else if (Number(shortBy) === 1) {
+          orderClause = [[col('Description'), 'ASC']]as Order;
+        } else if (Number(shortBy) === 2) {
+          orderClause = [[col('Description'), 'DESC']]as Order;
+        }
+
 
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
-    if (shortBy && Number(shortBy) === 1) {
-      orderClause = [[col('Description'), 'ASC']];
-    }
+    // if (shortBy && Number(shortBy) === 1) {
+    //   orderClause = [[col('Description'), 'ASC']];
+    // }
 
-    if (shortBy && Number(shortBy) === 2) {
-      orderClause = [[col('Description'), 'DESC']];
-    }
+    // if (shortBy && Number(shortBy) === 2) {
+    //   orderClause = [[col('Description'), 'DESC']];
+    // }
 
     let totalCount = 0;
 

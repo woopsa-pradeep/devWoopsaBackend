@@ -107,4 +107,9 @@ export class ListController {
         const data = await this.listService.getListOfSalesCategories();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getlistOfARreports(req: Request, res: Response) {
+        const data = await this.listService.getlistOfARreports();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

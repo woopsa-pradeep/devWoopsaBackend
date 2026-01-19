@@ -34,7 +34,10 @@ import { POHeader } from "../models/mmsql/poHeader.model";
 import { POType } from "../models/mmsql/poType.model";
 import { QBBills } from "../models/mmsql/qbBills.model";
 import { Route } from "../models/mmsql/routes.model";
+import { CustReceivables } from '../models/mmsql/custReceivables.model'
+import { ARDefinitions } from '../models/mmsql/arDefinitions.model'
 import Sequelize from "sequelize";
+import { ARDeposits } from "../models/mmsql/arDeposits.model";
 
 export class ListService {
 
@@ -636,10 +639,37 @@ export class ListService {
 
   async getListOfSalesCategories() {
     const salesCategory = await SalesCategory.findAll({
-      attributes: ['Sales_Category', 'Category_Desc'],
+      attributes: ['Sales_Category', 'Category_Desc', 'category_taxrate','Allow_Price_Change', 'Allow_Price_Change_Remote'],
       order: [['Category_Desc','ASC']]
     })
     return salesCategory;
+  }
+
+  async getlistOfARreports() {
+    const typeSelect = await CustReceivables.findAll({
+      attributes: [
+        [Sequelize.fn('DISTINCT', Sequelize.col('AR_Type')), 'AR_Type'],
+      ],
+      raw: true,
+    });
+
+    const transactionSource = await CustReceivables.findAll({
+      attributes: [
+        [Sequelize.fn('DISTINCT', Sequelize.col('AR_POS')), 'AR_POS'],
+      ],
+      raw: true,
+    });
+
+    const depositeID = await ARDeposits.findAll({
+      attributes: ['Deposit_ID','Deposit_Date','Deposit_Reference']
+    })
+
+    const users = await Users.findAll({
+      attributes:['UserNumber', 'UserName']
+    })
+
+    return { typeSelect, transactionSource, depositeID, users,  }
+    
   }
 
 } 

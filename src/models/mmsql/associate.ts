@@ -103,7 +103,7 @@ export function applyAssociations(): void {
     foreignKey: 'Price_Class',
     as: 'Inventories', // 👈 not used in query, just required
   });
-  CustReceivables.belongsTo(Customer, { foreignKey: 'C_Number', as: 'customer' });
+  CustReceivables.belongsTo(Customer, { foreignKey: 'C_Number',targetKey: 'C_Number', as: 'customer' });
 
   CustReceivables.belongsTo(ARDefinitions, {
     foreignKey: 'AR_SubType',
@@ -316,4 +316,17 @@ InventoryQtyDiscount.belongsTo(Inventory, {
   as: "InventoryItem",
 });
 
+ARDeposits.hasMany(CustReceivables, {
+  as: 'custReceivables',
+  foreignKey: 'Deposit_ID',
+});
+
+CustReceivables.belongsTo(ARDeposits, {
+  foreignKey: 'Deposit_ID',
+});
+
+CustReceivables.belongsTo(ARDefinitions, {
+  foreignKey: 'AR_Type',
+  targetKey: 'AR_Type',
+});
 }

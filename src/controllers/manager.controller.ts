@@ -1331,5 +1331,19 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Customer Velocity report fetched successfully');
   }
 
+  async getARreports(req: AuthRequest, res: Response) {
+    const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
+    const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
+    const page = typeof req.query.page === 'string' ? Math.max(parseInt(req.query.page, 10), 1) : 1;
+    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10), 500) : 50000; 
+    const data = await this.managerService.getARreports({ startDate,endDate,page,limit,});
+    sendResponse(res, 200, true, data, 'Account Receivable report fetched successfully');
+  }
+
+  async getARreportsHistory(req: AuthRequest, res: Response) {
+      const data = await this.managerService.getARreportsHistory();
+      sendResponse(res, 200, true, data, General.SUCCESS);
+      }
+
 
 }

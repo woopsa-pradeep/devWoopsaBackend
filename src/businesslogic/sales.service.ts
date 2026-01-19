@@ -891,7 +891,7 @@ export class SalesService {
     }
 
     let searchInUPC = false;
-    let orderClause: Order = [['Date_Created', 'DESC'] as const];
+    let orderClause;
 
 
     if (masterSearch && typeof masterSearch === 'string') {
@@ -966,7 +966,7 @@ export class SalesService {
       'ASC'
     ],
     ['Description', 'ASC']
-  ];
+  ] as Order;
 }
 
 
@@ -993,18 +993,27 @@ export class SalesService {
     }
 
     }
+    orderClause = [['Date_Created', 'DESC']] as Order ;
+
+    if (search && !searchInUPC && !masterSearch) {
+      orderClause = [[col('Description'), 'ASC']]as Order;
+    } else if (Number(shortBy) === 1) {
+      orderClause = [[col('Description'), 'ASC']]as Order;
+    } else if (Number(shortBy) === 2) {
+      orderClause = [[col('Description'), 'DESC']]as Order;
+    }
 
 
-    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
-
-    // if (search && !searchInUPC && !masterSearch) {
-    //   // When searching, sort by description alphabetically to get alphabetical order after common part
-    //   orderClause = [[col('Description'), 'ASC']];
-    // } else if (shortBy && Number(shortBy) === 1) {
-    //   orderClause = [[col('Description'), 'ASC']];
-    // } else if (shortBy && Number(shortBy) === 2) {
-    //   orderClause = [[col('Description'), 'DESC']];
-    // }
+    // orderClause = [['Date_Created', 'DESC']] as Order;
+  
+      // if (search && !searchInUPC && !masterSearch) {
+      //   // When searching, sort by description alphabetically to get alphabetical order after common part
+      //   orderClause = [[col('Description'), 'ASC']] as Order;
+      // } else if (shortBy && Number(shortBy) === 1) {
+      //   orderClause = [[col('Description'), 'ASC']] as Order;
+      // } else if (shortBy && Number(shortBy) === 2) {
+      //   orderClause = [[col('Description'), 'DESC']] as Order;
+      // }
     let totalCount = 0;
     if (searchInUPC) {
       const counted = await Inventory.findAll({

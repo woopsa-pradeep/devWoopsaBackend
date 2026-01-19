@@ -371,4 +371,7 @@ router.delete('/retailer-location/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), c
 router.get('/getShortShipmentReport', verifyRole(ROLES.MANAGER), catchAsync(managerController.getShortShipmentReport.bind(managerController)));
 router.get('/getVelocityReportCustomer', verifyRole(ROLES.MANAGER), catchAsync(managerController.getVelocityReportCustomer.bind(managerController)));
 
+router.get('/getARreports', verifyRole(ROLES.MANAGER), catchAsync(managerController.getARreports.bind(managerController)));
+router.get('/getARreportsHistory', verifyRole(ROLES.MANAGER), catchAsync(managerController.getARreportsHistory.bind(managerController)));
+
 export default router; 
