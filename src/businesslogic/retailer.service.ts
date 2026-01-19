@@ -1897,6 +1897,17 @@ export class RetailerService {
         'Order_Source',
         'Picklist_Printed'
       ],
+      include: [
+        {
+          model:OrderDetail,
+          as: 'orderDetails',
+          attributes: ['Order_Number', 'Quantity_Ordered'],
+          required: true
+        }
+      ],
+      distinct: true,
+      col: 'Order_Number',
+
       order: [['Order_Number', 'DESC']],
       limit,
       offset

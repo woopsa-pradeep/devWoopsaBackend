@@ -466,6 +466,7 @@ export class SalesService {
         attributes: []
       }
     ],
+   
     order: [['Order_Number', 'DESC']],
     limit,
     offset
@@ -877,7 +878,7 @@ export class SalesService {
     if (Array.isArray(priceClassId) && priceClassId.length > 0) {
       priceClassId = priceClassId.map(id => Number(id));
     }
-    
+
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
 
@@ -3964,9 +3965,8 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
   async getPdfOfOrderDetails(query: PaginationOptions & { orientation?: 'portrait' | 'landscape' }, userId: number) {
-    const { orderNumber, hasPrice = false, orientation = 'landscape' } = query;
+    const { orderNumber, hasPrice = false, orientation = 'landscape' ,invoiceGenerated=false} = query;
 
-    console.log(orderNumber, hasPrice, 'orderNumber, hasPrice');
     // First, get the order header to find customer number
     const orderHeader = await OrderHeader.findByPk(orderNumber);
     if (!orderHeader) {
@@ -4023,16 +4023,15 @@ const newSalesRepArray = salesRepList.map(Number);
         'OTP_Amount_City',
         'DepositAmount',
         'Price_Subclass',
-        "Taxable",
         'OffInvoice_Amount',
         'Taxable',
         'EBT',
         'Points',
         'STAMP_Qty',
+        'PrepaidTax_Amount',
         'ItemDescription',
         'CaseWeight',
-        'CaseCount',
-      
+        'CaseCount'
       ],
       include: [
         {
@@ -4070,17 +4069,20 @@ const newSalesRepArray = salesRepList.map(Number);
       Pack: detail.Pack || detail.inventory?.Pack || 1,
       CaseCount: detail.CaseCount || detail.inventory?.CaseCount || 1,
       Quantity_Ordered: detail.Quantity_Ordered || 0,
+      Quantity_Shipped: detail.Quantity_Shipped || 0,
       Item_Number: detail.Item_Number || detail.inventory?.Item_Number || 'N/A',
-      
-      Price: detail.Price + detail.OTP_Amount_State || 0
+      Price: detail.Price + detail.OTP_Amount_State + detail.PrepaidTax_Amount || 0,
+      Size: detail.inventory?.UOM || 'N/A'
     }));
 
     if (hasPrice) {
       // Generate HTML using renderOrderTableFromERP
       const html = renderOrderTableFromERP(rows, {
         showMoney: true,
-        getPrice: (row: any) => row.Price || 0
+        getPrice: (row: any) => row.Price || 0,
+        showOrderedQuantity: invoiceGenerated
       }, orderNumber, customerInfo, warehouseInfo);
+
 
       // Generate PDF from HTML with specified orientation
       const pdfBuffer = await generatePDFFromHTML(html, orientation);
@@ -4110,7 +4112,8 @@ const newSalesRepArray = salesRepList.map(Number);
 
       const html = renderOrderTableFromERP(rows, {
         showMoney: hasPrice,
-        getPrice: (row: any) => row.Price || 0
+        getPrice: (row: any) => row.Price || 0,
+        showOrderedQuantity: invoiceGenerated
       }, orderNumber, customerInfo, warehouseInfo);
 
       const pdfBuffer = await generatePDFFromHTML(html, orientation);

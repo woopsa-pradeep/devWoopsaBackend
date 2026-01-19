@@ -247,14 +247,15 @@ export class SalesController {
     }
 
     async getPdfOfOrderDetails(req: AuthRequest, res: Response) {
-        const { orderNumber, hasPrice, orientation } = req.query;
+        const { orderNumber, hasPrice, orientation,invoiceGenerated } = req.query;
         if (!orderNumber) {
             return sendResponse(res, 400, false, null, "Order number is required");
         }
          const result = await this.salesService.getPdfOfOrderDetails({
             orderNumber: Number(orderNumber),
             hasPrice: hasPrice === 'true',
-            orientation: (orientation as 'portrait' | 'landscape') || 'landscape'
+            orientation: (orientation as 'portrait' | 'landscape') || 'landscape',
+            invoiceGenerated: invoiceGenerated === 'true' ? true : false
         }, Number(req.params.customerId));
         sendResponse(res, 200, true, result.data, General.SUCCESS);
     }

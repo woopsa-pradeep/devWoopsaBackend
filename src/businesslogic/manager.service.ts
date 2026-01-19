@@ -2522,6 +2522,13 @@ export class ManagerService {
               required: false
             }
           ]
+        },
+        {
+          model:OrderDetail,
+          as: 'orderDetails',
+          attributes: ['Order_Number', 'Quantity_Ordered'],
+          required: true
+         
         }
       ],
       distinct: true,
@@ -2537,7 +2544,9 @@ export class ManagerService {
 
     // Get total quantities for these orders
     let quantityMap = new Map();
+    let isConfirmed = new Map();
     if (orderNumbers.length > 0) {
+      // Get total quantities grouped by Order_Number
       const quantityResults = await OrderDetail.findAll({
         attributes: [
           'Order_Number',
@@ -2550,9 +2559,34 @@ export class ManagerService {
         raw: true
       });
 
-      // Create a map for quick lookup
+      // Create a map for quick lookup of quantities
       quantityResults.forEach((result: any) => {
         quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
+      });
+
+      // Get all OrderDetails to check Confirmed status
+      const allOrderDetails = await OrderDetail.findAll({
+        attributes: ['Order_Number', 'Confirmed'],
+        where: {
+          Order_Number: { [Op.in]: orderNumbers }
+        },
+        raw: true
+      });
+
+      // Group OrderDetails by Order_Number and check if all are confirmed
+      const orderDetailsByOrder = new Map<number, any[]>();
+      allOrderDetails.forEach((detail: any) => {
+        const orderNum = detail.Order_Number;
+        if (!orderDetailsByOrder.has(orderNum)) {
+          orderDetailsByOrder.set(orderNum, []);
+        }
+        orderDetailsByOrder.get(orderNum)!.push(detail);
+      });
+
+      // For each order, check if ALL OrderDetails have Confirmed=true
+      orderDetailsByOrder.forEach((details: any[], orderNum: number) => {
+        const allConfirmed = details.every((detail: any) => detail.Confirmed === true);
+        isConfirmed.set(orderNum, allConfirmed);
       });
     }
 
@@ -2582,7 +2616,8 @@ export class ManagerService {
         country: order.customer?.C_Country || 'N/A',
         route: route?.Route_Number ?? null,
         stop: route?.Stop_Number ?? null,
-        totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0
+        totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
+        isConfirmed: isConfirmed.get(order.Order_Number) || false
       };
     });
 
