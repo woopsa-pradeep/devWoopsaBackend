@@ -2159,6 +2159,7 @@ export class ManagerService {
     console.log(query, 'query--->')
     const isDeleted = query.isDeleted || false;
     const updated = query.updated || false;
+
     // Handle query parameters with potential trailing spaces
     const page = Number(query.page || (query as any)['page ']) || 1;
     const limit = Number(query.limit || (query as any)['limit ']) || 10;
@@ -2170,8 +2171,7 @@ export class ManagerService {
 
     // Build where condition
     const whereCondition: any = {
-      Order_Deleted: isDeleted,
-      Order_Updated: updated,
+      Order_Deleted: false,
     };
 
     if (customerNumber) {
