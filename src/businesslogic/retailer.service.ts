@@ -1969,7 +1969,9 @@ export class RetailerService {
         'User_ID',
         'Order_Source',
         'Delivery_Charge',
-        'Picklist_Printed'
+        'Picklist_Printed',
+        'Invoice_Total',
+        'Invoice_Number',
       ]
     });
 
@@ -3235,7 +3237,7 @@ export class RetailerService {
   }
 
   async getPdfOfOrderDetails(query: PaginationOptions & { orientation?: 'portrait' | 'landscape' }, userId: number) {
-    const { orderNumber, hasPrice = false, orientation = 'landscape' } = query;
+    const { orderNumber, hasPrice = false, orientation = 'landscape' ,invoiceGenerated=false} = query;
 
     // First, get the order header to find customer number
     const orderHeader = await OrderHeader.findByPk(orderNumber);
@@ -3339,6 +3341,7 @@ export class RetailerService {
       Pack: detail.Pack || detail.inventory?.Pack || 1,
       CaseCount: detail.CaseCount || detail.inventory?.CaseCount || 1,
       Quantity_Ordered: detail.Quantity_Ordered || 0,
+      Quantity_Shipped: detail.Quantity_Shipped || 0,
       Item_Number: detail.Item_Number || detail.inventory?.Item_Number || 'N/A',
       Price: detail.Price + detail.OTP_Amount_State + detail.PrepaidTax_Amount || 0,
       Size: detail.inventory?.UOM || 'N/A'
@@ -3348,7 +3351,8 @@ export class RetailerService {
       // Generate HTML using renderOrderTableFromERP
       const html = renderOrderTableFromERP(rows, {
         showMoney: true,
-        getPrice: (row: any) => row.Price || 0
+        getPrice: (row: any) => row.Price || 0,
+        showOrderedQuantity: invoiceGenerated
       }, orderNumber, customerInfo, warehouseInfo);
 
 
@@ -3380,7 +3384,8 @@ export class RetailerService {
 
       const html = renderOrderTableFromERP(rows, {
         showMoney: hasPrice,
-        getPrice: (row: any) => row.Price || 0
+        getPrice: (row: any) => row.Price || 0,
+        showOrderedQuantity: invoiceGenerated
       }, orderNumber, customerInfo, warehouseInfo);
 
       const pdfBuffer = await generatePDFFromHTML(html, orientation);

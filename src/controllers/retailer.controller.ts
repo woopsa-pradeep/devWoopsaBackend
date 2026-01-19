@@ -219,7 +219,7 @@ export class RetailerController {
 
   async getPdfOfOrderDetails(req: AuthRequest, res: Response) {
     try {
-      const { orderNumber, hasPrice, orientation } = req.query;
+      const { orderNumber, hasPrice, orientation,invoiceGenerated } = req.query;
       
       if (!orderNumber) {
         return sendResponse(res, 400, false, null, "Order number is required");
@@ -227,6 +227,7 @@ export class RetailerController {
 
       const result = await this.retailerService.getPdfOfOrderDetails({
         orderNumber: Number(orderNumber),
+        invoiceGenerated: invoiceGenerated === 'true' ? true : false,
         hasPrice: hasPrice === 'true',
         orientation: (orientation as 'portrait' | 'landscape') || 'landscape'
       }, req.user.id);

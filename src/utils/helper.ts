@@ -1170,6 +1170,7 @@ export function renderOrderTableFromERP(rows: any, opts: any = {}, orderNumber: 
   const {
     showMoney = false,
     getPrice = null,               // (row) => number | null
+    showOrderedQuantity = false,   // Show "Ordered Quantity" column
     headerBg = '#3c7795',
     headerColor = '#ffffff'
   } = opts;
@@ -1470,6 +1471,7 @@ export function renderOrderTableFromERP(rows: any, opts: any = {}, orderNumber: 
         <th>Products</th>
         <th>Item Number</th>
         <th>Qty</th>
+        ${showOrderedQuantity ? '<th>Ordered Quantity</th>' : ''}
         ${showMoney ? '<th>Price</th><th>Total Price</th>' : ''}
       </tr>
     </thead>
@@ -1481,6 +1483,7 @@ export function renderOrderTableFromERP(rows: any, opts: any = {}, orderNumber: 
     const pack = row.Pack;
     const caseQty = row.CaseCount;
     const qty = row.Quantity_Ordered;
+    const orderedQty = row.Quantity_Ordered || 0;
     const itemNo = row.Item_Number;
 
     let priceCell = '', subtotalCell = '', totalPriceCell = '';
@@ -1492,6 +1495,10 @@ export function renderOrderTableFromERP(rows: any, opts: any = {}, orderNumber: 
       priceCell = `<td class="">${money(unitPrice)}</td>`;
       totalPriceCell = `<td class="">${money(subtotal)}</td>`;
     }
+
+    const orderedQuantityCell = showOrderedQuantity 
+      ? `<td class="quantity">${esc(orderedQty)}</td>` 
+      : '';
 
     // Get first letter of product name for icon
 
@@ -1508,6 +1515,7 @@ export function renderOrderTableFromERP(rows: any, opts: any = {}, orderNumber: 
       </td>
       <td class="item-number">${esc(itemNo)}</td>
       <td class="quantity">${esc(qty)}</td>
+      ${orderedQuantityCell}
       ${showMoney ? priceCell + subtotalCell + totalPriceCell : ''}
     </tr>`;
   }).join('\n');
