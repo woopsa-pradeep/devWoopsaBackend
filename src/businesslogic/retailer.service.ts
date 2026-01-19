@@ -271,7 +271,15 @@ export class RetailerService {
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
     let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='', salesCategory=[] } = query;
+    
+    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+      salesCategoryId = salesCategoryId.map(id => Number(id));
+    }
 
+    if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      priceClassId = priceClassId.map(id => Number(id));
+    }
+    
     const userJurisdiction = await getJurisdiction(user.id);
 
     let wareHouseSetting: any = await Setting.findOne({});
@@ -311,10 +319,12 @@ export class RetailerService {
 
       if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
         // Both filters exist → use OR condition
-        whereClause[Op.or] = [
-          { Sales_Category: { [Op.in]: salesCategoryId } },
-          { Price_Class: { [Op.in]: priceClassId } }
-        ];
+        whereClause={
+          Sales_Category: { [Op.in]: salesCategoryId },
+          Price_Class: { [Op.in]: priceClassId }
+        };
+
+        console.log(salesCategoryId,'salesCategoryId',priceClassId,'priceClassId','both filters exist')
       } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
         // Only Sales_Category filter
         whereClause.Sales_Category = { [Op.in]: salesCategoryId };
@@ -481,7 +491,7 @@ export class RetailerService {
       order: orderClause,
       limit,
       offset: (page - 1) * limit,
-      logging: false
+      logging: console.log,
     });
 
     const itemNumbers = productList.map(e => e.Item_Number);
