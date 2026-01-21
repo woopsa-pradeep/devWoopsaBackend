@@ -870,7 +870,7 @@ export class RetailerService {
       },
       order: [['createdAt', 'DESC']]
     });
-    const findTheLimit = await Retailer.findOne({
+    let findTheLimit :any = await Retailer.findOne({  
       where: {
         Customer_Number: customerNumber,
         isActive: true
@@ -968,6 +968,9 @@ export class RetailerService {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category);
       }
 
+
+
+
       return {
         isDiscounted,
         isNewItem,
@@ -1018,6 +1021,35 @@ export class RetailerService {
     const totalItems = cartItems.reduce((sum: any, item: any) => sum + item.Qty, 0);
     const totalAmount = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPrice), 0);
     const totalAmountWithTax = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
+
+    console.log(findTheLimit,'findTheLimit-->')
+
+    let globalMinOrderAmount :any = {};
+   
+    if(!findTheLimit){
+       globalMinOrderAmount  = await Setting.findOne({
+
+        attributes: ['itemGlobal']
+      })
+    }
+ if (findTheLimit) {
+      findTheLimit = findTheLimit?.dataValues || null;
+      if (!findTheLimit?.minOrderAmount || findTheLimit?.minOrderAmount == 0) {
+      
+        globalMinOrderAmount  = await Setting.findOne({
+
+          attributes: ['itemGlobal']
+        })
+        globalMinOrderAmount = globalMinOrderAmount?.dataValues || null;
+        console.log(globalMinOrderAmount, 'globalMinOrderAmount-->')
+        findTheLimit.minOrderAmount = globalMinOrderAmount?.itemGlobal?.MiniMumOrderAmount || 0;
+      }
+    } 
+    else {
+      findTheLimit.maxOrderLimit = globalMinOrderAmount?.itemGlobal?.maxOrderLimit || 0;
+      findTheLimit.minOrderAmount = globalMinOrderAmount?.itemGlobal?.MiniMumOrderAmount || 0;
+    }
+
     return {
       finalCartItems,
       totalItems,

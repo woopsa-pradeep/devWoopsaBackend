@@ -5,3 +5,4 @@ applyAssociations();
 
 export { sequelize };
 
+

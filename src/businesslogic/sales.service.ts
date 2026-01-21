@@ -95,8 +95,8 @@ export class SalesService {
 
     // Convert salesRepNumber to number since it's stored as string in database
 
-      console.log(user,'the user-->')
-      const newSalesRepArray = salesRepList.map(Number);
+    console.log(user, 'the user-->')
+    const newSalesRepArray = salesRepList.map(Number);
     // Now find customers assigned to this sales representative
     const customerList = await Customer.findAll({
       where: {
@@ -130,19 +130,19 @@ export class SalesService {
   }
 
   async placeOrder(orderData: PlaceOrder, req: any, customerId: any) {
-    const { shippingDetails , hasDiscount ,discountAmount, order_type} = orderData;
+    const { shippingDetails, hasDiscount, discountAmount, order_type } = orderData;
     const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
 
     const { orderPlayload, Delivery_Charge } = orderData;
 
-    const {method} = shippingDetails;
+    const { method } = shippingDetails;
     let deliveryId = 0;
-    if(method === 'delivery'){
-      deliveryId =0;
+    if (method === 'delivery') {
+      deliveryId = 0;
     }
-    if(method === 'pickup'){
+    if (method === 'pickup') {
       deliveryId = 99
     }
 
@@ -152,7 +152,7 @@ export class SalesService {
 
 
     console.log(customer?.dataValues, 'customer-->---->')
-    customer=customer?.dataValues as any;
+    customer = customer?.dataValues as any;
     const customerRoutes = await CustomerRoute.findOne({ where: { C_Number: customerId } });
 
 
@@ -163,32 +163,32 @@ export class SalesService {
     const orderNumber = await getNextOrderNumber();
     let Order_Type = 0;
 
-    if(order_type == 'regular'){
+    if (order_type == 'regular') {
       Order_Type = 0;
     }
-    if(order_type == 'prebook'){
+    if (order_type == 'prebook') {
       Order_Type = 1;
     }
-    if(order_type == 'backorder'){
+    if (order_type == 'backorder') {
       Order_Type = 2;
     }
-    if(order_type == 'price_quote'){
+    if (order_type == 'price_quote') {
       Order_Type = 4;
     }
-    if(order_type == 'return_sales'){
+    if (order_type == 'return_sales') {
       Order_Type = 5;
-     }
-    if(order_type == 'return_order'){
+    }
+    if (order_type == 'return_order') {
       Order_Type = 6;
-     }
-    if(order_type == 'trade_show'){
+    }
+    if (order_type == 'trade_show') {
       Order_Type = 7;
     }
-    if(order_type == 'pos'){
+    if (order_type == 'pos') {
       Order_Type = 8;
     }
-  
-   
+
+
     // Prepare dynamic header data
     const orderHeaderObject = {
       Order_Number: orderNumber,
@@ -202,7 +202,7 @@ export class SalesService {
       Jurisdiction_City: customer.Jurisdiction_City || '',
       Route_Number: customerRoutes?.Route_Number || 0,
       Stop_Number: customerRoutes?.Stop_Number || 0,
-      Delivery_ID:deliveryId,
+      Delivery_ID: deliveryId,
       User_ID: Number(req.user.userNumber),
       Reference: `USER-${req.user.userNumber}`,
       Invoice_Type: customer.C_InvoiceFormat || 0,
@@ -271,7 +271,7 @@ export class SalesService {
 
     const productMap = new Map(products.map(product => [product.Item_Number, product]));
 
-    const orderDetails = orderPlayload.map(async (item:any, index) => {
+    const orderDetails = orderPlayload.map(async (item: any, index) => {
       const product = productMap.get(item.Item_Number);
 
       if (!product) {
@@ -282,38 +282,38 @@ export class SalesService {
         throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
       }
 
-      console.log(item.Price, 'item.Price-->','item.Sales_Category',product.Sales_Category,'item.OTP_Number',product.OTP_Number)
+      console.log(item.Price, 'item.Price-->', 'item.Sales_Category', product.Sales_Category, 'item.OTP_Number', product.OTP_Number)
 
-      console.log(hasDiscount == true,'hasDiscount == true')
-      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.Sales_Category}, raw: true })
+      console.log(hasDiscount == true, 'hasDiscount == true')
+      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.Sales_Category }, raw: true })
 
-      if(!optionDefsValues){
-        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.OTP_Number}, raw: true })
+      if (!optionDefsValues) {
+        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.OTP_Number }, raw: true })
       }
 
       console.log(optionDefsValues, 'optionDefsValues-->')
-      if(!optionDefsValues){
+      if (!optionDefsValues) {
         optionDefsValues = 0
-      }else {
+      } else {
         optionDefsValues = Number(item.Qty)
       }
 
       let PPD_PackType = 0
       let PPD_Packs = 0
 
-      if(product.OTP_Number == 255){
-        if(product.Cig_Pack == 20){
+      if (product.OTP_Number == 255) {
+        if (product.Cig_Pack == 20) {
           PPD_PackType = 20
           PPD_Packs = 10
         }
-        else if(product.Cig_Pack == 10){
+        else if (product.Cig_Pack == 10) {
           PPD_PackType = 10
           PPD_Packs = 20
         }
-       
+
       }
 
-      let adjprice = hasDiscount == true? Number(item.discountPrice || 0): Number(item.Price);
+      let adjprice = hasDiscount == true ? Number(item.discountPrice || 0) : Number(item.Price);
       const orderDetail = {
         PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
         Order_Number: orderHeaderCreated.Order_Number,
@@ -326,17 +326,17 @@ export class SalesService {
         Pack: product.Pack,
         UOM: product.UOM,
         Price: Number(adjprice),
-        Price_Reference:Number(adjprice),
+        Price_Reference: Number(adjprice),
         Retail: product.Retail1,
         NetCost: product.NetCost,
         BaseCost: product.BaseCost,
         Invoice_Cost: product.Invoice_Cost,
         AvgCost: product.AvgCost,
-       OTP_Amount_State: Number(item.Tax_Rate ?? 0),
-       
+        OTP_Amount_State: Number(item.Tax_Rate ?? 0),
+
         OTP_Amount_County: 0,
         OTP_Amount_City: 0,
-        Item_Message: product.Item_Message ? product.Item_Message :  ' ',
+        Item_Message: product.Item_Message ? product.Item_Message : ' ',
 
         DepositAmount: product.DepositAmount,
         Price_Subclass: product.Price_Subclass,
@@ -349,8 +349,8 @@ export class SalesService {
         ItemDescription: product.Description,
         CaseWeight: product.CaseWeight,
         CaseCount: product.CaseCount,
-        PPD_PackType:PPD_PackType,
-        PPD_Packs:PPD_Packs,
+        PPD_PackType: PPD_PackType,
+        PPD_Packs: PPD_Packs,
         // CasesPerPallet: product.CasesPerPallet,
       };
 
@@ -363,25 +363,25 @@ export class SalesService {
 
     try {
       const resolvedOrderDetails = await Promise.all(orderDetails);
-    
+
       await OrderDetail.bulkCreate(resolvedOrderDetails);
-    
+
       try {
         sendEmailToOrder(orderHeaderCreated, resolvedOrderDetails, customer, Delivery_Charge);
       } catch (error) {
         console.log(error, 'error-->')
       }
-    
+
       console.log('Order details created successfully');
     } catch (error) {
       console.log(error, 'error-->')
       throw new AppError('Failed to create order details', 500);
     }
-    
+
 
 
     console.log(customer, 'customer-->---->------------------------>')
-  
+
 
     await CustomerCart.update({ isActive: false }, { where: { Customer_Number: customerId } });
 
@@ -409,9 +409,9 @@ export class SalesService {
 
 
 
-    try{
+    try {
 
-      if(hasDiscount == true){
+      if (hasDiscount == true) {
 
         await OrderDiscount.create({
           orderNumber: orderHeaderCreated.Order_Number,
@@ -420,12 +420,12 @@ export class SalesService {
           salesId: customer.C_Salesman || 0,
           CustomerNumber: customerId
         })
-      
+
       }
-    }catch(error){
+    } catch (error) {
       console.log(error, 'error--> in sales discount')
     }
-   
+
 
     return {
       orderHeader: orderHeaderCreated,
@@ -435,128 +435,128 @@ export class SalesService {
   }
 
 
- async getOrderHistory(customerNumber: number, query: PaginationOptions & { search?: string, startDate?: string, endDate?: string }) {
-  let { page = 1, limit = 10, search, startDate, endDate } = query;
-  page = Number(query.page || (query as any)['page ']) || 1;
-  limit = Number(query.limit || (query as any)['limit ']) || 10;
-  const offset = (page - 1) * limit;
+  async getOrderHistory(customerNumber: number, query: PaginationOptions & { search?: string, startDate?: string, endDate?: string }) {
+    let { page = 1, limit = 10, search, startDate, endDate } = query;
+    page = Number(query.page || (query as any)['page ']) || 1;
+    limit = Number(query.limit || (query as any)['limit ']) || 10;
+    const offset = (page - 1) * limit;
 
-  // Build where clause for OrderHeader
-  let whereClause: any = { C_Number: customerNumber, Order_Deleted: false };
+    // Build where clause for OrderHeader
+    let whereClause: any = { C_Number: customerNumber, Order_Deleted: false };
 
-  // Add search functionality if provided
-  if (search) {
-    whereClause[Op.or] = [
-      { Order_Number: { [Op.like]: `%${search}%` } },
-      { Reference: { [Op.like]: `%${search}%` } }
-    ];
-  }
-
-  // Add date filtering if provided
-  if (startDate || endDate) {
-    whereClause.Order_Date = {};
-
-    if (startDate) {
-      whereClause.Order_Date[Op.gte] = startDate;
+    // Add search functionality if provided
+    if (search) {
+      whereClause[Op.or] = [
+        { Order_Number: { [Op.like]: `%${search}%` } },
+        { Reference: { [Op.like]: `%${search}%` } }
+      ];
     }
 
-    if (endDate) {
-      whereClause.Order_Date[Op.lte] = endDate;
-    }
-  }
+    // Add date filtering if provided
+    if (startDate || endDate) {
+      whereClause.Order_Date = {};
 
-  // 🔥 EXCLUDE ORDERS WHERE TOTAL QUANTITY = 0
-  whereClause.Order_Number = {
-    [Op.in]: Sequelize.literal(`(
+      if (startDate) {
+        whereClause.Order_Date[Op.gte] = startDate;
+      }
+
+      if (endDate) {
+        whereClause.Order_Date[Op.lte] = endDate;
+      }
+    }
+
+    // 🔥 EXCLUDE ORDERS WHERE TOTAL QUANTITY = 0
+    whereClause.Order_Number = {
+      [Op.in]: Sequelize.literal(`(
       SELECT od."Order_Number"
       FROM "Order_Detail" od
       GROUP BY od."Order_Number"
       HAVING SUM(od."Quantity_Ordered") > 0
     )`)
-  };
+    };
 
-  // Get order headers with pagination
-  const orderHeaders = await OrderHeader.findAll({
-    where: whereClause,
-    attributes: [
-      'Order_Number',
-      'Order_Date',
-      'User_ID',
-      'Order_Source',
-      'Picklist_Printed'
-    ],
-    include: [
-      {
-        model: OrderDetail,
-        as: 'orderDetails',
-        required: true,
-        attributes: []
-      }
-    ],
-   
-    order: [['Order_Number', 'DESC']],
-    limit,
-    offset
-  });
+    // Get order headers with pagination
+    const orderHeaders = await OrderHeader.findAll({
+      where: whereClause,
+      attributes: [
+        'Order_Number',
+        'Order_Date',
+        'User_ID',
+        'Order_Source',
+        'Picklist_Printed'
+      ],
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails',
+          required: true,
+          attributes: []
+        }
+      ],
 
-  // Count total records
-  const totalCount = await OrderHeader.count({
-    where: { ...whereClause, Order_Deleted: false },
-    include: [
-      {
-        model: OrderDetail,
-        as: 'orderDetails',
-        required: true,
-        attributes: []
-      }
-    ],
-    distinct: true
-  });
+      order: [['Order_Number', 'DESC']],
+      limit,
+      offset
+    });
 
-  // Get total quantity per order
-  const orderNumbers = orderHeaders.map((h: any) => h.Order_Number);
+    // Count total records
+    const totalCount = await OrderHeader.count({
+      where: { ...whereClause, Order_Deleted: false },
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails',
+          required: true,
+          attributes: []
+        }
+      ],
+      distinct: true
+    });
 
-  const orderDetailsWithSums = await OrderDetail.findAll({
-    where: {
-      Order_Number: { [Op.in]: orderNumbers }
-    },
-    attributes: [
-      'Order_Number',
-      [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
-    ],
-    group: ['Order_Number'],
-    raw: true
-  });
+    // Get total quantity per order
+    const orderNumbers = orderHeaders.map((h: any) => h.Order_Number);
 
-  const quantityMap = new Map(
-    orderDetailsWithSums.map((d: any) => [d.Order_Number, d.totalQuantity])
-  );
+    const orderDetailsWithSums = await OrderDetail.findAll({
+      where: {
+        Order_Number: { [Op.in]: orderNumbers }
+      },
+      attributes: [
+        'Order_Number',
+        [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+      ],
+      group: ['Order_Number'],
+      raw: true
+    });
 
-  // Build final output
-  const result = orderHeaders.map((header: any) => {
-    let source = 'WEB';
-    if (header.Order_Source === 13) source = 'WEB';
-    else if (header.Order_Source === 12) source = 'APP';
-    else source = 'ERP';
+    const quantityMap = new Map(
+      orderDetailsWithSums.map((d: any) => [d.Order_Number, d.totalQuantity])
+    );
+
+    // Build final output
+    const result = orderHeaders.map((header: any) => {
+      let source = 'WEB';
+      if (header.Order_Source === 13) source = 'WEB';
+      else if (header.Order_Source === 12) source = 'APP';
+      else source = 'ERP';
+
+      return {
+        Order_Number: header.Order_Number,
+        Order_Date: header.Order_Date,
+        User_ID: header.User_ID,
+        Order_Source: source,
+        Picklist_Printed: header.Picklist_Printed,
+        totalQuantity: quantityMap.get(header.Order_Number) || 0
+      };
+    });
 
     return {
-      Order_Number: header.Order_Number,
-      Order_Date: header.Order_Date,
-      User_ID: header.User_ID,
-      Order_Source: source,
-      Picklist_Printed: header.Picklist_Printed,
-      totalQuantity: quantityMap.get(header.Order_Number) || 0
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      data: result
     };
-  });
-
-  return {
-    totalCount,
-    page,
-    limit,
-    totalPages: Math.ceil(totalCount / limit),
-    data: result
-  };
-}
+  }
 
 
   async getOrderHistoryByOrderNumber(orderNumber: number, query: PaginationOptions) {
@@ -602,20 +602,20 @@ export class SalesService {
     let totalPrepaidTax = 0;
     for (const details of allOrderDetails) {
       const d = details.dataValues;
-    
+
       const basePrice = toNum(d.Price);
-      const otpState  = toNum(d.OTP_Amount_State);
-      const prepaid   = toNum(d.PrepaidTax_Amount);
-      const qty       = toNum(d.Quantity_Shipped); // or fallback below
-    
+      const otpState = toNum(d.OTP_Amount_State);
+      const prepaid = toNum(d.PrepaidTax_Amount);
+      const qty = toNum(d.Quantity_Shipped); // or fallback below
+
       const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
       totalPrepaidTax += prepaid * quantity;
       const unitPrice = basePrice + otpState + prepaid;
-    
+
       totalPrice += unitPrice * quantity;
-    
+
       totalDiscount += toNum(d.OffInvoice_Amount);   // multiply by qty only if this is per-unit
-      totalDeposit  += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
+      totalDeposit += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
     }
 
     // Fetch paginated order details with inventory and UPC
@@ -685,7 +685,7 @@ export class SalesService {
     const orderDiscount = await OrderDiscount.findOne({
       where: { orderNumber: orderNumber }
     });
-    if(orderDiscount){
+    if (orderDiscount) {
       totalDiscount = orderDiscount.discount;
     }
     const orderDetailsWithImages = await Promise.all(orderDetails.map(async (detail: any) => {
@@ -895,7 +895,7 @@ export class SalesService {
   // }
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='',salesCategory=[] } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
 
 
     if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
@@ -918,11 +918,11 @@ export class SalesService {
     };
 
     const excludeItem = await excludeItemByUser(customerId);
-    if(excludeItem.length > 0){
+    if (excludeItem.length > 0) {
       whereClause.Item_Number = { [Op.notIn]: excludeItem };
     }
 
-    if(state || zip || jurisdiction){
+    if (state || zip || jurisdiction) {
       const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
       whereClause.Item_Number = { [Op.notIn]: excludeItem };
     }
@@ -934,14 +934,14 @@ export class SalesService {
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
-       if(salesCategory.length > 0){
-      whereClause.Sales_Category = { [Op.in]: salesCategory };
-    }
+      if (salesCategory.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
 
     } else {
       if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
         // Both filters exist → use OR condition
-        whereClause={
+        whereClause = {
           Sales_Category: { [Op.in]: salesCategoryId },
           Price_Class: { [Op.in]: priceClassId }
         };
@@ -956,61 +956,61 @@ export class SalesService {
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
-        } 
+        }
         else {
-        
+
           const term = search.toLowerCase();
           const anywhere = `%${term}%`;
           const starts = `${term}%`
 
-           if(salesCategory.length > 0){
-      whereClause.Sales_Category = { [Op.in]: salesCategory };
-    }
+          if (salesCategory.length > 0) {
+            whereClause.Sales_Category = { [Op.in]: salesCategory };
+          }
 
-  whereClause[Op.or] = [
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Description")),
-      { [Op.like]: anywhere }
-    ),
+          whereClause[Op.or] = [
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+              { [Op.like]: anywhere }
+            ),
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("Description")),
+              { [Op.like]: anywhere }
+            ),
 
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
-      { [Op.like]: anywhere }
-    )
-  ];
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
+              { [Op.like]: anywhere }
+            ),
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+              { [Op.like]: anywhere }
+            )
+          ];
 
-  // ORDER RULE:
-  // 1. Items starting with search term first
-  // 2. Then items containing it anywhere
-  // 3. Finally alphabetical
-  orderClause = [
-    [
-      Sequelize.literal(`
+          // ORDER RULE:
+          // 1. Items starting with search term first
+          // 2. Then items containing it anywhere
+          // 3. Finally alphabetical
+          orderClause = [
+            [
+              Sequelize.literal(`
         CASE 
           WHEN LOWER("Description") LIKE '${starts}' THEN 0
           WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
           ELSE 2
         END
       `),
-      'ASC'
-    ],
-    ['Description', 'ASC']
-  ] as Order;
-}
+              'ASC'
+            ],
+            ['Description', 'ASC']
+          ] as Order;
+        }
 
 
-        
+
       }
-      
-      
+
+
     }
 
     // === UPC JOIN logic ===
@@ -1024,33 +1024,33 @@ export class SalesService {
       },
       required: searchInUPC
     };
-    if(searchInUPC){
-      if(salesCategory.length > 0){
-      whereClause.Sales_Category = { [Op.in]: salesCategory };
-    }
+    if (searchInUPC) {
+      if (salesCategory.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
 
     }
-    orderClause = [['Date_Created', 'DESC']] as Order ;
+    orderClause = [['Date_Created', 'DESC']] as Order;
 
     if (search && !searchInUPC && !masterSearch) {
-      orderClause = [[col('Description'), 'ASC']]as Order;
+      orderClause = [[col('Description'), 'ASC']] as Order;
     } else if (Number(shortBy) === 1) {
-      orderClause = [[col('Description'), 'ASC']]as Order;
+      orderClause = [[col('Description'), 'ASC']] as Order;
     } else if (Number(shortBy) === 2) {
-      orderClause = [[col('Description'), 'DESC']]as Order;
+      orderClause = [[col('Description'), 'DESC']] as Order;
     }
 
 
     // orderClause = [['Date_Created', 'DESC']] as Order;
-  
-      // if (search && !searchInUPC && !masterSearch) {
-      //   // When searching, sort by description alphabetically to get alphabetical order after common part
-      //   orderClause = [[col('Description'), 'ASC']] as Order;
-      // } else if (shortBy && Number(shortBy) === 1) {
-      //   orderClause = [[col('Description'), 'ASC']] as Order;
-      // } else if (shortBy && Number(shortBy) === 2) {
-      //   orderClause = [[col('Description'), 'DESC']] as Order;
-      // }
+
+    // if (search && !searchInUPC && !masterSearch) {
+    //   // When searching, sort by description alphabetically to get alphabetical order after common part
+    //   orderClause = [[col('Description'), 'ASC']] as Order;
+    // } else if (shortBy && Number(shortBy) === 1) {
+    //   orderClause = [[col('Description'), 'ASC']] as Order;
+    // } else if (shortBy && Number(shortBy) === 2) {
+    //   orderClause = [[col('Description'), 'DESC']] as Order;
+    // }
     let totalCount = 0;
     if (searchInUPC) {
       const counted = await Inventory.findAll({
@@ -1074,22 +1074,22 @@ export class SalesService {
         logging: false
       });
     }
-   
+
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
-        'Retail1','Retail2','Retail3',
+        'Retail1', 'Retail2', 'Retail3',
         'CasesPerPallet',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces','Sales_Category','EBT'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category', 'EBT'
       ],
       where: whereClause,
       include: [
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc','Sales_Category'],
+          attributes: ['Category_Desc', 'Sales_Category'],
           required: false
         },
         {
@@ -1124,7 +1124,7 @@ export class SalesService {
     const imageMap = new Map(productImages.map(img => [img.product_number, img]));
 
     // const discountMap = await getDiscountsForItemNumbers(itemNumbers, customerId);
-  
+
     const userJurisdiction = await getJurisdiction(customerId);
 
     const topLatestItems = await getTopLatestItems();
@@ -1132,33 +1132,33 @@ export class SalesService {
     const finalProductList = await Promise.all(productList.map(async (e: any) => {
       const itemStr = e.Item_Number.toString();
       const productImage = imageMap.get(itemStr) || null;
-        const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
+      const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
 
-        let price = await getDiscount(e.Item_Number, customerId);
-        if (!price) {
-          price = await getFirstValidPrice(e);
-        }
-        // price = Math.ceil(price * 100) / 100;
+      let price = await getDiscount(e.Item_Number, customerId);
+      if (!price) {
+        price = await getFirstValidPrice(e);
+      }
+      // price = Math.ceil(price * 100) / 100;
       const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
       const productLimit = await getProductLimit(e.Item_Number);
       let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
-        taxRate = Math.ceil(taxRate * 100) / 100;
+      taxRate = Math.ceil(taxRate * 100) / 100;
 
       let allowToOrder = true;
       if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
 
-      const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId,price + taxRate);
+      const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, price + taxRate);
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
-      console.log(e.SalesCategory?.Sales_Category,'e.Sales_Category',userJurisdiction,'userJurisdiction')
-     let prepaidTaxRate = 0
-      if(userJurisdiction !=null && e.SalesCategory?.Sales_Category){
-       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number);
+      console.log(e.SalesCategory?.Sales_Category, 'e.Sales_Category', userJurisdiction, 'userJurisdiction')
+      let prepaidTaxRate = 0
+      if (userJurisdiction != null && e.SalesCategory?.Sales_Category) {
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number);
       }
-    
-     
+
+
       return {
         Pack: e.Pack,
         Description: e.Description,
@@ -1212,14 +1212,14 @@ export class SalesService {
   }
 
   async getInventoryShowPrepaidTax(user: any) {
-        const setting = await Setting.findOne({
-            where: { showWithPerpaidTax: true },
-          });
-  
-          return {
-            showWithPerpaidTax: setting ? setting.showWithPerpaidTax : false,
-          };
-      }
+    const setting = await Setting.findOne({
+      where: { showWithPerpaidTax: true },
+    });
+
+    return {
+      showWithPerpaidTax: setting ? setting.showWithPerpaidTax : false,
+    };
+  }
 
   async getInventoryItemsBySalesMan(
     query: PaginationOptions & { search?: string; masterSearch?: string },
@@ -1232,36 +1232,36 @@ export class SalesService {
       search,
       priceClassId,
       masterSearch,
-      salesCategory=[],
+      salesCategory = [],
       shortBy,
       state,
       zip,
       jurisdiction,
     } = query;
-  
+
     if (!search)
       return {
         totalCount: 0,
         finalProductList: [],
       };
-  
+
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
-  
+
     page = Number(page);
     limit = Number(limit);
-  
+
     let whereClause: any = {
       I_Inactive: false,
       ShortOrderForm: true,
     };
-  
-    if(salesCategory.length > 0){
+
+    if (salesCategory.length > 0) {
       whereClause.Sales_Category = { [Op.in]: salesCategory };
     }
-    
+
     let searchInUPC = false;
-  
+
     if (masterSearch && typeof masterSearch === "string") {
       const masterArray = masterSearch.split(",").map((i) => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
@@ -1285,7 +1285,7 @@ export class SalesService {
     }
     if (search) {
       const searchValue = `%${search}%`;
-  
+
       if (/^\d{8,}$/.test(search)) {
         searchInUPC = true;
       } else {
@@ -1297,7 +1297,7 @@ export class SalesService {
         ];
       }
     }
-  
+
     // === UPC JOIN logic ===
     const includeUPC = {
       model: InventoryUPC,
@@ -1309,7 +1309,7 @@ export class SalesService {
       },
       required: searchInUPC,
     };
-  
+
     let orderClause: Order = [["Date_Created", "DESC"] as const];
     if (search && !searchInUPC && !masterSearch) {
       // When searching, sort by description alphabetically to get alphabetical order after common part
@@ -1319,7 +1319,7 @@ export class SalesService {
     } else if (shortBy && Number(shortBy) === 2) {
       orderClause = [[col('Description'), 'DESC']];
     }
-  
+
     // === Count Query ===
     let totalCount = 0;
     if (searchInUPC) {
@@ -1339,8 +1339,8 @@ export class SalesService {
       });
     }
 
-   
-  
+
+
     // === Product List Query ===
     const productList = await Inventory.findAll({
       attributes: [
@@ -1365,7 +1365,7 @@ export class SalesService {
       ],
       where: whereClause,
       include: [
-        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc","Sales_Category"], required: false },
+        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc", "Sales_Category"], required: false },
         { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
         { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
         includeUPC,
@@ -1375,10 +1375,10 @@ export class SalesService {
       offset: (page - 1) * limit,
       logging: false,
     });
-  
+
     const itemNumbers = productList.map((e) => e.Item_Number);
     const otpNumbers = productList.map((e) => e.OTP_Number);
-  
+
     // === Run in parallel instead of sequential ===
     const [productImages, discountMap, userJurisdiction, topLatestItems] =
       await Promise.all([
@@ -1389,18 +1389,18 @@ export class SalesService {
         getJurisdiction(customerId),
         getTopLatestItems(),
       ]);
-  
-  
+
+
     // === Pre-map images ===
     const imageMap = new Map(productImages.map((img) => [img.product_number, img]));
-  
+
     // === Final mapping (parallel-friendly but sequential for price logic) ===
     const finalProductList = await Promise.all(
       productList.map(async (e: any) => {
         const itemStr = e.Item_Number.toString();
         const productImage = imageMap.get(itemStr) || null;
         const inventoryOnHand = await getInventoryOnHand(e.Item_Number);
-  
+
         // Price & discount checks
         let price = discountMap[e.Item_Number] ?? (await getFirstValidPrice(e));
         // price = Math.ceil(price * 100) / 100;
@@ -1412,20 +1412,20 @@ export class SalesService {
           getProductLimit(e.Item_Number),
           checkQtyDiscount(e.Item_Number, customerId, price + taxRate),
         ]);
-  
+
         let allowToOrder = true;
         if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
           allowToOrder = false;
         }
-  
+
         const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
         let prepaidTaxRate = 0
-        console.log(e.SalesCategory?.Sales_Category,'e.SalesCategory?.Sales_Category----->SALES',userJurisdiction,'userJurisdiction')
-        if(userJurisdiction !=null && e.SalesCategory){
+        console.log(e.SalesCategory?.Sales_Category, 'e.SalesCategory?.Sales_Category----->SALES', userJurisdiction, 'userJurisdiction')
+        if (userJurisdiction != null && e.SalesCategory) {
           prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number);
         }
-  
+
         return {
           Pack: e.Pack,
           Description: e.Description,
@@ -1468,7 +1468,7 @@ export class SalesService {
         };
       })
     );
-  
+
     return {
       totalCount,
       page,
@@ -1477,9 +1477,9 @@ export class SalesService {
       finalProductList,
     };
   }
-  
 
-  async addToCart(cartData: AddToCartRequest & { Customer_Number: number }, salesId: number) {  
+
+  async addToCart(cartData: AddToCartRequest & { Customer_Number: number }, salesId: number) {
     // Check if item already exists in cart for this customer
     cartData.TotalPrice = Number(cartData.TotalPrice);
     cartData.TotalPriceWithTax = Number(cartData.TotalPriceWithTax);
@@ -1512,7 +1512,8 @@ export class SalesService {
       return existingCartItem;
     } else {
       // Create new cart item
-      const newCartItem = await CustomerCart.create({ ...cartData, placedBySalesPerson: true, salesPersonNumber: salesId,
+      const newCartItem = await CustomerCart.create({
+        ...cartData, placedBySalesPerson: true, salesPersonNumber: salesId,
         discount: cartData.discount || 0,
         originalPrice: cartData.originalPrice || 0
       });
@@ -1535,7 +1536,7 @@ export class SalesService {
 
     const start = moment().startOf("week").toDate(); // start of this week
     const end = moment().endOf("week").toDate();     // end of this week
-    
+
     const weekUserOrders: any[] = await OrderHistory.findAll({
       where: {
         C_Number: customerNumber,
@@ -1548,7 +1549,7 @@ export class SalesService {
       order: [["createdAt", "DESC"]],
     });
 
-    if(weekUserOrders && weekUserOrders?.length > 0){
+    if (weekUserOrders && weekUserOrders?.length > 0) {
       todayTotalAmount = weekUserOrders.reduce(
         (sum: any, item: any) => sum + Number(item.orderPrice),
         0
@@ -1574,36 +1575,36 @@ export class SalesService {
         where: {
           Item_Number: e.Item_Number
         },
-  
-        include: [ {
+
+        include: [{
           model: InventoryUPC,
-    as: 'UPCList',
-    attributes: ['UPC_Number'],
-    where: {
-      Status: 0,
-    },
-    required: false,
-  
-  },
-  {
-    model: SalesCategory,
-    as: 'SalesCategory',
-    attributes: ['Category_Desc','Sales_Category'],
-    required: false
-  },
-  {
-    model: PriceClass,
-    as: 'PriceClass',
-    attributes: ['Class_Desc'],
-    required: false
-  }
+          as: 'UPCList',
+          attributes: ['UPC_Number'],
+          where: {
+            Status: 0,
+          },
+          required: false,
+
+        },
+        {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Category_Desc', 'Sales_Category'],
+          required: false
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
+          required: false
+        }
 
 
-]
+        ]
       })
-    product = product?.dataValues || null;
+      product = product?.dataValues || null;
 
-   
+
       let itemInActive = await isItemInActive(e.Item_Number)
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number)
       let wareHouseSetting: any = await Setting.findOne({});
@@ -1619,18 +1620,18 @@ export class SalesService {
       }
 
       const topLatestItems = await getTopLatestItems();
-      const isNewItem =  topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+      const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
       const productLimit = await getProductLimit(e.Item_Number);
-      const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber,Number(price)+Number(e.Tax_Rate));
+      const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
       const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
 
       let prepaidTaxRate = 0
       const userJurisdiction = await getJurisdiction(customerNumber);
 
 
-      console.log(product,'product.salesCategory')
-      if(userJurisdiction !=null && product.Sales_Category){
+      console.log(product, 'product.salesCategory')
+      if (userJurisdiction != null && product.Sales_Category) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
       }
 
@@ -1648,7 +1649,7 @@ export class SalesService {
         pack: product.Pack,
         size: product.Size,
         Price1: product.Price1,
-        upc:product?.UPCList,
+        upc: product?.UPCList,
         price: price,
         salesCategory: product.SalesCategory?.Category_Desc,
         priceClass: product.PriceClass?.Class_Desc,
@@ -1678,12 +1679,46 @@ export class SalesService {
         qtyDiscount: hasQtyDiscount,
       }
     }))
-    const findTheLimit = await Retailer.findOne({
+    let findTheLimit: any = await Retailer.findOne({
       where: {
         Customer_Number: customerNumber,
         isActive: true
       }
     })
+
+
+
+    console.log(findTheLimit, 'findTheLimit-->')
+
+    let globalMinOrderAmount: any = {};
+
+    if (!findTheLimit) {
+      globalMinOrderAmount = await Setting.findOne({
+
+        attributes: ['itemGlobal']
+      })
+    }
+    if (findTheLimit) {
+      findTheLimit = findTheLimit?.dataValues || null;
+      if (!findTheLimit?.minOrderAmount || findTheLimit?.minOrderAmount == 0) {
+
+        globalMinOrderAmount  = await Setting.findOne({
+
+          attributes: ['itemGlobal']
+        })
+        console.log(globalMinOrderAmount, 'globalMinOrderAmount-->')
+        globalMinOrderAmount = globalMinOrderAmount?.dataValues || null;
+        findTheLimit.minOrderAmount = globalMinOrderAmount?.itemGlobal?.MiniMumOrderAmount || 0;
+      }
+    }
+    else {
+      findTheLimit.maxOrderLimit = globalMinOrderAmount?.itemGlobal?.maxOrderLimit || 0;
+      findTheLimit.minOrderAmount = globalMinOrderAmount?.itemGlobal?.MiniMumOrderAmount || 0;
+    }
+
+
+
+
     const totalItems = cartItems.reduce((sum: any, item: any) => sum + item.Qty, 0);
     const totalAmount = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPrice), 0);
     const totalAmountWithTax = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
@@ -1758,7 +1793,7 @@ export class SalesService {
       storeDetail = await SalesSession.create({ userId: userId, currentCustomerId: customerId });
     }
     const store = await Customer.findOne({
-      where: { C_Number: customerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'Jurisdiction_State','C_Phone', 'LastBalance', 'C_Salesman','C_Name', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
+      where: { C_Number: customerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'Jurisdiction_State', 'C_Phone', 'LastBalance', 'C_Salesman', 'C_Name', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
       include: [
         {
           model: CustomerRoute,
@@ -1809,7 +1844,7 @@ export class SalesService {
         'ItemDescription',
         'CaseWeight',
         'CaseCount',
-        
+
       ],
       include: [
         {
@@ -1879,7 +1914,7 @@ export class SalesService {
 
     const salesRepList: string[] = pgArrayToJsArray(user.salesRepNumber);
     console.log(salesRepList, '-->')
-const newSalesRepArray = salesRepList.map(Number);
+    const newSalesRepArray = salesRepList.map(Number);
     const whereClause: any = {
       C_Inactive: false,
       C_Salesman: { [Op.in]: newSalesRepArray }
@@ -1915,7 +1950,7 @@ const newSalesRepArray = salesRepList.map(Number);
       where: whereClause,
       attributes: [
         'C_Number', 'C_Name', 'C_CoName', 'C_Address', 'C_City',
-        'C_State', 'C_Zip', 'C_Country', 'C_Email', 'C_Phone', 'C_PhoneMobile','C_DateCreated'
+        'C_State', 'C_Zip', 'C_Country', 'C_Email', 'C_Phone', 'C_PhoneMobile', 'C_DateCreated'
       ],
       include: [
         {
@@ -2228,7 +2263,7 @@ const newSalesRepArray = salesRepList.map(Number);
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='',salesCategoryId=[],priceClassId=[]} = query;
+    let { page = 1, limit = 10, search, filter, state = '', zip = '', jurisdiction = '', salesCategoryId = [], priceClassId = [] } = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -2308,8 +2343,8 @@ const newSalesRepArray = salesRepList.map(Number);
       include: [
         {
           model: OrderDetail,
-          as: 'orderDetails', 
-          required: true, 
+          as: 'orderDetails',
+          required: true,
           attributes: [],
           where: {
             ...(salesCategoryId && salesCategoryId.length > 0
@@ -2317,7 +2352,7 @@ const newSalesRepArray = salesRepList.map(Number);
               : {})
           },
           include: [{
-            model:Inventory,
+            model: Inventory,
             as: 'inventory',
             where: {
               ...(priceClassId && priceClassId.length > 0
@@ -2377,7 +2412,7 @@ const newSalesRepArray = salesRepList.map(Number);
           ...whereClause,
           [Op.or]: [
             { Item_Number: { [Op.like]: `%${search}%` } },
-           
+
           ],
         },
         attributes: ['Item_Number'],
@@ -2453,8 +2488,8 @@ const newSalesRepArray = salesRepList.map(Number);
       const inventoryOnHand = await getInventoryOnHand(detail.Item_Number) || 0;
       let price = await getDiscount(detail.Item_Number, customerId) ?? await getFirstValidPrice(detail);
 
-      if(!price){
-        let tempDetail :any = await Inventory.findOne({
+      if (!price) {
+        let tempDetail: any = await Inventory.findOne({
           where: {
             Item_Number: detail.Item_Number
           },
@@ -2464,7 +2499,7 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
 
-    
+
 
 
       const taxRate = await getTaxRateV1(detail.inventory.OTP_Number, userJurisdiction as number, detail.Item_Number, price);
@@ -2476,18 +2511,18 @@ const newSalesRepArray = salesRepList.map(Number);
         allowToOrder = false;
       }
       const productLimit = await getProductLimit(detail.Item_Number);
-      let hasQtyDiscount = await checkQtyDiscount(detail.Item_Number, customerId,price + taxRate);
+      let hasQtyDiscount = await checkQtyDiscount(detail.Item_Number, customerId, price + taxRate);
       // Find the corresponding order header
       const orderHeader = allMatchingOrderHeaders.find((header: any) => header.Order_Number === detail.Order_Number);
 
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === detail.Item_Number);
 
       let prepaidTaxRate = 0
-      if(userJurisdiction !=null && detail.inventory.Sales_Category){
+      if (userJurisdiction != null && detail.inventory.Sales_Category) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
       }
 
-       
+
 
       return {
         isNewItem,
@@ -2570,7 +2605,7 @@ const newSalesRepArray = salesRepList.map(Number);
       filter?: '1week' | '2week' | '3week' | '4week' | '5week' | '6week' | '7week' | '8week' | '9week' | '10week' | '11week' | '12week'
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='',salesCategoryId=[],priceClassId=[]} = query;
+    let { page = 1, limit = 10, search, filter, state = '', zip = '', jurisdiction = '', salesCategoryId = [], priceClassId = [] } = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -2650,8 +2685,8 @@ const newSalesRepArray = salesRepList.map(Number);
       include: [
         {
           model: OrderDetail,
-          as: 'orderDetails', 
-          required: true, 
+          as: 'orderDetails',
+          required: true,
           attributes: [],
           where: {
             ...(salesCategoryId && salesCategoryId.length > 0
@@ -2659,7 +2694,7 @@ const newSalesRepArray = salesRepList.map(Number);
               : {})
           },
           include: [{
-            model:Inventory,
+            model: Inventory,
             as: 'inventory',
             where: {
               ...(priceClassId && priceClassId.length > 0
@@ -2719,7 +2754,7 @@ const newSalesRepArray = salesRepList.map(Number);
           ...whereClause,
           [Op.or]: [
             { Item_Number: { [Op.like]: `%${search}%` } },
-           
+
           ],
         },
         attributes: ['Item_Number'],
@@ -2795,8 +2830,8 @@ const newSalesRepArray = salesRepList.map(Number);
       const inventoryOnHand = await getInventoryOnHand(detail.Item_Number) || 0;
       let price = await getDiscount(detail.Item_Number, customerId) ?? await getFirstValidPrice(detail);
 
-      if(!price){
-        let tempDetail :any = await Inventory.findOne({
+      if (!price) {
+        let tempDetail: any = await Inventory.findOne({
           where: {
             Item_Number: detail.Item_Number
           },
@@ -2806,7 +2841,7 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
 
-    
+
 
 
       const taxRate = await getTaxRateV1(detail.inventory.OTP_Number, userJurisdiction as number, detail.Item_Number, price);
@@ -2818,18 +2853,18 @@ const newSalesRepArray = salesRepList.map(Number);
         allowToOrder = false;
       }
       const productLimit = await getProductLimit(detail.Item_Number);
-      let hasQtyDiscount = await checkQtyDiscount(detail.Item_Number, customerId,price + taxRate);
+      let hasQtyDiscount = await checkQtyDiscount(detail.Item_Number, customerId, price + taxRate);
       // Find the corresponding order header
       const orderHeader = allMatchingOrderHeaders.find((header: any) => header.Order_Number === detail.Order_Number);
 
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === detail.Item_Number);
 
       let prepaidTaxRate = 0
-      if(userJurisdiction !=null && detail.inventory.Sales_Category){
+      if (userJurisdiction != null && detail.inventory.Sales_Category) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
       }
 
-       
+
 
       return {
         isNewItem,
@@ -3124,7 +3159,7 @@ const newSalesRepArray = salesRepList.map(Number);
     };
 
     // Filter by AR_Type based on tab
-   
+
     if (tab === 'payments') {
       whereCondition.AR_Type = 'C';
     } else if (tab === 'charges') {
@@ -3134,7 +3169,7 @@ const newSalesRepArray = salesRepList.map(Number);
       whereCondition.AR_Type = 'I';
       whereCondition.AR_Amount = { [Op.lt]: 0 };
     }
-    
+
     // Search logic
     const searchConditions: any[] = [];
     if (search) {
@@ -3171,8 +3206,8 @@ const newSalesRepArray = salesRepList.map(Number);
       include.push({
         model: ARDefinitions,
         as: 'arDefinition',
-        where:{
-          AR_Type:'C'
+        where: {
+          AR_Type: 'C'
         },
         required: false,
         attributes: ['AR_SubTypeRef'],
@@ -3184,13 +3219,13 @@ const newSalesRepArray = salesRepList.map(Number);
         model: ARDetails,
         as: 'details',
         required: false,
-      
+
       });
     }
 
     const { count: totalCount, rows } = await CustReceivables.findAndCountAll({
       where: whereCondition,
-      
+
       attributes: [
         'P_Number',
         'AR_Type',
@@ -3217,11 +3252,11 @@ const newSalesRepArray = salesRepList.map(Number);
 
       if (tab === 'payments') {
         const subType = item.arDefinition?.AR_SubTypeRef?.trim() || 'N/A';
-        
-      
+
+
         return {
           subType,
-          reference:item.AR_Ref,
+          reference: item.AR_Ref,
           amount: amount.toFixed(2),
           applied: applied.toFixed(2),
           balance: balance.toFixed(2),
@@ -3236,11 +3271,11 @@ const newSalesRepArray = salesRepList.map(Number);
         else if (item.AR_Type === 'A') typeLabel = 'Adjustments';
         else if (item.AR_Type === 'R') typeLabel = 'Return';
 
-   
+
 
         return {
           type: typeLabel,
-          reference:item.AR_Ref,
+          reference: item.AR_Ref,
           invoiceNumber: item.Invoice_Number || 0,
           invoiceAmount: amount.toFixed(2),
           invoiceDue: balance.toFixed(2),
@@ -3255,7 +3290,7 @@ const newSalesRepArray = salesRepList.map(Number);
         else if (item.AR_Type === 'I') typeLabel = 'Invoice';
         return {
           type: typeLabel,
-          reference:item.AR_Ref,
+          reference: item.AR_Ref,
           invoiceNumber: item.Invoice_Number || 0,
           invoiceAmount: amount.toFixed(2),
           invoiceDue: balance.toFixed(2),
@@ -3313,7 +3348,7 @@ const newSalesRepArray = salesRepList.map(Number);
     };
 
     // Filter by AR_Type based on tab
-   
+
     if (tab === 'payments') {
       whereCondition.AR_Type = 'C';
     } else if (tab === 'charges') {
@@ -3323,7 +3358,7 @@ const newSalesRepArray = salesRepList.map(Number);
       whereCondition.AR_Type = 'I';
       whereCondition.AR_Amount = { [Op.lt]: 0 };
     }
-    
+
     // Search logic
     const searchConditions: any[] = [];
     if (search) {
@@ -3348,8 +3383,8 @@ const newSalesRepArray = salesRepList.map(Number);
     if (tab === 'payments') {
       include.push({
         model: ARDefinitions,
-        where:{
-          AR_Type:'C'
+        where: {
+          AR_Type: 'C'
         },
         as: 'arDefinition',
         required: false,
@@ -3367,7 +3402,7 @@ const newSalesRepArray = salesRepList.map(Number);
 
     const { count: totalCount, rows } = await CustReceivables.findAndCountAll({
       where: whereCondition,
-     
+
       attributes: [
         'P_Number',
         'AR_Type',
@@ -3381,13 +3416,13 @@ const newSalesRepArray = salesRepList.map(Number);
         'C_Number',
       ],
       include,
-      distinct: true, 
+      distinct: true,
       limit,
       offset,
       order: [['AR_CheckDate', 'DESC']],
     });
 
-    
+
 
     // Total current due calculation (same filter: AR_Type + C_Number)
     const allDueRecords = await CustReceivables.findAll({
@@ -3470,7 +3505,7 @@ const newSalesRepArray = salesRepList.map(Number);
           attributes: ['UPC_Number'],
           required: false
         },
-        
+
       ]
     });
 
@@ -3495,7 +3530,7 @@ const newSalesRepArray = salesRepList.map(Number);
     let taxRate = 0
     const userJurisdiction = await getJurisdiction(userId);
     if (findItem.OTP_Number) {
-      taxRate = await getTaxRateV1(findItem.OTP_Number, userJurisdiction as number,findItem.Item_Number,price);
+      taxRate = await getTaxRateV1(findItem.OTP_Number, userJurisdiction as number, findItem.Item_Number, price);
     }
 
 
@@ -3556,145 +3591,147 @@ const newSalesRepArray = salesRepList.map(Number);
 
     let upcRecord;
 
-      // Step 1: Check if UPC exists
-      // const upcRecord = await InventoryUPC.findOne({
-      //   where: {
-      //     UPC_Number: {
-      //       [Op.like]: `%${barcode}%`,
-      //     },
-      //   },
-      // })
+    // Step 1: Check if UPC exists
+    // const upcRecord = await InventoryUPC.findOne({
+    //   where: {
+    //     UPC_Number: {
+    //       [Op.like]: `%${barcode}%`,
+    //     },
+    //   },
+    // })
 
-      barcode = barcode.trim();
-      if (barcode.length > 9) {
-        // If barcode is long → use LIKE search
-        upcRecord = await InventoryUPC.findOne({
-          where: {
-            UPC_Number: {
-              [Op.like]: `%${barcode}%`,
-            },
+    barcode = barcode.trim();
+    if (barcode.length > 9) {
+      // If barcode is long → use LIKE search
+      upcRecord = await InventoryUPC.findOne({
+        where: {
+          UPC_Number: {
+            [Op.like]: `%${barcode}%`,
           },
-        });
-      } else {
-        // If barcode length <= 9 → exact match
-        upcRecord = await InventoryUPC.findOne({
-          where: {
-            UPC_Number: barcode
-          },
-        });
-      }
-      
-
-      if (!upcRecord) {
-        throw new AppError(`Item not found for UPC: ${barcode}`, 404);
-      }
-
-      let whereCondition :any ={ Item_Number: upcRecord.Item_Number,I_Inactive: false,
-        ShortOrderForm: true }
-  
-        if(userId != null){
-          const salesCategoryArray = await getAllowedSalesCategories(userId);
-          if(Array.isArray(salesCategoryArray) && salesCategoryArray.length > 0){
-            whereCondition.Sales_Category = { [Op.in]: salesCategoryArray };
-          }
-  
-        }
-  
-      // Step 2: Fetch item details from Inventory
-      const item = await Inventory.findOne({
-        where: whereCondition,
-        attributes: [
-          "Pack", "Description", "Item_Number", "CaseCount", "UOM",
-          "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
-          "NetCost", "OTP_Number", "Price_Subclass"
-        ],
-        include: [
-          { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc","Sales_Category"], required: false },
-          { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
-          // { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
-          { model: InventoryUPC, as: "UPCList", attributes: ["UPC_Number"], required: false }
-        ]
-      });
-  
-      if (!item) {
-        throw new AppError("Item details not found in Inventory", 404);
-      }
-  
-      // Step 3: Pricing & Tax
-      let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
-      const userJurisdiction = await getJurisdiction(userId);
-      const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
-      // price = Math.ceil(price * 100) / 100;
-  
-      let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
-      taxRate = Math.ceil(taxRate * 100) / 100;
-  
-      // Step 4: Build response object (same format as your example)
-      const productImage = await ProductImage.findOne({
-        where: { product_number: item.Item_Number.toString(), isAllow: true }
-      });
-  
-      const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
-      const wareHouseSetting: any = await Setting.findOne({});
-      const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
-      let prepaidTaxRate = 0
-      if(userJurisdiction !=null && item.SalesCategory){
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
-      }
-      const formattedItem = {
-        Pack: item.Pack,
-        Description: item.Description,
-        Item_Number: item.Item_Number,
-        CaseCount: item.CaseCount,
-        UOM: item.UOM,
-        isDiscounted,
-        Price1: item.Price1,
-        Tax_Rate: taxRate,
-        OTP_Number: item.OTP_Number,
-        price,
-        isNewItem: true,
-        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
-        prepaidTaxRate: prepaidTaxRate,
-        priceWithTax: price + taxRate,
-        BaseCost: item.BaseCost,
-        Invoice_Cost: item.Invoice_Cost,
-        AvgCost: item.AvgCost,
-        NetCost: item.NetCost,
-        hasProductLimit: false,
-        productLimit: null,
-        UPCList: item.UPCList || [{ UPC_Number: barcode }],
-        Inventory_OnHand: inventoryOnHand,
-        UnitOunces: 0,
-        allowToOrder,
-        hasQtyDiscount: false,
-        qtyDiscount: {
-          allowToDiscount: false,
-          hasCaseDiscount: false,
-          hasQtyDiscount: false,
-          isCaseDiscount: false,
-          isQtyDiscount: false,
-          percentageCaseDiscount: 0,
-          minimumQtyForCaseDiscount: 0,
-          qtyDiscount: [],
-          price,
         },
-        showTheInventoryStock: true,
-        showLowStock: false,
-        showWithOutPrice: false,
-        SalesCategory: item.SalesCategory?.Category_Desc || null,
-        PriceClass: item.PriceClass?.Class_Desc || null,
-        showDistributorImage: productImage?.isAllow ?? false,
-        distributorImage: productImage?.img_url || null,
-        masterImage: `${process.env.AZUREIMAGESERVER}${barcode}.jpg`,
-        quantity: 1, // Default 1 when scanned
-      };
-
-      console.log('Scanned Item:', formattedItem);
-      return formattedItem;
+      });
+    } else {
+      // If barcode length <= 9 → exact match
+      upcRecord = await InventoryUPC.findOne({
+        where: {
+          UPC_Number: barcode
+        },
+      });
     }
 
-  async addMultipleItems(customerNumber: number, body:any) {
-    let {formattedItems} = body;
+
+    if (!upcRecord) {
+      throw new AppError(`Item not found for UPC: ${barcode}`, 404);
+    }
+
+    let whereCondition: any = {
+      Item_Number: upcRecord.Item_Number, I_Inactive: false,
+      ShortOrderForm: true
+    }
+
+    if (userId != null) {
+      const salesCategoryArray = await getAllowedSalesCategories(userId);
+      if (Array.isArray(salesCategoryArray) && salesCategoryArray.length > 0) {
+        whereCondition.Sales_Category = { [Op.in]: salesCategoryArray };
+      }
+
+    }
+
+    // Step 2: Fetch item details from Inventory
+    const item = await Inventory.findOne({
+      where: whereCondition,
+      attributes: [
+        "Pack", "Description", "Item_Number", "CaseCount", "UOM",
+        "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
+        "NetCost", "OTP_Number", "Price_Subclass"
+      ],
+      include: [
+        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc", "Sales_Category"], required: false },
+        { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
+        // { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
+        { model: InventoryUPC, as: "UPCList", attributes: ["UPC_Number"], required: false }
+      ]
+    });
+
+    if (!item) {
+      throw new AppError("Item details not found in Inventory", 404);
+    }
+
+    // Step 3: Pricing & Tax
+    let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
+    const userJurisdiction = await getJurisdiction(userId);
+    const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
+    // price = Math.ceil(price * 100) / 100;
+
+    let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
+    taxRate = Math.ceil(taxRate * 100) / 100;
+
+    // Step 4: Build response object (same format as your example)
+    const productImage = await ProductImage.findOne({
+      where: { product_number: item.Item_Number.toString(), isAllow: true }
+    });
+
+    const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
+    const wareHouseSetting: any = await Setting.findOne({});
+    const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
+    let prepaidTaxRate = 0
+    if (userJurisdiction != null && item.SalesCategory) {
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
+    }
+    const formattedItem = {
+      Pack: item.Pack,
+      Description: item.Description,
+      Item_Number: item.Item_Number,
+      CaseCount: item.CaseCount,
+      UOM: item.UOM,
+      isDiscounted,
+      Price1: item.Price1,
+      Tax_Rate: taxRate,
+      OTP_Number: item.OTP_Number,
+      price,
+      isNewItem: true,
+      hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+      prepaidTaxRate: prepaidTaxRate,
+      priceWithTax: price + taxRate,
+      BaseCost: item.BaseCost,
+      Invoice_Cost: item.Invoice_Cost,
+      AvgCost: item.AvgCost,
+      NetCost: item.NetCost,
+      hasProductLimit: false,
+      productLimit: null,
+      UPCList: item.UPCList || [{ UPC_Number: barcode }],
+      Inventory_OnHand: inventoryOnHand,
+      UnitOunces: 0,
+      allowToOrder,
+      hasQtyDiscount: false,
+      qtyDiscount: {
+        allowToDiscount: false,
+        hasCaseDiscount: false,
+        hasQtyDiscount: false,
+        isCaseDiscount: false,
+        isQtyDiscount: false,
+        percentageCaseDiscount: 0,
+        minimumQtyForCaseDiscount: 0,
+        qtyDiscount: [],
+        price,
+      },
+      showTheInventoryStock: true,
+      showLowStock: false,
+      showWithOutPrice: false,
+      SalesCategory: item.SalesCategory?.Category_Desc || null,
+      PriceClass: item.PriceClass?.Class_Desc || null,
+      showDistributorImage: productImage?.isAllow ?? false,
+      distributorImage: productImage?.img_url || null,
+      masterImage: `${process.env.AZUREIMAGESERVER}${barcode}.jpg`,
+      quantity: 1, // Default 1 when scanned
+    };
+
+    console.log('Scanned Item:', formattedItem);
+    return formattedItem;
+  }
+
+  async addMultipleItems(customerNumber: number, body: any) {
+    let { formattedItems } = body;
     if (typeof formattedItems === "string") {
       try {
         formattedItems = JSON.parse(formattedItems);
@@ -3702,9 +3739,9 @@ const newSalesRepArray = salesRepList.map(Number);
         throw new AppError("Invalid formattedItems format", 400);
       }
     }
-  
+
     const cartItemsData = [];
-  
+
     for (const item of formattedItems) {
       const Item_Number = Number(item.Item_Number);
       const quantity = Number(item.Qty ?? item.quantity ?? 1);
@@ -3712,8 +3749,8 @@ const newSalesRepArray = salesRepList.map(Number);
       const Tax_Rate = item.Tax_Rate ?? 0;
       const Price_With_Tax =
         Number(item.Price_With_Tax ?? item.priceWithTax ?? price + (price * Tax_Rate) / 100);
-  
-  
+
+
       const existingCartItem = await CustomerCart.findOne({
         where: {
           Customer_Number: customerNumber,
@@ -3721,14 +3758,14 @@ const newSalesRepArray = salesRepList.map(Number);
           isActive: true,
         },
       });
-  
+
       if (existingCartItem) {
         const newQty = existingCartItem.Qty + quantity;
-  
+
         const updatedPrice = price * newQty;
         const updatedPriceWithTax = Price_With_Tax * newQty;
 
-  
+
         await existingCartItem.update({
           Qty: newQty,
           TotalPrice: updatedPrice,
@@ -3736,13 +3773,13 @@ const newSalesRepArray = salesRepList.map(Number);
           TotalprepaidTaxRate: item.TotalprepaidTaxRate || 0,
           prepaidTaxRate: item.prepaidTaxRate || 0,
         });
-  
+
         cartItemsData.push(existingCartItem);
       } else {
         // ✅ Create new cart entry if not exist
         const totalPrice = price * quantity;
         const totalPriceWithTax = Price_With_Tax * quantity;
-  
+
         const cartData = {
           Customer_Number: customerNumber,
           Item_Number,
@@ -3759,13 +3796,13 @@ const newSalesRepArray = salesRepList.map(Number);
           TotalprepaidTaxRate: item.TotalprepaidTaxRate || 0,
           prepaidTaxRate: item.prepaidTaxRate || 0,
         };
-      console.log(price, 'price>>>>>>>>>>>>>>>>')
-  
+        console.log(price, 'price>>>>>>>>>>>>>>>>')
+
         const addedCartItem = await CustomerCart.create(cartData);
         cartItemsData.push(addedCartItem);
       }
     }
-  
+
     // ✅ Return updated cart summary
     return await this.getCartItems(customerNumber);
   }
@@ -3773,29 +3810,30 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
   async addToCartMultiScanner(body: any, userId: number) {
-    const { upcNumbers, isMultiple, arrayOfUpc ,state='', zip='', jurisdiction=''} = body;
+    const { upcNumbers, isMultiple, arrayOfUpc, state = '', zip = '', jurisdiction = '' } = body;
     let excludeItem: any = []
-    if(state || zip || jurisdiction){
-      excludeItem  = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+    if (state || zip || jurisdiction) {
+      excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
     }
-  
+
     const excludeItemForCustomer = await excludeItemByUser(userId);
-    if(excludeItemForCustomer.length > 0){
+    if (excludeItemForCustomer.length > 0) {
       excludeItem = [...excludeItem, ...excludeItemForCustomer];
     }
     // Common helper to get product details by UPC
     const getProductDetailByUPC = async (UPC: string) => {
       const isUpcAvailable = await InventoryUPC.findOne({
-        where: { UPC_Number: UPC ,
+        where: {
+          UPC_Number: UPC,
 
           Item_Number: { [Op.notIn]: excludeItem }
         }
       });
-  
+
       if (!isUpcAvailable) {
         return null;
       }
-  
+
       const findItem = await Inventory.findOne({
         where: { Item_Number: isUpcAvailable.Item_Number },
         attributes: [
@@ -3804,48 +3842,48 @@ const newSalesRepArray = salesRepList.map(Number);
           'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created', 'OTP_Number'
         ],
         include: [
-          { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc','Sales_Category'], required: false },
+          { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc', 'Sales_Category'], required: false },
           { model: PriceClass, as: 'PriceClass', attributes: ['Class_Desc'], required: false },
           { model: InventoryStatus, as: 'inventoryStatus', attributes: ['Inventory_OnHand'], required: false },
           { model: InventoryUPC, as: 'UPCList', attributes: ['UPC_Number'], required: false }
         ]
       });
-  
+
       if (!findItem) {
         throw new AppError(`Item details not found in Inventory for UPC: ${UPC}`, 404);
       }
-  
+
       const productImage = await ProductImage.findOne({
         where: {
           product_number: findItem.Item_Number.toString(),
           isAllow: true
         }
       });
-  
+
       let price = await getDiscount(Number(findItem.Item_Number), userId);
       if (!price) {
         price = await getFirstValidPrice(findItem);
       }
-  
+
       const inventoryOnHand = await getInventoryOnHand(findItem.Item_Number);
       let taxRate = 0;
       let prepaidTaxRate = 0
       if (findItem.OTP_Number) {
         const userJurisdiction = await getJurisdiction(userId);
-        taxRate = await getTaxRateV1(findItem.OTP_Number,userJurisdiction as number,findItem.Item_Number,price);
-        if(userJurisdiction !=null && findItem?.SalesCategory){
+        taxRate = await getTaxRateV1(findItem.OTP_Number, userJurisdiction as number, findItem.Item_Number, price);
+        if (userJurisdiction != null && findItem?.SalesCategory) {
           prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category);
         }
       }
 
-     
-  
+
+
       const wareHouseSetting: any = await Setting.findOne({});
       let allowToOrder = true;
       if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
       }
-  
+
       return {
         ...findItem.toJSON(),
         price,
@@ -3857,11 +3895,11 @@ const newSalesRepArray = salesRepList.map(Number);
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
       };
     };
-  
+
     // If single UPC scan
     if (!isMultiple) {
       const finalItem = await getProductDetailByUPC(upcNumbers);
-      if(!finalItem){
+      if (!finalItem) {
         throw new AppError(`Item not found for UPC: ${upcNumbers}`, 400);
       }
       const obj = {
@@ -3878,8 +3916,8 @@ const newSalesRepArray = salesRepList.map(Number);
         TotalprepaidTaxRate: finalItem.prepaidTaxRate || 0,
         prepaidTaxRate: finalItem.prepaidTaxRate || 0,
       };
-      
-  
+
+
       const existingCartItem = await CustomerCart.findOne({
         where: {
           Customer_Number: obj.Customer_Number,
@@ -3887,27 +3925,27 @@ const newSalesRepArray = salesRepList.map(Number);
           isActive: true
         }
       });
-  
+
       if (existingCartItem) {
         await existingCartItem.update({
           Qty: existingCartItem.Qty + obj.Qty,
           TotalPrice: Number(existingCartItem.TotalPrice) + Number(obj.TotalPrice),
           TotalPriceWithTax: Number(existingCartItem.TotalPriceWithTax) + Number(obj.TotalPriceWithTax)
         });
-        
+
         return existingCartItem;
       } else {
         return await CustomerCart.create(obj);
       }
     }
-  
+
     // If multiple UPCs scan
     else {
       const results = [];
-  
+
       for (const upc of arrayOfUpc) {
         const finalItem = await getProductDetailByUPC(upc);
-        if(!finalItem){
+        if (!finalItem) {
           continue;
         }
         const obj = {
@@ -3921,8 +3959,8 @@ const newSalesRepArray = salesRepList.map(Number);
           Price_With_Tax: Number(finalItem.price) + Number(finalItem.taxRate),
           isActive: true
         };
-        
-  
+
+
         const existingCartItem = await CustomerCart.findOne({
           where: {
             Customer_Number: obj.Customer_Number,
@@ -3930,28 +3968,28 @@ const newSalesRepArray = salesRepList.map(Number);
             isActive: true
           }
         });
-  
+
         if (existingCartItem) {
-        
+
 
           await existingCartItem.update({
             Qty: existingCartItem.Qty + obj.Qty,
             TotalPrice: Number(existingCartItem.TotalPrice) + Number(obj.TotalPrice),
             TotalPriceWithTax: Number(existingCartItem.TotalPriceWithTax) + Number(obj.TotalPriceWithTax)
           });
-          
+
           results.push(existingCartItem);
         } else {
           const newCartItem = await CustomerCart.create(obj);
           results.push(newCartItem);
         }
       }
-  
+
       return results; // All items processed
     }
   }
 
-  async getCustomerByIdInfoInCalender(customerId: number,userId:number) {
+  async getCustomerByIdInfoInCalender(customerId: number, userId: number) {
     const data = await Customer.findByPk(customerId, {
       attributes: ['C_Number', 'C_Name', 'C_CoName', 'C_Email', 'TermsCode', 'C_Phone', 'C_Memo', 'C_PhoneMobile', 'Credit_Limit', 'LastBalance', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country', 'C_OperationHours1', 'C_OperationHours2'],
       include: [
@@ -3968,11 +4006,11 @@ const newSalesRepArray = salesRepList.map(Number);
       ],
 
     })
-    console.log(data?.dataValues,'=----->data');
+    console.log(data?.dataValues, '=----->data');
     const salesNotes = await SalesNote.findAll({
-      where:{
-        CustomerNumber:customerId,
-        salesId:userId
+      where: {
+        CustomerNumber: customerId,
+        salesId: userId
       }
     })
 
@@ -3992,7 +4030,7 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
   async getPdfOfOrderDetails(query: PaginationOptions & { orientation?: 'portrait' | 'landscape' }, userId: number) {
-    const { orderNumber, hasPrice = false, orientation = 'landscape' ,invoiceGenerated=false} = query;
+    const { orderNumber, hasPrice = false, orientation = 'landscape', invoiceGenerated = false } = query;
 
     // First, get the order header to find customer number
     const orderHeader = await OrderHeader.findByPk(orderNumber);
@@ -4212,18 +4250,18 @@ const newSalesRepArray = salesRepList.map(Number);
 
 
   async getCustomerOrderByCalenderDate(query: PaginationOptions, id: number) {
-    console.log(id,'=----->ID');
+    console.log(id, '=----->ID');
     let { orderDate, orderDay } = query;
     const dayNum = Number(orderDay);
     if (Number.isNaN(dayNum)) throw new AppError("Invalid orderDay", 400);
-  
+
     const webUser: any = await WebUsers.findByPk(id, {
       attributes: ['salesRepNumber'],
     });
     if (!webUser) throw new AppError("User not found", 404);
-  
+
     const normalizedDate = String(orderDate).slice(0, 10); // 'YYYY-MM-DD'
-  
+
     const salesRepList: string[] = pgArrayToJsArray(webUser.salesRepNumber);
     const newSalesRepArray = salesRepList.map(Number);
     // 1) Customers for the rep on that day
@@ -4234,17 +4272,17 @@ const newSalesRepArray = salesRepList.map(Number);
         C_OrderDay: dayNum,
       },
       attributes: [
-        'C_Number','C_Name','C_CoName','C_Email','C_Phone','C_PhoneMobile',
-        'C_Address','C_City','C_State','C_Zip','C_Country','C_Salesman'
+        'C_Number', 'C_Name', 'C_CoName', 'C_Email', 'C_Phone', 'C_PhoneMobile',
+        'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country', 'C_Salesman'
       ],
-      include: [{ model: CustomerRoute, as: 'Routes', attributes: ['Route_Number','Stop_Number'] }],
+      include: [{ model: CustomerRoute, as: 'Routes', attributes: ['Route_Number', 'Stop_Number'] }],
       raw: true,
     });
-  
+
     if (customers.length === 0) return [];
-  
+
     const customerNumbers = customers.map(c => c.C_Number);
-  
+
     // 2) Orders for those customers on the date
     const orders = await OrderHeader.findAll({
       where: {
@@ -4254,8 +4292,8 @@ const newSalesRepArray = salesRepList.map(Number);
       attributes: ['Order_Number', 'C_Number'],
       raw: true,
     });
-    const customersWithOrders = new Set(orders.map((o:any) => o.C_Number));
-  
+    const customersWithOrders = new Set(orders.map((o: any) => o.C_Number));
+
     // 3) Build result; NOTE: await Promise.all to resolve the async map
     const result = await Promise.all(
       customers.map(async (cust) => {
@@ -4265,7 +4303,7 @@ const newSalesRepArray = salesRepList.map(Number);
           id
           // optionally pass normalizedDate if your check filters by date
         );
-  
+
         return {
           ...cust,
           time, // whatever your checkSalesCallTime returns (null/Date/object)
@@ -4273,10 +4311,10 @@ const newSalesRepArray = salesRepList.map(Number);
         };
       })
     );
-  
+
     return result;
   }
-  
+
   async getCustomerOrderOfCurrentWeek(query: PaginationOptions, id: number) {
     const { orderDate } = query;
 
@@ -4297,50 +4335,50 @@ const newSalesRepArray = salesRepList.map(Number);
       whereClause.Order_Date[Op.lte] = endDate;
     }
 
-    const orders :any = await OrderHeader.findAll({
+    const orders: any = await OrderHeader.findAll({
       where: whereClause,
       attributes: ['Order_Number', 'C_Number', 'Order_Date'],
       raw: true,
     });
 
     const results = [];
-  for (const order of orders) {
-    const orderNumber = order.Order_Number;
+    for (const order of orders) {
+      const orderNumber = order.Order_Number;
 
-    const details = await OrderDetail.findAll({
-      where: { Order_Number: orderNumber },
-      attributes: [
-        'Price',
-        'OTP_Amount_State',
-        'Quantity_Ordered',
-        'OffInvoice_Amount',
-        'DepositAmount'
-      ],
-      raw: true,
-    });
+      const details = await OrderDetail.findAll({
+        where: { Order_Number: orderNumber },
+        attributes: [
+          'Price',
+          'OTP_Amount_State',
+          'Quantity_Ordered',
+          'OffInvoice_Amount',
+          'DepositAmount'
+        ],
+        raw: true,
+      });
 
-    let totalPrice = 0;
-    let totalQty = 0;
-    for (const d of details) {
-      const price = Number(d.Price || 0) + Number(d.OTP_Amount_State || 0);
-      const qty = Number(d.Quantity_Ordered || 0);
-      totalPrice   += price * qty;
-      totalQty += qty;
+      let totalPrice = 0;
+      let totalQty = 0;
+      for (const d of details) {
+        const price = Number(d.Price || 0) + Number(d.OTP_Amount_State || 0);
+        const qty = Number(d.Quantity_Ordered || 0);
+        totalPrice += price * qty;
+        totalQty += qty;
+      }
+      results.push({
+        ...order,
+        totals: {
+          totalPrice: Number(totalPrice.toFixed(2)),
+          totalQty: totalQty,
+        },
+      });
+
     }
-    results.push({
-      ...order,
-      totals: {
-        totalPrice: Number(totalPrice.toFixed(2)),
-        totalQty: totalQty,
-      },
-    });
-    
-  }
 
-  return {
-    orders: results,
-    totalCount: results.length,
-  }
+    return {
+      orders: results,
+      totalCount: results.length,
+    }
   }
 
   async removeMultipleItemsFromCart(cartItemIds: number[]) {
@@ -4358,8 +4396,8 @@ const newSalesRepArray = salesRepList.map(Number);
   }
 
   // SalesCallTime methods
-  async createSalesCallTime(body: any,webUserId:number) {
-    const salesCallTime = await SalesCallTime.create({...body,webUserId:webUserId});
+  async createSalesCallTime(body: any, webUserId: number) {
+    const salesCallTime = await SalesCallTime.create({ ...body, webUserId: webUserId });
     return salesCallTime;
   }
 
@@ -4368,7 +4406,7 @@ const newSalesRepArray = salesRepList.map(Number);
     if (!salesCallTime) {
       throw new AppError("Sales call time not found", 404);
     }
-    
+
     await salesCallTime.update(body);
     return salesCallTime;
   }
@@ -4448,7 +4486,7 @@ const newSalesRepArray = salesRepList.map(Number);
     return salesNotes;
   }
 
-  async addUpc(body:any){
+  async addUpc(body: any) {
     const result = await InventoryUPC.create(body);
     return result;
   }
@@ -4459,12 +4497,12 @@ const newSalesRepArray = salesRepList.map(Number);
       search = '',
       priceClassId = [],       // array of price class IDs
     } = body;
-  
+
     const whereClause: any = {
       I_Inactive: false,
       ShortOrderForm: true,
     };
-  
+
     // 1) PRIMARY FILTER: Sales_Category wins
     if (Array.isArray(salesCategoryIds) && salesCategoryIds.length > 0) {
       // Only these categories
@@ -4473,30 +4511,30 @@ const newSalesRepArray = salesRepList.map(Number);
       // Only if category filter is NOT provided
       whereClause.Price_Class = { [Op.in]: priceClassId };
     }
-  
+
     // 2) SEARCH: must be AND-ed with above filters
     const trimmed = search.trim();
     if (trimmed !== '') {
       const likeAnywhere = `%${trimmed}%`;
-      const likePrefix   = `${trimmed}%`;
-  
+      const likePrefix = `${trimmed}%`;
+
       if (!whereClause[Op.and]) {
         whereClause[Op.and] = [];
       }
-  
+
       whereClause[Op.and].push({
         [Op.or]: [
-          { Item_Number:      { [Op.like]: likePrefix } },   // starts with "se"
-          { Description:      { [Op.like]: likeAnywhere } }, // contains "se"
+          { Item_Number: { [Op.like]: likePrefix } },   // starts with "se"
+          { Description: { [Op.like]: likeAnywhere } }, // contains "se"
           { ALT_Description2: { [Op.like]: likeAnywhere } },
           // uncomment if you want UPC search too:
           // { '$UPCList.UPC_Number$': { [Op.like]: likePrefix } },
         ],
       });
     }
-  
+
     console.log('WHERE:', JSON.stringify(whereClause, null, 2));
-  
+
     const product = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
@@ -4526,13 +4564,13 @@ const newSalesRepArray = salesRepList.map(Number);
         },
       ],
     });
-  
+
     return { product: product || [] };
   }
 
 
-  async updateUpc(id:number,body:any){
-    const result = await InventoryUPC.update(body,{where:{myKey:id}});
+  async updateUpc(id: number, body: any) {
+    const result = await InventoryUPC.update(body, { where: { myKey: id } });
     return result;
   }
 
@@ -4547,7 +4585,7 @@ const newSalesRepArray = salesRepList.map(Number);
     const checkSalesCallTime = await SalesCallTime.findAll({
       where: {
         customer_number: customerNumber,
-        salesRepNumber:  { [Op.in]: salesRepNumber.map(Number) } ,
+        salesRepNumber: { [Op.in]: salesRepNumber.map(Number) },
         webUserId: webUserId,
       },
     });
@@ -4678,7 +4716,7 @@ const newSalesRepArray = salesRepList.map(Number);
         BaseCost: product.BaseCost,
         Invoice_Cost: product.Invoice_Cost,
         AvgCost: product.AvgCost,
-       OTP_Amount_State: Number(item.Tax_Rate ?? 0),
+        OTP_Amount_State: Number(item.Tax_Rate ?? 0),
         OTP_Amount_County: 0,
         OTP_Amount_City: 0,
         DepositAmount: product.DepositAmount,
@@ -4761,7 +4799,7 @@ const newSalesRepArray = salesRepList.map(Number);
     let todayTotalAmount = 0;
     const start = moment().startOf("week").toDate(); // start of this week
     const end = moment().endOf("week").toDate();     // end of this week
-    
+
     const weekUserOrders: any[] = await OrderHistory.findAll({
       where: {
         C_Number: customerNumber,
@@ -4773,7 +4811,7 @@ const newSalesRepArray = salesRepList.map(Number);
       },
       order: [["createdAt", "DESC"]],
     });
-    if(weekUserOrders && weekUserOrders?.length > 0){
+    if (weekUserOrders && weekUserOrders?.length > 0) {
       todayTotalAmount = weekUserOrders.reduce(
         (sum: any, item: any) => sum + Number(item.orderPrice),
         0
@@ -4800,20 +4838,20 @@ const newSalesRepArray = salesRepList.map(Number);
         where: {
           Item_Number: e.Item_Number
         },
-        include: [ {
+        include: [{
           model: InventoryUPC,
-    as: 'UPCList',
-    attributes: ['UPC_Number'],
-    where: {
-      Status: 0,
-    },
-    required: false,
-  
-  }]
-      })
-    product = product?.dataValues || null;
+          as: 'UPCList',
+          attributes: ['UPC_Number'],
+          where: {
+            Status: 0,
+          },
+          required: false,
 
-   
+        }]
+      })
+      product = product?.dataValues || null;
+
+
       let itemInActive = await isItemInActive(e.Item_Number)
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number)
       let wareHouseSetting: any = await Setting.findOne({});
@@ -4830,15 +4868,15 @@ const newSalesRepArray = salesRepList.map(Number);
       }
 
       const topLatestItems = await getTopLatestItems();
-      const isNewItem =  topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+      const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
       const productLimit = await getProductLimit(e.Item_Number);
-      const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber,Number(price)+Number(e.Tax_Rate));
+      const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
       const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
 
       let prepaidTaxRate = 0
-      console.log(product.Sales_Category,'product.Sales_Category')
-      if(userJurisdiction !=null && product.Sales_Category){
+      console.log(product.Sales_Category, 'product.Sales_Category')
+      if (userJurisdiction != null && product.Sales_Category) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
       }
 
@@ -4872,7 +4910,7 @@ const newSalesRepArray = salesRepList.map(Number);
         oldPrice: Number(e?.originalPrice),
         newPrice: price,
         showDistributorImage: productImage?.isAllow ?? false,
-          distributorImage: productImage?.img_url || null,
+        distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
         Product: e,
         hasQtyDiscount: hasQtyDiscount.allowToDiscount,
@@ -4896,10 +4934,10 @@ const newSalesRepArray = salesRepList.map(Number);
       userLimitMinOrderAmount: (findTheLimit?.minOrderAmount || 0) - todayTotalAmount,
       totalAmount
     };
-  } 
+  }
 
 
-  async addToReturnCart(cartData: AddToCartRequest & { Customer_Number: number }, salesId: number) {  
+  async addToReturnCart(cartData: AddToCartRequest & { Customer_Number: number }, salesId: number) {
     // Check if item already exists in cart for this customer
     cartData.TotalPrice = Number(cartData.TotalPrice);
     cartData.TotalPriceWithTax = Number(cartData.TotalPriceWithTax);
@@ -4933,7 +4971,8 @@ const newSalesRepArray = salesRepList.map(Number);
       return existingCartItem;
     } else {
       // Create new cart item
-      const newCartItem = await CustomerCart.create({ ...cartData, type: 'return', placedBySalesPerson: true, salesPersonNumber: salesId,
+      const newCartItem = await CustomerCart.create({
+        ...cartData, type: 'return', placedBySalesPerson: true, salesPersonNumber: salesId,
         discount: cartData.discount || 0,
         originalPrice: cartData.originalPrice || 0
       });
@@ -4944,7 +4983,7 @@ const newSalesRepArray = salesRepList.map(Number);
   // OrderConfirmation CRUD methods
   async createOrderConfirmation(orderData: {
     order_Number: string;
-   
+
     current_orderline?: number;
     sales_id: number
   }) {
@@ -4952,8 +4991,8 @@ const newSalesRepArray = salesRepList.map(Number);
       order_Number: orderData.order_Number,
       sales_id: orderData.sales_id,
     };
-    
-  
+
+
     if (orderData.current_orderline !== undefined) {
       createData.current_orderline = orderData.current_orderline;
     }
@@ -4968,9 +5007,9 @@ const newSalesRepArray = salesRepList.map(Number);
         }
       }
     );
-    
+
     createData.startTime = new Date();
-  
+
     const orderConfirmation = await OrderConfirmation.create(createData);
 
     const userInfo = await WebUsers.findByPk(orderData.sales_id);
@@ -4984,32 +5023,32 @@ const newSalesRepArray = salesRepList.map(Number);
   }
 
 
-  async  restartOrderConfirmation(orderData: {
+  async restartOrderConfirmation(orderData: {
     order_Number: string;
     sales_id: number;
     current_orderline?: number;
   }) {
     const { order_Number, sales_id, current_orderline } = orderData;
-  
+
     // Step 1: Find existing confirmation
     const existing = await OrderConfirmation.findOne({
       where: { order_Number }
     });
-  
+
     if (!existing) {
       throw new AppError("Order confirmation not found", 404);
     }
-  
+
     // Step 2: Mark old confirmation as ended
-   await OrderConfirmation.destroy({where:{order_Number}});
- 
+    await OrderConfirmation.destroy({ where: { order_Number } });
+
 
     // Step 3: Reset order detail shipped quantity
     await OrderDetail.update(
-      { Quantity_Shipped: 0, Confirmed:false },
+      { Quantity_Shipped: 0, Confirmed: false },
       { where: { Order_Number: order_Number } }
     );
-  
+
     // Step 4: Prepare new confirmation
     const createData: any = {
       order_Number,
@@ -5017,11 +5056,11 @@ const newSalesRepArray = salesRepList.map(Number);
       startTime: new Date(),
       isActive: true
     };
-  
+
     if (current_orderline !== undefined) {
       createData.current_orderline = current_orderline;
     }
-  
+
     // Step 5: Create new order confirmation
     const newOrder = await OrderConfirmation.create(createData);
 
@@ -5032,14 +5071,14 @@ const newSalesRepArray = salesRepList.map(Number);
       Lock_User: Number(userInfo?.userNumber ?? 0),
       Lock_Workstation: 0
     });
-  
-    await DriverPickupOrder.destroy({where:{order_number:Number(order_Number)}});
+
+    await DriverPickupOrder.destroy({ where: { order_number: Number(order_Number) } });
     return newOrder;
   }
-  
 
 
-async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sales_id?: number; status?: string }) {
+
+  async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sales_id?: number; status?: string }) {
     const { page = 1, limit = 10, search, sales_id, status } = query;
     const offset = (page - 1) * limit;
 
@@ -5110,37 +5149,37 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
       }>;
     }
   ) {
-  
+
 
     try {
       // 1) Load order confirmation inside the transaction
-      let randomBarCode  :any= [];
-      const orderConfirmation = await OrderConfirmation.findOne({where:{order_Number:id}});
-  
+      let randomBarCode: any = [];
+      const orderConfirmation = await OrderConfirmation.findOne({ where: { order_Number: id } });
+
       if (!orderConfirmation) {
         throw new AppError("Order confirmation not found", 404);
       }
-  
+
       // 2) Handle endTime based on status
       if (updateData.status === "completed") {
         updateData.endTime = new Date();
-        
 
-    
+
+
       } else {
         updateData.endTime = null;
       }
-  
+
       // 3) Extract orderDetail array and remove it from updateData
       const { orderDetail } = updateData;
       delete (updateData as any).orderDetail;
-  
+
       // 4) Update OrderConfirmation row
-      await orderConfirmation.update(updateData,{
+      await orderConfirmation.update(updateData, {
         where: { order_Number: id }
       });
 
-      
+
       // 5) Update related OrderDetail rows (if provided)
       if (Array.isArray(orderDetail) && orderDetail.length > 0) {
         for (const item of orderDetail) {
@@ -5148,49 +5187,49 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             {
               Quantity_Ordered: item.Quantity_Ordered,
               Quantity_Shipped: item.Quantity_Shipped,
-              Confirmed:item.Confirmed,
+              Confirmed: item.Confirmed,
             },
             {
               where: {
                 Order_Number: item.Order_Number,
                 Line_Number: item.Line_Number,
               },
-        
+
             }
           );
         }
       }
 
       if (updateData.status === "completed") {
-       
+
         await OrderHeader.update({
-          Bundles:updateData.Bundles,
-        },{
+          Bundles: updateData.Bundles,
+        }, {
           where: { Order_Number: id }
         });
 
         await OrderDetail.update({
-          Confirmed:true,
-        },{
+          Confirmed: true,
+        }, {
           where: { Order_Number: id }
         });
 
 
-         randomBarCode = await generateRandomBarCode(Number(updateData.Bundles));
+        randomBarCode = await generateRandomBarCode(Number(updateData.Bundles));
 
         await DriverPickupOrder.create({
           order_number: Number(id),
           barcodes: randomBarCode,
         });
-        
-    
-      } 
-  
+
+
+      }
+
       // 6) Commit transaction
 
-      await RecordLock.destroy({where:{Lock_Number:Number(id),Lock_Type:0}});
+      await RecordLock.destroy({ where: { Lock_Number: Number(id), Lock_Type: 0 } });
 
-  
+
       // Optionally re-fetch if you want latest from DB
       return {
         ...orderConfirmation.toJSON(),
@@ -5201,12 +5240,12 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     }
   }
 
-  async lockOrderConfirmation(orderNumber: number, salesId: number){
+  async lockOrderConfirmation(orderNumber: number, salesId: number) {
 
     const fetchOrderLock = await RecordLock.findOne({
       where: { Lock_Number: orderNumber, Lock_Type: 0 }
     });
-    if(fetchOrderLock){
+    if (fetchOrderLock) {
       throw new AppError("Order is already locked", 400);
     }
     const userInfo = await WebUsers.findByPk(salesId);
@@ -5227,12 +5266,12 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     if (!orderConfirmation) {
       throw new AppError("Order confirmation not found", 404);
     }
-    await DriverPickupOrder.destroy({where:{order_number:Number(id)}});
+    await DriverPickupOrder.destroy({ where: { order_number: Number(id) } });
     await orderConfirmation.destroy();
     return { message: "Order confirmation deleted successfully" };
   }
 
-  
+
 
   async getOrderConfirmationsBySalesId(salesId: number, query?: PaginationOptions) {
     const { page = 1, limit = 10 } = query || {};
@@ -5258,7 +5297,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
 
 
   async getOrderConfirmationList(query: PaginationOptions) {
-    const { status,search } = query;
+    const { status, search } = query;
 
     // Normalize query params (handle trailing-space keys)
     const page = Number(query.page || (query as any)['page ']) || 1;
@@ -5267,46 +5306,46 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
       query.customerNumber || (query as any)['customerNumber '];
     const startDate = query.startDate || (query as any)['startDate '];
     const endDate = query.endDate || (query as any)['endDate '];
-  
+
     const offset = (page - 1) * limit;
-  
+
     const fetchOrderLock = await RecordLock.findAll({
       where: { Lock_Type: 0 },
       attributes: ['Lock_Number'],
-    
+
     });
     const lockOrderNumbers = fetchOrderLock.map((lock: any) => lock.Lock_Number);
-   console.log(lockOrderNumbers, 'lockOrderNumbers-->')
+    console.log(lockOrderNumbers, 'lockOrderNumbers-->')
 
     // Build base where condition for MSSQL
     const whereCondition: any = {
       Order_Updated: false
     };
-  
+
     if (customerNumber) {
       whereCondition.C_Number = Number(customerNumber);
     }
-  
+
     if (startDate && endDate) {
       whereCondition.Order_Date = {
         [Op.between]: [startDate, endDate],
       };
     }
-  
+
     // Small helper to normalize status strings
     const normalize = (val?: string | null) =>
       val ? val.toString().trim().toLowerCase() : null;
-  
+
     const normalizedStatus = normalize(status);
     const isNotConfirmedFilter =
       normalizedStatus === 'not_confirmed' ||
       normalizedStatus === 'not_confirmd' ||
       normalizedStatus === 'not confirmed' ||
       normalizedStatus === 'notconfirmed';
-  
 
 
-      const normalizedSearch = search ? search.toString().trim() : null;
+
+    const normalizedSearch = search ? search.toString().trim() : null;
 
 
     if (status) {
@@ -5333,9 +5372,9 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           offset,
           raw: true,
         });
-  
+
         const orderNumbers = confirmations.map((c: any) => c.order_Number);
-  
+
         if (!orderNumbers.length) {
           return {
             totalCount,
@@ -5345,13 +5384,13 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             orderList: [],
           };
         }
-  
+
         // Restrict MSSQL query to these orderNumbers
         const headerWhere = {
           ...whereCondition,
           Order_Number: { [Op.in]: orderNumbers },
         };
-  
+
         const orderList = await OrderHeader.findAll({
           attributes: [
             'Order_Number',
@@ -5393,11 +5432,11 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           ],
           order: [['Order_Number', 'DESC']],
         });
-  
+
         const headerOrderNumbers = orderList.map(
           (order: any) => order.Order_Number,
         );
-  
+
         // Quantity map from MSSQL
         const quantityMap = new Map<number, number>();
         if (headerOrderNumbers.length > 0) {
@@ -5415,7 +5454,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             group: ['Order_Number'],
             raw: true,
           });
-  
+
           quantityResults.forEach((result: any) => {
             quantityMap.set(
               result.Order_Number,
@@ -5423,13 +5462,13 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             );
           });
         }
-  
+
         // Build a map from order_Number → confirmation row for quick lookup
         const confirmationMap = new Map<number, any>();
         confirmations.forEach((c: any) => {
           confirmationMap.set(c.order_Number, c);
         });
-  
+
         // Format response
         const formattedOrderList = await Promise.all(
           orderList.map(async (order: any) => {
@@ -5440,9 +5479,9 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             } else if (order.Order_Source === 12) {
               orderSourceName = 'App';
             }
-      
+
             const route = order.customer?.Routes?.[0];
-      
+
             const isOrderConfirmed = await OrderConfirmation.findOne({
               where: { order_Number: order.Order_Number, isActive: true },
               include: [
@@ -5452,7 +5491,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
                   attributes: ['id', 'firstName', 'lastName'],
                 }
               ],
-              attributes: ['status','id','current_orderline','startTime','endTime','sales_id'],
+              attributes: ['status', 'id', 'current_orderline', 'startTime', 'endTime', 'sales_id'],
               raw: true,
             });
 
@@ -5463,7 +5502,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
               },
               raw: true,
             });
-      
+
             return {
               Order_Number: order.Order_Number,
               C_Number: order.C_Number,
@@ -5471,7 +5510,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
               isLocked: lockOrderNumbers.includes(order.Order_Number) ? true : false,
               status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
               Order_Source: order.Order_Source,
-              isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
+              isOrderConfirmed: isOrderConfirmed ? isOrderConfirmed : null,
               Order_Source_Name: orderSourceName,
               Order_Date: order.Order_Date,
               Invoice_Generated: order.Invoice_Number > 0 ? true : false,
@@ -5496,32 +5535,33 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           totalPages: Math.ceil(Number(totalCount) / Number(limit)),
           orderList: formattedOrderList,
         };
-      }}
-      
-      else {
+      }
+    }
+
+    else {
 
       const whereCondition: any = {
-        Order_Updated:false,
+        Order_Updated: false,
 
       };
-  
+
 
       if (normalizedSearch) {
         whereCondition.Order_Number = {
           [Op.like]: `%${normalizedSearch}%`,
         };
       }
-      
+
       if (customerNumber) {
         whereCondition.C_Number = Number(customerNumber);
       }
-  
+
       if (startDate && endDate) {
         whereCondition.Order_Date = {
           [Op.between]: [startDate, endDate]
         };
       }
-  
+
       // First, get the order headers with pagination
       // Use distinct: true to count unique orders when there are joins
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
@@ -5568,11 +5608,11 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         limit,
         offset,
       });
-      
-  
+
+
       // Get the order numbers to fetch quantities
       const orderNumbers = orderList.map((order: any) => order.Order_Number);
-  
+
       // Get total quantities for these orders
       let quantityMap = new Map();
       if (orderNumbers.length > 0) {
@@ -5587,21 +5627,21 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           group: ['Order_Number'],
           raw: true
         });
-  
+
         // Create a map for quick lookup
         quantityResults.forEach((result: any) => {
           quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
         });
       }
-  
+
 
       const qtyAgg = await OrderDetail.findAll({
         attributes: [
           'Order_Number',
-      
+
           // Total ordered
           [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalOrdered'],
-      
+
           // Total shipped (treat NULL as 0)
           [
             Sequelize.fn(
@@ -5610,7 +5650,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             ),
             'totalShipped',
           ],
-      
+
           // Any unconfirmed lines?
           [
             Sequelize.fn(
@@ -5629,27 +5669,27 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         group: ['Order_Number'],
         raw: true,
       });
-      
-      
+
+
       const totalOrderedMap = new Map<number, number>();
       const totalShippedMap = new Map<number, number>();
       const confirmFromErpMap = new Map<number, boolean>();
-      
+
       qtyAgg.forEach((r: any) => {
         const orderNo = Number(r.Order_Number);
-      
+
         const totalOrdered = Number(r.totalOrdered || 0);
         const totalShipped = Number(r.totalShipped || 0);
         const unconfirmedCount = Number(r.unconfirmedCount || 0);
-      
+
         totalOrderedMap.set(orderNo, totalOrdered);
         totalShippedMap.set(orderNo, totalShipped);
-      
+
         // Rule: if any Confirmed=0 => false
         // else compare totals
         const confirmFromErp =
           unconfirmedCount === 0 && totalOrdered === totalShipped;
-      
+
         confirmFromErpMap.set(orderNo, confirmFromErp);
       });
       // Format the response
@@ -5662,9 +5702,9 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           } else if (order.Order_Source === 12) {
             orderSourceName = 'App';
           }
-    
+
           const route = order.customer?.Routes?.[0];
-    
+
           const isOrderConfirmed = await OrderConfirmation.findOne({
             where: { order_Number: order.Order_Number, isActive: true },
             include: [
@@ -5674,10 +5714,10 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
                 attributes: ['id', 'firstName', 'lastName'],
               }
             ],
-            attributes: ['status','id','current_orderline','startTime','endTime','sales_id'],
+            attributes: ['status', 'id', 'current_orderline', 'startTime', 'endTime', 'sales_id'],
             raw: true,
           });
-    
+
           const confirmFromErp = confirmFromErpMap.get(order.Order_Number) ?? false;
 
           const orderConfirmedByEpick = await OrderPick.findOne({
@@ -5695,7 +5735,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
             isLocked: lockOrderNumbers.includes(order.Order_Number) ? true : false,
             status: isOrderConfirmed ? isOrderConfirmed.status : 'Not Confirmed',
             Order_Source: order.Order_Source,
-            isOrderConfirmed:isOrderConfirmed ? isOrderConfirmed : null,
+            isOrderConfirmed: isOrderConfirmed ? isOrderConfirmed : null,
             Order_Source_Name: orderSourceName,
             Order_Date: order.Order_Date,
             Invoice_Generated: order.Invoice_Number > 0 ? true : false,
@@ -5716,8 +5756,8 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           };
         })
       );
-      
-  
+
+
       return {
         totalCount,
         page,
@@ -5728,13 +5768,13 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
 
     }
     // Build where condition
-   
+
   }
 
   async getOrderConfirmationDetailsHistory(orderNumber: number, query: PaginationOptions) {
     let { page = 1, limit = 10 } = query;
-   
-    
+
+
     // Fetch order header
     const orderHeader = await OrderHeader.findByPk(orderNumber, {
       attributes: [
@@ -5743,31 +5783,31 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         'User_ID',
         'Order_Source',
         'Delivery_Charge',
-      ], 
-        include: [
-    {
-      model: Customer,
-      as: 'customer',
-      attributes: [
-        'C_Name',
-        'C_Number',
-        'C_Address',
-        'C_City',
-        'C_State',
-        'C_Phone'
       ],
       include: [
         {
-          model: CustomerRoute,
-          as: 'customerRoute',
+          model: Customer,
+          as: 'customer',
           attributes: [
-            'Route_Number',
-            'Stop_Number'
+            'C_Name',
+            'C_Number',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Phone'
+          ],
+          include: [
+            {
+              model: CustomerRoute,
+              as: 'customerRoute',
+              attributes: [
+                'Route_Number',
+                'Stop_Number'
+              ]
+            }
           ]
         }
       ]
-    }
-  ]
     });
 
     // Get total count of order lines
@@ -5833,7 +5873,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
         'ItemDescription',
         'CaseWeight',
         'CaseCount',
-   
+
       ],
       include: [
         {
@@ -5863,7 +5903,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     const orderDiscount = await OrderDiscount.findOne({
       where: { orderNumber: orderNumber }
     });
-    if(orderDiscount){
+    if (orderDiscount) {
       totalDiscount = orderDiscount.discount;
     }
     const orderDetailsWithImages = await Promise.all(orderDetails.map(async (detail: any) => {
@@ -5873,7 +5913,7 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
           isAllow: true
         },
       });
-      
+
       let Price = Number(detail.Price || 0) + Number(detail.OTP_Amount_State || 0);
       return {
         ...detail.toJSON(),
@@ -5885,8 +5925,8 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
     }));
 
     let barcodes = await DriverPickupOrder.findOne({
-      where:{
-        order_number:orderNumber
+      where: {
+        order_number: orderNumber
       }
     })
 
@@ -5907,20 +5947,20 @@ async getAllOrderConfirmations(query: PaginationOptions & { search?: string; sal
   }
 
 
-  async getSalesCategoryPriceClassByCustomer(customerNumber: number){
+  async getSalesCategoryPriceClassByCustomer(customerNumber: number) {
     const data = await getAllowedSalesCategoriesAndPriceClasses(customerNumber);
     return data;
   }
 
 
-  async getSalesCategoryByCustomer(customerNumber: number){
-    console.log(customerNumber,'customerNumber')
+  async getSalesCategoryByCustomer(customerNumber: number) {
+    console.log(customerNumber, 'customerNumber')
     const data = await getAllowedSalesCategories(customerNumber);
     return data;
   }
 
-async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?: string, masterSearch?: string }, customerNumber: number){
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='', salesCategory=[] } = query;
+  async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?: string, masterSearch?: string }, customerNumber: number) {
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
 
     const userJurisdiction = await getJurisdiction(customerNumber);
 
@@ -5936,10 +5976,10 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
     };
 
     const excludeItem = await excludeItemByUser(customerNumber);
-    if(excludeItem.length > 0){
+    if (excludeItem.length > 0) {
       whereClause.Item_Number = { [Op.notIn]: excludeItem };
     }
-    if(state || zip || jurisdiction){
+    if (state || zip || jurisdiction) {
       const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
       whereClause.Item_Number = { [Op.notIn]: excludeItem };
     }
@@ -5947,7 +5987,7 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
 
 
     let searchInUPC = false;
-    let orderClause: Order = [['Date_Created', 'DESC'] as const]; 
+    let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
@@ -5972,59 +6012,59 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
-        } 
+        }
         else {
-        
+
           const term = search.toLowerCase();
           const anywhere = `%${term}%`;
           const starts = `${term}%`
 
-          
-  whereClause[Op.or] = [
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Description")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
-      { [Op.like]: anywhere }
-    )
-  ];
 
-  // ORDER RULE:
-  // 1. Items starting with search term first
-  // 2. Then items containing it anywhere
-  // 3. Finally alphabetical
-  orderClause = [
-    [
-      Sequelize.literal(`
+          whereClause[Op.or] = [
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+              { [Op.like]: anywhere }
+            ),
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("Description")),
+              { [Op.like]: anywhere }
+            ),
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
+              { [Op.like]: anywhere }
+            ),
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+              { [Op.like]: anywhere }
+            )
+          ];
+
+          // ORDER RULE:
+          // 1. Items starting with search term first
+          // 2. Then items containing it anywhere
+          // 3. Finally alphabetical
+          orderClause = [
+            [
+              Sequelize.literal(`
         CASE 
           WHEN LOWER("Description") LIKE '${starts}' THEN 0
           WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
           ELSE 2
         END
       `),
-      'ASC'
-    ],
-    ['Description', 'ASC']
-  ];
-}
+              'ASC'
+            ],
+            ['Description', 'ASC']
+          ];
+        }
 
 
-        
+
       }
 
     }
 
-    if(salesCategory.length > 0){
+    if (salesCategory.length > 0) {
       whereClause.Sales_Category = { [Op.in]: salesCategory };
     }
 
@@ -6081,14 +6121,14 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT'
       ],
       where: whereClause,
       include: [
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc','Sales_Category'],
+          attributes: ['Category_Desc', 'Sales_Category'],
           required: false
         },
         {
@@ -6145,12 +6185,12 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
       let prepaidTaxRate = 0
-      if(userJurisdiction !=null && e.SalesCategory){
+      if (userJurisdiction != null && e.SalesCategory) {
 
-        console.log(e?.SalesCategory,'e.Sales_Category')
-       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
+        console.log(e?.SalesCategory, 'e.Sales_Category')
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
       }
-    
+
 
 
       return {
@@ -6200,14 +6240,14 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
       totalPages: Math.ceil(totalCount / limit),
       finalProductList
     };
-  
- 
-}
- 
+
+
+  }
+
 
   async placeOrderForCustomer(orderData: any, customerId: number) {
-   
-    const { orderPlayload ,orderNumber} = orderData;
+
+    const { orderPlayload, orderNumber } = orderData;
 
     // Get customer and route info
 
@@ -6215,18 +6255,18 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
 
 
     console.log(customer?.dataValues, 'customer-->---->')
-    customer=customer?.dataValues as any;
+    customer = customer?.dataValues as any;
 
 
 
     if (!customer) {
       throw new AppError("Customer not found", 404);
     }
-   
+
 
 
     // Fetch products and options
-    const itemNumbers = orderPlayload.map((item:any) => item.Item_Number);
+    const itemNumbers = orderPlayload.map((item: any) => item.Item_Number);
     const [products] = await Promise.all([
       Inventory.findAll({ where: { Item_Number: itemNumbers }, raw: true }),
     ]);
@@ -6235,7 +6275,7 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
 
     const productMap = new Map(products.map(product => [product.Item_Number, product]));
 
-    const orderDetails = orderPlayload.map(async (item:any, index:number) => {
+    const orderDetails = orderPlayload.map(async (item: any, index: number) => {
       const product = productMap.get(item.Item_Number);
 
       if (!product) {
@@ -6246,37 +6286,37 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
         throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
       }
 
-      console.log(item.Price, 'item.Price-->','item.Sales_Category',product.Sales_Category,'item.OTP_Number',product.OTP_Number)
+      console.log(item.Price, 'item.Price-->', 'item.Sales_Category', product.Sales_Category, 'item.OTP_Number', product.OTP_Number)
 
-      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.Sales_Category}, raw: true })
+      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.Sales_Category }, raw: true })
 
-      if(!optionDefsValues){
-        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.OTP_Number}, raw: true })
+      if (!optionDefsValues) {
+        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.OTP_Number }, raw: true })
       }
 
       console.log(optionDefsValues, 'optionDefsValues-->')
-      if(!optionDefsValues){
+      if (!optionDefsValues) {
         optionDefsValues = 0
-      }else {
+      } else {
         optionDefsValues = Number(item.Qty)
       }
 
       let PPD_PackType = 0
       let PPD_Packs = 0
 
-      if(product.OTP_Number == 255){
-        if(product.Cig_Pack == 20){
+      if (product.OTP_Number == 255) {
+        if (product.Cig_Pack == 20) {
           PPD_PackType = 20
           PPD_Packs = 10
         }
-        else if(product.Cig_Pack == 10){
+        else if (product.Cig_Pack == 10) {
           PPD_PackType = 10
           PPD_Packs = 20
         }
-       
+
       }
 
-      let adjprice =  Number(item.Price);
+      let adjprice = Number(item.Price);
       const orderDetail = {
         PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
         Order_Number: orderNumber,
@@ -6289,18 +6329,18 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
         Pack: product.Pack,
         UOM: product.UOM,
         Price: Number(adjprice),
-        Price_Reference:Number(adjprice),
+        Price_Reference: Number(adjprice),
         Retail: product.Retail1,
         NetCost: product.NetCost,
         BaseCost: product.BaseCost,
-        Confirmed:true,
+        Confirmed: true,
         Invoice_Cost: product.Invoice_Cost,
         AvgCost: product.AvgCost,
-       OTP_Amount_State: Number(item.Tax_Rate ?? 0),
-       
+        OTP_Amount_State: Number(item.Tax_Rate ?? 0),
+
         OTP_Amount_County: 0,
         OTP_Amount_City: 0,
-        Item_Message: product.Item_Message ? product.Item_Message :  ' ',
+        Item_Message: product.Item_Message ? product.Item_Message : ' ',
 
         DepositAmount: product.DepositAmount,
         Price_Subclass: product.Price_Subclass,
@@ -6313,8 +6353,8 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
         ItemDescription: product.Description,
         CaseWeight: product.CaseWeight,
         CaseCount: product.CaseCount,
-        PPD_PackType:PPD_PackType,
-        PPD_Packs:PPD_Packs,
+        PPD_PackType: PPD_PackType,
+        PPD_Packs: PPD_Packs,
         // CasesPerPallet: product.CasesPerPallet,
       };
 
@@ -6327,28 +6367,28 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
 
     try {
       const resolvedOrderDetails = await Promise.all(orderDetails);
-    
+
       await OrderDetail.bulkCreate(resolvedOrderDetails);
-    
-      
-    
+
+
+
       console.log('Order details created successfully');
     } catch (error) {
       console.log(error, 'error-->')
       throw new AppError('Failed to create order details', 500);
     }
-    
+
 
 
     console.log(customer, 'customer-->---->------------------------>')
-  
+
 
     return {
       orderDetails,
       message: "Order placed successfully"
     };
-  
-}
+
+  }
 
 
 
@@ -6358,7 +6398,7 @@ async getInventoryItemsForOrderConfirmation(query: PaginationOptions & { search?
       throw new AppError('Sales category not found', 404);
     }
     if (salesCategory.Sales_Category === 1) {
-      throw new AppError('Cigarette sales category cannot be modified',403);
+      throw new AppError('Cigarette sales category cannot be modified', 403);
     }
     await salesCategory.update(body);
 

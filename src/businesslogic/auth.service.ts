@@ -954,12 +954,12 @@ export class AuthService {
   }
 
    async checkerLogin(body: any){
-    // 1️⃣ Find user with role = "checker"
+    // 1️⃣ Find user with role = "checker" or "sales"
     const isUserExist = await WebUsers.findOne({
       where: {
         email: body.email,
         status: true,
-        role: "checker",
+        role: { [Op.or]: ["checker", "sales"] },
         isActive: true,
       },
     });
@@ -971,20 +971,41 @@ export class AuthService {
       throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
     }
 
-    // 3️⃣ Compare password (bcrypt or your comparePassword function)
+    // 3️⃣ If user is "sales", check for order_checker permission with view or edit
+    let orderCheckerPermission: any = null;
+    if (isUserExist.role === "sales") {
+      orderCheckerPermission = await RolePermission.findOne({
+        where: {
+          userId: isUserExist.id,
+          module: "Order Checker",      
+          status: true,
+          isActive: true,
+          [Op.or]: [
+            { view: true },
+            { edit: true }
+          ]
+        },
+      });
+
+      if (!orderCheckerPermission) {
+        throw new AppError("Access denied: Sales user must have order checker permission with view or edit access", 403);
+      }
+    }
+
+    // 4️⃣ Compare password (bcrypt or your comparePassword function)
     const checkPassword = await comparePassword(body.password, isUserExist.password);
     if (!checkPassword) {
       throw new AppError(AuthMessage.INVALID_PASS_EMAIL, 400);
     }
 
-    // 4️⃣ Generate token
+    // 5️⃣ Generate token
     const token = generateToken({
       id: isUserExist.id,
       role: isUserExist.role,
       userNumber: isUserExist.userNumber,
     });
 
-    // 5️⃣ Get role permissions
+    // 6️⃣ Get role permissions
     const getUserRolesPermissions = await RolePermission.findAll({
       where: { userId: isUserExist.id },
     });
@@ -992,12 +1013,12 @@ export class AuthService {
       (perm: any) => perm.add || perm.edit || perm.view
     );
 
-    // 6️⃣ Check if user already has an active session
+    // 7️⃣ Check if user already has an active session
     const isSessionActive = await SalesSession.findOne({
       where: { userId: isUserExist.id },
     });
 
-    // 7️⃣ If active, fetch store details
+    // 8️⃣ If active, fetch store details
     let storeDetail: any = null;
     if (isSessionActive) {
       const store = await Customer.findOne({
@@ -1032,22 +1053,24 @@ export class AuthService {
       }
     }
 
-    // 8️⃣ Get Distributor and Epick Settings
+    // 9️⃣ Get Distributor and Epick Settings
     const wholeStoreDetail = await Distributor.findOne({
       attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"],
     });
 
     const epickSetting = await EpickSetting.findOne({});
 
-    // 9️⃣ Final Response
+    // 🔟 Final Response
     return {
       token: token,
       rolesPermission: filtered,
       logo: logo?.warehouseImage || null,
       epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
-      role: "checker",
+      role: isUserExist.role,
       profile: {
         id: isUserExist.id,
+     isview: isUserExist.role === "sales" ? orderCheckerPermission?.view : true,
+        isedit: isUserExist.role === "sales" ? orderCheckerPermission?.edit : true,
         email: isUserExist.email,
         firstName: isUserExist.firstName,
         lastName: isUserExist.lastName,

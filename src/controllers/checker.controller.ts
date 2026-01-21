@@ -139,6 +139,30 @@ export class CheckerController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async createContainer(req: Request, res: Response) {
+        const { orderNumber, containerType } = req.body;
+
+        // Validate required fields
+        if (!orderNumber || !containerType) {
+            return sendResponse(res, 400, false, null, "Missing required fields: orderNumber, containerType");
+        }
+
+        // Validate types
+        if (typeof orderNumber !== 'number') {
+            return sendResponse(res, 400, false, null, "orderNumber must be a number");
+        }
+
+        if (!['box', 'tote', 'drink'].includes(containerType)) {
+            return sendResponse(res, 400, false, null, "containerType must be 'box', 'tote', or 'drink'");
+        }
+
+        const data = await this.checkerService.createContainer({
+            orderNumber,
+            containerType
+        });
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async createContainerAndMoveItems(req: Request, res: Response) {
         const { orderNumber, containerType, sourceBoxId, items } = req.body;
 

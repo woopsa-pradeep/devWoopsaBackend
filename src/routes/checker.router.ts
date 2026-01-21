@@ -15,6 +15,7 @@ router.get("/getBoxItem/:boxId", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAs
 router.get("/getOrderItems/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.getOrderItems.bind(checkerController)));
 router.post("/moveItemsToBox", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.moveItemsToBox.bind(checkerController)));
 router.post("/updateItemQty", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.updateItemQty.bind(checkerController)));
+router.post("/createContainer", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.createContainer.bind(checkerController)));
 router.post("/createContainerAndMoveItems", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.createContainerAndMoveItems.bind(checkerController)));
 router.post("/readyForDelivery/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(checkerController.readyForDelivery.bind(checkerController)));
 router.post("/capturePhotos/:orderNumber", verifyRole(ROLES.CHECKER, ROLES.SALES), multerUpload.array('images'), catchAsync(checkerController.capturePhotos.bind(checkerController)));

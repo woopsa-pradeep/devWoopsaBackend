@@ -16,7 +16,7 @@ import { OverrideRequest } from "../models/postgres/overrideRequest.model";
 import { WebUsers } from "../models/postgres/users.model";
 import { EpickConfirmation } from "../models/postgres/epickConfirmation.model";
 import SalesCategory from "../models/mmsql/salesCategory.model";
-import { getInventoryOnHand, generatePDFFromHTML } from "../utils/helper";
+import { getInventoryOnHand, generatePDFFromHTML, generateBarcode } from "../utils/helper";
 import { AppError } from "../utils/AppError";
 import { uploadFileToAzure, deleteFileFromAzure } from "../utils/azureUploader";
 import { generateBarcodeAndUpload } from "../utils/barCodeGenerate";
@@ -24,6 +24,7 @@ import { getDefaultOrderDetailValues } from "../utils/order";
 import puppeteer from 'puppeteer';
 import moment from 'moment';
 import { sequelize } from "../db";
+import { EpickUser } from "../models/postgres/epickUser.model";
 
 export class CheckerService {
 
@@ -126,20 +127,21 @@ export class CheckerService {
     );
     
     // Fetch picker names from Users table
-    const pickers = await Users.findAll({
-      where: {
-        UserNumber: { [Op.in]: pickerIds },
+       const epickPickers = await EpickUser.findAll({
+
+    where: {
+        userNumber: { [Op.in]: pickerIds.map((id: any) => String(id)) },
       },
-      attributes: ['UserNumber', 'UserName'],
+      attributes: ['userNumber', 'firstName', 'lastName'],
       raw: true,
     });
     
     // Create a map of picker ID to picker name
     const pickerMap: any = {};
-    pickers.forEach((picker: any) => {
-      pickerMap[picker.UserNumber] = picker.UserName;
+epickPickers.forEach((picker: any) => {
+      const fullName = `${picker.firstName} ${picker.lastName}`.trim();
+      pickerMap[picker.userNumber] = fullName;
     });
-    
     // Query all OrderPickBox records for these orders
     const orderBoxes = await OrderPickBox.findAll({
       where: {
@@ -184,7 +186,7 @@ export class CheckerService {
       const invoiced = invoiceNumber !== 0;
       
       // Get picker name from picker map
-      const pickerName = order.Picker_ID ? (pickerMap[order.Picker_ID] || null) : null;
+      const pickerName = order.Picker_ID ? (pickerMap[String(order.Picker_ID)] || null) : null;
       
       return {
         orderNumber: orderNum,
@@ -355,19 +357,19 @@ export class CheckerService {
       )
     );
     
-    // Fetch picker names from Users table
-    const pickers = await Users.findAll({
+    // Fetch picker names from EpickUser table
+    const epickPickers = await EpickUser.findAll({
       where: {
-        UserNumber: { [Op.in]: pickerIds },
+        userNumber: { [Op.in]: pickerIds.map((id: any) => String(id)) },
       },
-      attributes: ['UserNumber', 'UserName'],
-      raw: true,
+      attributes: ['userNumber', 'firstName', 'lastName'],
     });
     
-    // Create a map of picker ID to picker name
+    // Create a map of picker ID to picker name (firstName + lastName)
     const pickerMap: any = {};
-    pickers.forEach((picker: any) => {
-      pickerMap[picker.UserNumber] = picker.UserName;
+    epickPickers.forEach((picker: any) => {
+      const fullName = `${picker.firstName} ${picker.lastName}`.trim();
+      pickerMap[picker.userNumber] = fullName;
     });
     
     // Query all OrderPickBox records for these orders
@@ -414,7 +416,7 @@ export class CheckerService {
       const invoiced = invoiceNumber !== 0;
       
       // Get picker name from picker map
-      const pickerName = order.Picker_ID ? (pickerMap[order.Picker_ID] || null) : null;
+      const pickerName = order.Picker_ID ? (pickerMap[String(order.Picker_ID)] || null) : null;
       
       return {
         orderNumber: orderNum,
@@ -437,7 +439,7 @@ export class CheckerService {
 
   /**
    * Get items in a box by box ID
-   * - Returns item details with qty from Quantity_Shipped
+   * - Returns item details with qty from Quantity_..Shipped
    */
   async getBoxItem(boxId: number) {
     // Get all scans for this box with actual qty values
@@ -3504,7 +3506,44 @@ export class CheckerService {
       totalQtyShipped
     };
   }
+  /**
+   * Create a new container (box/tote/drink) for an order
+   */
+  async createContainer(data: {
+    orderNumber: number;
+    containerType: 'box' | 'tote' | 'drink';
+  }) {
+    const { orderNumber, containerType } = data;
+    
+    // Generate barcode value
+    const barcodeValue = generateBarcode(orderNumber);
+    
+    // Generate and upload barcode image
+    const barcodeResult = await generateBarcodeAndUpload(barcodeValue, {
+      folderName: 'barcodes/orders',
+      type: 'code128',
+      includeText: true,
+      scale: 4,
+      height: 14,
+    });
 
+    // Check if barcode generation was successful
+    if (!barcodeResult.success || !barcodeResult.url) {
+      throw new AppError("Failed to generate barcode", 400);
+    }
+
+    // Create container with barcode
+    const container = await OrderPickBox.create({
+      orderNumber: orderNumber,
+      type: containerType,
+      notes: null,
+      images: null,
+      barcode: barcodeResult.url,
+      value: barcodeValue
+    });
+    
+    return container;
+  }
   /**
    * Create new container (box/tote/drink) and move items to it
    * Only allowed if invoice is not created (Invoice_Number = 0)
@@ -3564,6 +3603,22 @@ export class CheckerService {
         throw new AppError(`Insufficient quantity for item ${item.itemNumber}. Available: ${totalSourceQty}, Requested: ${item.qty}`, 400);
       }
     }
+ // Generate barcode value
+    const barcodeValue = generateBarcode(orderNumber);
+    
+    // Generate and upload barcode image
+    const barcodeResult = await generateBarcodeAndUpload(barcodeValue, {
+      folderName: 'barcodes/orders',
+      type: 'code128',
+      includeText: true,
+      scale: 4,
+      height: 14,
+    });
+
+    // Check if barcode generation was successful
+    if (!barcodeResult.success || !barcodeResult.url) {
+      throw new AppError("Failed to generate barcode", 400);
+    }
 
     // Create new container
     const newContainer = await OrderPickBox.create({
@@ -3571,8 +3626,8 @@ export class CheckerService {
       type: containerType,
       notes: null,
       images: null,
-      barcode: null,
-      value: null
+      barcode: barcodeResult.url,
+      value: barcodeValue
     });
 
     const newContainerId = newContainer.id;
