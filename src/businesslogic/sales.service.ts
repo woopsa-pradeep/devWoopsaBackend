@@ -130,7 +130,7 @@ export class SalesService {
   }
 
   async placeOrder(orderData: PlaceOrder, req: any, customerId: any) {
-    const { shippingDetails , hasDiscount ,discountAmount} = orderData;
+    const { shippingDetails , hasDiscount ,discountAmount, order_type} = orderData;
     const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
@@ -161,7 +161,34 @@ export class SalesService {
       throw new AppError("Customer not found", 404);
     }
     const orderNumber = await getNextOrderNumber();
+    let Order_Type = 0;
 
+    if(order_type == 'regular'){
+      Order_Type = 0;
+    }
+    if(order_type == 'prebook'){
+      Order_Type = 1;
+    }
+    if(order_type == 'backorder'){
+      Order_Type = 2;
+    }
+    if(order_type == 'price_quote'){
+      Order_Type = 4;
+    }
+    if(order_type == 'return_sales'){
+      Order_Type = 5;
+     }
+    if(order_type == 'return_order'){
+      Order_Type = 6;
+     }
+    if(order_type == 'trade_show'){
+      Order_Type = 7;
+    }
+    if(order_type == 'pos'){
+      Order_Type = 8;
+    }
+  
+   
     // Prepare dynamic header data
     const orderHeaderObject = {
       Order_Number: orderNumber,
@@ -191,7 +218,7 @@ export class SalesService {
       Cig25tax: 0,
       POS_ChangeDue: 0,
       Order_Pricing_Account: customer.C_PricingAccount || customerId,
-
+      Order_Type: Order_Type || 0,
       Points: 0,
       Total_Weight: 0,
       Delivery_Charge_Select: !!customer.Delivery_Charge,

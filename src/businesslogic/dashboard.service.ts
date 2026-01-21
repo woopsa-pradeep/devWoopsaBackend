@@ -24,6 +24,7 @@ import { OverrideRequest } from "../models/postgres/overrideRequest.model";
 import { OrderPickScan } from "../models/postgres/epickOrderScan.model";
 import { sequelize } from "../db";
 import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model";
+import { Users } from "../models/mmsql/user.model";
 
 
 export class DashboardService {
@@ -1531,24 +1532,31 @@ export class DashboardService {
 
 
 
-        // Get sales rep details for each sales person
-        const salesPersonWithDetails = await Promise.all(
-            salesPersonData.map(async (salesPerson: any) => {
-                const salesRep = await SalesRep.findByPk(salesPerson['orderHeader.S_Number'], {
-                    attributes: ['S_Number', 'S_Desc']
-                });
+       
 
-                return {
-                    salesRepNumber: salesPerson['orderHeader.S_Number'],
-                    salesRepName: salesRep?.S_Desc || 'Unknown',
-                    totalSales: Number(salesPerson.totalSales * salesPerson.totalQuantity || 0),
-                    orderCount: parseInt(salesPerson.orderCount || 0),
-                    totalQuantity: Number(salesPerson.totalQuantity || 0)
-                };
-            })
-        );
+ 
 
+const results = await OrderHeader.findAll({
+    attributes: [
+      [col("user.UserName"), "userName"],
+      [literal(`SUM([OrderHeader].[Invoice_Total])`), "totalInvoiceTotal"],
+    ],
+    include: [
+        { model: Users, as: "user", attributes: [], required: false }, 
+      ],
+    where: {
+      Order_Deleted: false,
+      Invoice_Number: { [Op.ne]: 0 },
+      Invoice_Date: { [Op.between]: [startDate, endDate] },
+      Order_Updated: true,
+    },
+    group: [col("user.UserName")],
+    order: [[col("user.UserName"), "ASC"]],
+    raw: true,
+  });
+  
 
+   
 
         // Summary statistics
         const totalActiveCustomer = await Customer.count({ where: { C_Inactive: false } });
@@ -1666,7 +1674,8 @@ export class DashboardService {
                 retailer: orderByRetailer
             },
             highDemandProducts: top10HighDemandProducts,
-            salesPersonPerformance: salesPersonWithDetails,
+            salesPersonPerformance: [],
+            userPerformance: results,
             dateRange: {
                 fromDate: startDate.toISOString().split('T')[0],
                 toDate: endDate.toISOString().split('T')[0]

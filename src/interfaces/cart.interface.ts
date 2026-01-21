@@ -53,6 +53,7 @@ export interface PlaceOrder {
   shippingDetails: any;
   hasDiscount: boolean;
   discountAmount: number;
+  order_type?: string;
 }
 
 

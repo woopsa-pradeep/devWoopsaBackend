@@ -25,6 +25,7 @@ import { Vendor } from "./vendor.model";
 import { ClassOfTrade } from "./classOfTrade.model";
 import { Order_Header_Costs } from "./orderHeaderCost.model";
 import { Record_Locks } from "./recordLock.model";
+import { Users } from "./user.model";
 
 
 
@@ -347,7 +348,18 @@ OrderHeader.hasMany(Record_Locks, {
   constraints: false,
 });
 
+OrderHeader.belongsTo(Users, {
+  foreignKey: 'User_ID',     // column in Order_Header
+  targetKey: 'UserNumber',   // PK in Users
+  as: 'user',
+});
 
+// Optional reverse (not required for your query)
+Users.hasMany(OrderHeader, {
+  foreignKey: 'User_ID',
+  sourceKey: 'UserNumber',
+  as: 'orders',
+});
 
 
 }
