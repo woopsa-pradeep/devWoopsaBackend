@@ -1539,7 +1539,8 @@ export class DashboardService {
 const results = await OrderHeader.findAll({
     attributes: [
       [col("user.UserName"), "userName"],
-      [literal(`SUM([OrderHeader].[Invoice_Total])`), "totalInvoiceTotal"],
+      [fn("COUNT", col("OrderHeader.Order_Number")), "order_Count"],
+      [fn("SUM", col("OrderHeader.Invoice_Total")), "totalInvoiceTotal"],
     ],
     include: [
         { model: Users, as: "user", attributes: [], required: false }, 
