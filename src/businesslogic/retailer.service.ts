@@ -270,8 +270,8 @@ export class RetailerService {
   // }
 
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state='', zip='', jurisdiction='', salesCategory=[] } = query;
-    
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
+
     if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
       salesCategoryId = salesCategoryId.map(id => Number(id));
     }
@@ -279,7 +279,7 @@ export class RetailerService {
     if (Array.isArray(priceClassId) && priceClassId.length > 0) {
       priceClassId = priceClassId.map(id => Number(id));
     }
-    
+
     const userJurisdiction = await getJurisdiction(user.id);
 
     let wareHouseSetting: any = await Setting.findOne({});
@@ -294,10 +294,10 @@ export class RetailerService {
     };
 
     const excludeItem = await excludeItemByUser(user.id);
-    if(excludeItem.length > 0){
+    if (excludeItem.length > 0) {
       whereClause.Item_Number = { [Op.notIn]: excludeItem };
     }
-    if(state || zip || jurisdiction){
+    if (state || zip || jurisdiction) {
       const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
       whereClause.Item_Number = { [Op.notIn]: excludeItem };
     }
@@ -319,12 +319,12 @@ export class RetailerService {
 
       if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
         // Both filters exist → use OR condition
-        whereClause={
+        whereClause = {
           Sales_Category: { [Op.in]: salesCategoryId },
           Price_Class: { [Op.in]: priceClassId }
         };
 
-        console.log(salesCategoryId,'salesCategoryId',priceClassId,'priceClassId','both filters exist')
+        console.log(salesCategoryId, 'salesCategoryId', priceClassId, 'priceClassId', 'both filters exist')
       } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
         // Only Sales_Category filter
         whereClause.Sales_Category = { [Op.in]: salesCategoryId };
@@ -337,7 +337,7 @@ export class RetailerService {
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
-        } 
+        }
         else {
           if (Array.isArray(salesCategory) && salesCategory.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
@@ -346,57 +346,57 @@ export class RetailerService {
           const anywhere = `%${term}%`;
           const starts = `${term}%`
 
-          
-  whereClause[Op.or] = [
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Description")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
-      { [Op.like]: anywhere }
-    )
-  ];
 
-  // ORDER RULE:
-  // 1. Items starting with search term first
-  // 2. Then items containing it anywhere
-  // 3. Finally alphabetical
-  orderClause = [
-    [
-      Sequelize.literal(`
+          whereClause[Op.or] = [
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+              { [Op.like]: anywhere }
+            ),
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("Description")),
+              { [Op.like]: anywhere }
+            ),
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
+              { [Op.like]: anywhere }
+            ),
+            Sequelize.where(
+              Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+              { [Op.like]: anywhere }
+            )
+          ];
+
+          // ORDER RULE:
+          // 1. Items starting with search term first
+          // 2. Then items containing it anywhere
+          // 3. Finally alphabetical
+          orderClause = [
+            [
+              Sequelize.literal(`
         CASE 
           WHEN LOWER("Description") LIKE '${starts}' THEN 0
           WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
           ELSE 2
         END
       `),
-      'ASC'
-    ],
-    ['Description', 'ASC']
-  ];
-}
+              'ASC'
+            ],
+            ['Description', 'ASC']
+          ];
+        }
 
 
-        
+
       }
 
     }
 
-    if(searchInUPC){
+    if (searchInUPC) {
       if (Array.isArray(salesCategory) && salesCategory.length > 0) {
         whereClause.Sales_Category = { [Op.in]: salesCategory };
       }
     }
-    
+
 
     // === UPC JOIN logic ===
     const includeUPC = {
@@ -410,16 +410,16 @@ export class RetailerService {
       required: searchInUPC
     };
 
-    
-    orderClause = [['Date_Created', 'DESC']] as Order ;
-    
-        if (search && !searchInUPC && !masterSearch) {
-          orderClause = [[col('Description'), 'ASC']]as Order;
-        } else if (Number(shortBy) === 1) {
-          orderClause = [[col('Description'), 'ASC']]as Order;
-        } else if (Number(shortBy) === 2) {
-          orderClause = [[col('Description'), 'DESC']]as Order;
-        }
+
+    orderClause = [['Date_Created', 'DESC']] as Order;
+
+    if (search && !searchInUPC && !masterSearch) {
+      orderClause = [[col('Description'), 'ASC']] as Order;
+    } else if (Number(shortBy) === 1) {
+      orderClause = [[col('Description'), 'ASC']] as Order;
+    } else if (Number(shortBy) === 2) {
+      orderClause = [[col('Description'), 'DESC']] as Order;
+    }
 
 
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
@@ -460,18 +460,18 @@ export class RetailerService {
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
-        "Retail1","Retail2","Retail3",
+        "Retail1", "Retail2", "Retail3",
         "CasesPerPallet",
-        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost','Unit_Price',
+        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'Unit_Price',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT'
       ],
       where: whereClause,
       include: [
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc','Sales_Category'],
+          attributes: ['Category_Desc', 'Sales_Category'],
           required: false
         },
         {
@@ -528,12 +528,12 @@ export class RetailerService {
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
       let prepaidTaxRate = 0
-      if(userJurisdiction !=null && e.SalesCategory){
+      if (userJurisdiction != null && e.SalesCategory) {
 
-        console.log(e?.SalesCategory,'e.Sales_Category')
-       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
+        console.log(e?.SalesCategory, 'e.Sales_Category')
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
       }
-    
+
 
 
       return {
@@ -591,14 +591,14 @@ export class RetailerService {
   }
 
   async getInventoryShowPrepaidTax(user: any) {
-      const setting = await Setting.findOne({
-          where: { showWithPerpaidTax: true },
-        });
+    const setting = await Setting.findOne({
+      where: { showWithPerpaidTax: true },
+    });
 
-        return {
-          showWithPerpaidTax: setting ? setting.showWithPerpaidTax : false,
-        };
-    }
+    return {
+      showWithPerpaidTax: setting ? setting.showWithPerpaidTax : false,
+    };
+  }
 
   async getInventoryItemByItemNumber(itemNumber: string) {
     const data = await Inventory.findOne({
@@ -672,7 +672,7 @@ export class RetailerService {
     await inventoryLocation.update(body);
     return inventoryLocation;
   }
-  
+
   async getBannerList() {
 
     const { count: totalCount, rows: bannerList } = await Banner.findAndCountAll({
@@ -871,7 +871,7 @@ export class RetailerService {
       },
       order: [['createdAt', 'DESC']]
     });
-    let findTheLimit :any = await Retailer.findOne({  
+    let findTheLimit: any = await Retailer.findOne({
       where: {
         Customer_Number: customerNumber,
         isActive: true
@@ -880,7 +880,7 @@ export class RetailerService {
 
     const start = moment().startOf("week").toDate(); // start of this week
     const end = moment().endOf("week").toDate();     // end of this week
-    
+
     const weekUserOrders: any[] = await OrderHistory.findAll({
       where: {
         C_Number: customerNumber,
@@ -892,13 +892,13 @@ export class RetailerService {
       },
       order: [["createdAt", "DESC"]],
     });
-    
-    if(weekUserOrders && weekUserOrders?.length > 0){
+
+    if (weekUserOrders && weekUserOrders?.length > 0) {
       todayTotalAmount = weekUserOrders.reduce(
         (sum, item) => sum + Number(item.orderPrice),
         0
       );
-  }
+    }
     const finalCartItems = await Promise.all(cartItems.map(async (es: any) => {
       const e: any = es.dataValues
       const productImage = await ProductImage.findOne({
@@ -922,25 +922,25 @@ export class RetailerService {
           {
             model: SalesCategory,
             as: 'SalesCategory',
-            attributes: ['Category_Desc','Sales_Category'],
+            attributes: ['Category_Desc', 'Sales_Category'],
             required: false
           },
           {
             model: PriceClass,
             as: 'PriceClass',
-            attributes: ['Class_Desc','Price_Class'],
+            attributes: ['Class_Desc', 'Price_Class'],
             required: false
           },
           {
-          model: InventoryUPC,
-          as: 'UPCList',
-          attributes: ['UPC_Number'],
-          where: {
-            Status: 0,
-          },
-          required: false
+            model: InventoryUPC,
+            as: 'UPCList',
+            attributes: ['UPC_Number'],
+            where: {
+              Status: 0,
+            },
+            required: false
 
-        }]
+          }]
       })
       product = product?.dataValues || null;
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number)
@@ -965,7 +965,7 @@ export class RetailerService {
       const isDiscounted = await hasDiscountedItem(e.Item_Number, product.Price_Subclass);
       const userJurisdiction = await getJurisdiction(customerNumber);
       let prepaidTaxRate = 0
-      if(userJurisdiction !=null && product.SalesCategory){
+      if (userJurisdiction != null && product.SalesCategory) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category);
       }
 
@@ -986,7 +986,7 @@ export class RetailerService {
         salesCategory: product.SalesCategory?.Category_Desc,
         priceClass: product.PriceClass?.Class_Desc,
         priceClassId: product.PriceClass?.Price_Class,
-        upc:product?.UPCList,
+        upc: product?.UPCList,
         unitOunces: product.UnitOunces,
         pack: product.Pack,
         size: product.Size,
@@ -1023,32 +1023,44 @@ export class RetailerService {
     const totalAmount = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPrice), 0);
     const totalAmountWithTax = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
 
-    console.log(findTheLimit,'findTheLimit-->')
+    console.log(findTheLimit, 'findTheLimit-->')
 
-    let globalMinOrderAmount :any = {};
-   
-    if(!findTheLimit){
-       globalMinOrderAmount  = await Setting.findOne({
+    let globalMinOrderAmount: any = {};
+
+    if (!findTheLimit) {
+      globalMinOrderAmount = await Setting.findOne({
 
         attributes: ['itemGlobal']
       })
+
+      if (globalMinOrderAmount) {
+        globalMinOrderAmount = globalMinOrderAmount?.dataValues || null;
+      }
+
     }
- if (findTheLimit) {
+
+    
+    if (findTheLimit) {
       findTheLimit = findTheLimit?.dataValues || null;
       if (!findTheLimit?.minOrderAmount || findTheLimit?.minOrderAmount == 0) {
-      
-        globalMinOrderAmount  = await Setting.findOne({
+
+        globalMinOrderAmount = await Setting.findOne({
 
           attributes: ['itemGlobal']
         })
         globalMinOrderAmount = globalMinOrderAmount?.dataValues || null;
         console.log(globalMinOrderAmount, 'globalMinOrderAmount-->')
-        findTheLimit.minOrderAmount = globalMinOrderAmount?.itemGlobal?.MiniMumOrderAmount || 0;
+        findTheLimit = {
+          maxOrderLimit: globalMinOrderAmount?.itemGlobal?.maxOrderLimit || 0,
+          minOrderAmount: globalMinOrderAmount?.itemGlobal?.MiniMumOrderAmount || 0,
+        };
       }
-    } 
+    }
     else {
-      findTheLimit.maxOrderLimit = globalMinOrderAmount?.itemGlobal?.maxOrderLimit || 0;
-      findTheLimit.minOrderAmount = globalMinOrderAmount?.itemGlobal?.MiniMumOrderAmount || 0;
+      findTheLimit = {
+        maxOrderLimit: globalMinOrderAmount?.itemGlobal?.maxOrderLimit || 0,
+        minOrderAmount: globalMinOrderAmount?.itemGlobal?.MiniMumOrderAmount || 0,
+      };
     }
 
     return {
@@ -1150,12 +1162,12 @@ export class RetailerService {
     const isWeb = isWebOrder === 'true' ? true : false;
     const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
 
-    const {method} = shippingDetails;
+    const { method } = shippingDetails;
     let deliveryId = 0;
-    if(method === 'delivery'){
-      deliveryId =0;
+    if (method === 'delivery') {
+      deliveryId = 0;
     }
-    if(method === 'pickup'){
+    if (method === 'pickup') {
       deliveryId = 99
     }
 
@@ -1270,7 +1282,7 @@ export class RetailerService {
 
     const productMap = new Map(products.map(product => [product.Item_Number, product]));
 
-    const orderDetails = orderPlayload.map(async (item:any, index) => {
+    const orderDetails = orderPlayload.map(async (item: any, index) => {
       const product = productMap.get(item.Item_Number);
 
       if (!product) {
@@ -1281,31 +1293,31 @@ export class RetailerService {
         throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
       }
 
-      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.Sales_Category}, raw: true })
+      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.Sales_Category }, raw: true })
 
-      if(!optionDefsValues){
-        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value :product.OTP_Number}, raw: true })
+      if (!optionDefsValues) {
+        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.OTP_Number }, raw: true })
       }
 
       console.log(optionDefsValues, 'optionDefsValues-->')
-      if(!optionDefsValues){
+      if (!optionDefsValues) {
         optionDefsValues = 0
-      }else {
+      } else {
         optionDefsValues = Number(item.Qty)
       }
       let PPD_PackType = 0
       let PPD_Packs = 0
 
-      if(product.OTP_Number == 255){
-        if(product.Cig_Pack == 20){
+      if (product.OTP_Number == 255) {
+        if (product.Cig_Pack == 20) {
           PPD_PackType = 20
           PPD_Packs = 10
         }
-        else if(product.Cig_Pack == 10){
+        else if (product.Cig_Pack == 10) {
           PPD_PackType = 10
           PPD_Packs = 20
         }
-       
+
       }
       const orderDetail = {
         PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
@@ -1328,7 +1340,7 @@ export class RetailerService {
         OTP_Amount_State: Number(item.Tax_Rate ?? 0),
         OTP_Amount_County: 0,
         OTP_Amount_City: 0,
-        Item_Message: product.Item_Message ? product.Item_Message :  ' ',
+        Item_Message: product.Item_Message ? product.Item_Message : ' ',
         DepositAmount: product.DepositAmount,
         Price_Subclass: product.Price_Subclass,
         OffInvoice_Amount: 0,
@@ -1340,8 +1352,8 @@ export class RetailerService {
         ItemDescription: product.Description,
         CaseWeight: product.CaseWeight,
         CaseCount: product.CaseCount,
-        PPD_PackType:PPD_PackType,
-        PPD_Packs:PPD_Packs,
+        PPD_PackType: PPD_PackType,
+        PPD_Packs: PPD_Packs,
         // CasesPerPallet: product.CasesPerPallet,
       };
 
@@ -1354,9 +1366,9 @@ export class RetailerService {
 
     try {
       const resolvedOrderDetails = await Promise.all(orderDetails);
-    
+
       await OrderDetail.bulkCreate(resolvedOrderDetails);
-    
+
       try {
         sendEmailToOrder(orderHeaderCreated, resolvedOrderDetails, customer, Delivery_Charge);
       } catch (error) {
@@ -1407,7 +1419,7 @@ export class RetailerService {
     });
 
     // Send order confirmation email to customer
-  
+
 
     return {
       orderHeader: orderHeaderCreated,
@@ -1418,97 +1430,97 @@ export class RetailerService {
 
   async getOrderHistoryByProductNumber(productNumber: number, retailerId: number) {
 
-      const orderHeaders = await OrderHeader.findAll({
-        where: { C_Number: retailerId },
-        attributes: ['Order_Number', 'Order_Date', 'C_Number'],
+    const orderHeaders = await OrderHeader.findAll({
+      where: { C_Number: retailerId },
+      attributes: ['Order_Number', 'Order_Date', 'C_Number'],
 
-        include: [
-          {
-            model: OrderDetail,
-            as: 'orderDetails',
-            where: { Item_Number: productNumber },
-            required: true,
-            attributes: [
-              'Order_Number',
-              'Line_Number',
-              'Item_Number',
-              'Sales_Category',
-              'OTP_Number',
-              'Quantity_Ordered',
-              'Quantity_Shipped',
-              'Pack',
-              'Price',
-              'Price_Reference',
-              'Retail',
-              'NetCost',
-              'BaseCost',
-              'Invoice_Cost',
-              'AvgCost',
-              'OTP_Amount_State',
-              'OTP_Amount_County',
-              'OTP_Amount_City',
-              'DepositAmount',
-              'Price_Subclass',
-              'OffInvoice_Amount',
-              'Taxable',
-              'ItemDescription',
-              'CaseWeight',
-              'CaseCount',
-            ],
-            include: [
-              {
-                model: Inventory,
-                as: 'inventory',
-                attributes: ['Item_Number', 'Description'],
-                include: [
-                  {
-                    model: InventoryUPC,
-                    as: 'UPCList',
-                    where: { Status: 0 },
-                    attributes: ['UPC_Number'],
-                    required: false
-                  }
-                ]
-              }
-            ]
-          }
-        ],
-
-        order: [['Order_Number', 'DESC']],
-        limit: 30,
-      });
-
-      // Build final normalised output
-      const response: any[] = [];
-
-      for (const header of orderHeaders) {
-        const details = (header as any).orderDetails;
-
-        for (const detail of details) {
-          const productImage = await ProductImage.findOne({
-            where: {
-              product_number: detail.Item_Number.toString(),
-              isAllow: true,
-            },
-          });
-
-          response.push({
-            ...detail.toJSON(),
-            orderHeader: {
-              Order_Number: header.Order_Number,
-              Order_Date: header.Order_Date,
-              C_Number: header.C_Number,
-            },
-
-            isDistributorImageShow: productImage?.isAllow ?? false,
-            distributorImage: productImage?.img_url ?? null,
-            masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory?.UPCList?.[0]?.UPC_Number}.jpg`
-          });
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails',
+          where: { Item_Number: productNumber },
+          required: true,
+          attributes: [
+            'Order_Number',
+            'Line_Number',
+            'Item_Number',
+            'Sales_Category',
+            'OTP_Number',
+            'Quantity_Ordered',
+            'Quantity_Shipped',
+            'Pack',
+            'Price',
+            'Price_Reference',
+            'Retail',
+            'NetCost',
+            'BaseCost',
+            'Invoice_Cost',
+            'AvgCost',
+            'OTP_Amount_State',
+            'OTP_Amount_County',
+            'OTP_Amount_City',
+            'DepositAmount',
+            'Price_Subclass',
+            'OffInvoice_Amount',
+            'Taxable',
+            'ItemDescription',
+            'CaseWeight',
+            'CaseCount',
+          ],
+          include: [
+            {
+              model: Inventory,
+              as: 'inventory',
+              attributes: ['Item_Number', 'Description'],
+              include: [
+                {
+                  model: InventoryUPC,
+                  as: 'UPCList',
+                  where: { Status: 0 },
+                  attributes: ['UPC_Number'],
+                  required: false
+                }
+              ]
+            }
+          ]
         }
-      }
+      ],
 
-      return response;
+      order: [['Order_Number', 'DESC']],
+      limit: 30,
+    });
+
+    // Build final normalised output
+    const response: any[] = [];
+
+    for (const header of orderHeaders) {
+      const details = (header as any).orderDetails;
+
+      for (const detail of details) {
+        const productImage = await ProductImage.findOne({
+          where: {
+            product_number: detail.Item_Number.toString(),
+            isAllow: true,
+          },
+        });
+
+        response.push({
+          ...detail.toJSON(),
+          orderHeader: {
+            Order_Number: header.Order_Number,
+            Order_Date: header.Order_Date,
+            C_Number: header.C_Number,
+          },
+
+          isDistributorImageShow: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url ?? null,
+          masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory?.UPCList?.[0]?.UPC_Number}.jpg`
+        });
+      }
     }
+
+    return response;
+  }
 
 
 
@@ -1922,7 +1934,7 @@ export class RetailerService {
     // Get order headers with pagination
     const { count: totalCount, rows: orderHeaders } = await OrderHeader.findAndCountAll({
       where: whereClause,
-     
+
       attributes: [
         'Order_Number',
         'Order_Date',
@@ -1932,7 +1944,7 @@ export class RetailerService {
       ],
       include: [
         {
-          model:OrderDetail,
+          model: OrderDetail,
           as: 'orderDetails',
           attributes: ['Order_Number', 'Quantity_Ordered'],
           required: true
@@ -1952,7 +1964,7 @@ export class RetailerService {
     const orderDetailsWithSums = await OrderDetail.findAll({
       where: {
         Order_Number: { [Op.in]: orderNumbers },
-        
+
       },
 
       attributes: [
@@ -2044,21 +2056,21 @@ export class RetailerService {
     let totalPrepaidTax = 0;
     for (const details of allOrderDetails) {
       const d = details.dataValues;
-    
+
       const basePrice = toNum(d.Price);
-      const otpState  = toNum(d.OTP_Amount_State);
-      const prepaid   = toNum(d.PrepaidTax_Amount);
-      const qty       = toNum(d.Quantity_Shipped); // or fallback below
-    
+      const otpState = toNum(d.OTP_Amount_State);
+      const prepaid = toNum(d.PrepaidTax_Amount);
+      const qty = toNum(d.Quantity_Shipped); // or fallback below
+
       const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
-    
+
       const unitPrice = basePrice + otpState + prepaid;
       totalPrepaidTax += prepaid * quantity;
-    
+
       totalPrice += unitPrice * quantity;
-    
+
       totalDiscount += toNum(d.OffInvoice_Amount);   // multiply by qty only if this is per-unit
-      totalDeposit  += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
+      totalDeposit += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
     }
     const orderDiscount = await OrderDiscount.findOne({
       where: { orderNumber: orderNumber }
@@ -2211,7 +2223,7 @@ export class RetailerService {
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc','Sales_Category'],
+          attributes: ['Category_Desc', 'Sales_Category'],
           required: false
         },
         {
@@ -2251,7 +2263,7 @@ export class RetailerService {
 
       const userJurisdiction = await getJurisdiction(user.id);
       let prepaidTaxRate = 0
-      if(userJurisdiction !=null && e.SalesCategory){
+      if (userJurisdiction != null && e.SalesCategory) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
       }
 
@@ -2294,7 +2306,7 @@ export class RetailerService {
       priceClassId?: number[],
     }
   ) {
-    let { page = 1, limit = 10, search, filter ,state='', zip='', jurisdiction='',priceClassId=[] , salesCategoryIds=[],userSalesCategory=[]} = query;
+    let { page = 1, limit = 10, search, filter, state = '', zip = '', jurisdiction = '', priceClassId = [], salesCategoryIds = [], userSalesCategory = [] } = query;
     page = Number(page);
     limit = Number(limit);
 
@@ -2304,7 +2316,7 @@ export class RetailerService {
     if (Array.isArray(priceClassId)) {
       priceClassId = priceClassId.map(Number);
     }
-    
+
     if (Array.isArray(salesCategoryIds)) {
       salesCategoryIds = salesCategoryIds
         .map(Number)
@@ -2381,24 +2393,24 @@ export class RetailerService {
       include: [
         {
           model: OrderDetail,
-          as: 'orderDetails', 
-          required: true, 
+          as: 'orderDetails',
+          required: true,
           attributes: [],
           where: {
-        // Simple sales category filter
-              ...(salesCategoryIds && salesCategoryIds.length > 0
-                ? { Sales_Category: { [Op.in]: salesCategoryIds } }
+            // Simple sales category filter
+            ...(salesCategoryIds && salesCategoryIds.length > 0
+              ? { Sales_Category: { [Op.in]: salesCategoryIds } }
+              : {})
+          },
+          include: [{
+            model: Inventory,
+            as: 'inventory',
+            where: {
+              ...(priceClassId && priceClassId.length > 0
+                ? { Price_Class: { [Op.in]: priceClassId } }
                 : {})
-            },
-            include: [{
-              model:Inventory,
-              as: 'inventory',
-              where: {
-                ...(priceClassId && priceClassId.length > 0
-                  ? { Price_Class: { [Op.in]: priceClassId } }
-                  : {})
-              }
-            }],
+            }
+          }],
         }
       ],
       attributes: ['Order_Number', 'Order_Date', 'Invoice_Total', 'Order_Source'],
@@ -2434,7 +2446,7 @@ export class RetailerService {
       }
     }
     let whereClause: any = {};
-    
+
     const userExcluded = await excludeItemByUser(Number(customerId));
     if (userExcluded && userExcluded.length > 0) {
       allExcludedItems = allExcludedItems.concat(userExcluded);
@@ -2445,7 +2457,7 @@ export class RetailerService {
       whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
     }
 
-    if(Array.isArray(userSalesCategory) && userSalesCategory?.length > 0){
+    if (Array.isArray(userSalesCategory) && userSalesCategory?.length > 0) {
       whereClause.Sales_Category = { [Op.in]: userSalesCategory };
     }
     if (search) {
@@ -2548,14 +2560,14 @@ export class RetailerService {
       const productImage = imageMap.get(itemStr) || null;
       let price = await getDiscount(detail.Item_Number, customerId);
       if (!price) {
-        const tempDetail :any = await Inventory.findOne({
+        const tempDetail: any = await Inventory.findOne({
           where: {
             Item_Number: detail.Item_Number
           },
         });
         price = await getFirstValidPrice(tempDetail);
       }
-      
+
 
       const taxRate = await getTaxRateV1(detail?.inventory?.OTP_Number, userJurisdiction as number, detail?.Item_Number, price);
 
@@ -2573,7 +2585,7 @@ export class RetailerService {
 
       let prepaidTaxRate = 0
       // console.log(detail?.inventory,'detail?.inventory?.Sales_Category')
-      if(userJurisdiction !=null && detail?.inventory?.Sales_Category){
+      if (userJurisdiction != null && detail?.inventory?.Sales_Category) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
       }
 
@@ -2891,48 +2903,50 @@ export class RetailerService {
     let upcRecord;
     barcode = barcode.trim();
 
-      // Step 1: Check if UPC exists
-      // const upcRecord = await InventoryUPC.findOne({
-      //   where: {
-      //     UPC_Number: {
-      //       [Op.like]: `%${barcode}%`,
-      //     },
-      //   },
-      // })
+    // Step 1: Check if UPC exists
+    // const upcRecord = await InventoryUPC.findOne({
+    //   where: {
+    //     UPC_Number: {
+    //       [Op.like]: `%${barcode}%`,
+    //     },
+    //   },
+    // })
 
-      if (barcode.length > 9) {
-        // If barcode is long → use LIKE search
-        upcRecord = await InventoryUPC.findOne({
-          where: {
-            UPC_Number: {
-              [Op.like]: `%${barcode}%`,
-            },
+    if (barcode.length > 9) {
+      // If barcode is long → use LIKE search
+      upcRecord = await InventoryUPC.findOne({
+        where: {
+          UPC_Number: {
+            [Op.like]: `%${barcode}%`,
           },
-        });
-      } else {
-        // If barcode length <= 9 → exact match
-        upcRecord = await InventoryUPC.findOne({
-          where: {
-            UPC_Number: barcode
-          },
-        });
-      }
+        },
+      });
+    } else {
+      // If barcode length <= 9 → exact match
+      upcRecord = await InventoryUPC.findOne({
+        where: {
+          UPC_Number: barcode
+        },
+      });
+    }
 
 
     if (!upcRecord) {
       throw new AppError(`Item not found for UPC: ${barcode}`, 404);
     }
 
-    let whereCondition :any ={ Item_Number: upcRecord.Item_Number,I_Inactive: false,
-      ShortOrderForm: true }
+    let whereCondition: any = {
+      Item_Number: upcRecord.Item_Number, I_Inactive: false,
+      ShortOrderForm: true
+    }
 
-      if(userId != null){
-        const salesCategoryArray = await getAllowedSalesCategories(userId);
-        if(Array.isArray(salesCategoryArray) && salesCategoryArray.length > 0){
-          whereCondition.Sales_Category = { [Op.in]: salesCategoryArray };
-        }
-
+    if (userId != null) {
+      const salesCategoryArray = await getAllowedSalesCategories(userId);
+      if (Array.isArray(salesCategoryArray) && salesCategoryArray.length > 0) {
+        whereCondition.Sales_Category = { [Op.in]: salesCategoryArray };
       }
+
+    }
 
     // Step 2: Fetch item details from Inventory
     const item = await Inventory.findOne({
@@ -2943,7 +2957,7 @@ export class RetailerService {
         "NetCost", "OTP_Number", "Price_Subclass"
       ],
       include: [
-        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc","Sales_Category"], required: false },
+        { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc", "Sales_Category"], required: false },
         { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
         // { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
         { model: InventoryUPC, as: "UPCList", attributes: ["UPC_Number"], required: false }
@@ -2954,8 +2968,8 @@ export class RetailerService {
       throw new AppError("Item details not found in Inventory", 404);
     }
     const userJurisdiction = await getJurisdiction(userId);
-  
-    console.log(item,'item----->')
+
+    console.log(item, 'item----->')
     // Step 3: Pricing & Tax
     let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
     const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
@@ -2975,8 +2989,8 @@ export class RetailerService {
     const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
 
     let prepaidTaxRate = 0
-    if(userJurisdiction !=null && item.SalesCategory){
-     prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
+    if (userJurisdiction != null && item.SalesCategory) {
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
     }
 
 
@@ -3043,20 +3057,21 @@ export class RetailerService {
 
 
   async addToCartMultiScanner(body: any, userId: number) {
-    const { upcNumbers, isMultiple, arrayOfUpc, state='', zip='', jurisdiction='' } = body;
+    const { upcNumbers, isMultiple, arrayOfUpc, state = '', zip = '', jurisdiction = '' } = body;
     let excludeItem: any = []
-    if(state || zip || jurisdiction){
-      excludeItem  = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+    if (state || zip || jurisdiction) {
+      excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
     }
 
     const excludeItemForCustomer = await excludeItemByUser(userId);
-    if(excludeItemForCustomer.length > 0){
+    if (excludeItemForCustomer.length > 0) {
       excludeItem = [...excludeItem, ...excludeItemForCustomer];
     }
     // Common helper to get product details by UPC
     const getProductDetailByUPC = async (UPC: string) => {
       const isUpcAvailable = await InventoryUPC.findOne({
-        where: { UPC_Number: UPC ,
+        where: {
+          UPC_Number: UPC,
 
           Item_Number: { [Op.notIn]: excludeItem }
         }
@@ -3074,7 +3089,7 @@ export class RetailerService {
           'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created', 'OTP_Number'
         ],
         include: [
-          { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc','Sales_Category'], required: false },
+          { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc', 'Sales_Category'], required: false },
           { model: PriceClass, as: 'PriceClass', attributes: ['Class_Desc'], required: false },
           { model: InventoryStatus, as: 'inventoryStatus', attributes: ['Inventory_OnHand'], required: false },
           { model: InventoryUPC, as: 'UPCList', attributes: ['UPC_Number'], required: false }
@@ -3104,13 +3119,13 @@ export class RetailerService {
         const userJurisdiction = await getJurisdiction(userId);
         taxRate = await getTaxRateV1(findItem.OTP_Number, userJurisdiction as number, findItem.Item_Number, price);
 
-        if(userJurisdiction !=null && findItem?.SalesCategory){
+        if (userJurisdiction != null && findItem?.SalesCategory) {
 
-          console.log(e,'e.Sales_Category')
-         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category);
+          console.log(e, 'e.Sales_Category')
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category);
         }
 
-        
+
       }
 
       const wareHouseSetting: any = await Setting.findOne({});
@@ -3119,9 +3134,9 @@ export class RetailerService {
         allowToOrder = false;
       }
 
- 
-    
-      
+
+
+
 
       return {
         ...findItem.toJSON(),
@@ -3281,7 +3296,7 @@ export class RetailerService {
   }
 
   async getPdfOfOrderDetails(query: PaginationOptions & { orientation?: 'portrait' | 'landscape' }, userId: number) {
-    const { orderNumber, hasPrice = false, orientation = 'landscape' ,invoiceGenerated=false} = query;
+    const { orderNumber, hasPrice = false, orientation = 'landscape', invoiceGenerated = false } = query;
 
     // First, get the order header to find customer number
     const orderHeader = await OrderHeader.findByPk(orderNumber);
@@ -3891,13 +3906,13 @@ export class RetailerService {
     let device = await RetailerDevice.findOne({ where: { deviceId: deviceId, customerNumber: storeDetail?.C_Number } });
 
     if (!device) {
-      device=   await RetailerDevice.create({
+      device = await RetailerDevice.create({
         deviceId: deviceId,
         deviceName: deviceName,
         deviceType: deviceType,
         isAllow: true,
         customerNumber: storeDetail?.C_Number || 0,
-        deviceToken:  "",
+        deviceToken: "",
       });
     }
 
@@ -3924,70 +3939,70 @@ export class RetailerService {
   }
 
 
-async getSalesCategoryPriceClassByCustomer(customerNumber: number){
-  const data = await getAllowedSalesCategoriesAndPriceClasses(customerNumber);
-  return data;
-}
-
-
-
-async getSalesCategoryByCustomer(customerNumber: number){
-  console.log(customerNumber,'customerNumber')
-  const data = await getAllowedSalesCategories(customerNumber);
-  return data;
-}
-
-async updateRetailerDocuments(id: number, body: Partial<{
-  customerNumber: number;
-  attachments: string[] | null;
-  salesTaxDoc: string | null;
-  CigTaxDoc: string | null;
-  licenseAttachments: string[] | null;
-}>) {
-  const retailerDocuments = await RetailerDocuments.findByPk(id);
-
-  if (!retailerDocuments) {
-    throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+  async getSalesCategoryPriceClassByCustomer(customerNumber: number) {
+    const data = await getAllowedSalesCategoriesAndPriceClasses(customerNumber);
+    return data;
   }
 
-  await retailerDocuments.update(body);
-  return retailerDocuments;
-}
 
-async deleteRetailerDocuments(id: number) {
-  const retailerDocuments = await RetailerDocuments.findByPk(id);
 
-  if (!retailerDocuments) {
-    throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+  async getSalesCategoryByCustomer(customerNumber: number) {
+    console.log(customerNumber, 'customerNumber')
+    const data = await getAllowedSalesCategories(customerNumber);
+    return data;
   }
 
-  await retailerDocuments.destroy();
-  return { success: true, message: 'Retailer documents deleted successfully' };
-}
+  async updateRetailerDocuments(id: number, body: Partial<{
+    customerNumber: number;
+    attachments: string[] | null;
+    salesTaxDoc: string | null;
+    CigTaxDoc: string | null;
+    licenseAttachments: string[] | null;
+  }>) {
+    const retailerDocuments = await RetailerDocuments.findByPk(id);
 
-async createRetailerDocuments(body: {
-  customerNumber: number;
-  attachments?: string[] | null;
-  salesTaxDoc?: string | null;
-  CigTaxDoc?: string | null;
-  licenseAttachments?: string[] | null;
-}) {
-  const retailerDocuments = await RetailerDocuments.create(body);
-  return retailerDocuments;
-}
+    if (!retailerDocuments) {
+      throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+    }
 
-
-
-async uploadImages(req: Request) {
-  const file = req.file;
-  if (!file) {
-    throw new AppError('File not found', 404);
+    await retailerDocuments.update(body);
+    return retailerDocuments;
   }
-  const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, 'retailer-attachments');
-  if (!result.success) {
-    throw new AppError(result.error || 'Failed to upload image', 500);
+
+  async deleteRetailerDocuments(id: number) {
+    const retailerDocuments = await RetailerDocuments.findByPk(id);
+
+    if (!retailerDocuments) {
+      throw new AppError(Manager.RETAILER_DOCUMENTS_NOT_FOUND, 404);
+    }
+
+    await retailerDocuments.destroy();
+    return { success: true, message: 'Retailer documents deleted successfully' };
   }
-  return result;
-}
+
+  async createRetailerDocuments(body: {
+    customerNumber: number;
+    attachments?: string[] | null;
+    salesTaxDoc?: string | null;
+    CigTaxDoc?: string | null;
+    licenseAttachments?: string[] | null;
+  }) {
+    const retailerDocuments = await RetailerDocuments.create(body);
+    return retailerDocuments;
+  }
+
+
+
+  async uploadImages(req: Request) {
+    const file = req.file;
+    if (!file) {
+      throw new AppError('File not found', 404);
+    }
+    const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, 'retailer-attachments');
+    if (!result.success) {
+      throw new AppError(result.error || 'Failed to upload image', 500);
+    }
+    return result;
+  }
 
 }
