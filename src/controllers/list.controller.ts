@@ -112,4 +112,9 @@ export class ListController {
         const data = await this.listService.getlistOfARreports();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getlistOfARStatementreports(req: Request, res: Response) {
+        const data = await this.listService.getlistOfARStatementreports();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

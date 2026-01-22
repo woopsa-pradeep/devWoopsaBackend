@@ -59,6 +59,14 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getReturnCartItemsByType(req: AuthRequest, res: Response) {
+        if (!req.query.type) {
+            return sendResponse(res, 400, false, null, "Type is required");
+        }
+        const data = await this.salesService.getReturnCartItemsByType(Number(req.params.customerId), req.query.type as string);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+    
     async getInventoryItems(req: AuthRequest, res: Response) {
         const data = await this.salesService.getInventoryItems(req.body as PaginationOptions & { search?: string, masterSearch?: string }, Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -149,6 +157,27 @@ export class SalesController {
         const data = await this.salesService.addToReturnCart(cartData, Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+
+    async addToCartByType(req: AuthRequest, res: Response) {
+
+        const cartData = {
+            ...req.body,
+            Customer_Number: req.params.customerId,
+            Tax_Rate: req.body.Tax_Rate,
+            Price_With_Tax: req.body.Price_With_Tax,
+            placedBySalesPerson: true,
+            salesPersonNumber: Number(req.user.id),
+            originalPrice: req.body.originalPrice || 0,
+            discount: req.body.discount || 0,
+            TotalprepaidTaxRate: req.body.TotalprepaidTaxRate || 0,
+            prepaidTaxRate: req.body.prepaidTaxRate || 0,
+        };
+        const data = await this.salesService.addToCartByType(cartData, Number(req.user.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+
 
     async getOrderHistoryByProductNumber(req: AuthRequest, res: Response) {
         const { productNumber, customerId } = req.query;

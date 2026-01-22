@@ -98,9 +98,11 @@ import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 import { Inventory_ItemGroups } from "../models/mmsql/inventoryItemGroup.model";
 import { InventoryBrands,getNextInventoryBrand } from "../models/mmsql/inventoryBrand.model";
 import { RetailerLocation } from "../models/postgres/retailerLocation.model";
+import { CustBillTo } from "../models/mmsql/custBillTo.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
 import { formatCustomerVelocityItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
 import { Record_Locks } from "../models/mmsql/recordLock.model";
+import { PreBook } from "../models/postgres/preBook.model";
 
 
 export class ManagerService {
@@ -2643,7 +2645,9 @@ export class ManagerService {
         'User_ID',
         'Order_Source',
         'Delivery_Charge',
-        'Picklist_Printed'
+        'Picklist_Printed',
+        'Invoice_Total',
+        'Invoice_Number',
       ]
     });
 
@@ -5018,16 +5022,20 @@ export class ManagerService {
 
     const customerNumbers = customers.map((c: any) => c.C_Number);
 
+const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
+
     // 2️⃣ Orders for those customers on that date
     const orders = await OrderHeader.findAll({
       where: {
         C_Number: { [Op.in]: customerNumbers },
-        Order_Date: normalizedDate,
-      },
+        Order_Date: {
+          [Op.gte]: normalizedDate,
+          [Op.lt]: nextDate,
+        },
+        },
       attributes: ["Order_Number", "C_Number"],
       raw: true,
     });
-
     const customersWithOrders = new Set(orders.map((o: any) => o.C_Number));
 
     // 3️⃣ Build result list + status
@@ -5044,6 +5052,7 @@ export class ManagerService {
     return {
       total: count,
       doneCount,
+      customerOrder:orders?.length || 0,
       pendingCount
     };
   }
@@ -7542,6 +7551,7 @@ async getShortShipmentReport(
       [col('orderHeader.C_Number'), 'C_Number'],
       [col('orderHeader.S_Number'), 'S_Number'],
       [col('orderHeader.Route_Number'), 'Route_Number'],
+      [col('orderHeader.customer.C_ClassOfTrade'), 'C_ClassOfTrade'],
 
       'Order_Number',
       'Promo_Number',
@@ -7679,6 +7689,17 @@ async getShortShipmentReport(
 
       [col('inventory.Description'), 'Description'],
       [col('inventory.UOM'), 'UOM'],
+      [col('inventory.Sales_Category'), 'Sales_Category'],
+      [col('inventory.OTP_Number'), 'OTP_Number'],
+      [col('inventory.Primary_Vendor'), 'Primary_Vendor'],
+      [col('inventory.Price_Subclass'), 'Price_Subclass'],
+      [col('inventory.Jurisdiction_State'), 'Jurisdiction_State'],
+      [col('inventory.Jurisdiction_County'), 'Jurisdiction_County'],
+      [col('inventory.Jurisdiction_City'), 'Jurisdiction_City'],
+      [col('inventory.Location'), 'Location'],
+      [col('inventory.Section'), 'Section'],
+      [col('inventory.PickArea'), 'PickArea'],
+      
       [col('inventory.Pack'), 'Pack'],
       [col('inventory.UnitOunces'), 'UnitOunces'],
       [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
@@ -7686,6 +7707,7 @@ async getShortShipmentReport(
       [col('inventory.Cig_Pack'), 'Cig_Pack'],
       [col('inventory.Price_Class'), 'Price_Class_Number'],
       [col('inventory.PriceClass.Class_Desc'), 'Class_Desc'],
+      
 
       [col('orderHeader.customer.C_Name'), 'C_Name'],
       [col('orderHeader.customer.c_address'), 'c_address'],
@@ -7768,10 +7790,10 @@ async getShortShipmentReport(
       startDate,
       endDate,
       page = 1,
-      limit = 50,
+      limit ,
     } = query;
 
-    const offset = (page - 1) * limit;
+    const offset = limit ? (page - 1) * limit : undefined;
 
     const total = await ARDeposits.count({
       distinct: true,
@@ -7800,7 +7822,6 @@ async getShortShipmentReport(
           model: CustReceivables,
           as: 'custReceivables',
           required: false, 
-
           include: [
             
             {
@@ -7846,4 +7867,408 @@ async getShortShipmentReport(
       
     return arReportHistort
   }
+
+  // PreBook CRUD methods
+  async createPreBook(body: { startDate: string; endDate: string; products: number[]; showPrice: boolean; note?: string | null }) {
+    // Validate date range
+    const start = new Date(body.startDate);
+    const end = new Date(body.endDate);
+    
+    if (start > end) {
+      throw new AppError('Start date must be before or equal to end date', 400);
+    }
+
+    // Validate products array
+    if (!Array.isArray(body.products) || body.products.length === 0) {
+      throw new AppError('Products array is required and must contain at least one item', 400);
+    }
+
+    const preBook = await PreBook.create({
+      startDate: body.startDate,
+      endDate: body.endDate,
+      products: body.products,
+      showPrice: body.showPrice ?? false,
+      note: body.note || null,
+    });
+
+    return preBook;
+  }
+
+  async getPreBookById(id: number) {
+    const preBook = await PreBook.findByPk(id);
+
+    if (!preBook) {
+      throw new AppError('PreBook not found', 404);
+    }
+
+    const  products = await Inventory.findAll({
+      where: {
+        Item_Number: {
+          [Op.in]: preBook.products
+        }
+      },
+      attributes: ['Item_Number', 'Description', 'Price1', 'Sales_Category','Price_Class','Pack','UOM'],
+      include: [
+        {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Category_Desc'],
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
+        }
+      ]
+    });
+
+    return {
+      preBook,
+      products
+    };
+  }
+
+  async getAllPreBooks(query: PaginationOptions & { search?: string; startDate?: string; endDate?: string }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const offset = (page - 1) * limit;
+
+    const whereCondition: any = {};
+
+    // Date range filter
+    if (query.startDate || query.endDate) {
+      whereCondition[Op.and] = [];
+      if (query.startDate) {
+        whereCondition[Op.and].push({
+          startDate: { [Op.gte]: query.startDate }
+        });
+      }
+      if (query.endDate) {
+        whereCondition[Op.and].push({
+          endDate: { [Op.lte]: query.endDate }
+        });
+      }
+    }
+
+    const { count: totalCount, rows: preBooks } = await PreBook.findAndCountAll({
+      where: whereCondition,
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    return {
+      data: preBooks,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+    };
+  }
+
+  async updatePreBook(id: number, body: Partial<{ startDate: string; endDate: string; products: number[]; showPrice: boolean; note: string | null }>) {
+    const preBook = await PreBook.findByPk(id);
+
+    if (!preBook) {
+      throw new AppError('PreBook not found', 404);
+    }
+
+    // Validate date range if both dates are being updated
+    if (body.startDate && body.endDate) {
+      const start = new Date(body.startDate);
+      const end = new Date(body.endDate);
+      
+      if (start > end) {
+        throw new AppError('Start date must be before or equal to end date', 400);
+      }
+    } else if (body.startDate) {
+      const start = new Date(body.startDate);
+      const end = new Date(preBook.endDate);
+      
+      if (start > end) {
+        throw new AppError('Start date must be before or equal to end date', 400);
+      }
+    } else if (body.endDate) {
+      const start = new Date(preBook.startDate);
+      const end = new Date(body.endDate);
+      
+      if (start > end) {
+        throw new AppError('Start date must be before or equal to end date', 400);
+      }
+    }
+
+    // Validate products array if being updated
+    if (body.products !== undefined) {
+      if (!Array.isArray(body.products) || body.products.length === 0) {
+        throw new AppError('Products array must contain at least one item', 400);
+      }
+    }
+
+    await preBook.update(body);
+    return preBook;
+  }
+
+  async deletePreBook(id: number) {
+    const preBook = await PreBook.findByPk(id);
+
+    if (!preBook) {
+      throw new AppError('PreBook not found', 404);
+    }
+
+    await preBook.destroy();
+    return { success: true, message: 'PreBook deleted successfully' };
+  }
+  
+  async getArStatementReport(filters: {
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const {
+    startDate,
+    endDate,
+    page = 1,
+    limit ,
+  } = filters;
+
+  const offset = limit ? (page - 1) * limit : undefined;
+
+  /** Date Filter */
+  const where: any = {};
+  if (startDate && endDate) {
+    where.AR_Date = {
+      [Op.between]: [new Date(startDate), new Date(endDate)],
+    };
+  }
+
+  const { rows, count } = await CustReceivables.findAndCountAll({
+    distinct: true,
+    where,
+    limit,
+    offset,
+
+    order: [
+      [{ model: Customer, as: 'customer' }, 'C_Name', 'ASC'],
+      ['AR_Date', 'ASC'],
+      ['P_Number', 'ASC'],
+    ],
+
+    attributes: {
+      include: [
+        /** Child Customer Name */
+        [
+          Sequelize.literal(`
+            ISNULL(
+              (
+                SELECT C_Name
+                FROM Customer
+                WHERE Customer.C_Number = [CustReceivables].[C_Number_Child]
+              ),
+              ''
+            )
+          `),
+          'C_Name_Child',
+        ],
+
+        /** Finance Charges */
+        [
+          Sequelize.literal(`
+            ISNULL(
+              (
+                SELECT SUM(Finance_Charge)
+                FROM Cust_FinanceCharges
+                WHERE Cust_FinanceCharges.C_Number = [CustReceivables].[C_Number]
+              ),
+              0
+            )
+          `),
+          'fCharge',
+        ],
+      ],
+    },
+
+    include: [
+      {
+        model: Customer,
+        as: 'customer',
+        required: false,
+        attributes: [
+          'C_Name',
+          'C_CoName',
+          'C_Address',
+          'C_City',
+          'C_State',
+          'C_Zip',
+          'C_Phone',
+          'C_Fax',
+          'C_Email',
+          'TermsCode',
+          'C_Salesman',
+          'C_StatementAccount',
+          'C_StatusCode',
+          'C_StatementCode',
+          'C_Interest',
+
+        ],
+
+        include: [
+          {
+            model: SalesRep,
+            as: 'salesRep',
+            required: false,
+            attributes: [['S_Desc', 'RepName']],
+          },
+          {
+            model: Terms,
+            as: 'invoiceTerms',
+            required: false,
+            attributes: ['Terms', 'DaysUntilDue'],
+          },
+          {
+            model: CustBillTo,
+            as: 'billTo',
+            required: false,
+            attributes: [
+              ['C_Number', 'BT_Number'],
+              ['C_Name', 'BT_Name'],
+              ['C_CoName', 'BT_CoName'],
+              ['C_Address', 'BT_Address'],
+              ['C_City', 'BT_City'],
+              ['C_State', 'BT_State'],
+              ['C_Zip', 'BT_Zip'],
+            ],
+          },
+          {
+            model: CustomerRoute,
+            as: 'routes',
+            required: false,
+            attributes: ['Route_Number'],
+          },
+        ],
+      },
+
+      {
+        model: ARDefinitions,
+        as: 'arDefinition',
+        required: false,
+        attributes: [['AR_SubTypeRef', 'SubType']],
+        where: Sequelize.literal(`
+          [CustReceivables].[AR_Type] = [arDefinition].[AR_Type]
+        `),
+      },
+    ],
+  });
+
+  return {
+    data: rows,
+    pagination: {
+      page,
+      limit,
+      totalRecords: count,
+    },
+  };
+}
+
+async getOpenItemReport() {
+  return await CustReceivables.findAll({
+    include: [
+      {
+        model: Customer,
+        as: 'customer',
+        required: false,
+        attributes: [
+          'C_Number',
+          'C_Name',
+          'C_CoName',
+          'C_Address',
+          'C_City',
+          'C_State',
+          'C_Zip',
+          'C_Phone',
+          'C_Fax',
+          'C_Email',
+          'TermsCode',
+          'C_Salesman',
+          'C_StatementAccount',
+          'C_Interest',
+        ],
+        include: [
+          {
+            model: SalesRep,
+            as: 'salesRep',
+            attributes: [['S_Desc', 'RepName']],
+            required: false
+          },
+          {
+            model: Terms,
+            as: 'terms',
+            attributes: ['DaysUntilDue', 'Terms'],
+            required: false
+          }
+        ]
+      },
+      {
+        model: CustBillTo,
+        as: 'Cust_BillTo',
+        required: false,
+        attributes: [
+          [Sequelize.fn('ISNULL', Sequelize.col('Cust_BillTo.C_Number'), 0), 'BT_Number'],
+          ['C_Name', 'BT_Name'],
+          ['C_CoName', 'BT_CoName'],
+          ['C_Address', 'BT_Address'],
+          ['C_City', 'BT_City'],
+          ['C_State', 'BT_State'],
+          ['C_Zip', 'BT_Zip'],
+        ]
+      }
+    ],
+    attributes: {
+      include: [
+        [
+          Sequelize.literal(`
+            ISNULL(
+              (SELECT C_Name
+               FROM Customer
+               WHERE Customer.C_Number = CustReceivables.C_Number_Child),
+            '')
+          `),
+          'C_Name_Child'
+        ],
+        [
+          Sequelize.literal(`
+            (SELECT AR_SubTypeRef
+             FROM AR_Definitions
+             WHERE CustReceivables.AR_Type = AR_Definitions.AR_Type
+               AND CustReceivables.AR_SubType = AR_Definitions.AR_SubType)
+          `),
+          'SubType'
+        ],
+        [
+          Sequelize.literal(`
+            ISNULL(
+              (SELECT SUM(Finance_Charge)
+               FROM Cust_FinanceCharges
+               WHERE Cust_FinanceCharges.C_Number = CustReceivables.C_Number),
+            0)
+          `),
+          'fCharge'
+        ],
+        [
+          Sequelize.literal(`
+            DATEDIFF(DAY, CustReceivables.AR_Date, GETDATE())
+          `),
+          'aging'
+        ]
+      ]
+    },
+    order: [
+      [Sequelize.literal('[customer].[C_Name]'), 'ASC'],
+      ['AR_Date', 'ASC']
+    ]
+  });
+}
+
+
+
 }

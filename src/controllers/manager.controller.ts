@@ -1335,7 +1335,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
     const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
     const page = typeof req.query.page === 'string' ? Math.max(parseInt(req.query.page, 10), 1) : 1;
-    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10), 500) : 50000; 
+    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10)) : undefined ;
     const data = await this.managerService.getARreports({ startDate,endDate,page,limit,});
     sendResponse(res, 200, true, data, 'Account Receivable report fetched successfully');
   }
@@ -1343,7 +1343,46 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async getARreportsHistory(req: AuthRequest, res: Response) {
       const data = await this.managerService.getARreportsHistory();
       sendResponse(res, 200, true, data, General.SUCCESS);
-      }
+  }
 
+  // PreBook CRUD controller methods
+  async createPreBook(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createPreBook(req.body);
+    sendResponse(res, 201, true, data, 'PreBook created successfully');
+  }
+
+  async getPreBookById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPreBookById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'PreBook fetched successfully');
+  }
+
+  async getAllPreBooks(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllPreBooks(req.query as PaginationOptions & { search?: string; startDate?: string; endDate?: string });
+    sendResponse(res, 200, true, data, 'PreBooks fetched successfully');
+  }
+
+  async updatePreBook(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updatePreBook(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'PreBook updated successfully');
+  }
+
+  async deletePreBook(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deletePreBook(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'PreBook deleted successfully');
+  }
+  async getArStatementReport(req: AuthRequest, res: Response) {
+    const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
+    const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
+    const page = typeof req.query.page === 'string' ? Math.max(parseInt(req.query.page, 10), 1) : 1;
+    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10)) : undefined ;
+    const data = await this.managerService.getArStatementReport({ startDate,endDate,page,limit,});
+    sendResponse(res, 200, true, data, 'Account  report fetched successfully');
+  }
+    
+
+  async getOpenItemReport(req: AuthRequest, res: Response) {
+      const data = await this.managerService.getOpenItemReport();
+      sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 
 }

@@ -1660,6 +1660,15 @@ const results = await OrderHeader.findAll({
             raw: true,
         });
 
+        const returnOrder = await OrderHistory.count({
+            where: {
+                createdAt: {
+                    [Op.between]: [startDate, endDate]
+                },
+                type: 'return'
+            }
+        });
+
 
         return {
             summary: {
@@ -1668,6 +1677,7 @@ const results = await OrderHeader.findAll({
                 totalInactiveCustomer,
                 totalOrder
             },
+            returnOrder: returnOrder,
             result: rows,
             orderPlatform,
             orderByUser: {

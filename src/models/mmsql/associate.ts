@@ -26,6 +26,7 @@ import { ClassOfTrade } from "./classOfTrade.model";
 import { Order_Header_Costs } from "./orderHeaderCost.model";
 import { Record_Locks } from "./recordLock.model";
 import { Users } from "./user.model";
+import { CustBillTo } from "./custBillTo.model";
 
 
 
@@ -106,6 +107,25 @@ export function applyAssociations(): void {
     as: 'Inventories', // 👈 not used in query, just required
   });
   CustReceivables.belongsTo(Customer, { foreignKey: 'C_Number',targetKey: 'C_Number', as: 'customer' });
+
+  CustReceivables.belongsTo(CustBillTo, {
+    foreignKey: 'C_Number',
+    targetKey: 'C_Number',
+    as: 'CustBillTo',
+  });
+
+  Customer.belongsTo(Terms, {
+    foreignKey: 'TermsCode',
+    targetKey: 'TermsCode',
+    as: 'invoiceTerms',
+  });
+
+  Customer.hasOne(CustBillTo, {
+    foreignKey: 'C_Number',
+    as: 'billTo',
+  });
+
+
 
   CustReceivables.belongsTo(ARDefinitions, {
     foreignKey: 'AR_SubType',
@@ -359,6 +379,20 @@ Users.hasMany(OrderHeader, {
   foreignKey: 'User_ID',
   sourceKey: 'UserNumber',
   as: 'orders',
+});Customer.hasMany(CustomerRoute, {
+  foreignKey: 'C_Number',
+  as: 'routes',
+});
+
+// CustomerRoutes.ts
+CustomerRoute.belongsTo(Customer, {
+  foreignKey: 'C_Number',
+  as: 'customer',
+});
+
+CustReceivables.belongsTo(CustBillTo, {
+  foreignKey: 'C_Number',
+  as: 'Cust_BillTo'
 });
 
 

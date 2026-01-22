@@ -672,4 +672,20 @@ export class ListService {
     
   }
 
+  async getlistOfARStatementreports(){
+    const salesRep = await SalesRep.findAll({
+      attributes:[ 'S_Number', 'S_Desc']
+    })
+
+    const customer = await Customer.findAll({
+      attributes:['C_Number','C_Name']
+    })
+
+    const route = await Route.findAll({
+      attributes:['Route_Number','Route_Description']
+    })
+
+    return { salesRep,customer,route }
+  }
+
 } 

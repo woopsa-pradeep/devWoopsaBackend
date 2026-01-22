@@ -573,7 +573,9 @@ export class SalesService {
         'User_ID',
         'Order_Source',
         'Delivery_Charge',
-        'Picklist_Printed'
+        'Picklist_Printed',
+        'Invoice_Total',
+        'Invoice_Number',
       ]
     });
 
@@ -4979,6 +4981,201 @@ export class SalesService {
       return newCartItem;
     }
   }
+
+
+  async getReturnCartItemsByType(customerNumber: number, type: string) {
+    const cartItems: any = await CustomerCart.findAll({
+      where: {
+        Customer_Number: customerNumber,
+        isActive: true,
+        type: type
+      },
+      order: [['createdAt', 'DESC']]
+    });
+
+    let todayTotalAmount = 0;
+    const start = moment().startOf("week").toDate(); // start of this week
+    const end = moment().endOf("week").toDate();     // end of this week
+
+    const weekUserOrders: any[] = await OrderHistory.findAll({
+      where: {
+        C_Number: customerNumber,
+        isActive: true,
+        type: type,
+        createdAt: {
+          [Op.between]: [start, end],
+        },
+      },
+      order: [["createdAt", "DESC"]],
+    });
+    if (weekUserOrders && weekUserOrders?.length > 0) {
+      todayTotalAmount = weekUserOrders.reduce(
+        (sum: any, item: any) => sum + Number(item.orderPrice),
+        0
+      );
+    }
+
+    console.log(todayTotalAmount, 'todayTotalAmount---->')
+    const finalCartItems = await Promise.all(cartItems.map(async (es: any) => {
+      const e: any = es.dataValues
+      const productImage = await ProductImage.findOne({
+        where: {
+          product_number: e.Item_Number.toString(),
+          isAllow: true
+        },
+      });
+
+      let price = await getDiscount(Number(e.Item_Number), Number(e.Customer_Number))
+      if (!price) {
+        const data = await Inventory.findByPk(e.Item_Number)
+        price = await getFirstValidPrice(data?.dataValues)
+      }
+      // price = Math.ceil(price * 100) / 100;
+      let product: any = await Inventory.findOne({
+        where: {
+          Item_Number: e.Item_Number
+        },
+        include: [{
+          model: InventoryUPC,
+          as: 'UPCList',
+          attributes: ['UPC_Number'],
+          where: {
+            Status: 0,
+          },
+          required: false,
+
+        }]
+      })
+      product = product?.dataValues || null;
+
+
+      let itemInActive = await isItemInActive(e.Item_Number)
+      const inventoryOnHand = await getInventoryOnHand(e.Item_Number)
+      let wareHouseSetting: any = await Setting.findOne({});
+      wareHouseSetting = wareHouseSetting?.dataValues || null;
+      let allowToOrder = true;
+      console.log(wareHouseSetting?.salesRep)
+
+      let userJurisdiction = await getJurisdiction(customerNumber);
+      if (wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible) {
+        allowToOrder = true;
+      }
+      else if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+        allowToOrder = false;
+      }
+
+      const topLatestItems = await getTopLatestItems();
+      const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+
+      const productLimit = await getProductLimit(e.Item_Number);
+      const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
+      const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
+
+      let prepaidTaxRate = 0
+      console.log(product.Sales_Category, 'product.Sales_Category')
+      if (userJurisdiction != null && product.Sales_Category) {
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
+      }
+
+      return {
+
+        isNewItem,
+        Description: product.Description,
+        isDiscounted,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
+        // Description: product.Description,
+        Item_Number: e.Item_Number,
+        CaseCount: product.CaseCount,
+        UOM: product.UOM,
+        Price1: product.Price1,
+        price: price,
+        BaseCost: product.BaseCost,
+        Invoice_Cost: product.Invoice_Cost,
+        hasProductLimit: productLimit ? true : false,
+        productLimit,
+        Inventory_OnHand: inventoryOnHand || 0,
+        allowToOrder,
+        showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
+        showLowStock: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+        showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+        itemInActive,
+        AvgCost: product.AvgCost,
+        NetCost: product.NetCost,
+        isPriceChanged: price != e?.originalPrice,
+        UPCList: product.UPCList,
+        oldPrice: Number(e?.originalPrice),
+        newPrice: price,
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
+        Product: e,
+        hasQtyDiscount: hasQtyDiscount.allowToDiscount,
+        qtyDiscount: hasQtyDiscount,
+      }
+    }))
+    const findTheLimit = await Retailer.findOne({
+      where: {
+        Customer_Number: customerNumber,
+        isActive: true
+      }
+    })
+    const totalItems = cartItems.reduce((sum: any, item: any) => sum + item.Qty, 0);
+    const totalAmount = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPrice), 0);
+    const totalAmountWithTax = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
+    return {
+      finalCartItems,
+      totalItems,
+      totalAmountWithTax,
+      userItemLimitQty: findTheLimit?.maxOrderLimit,
+      userLimitMinOrderAmount: (findTheLimit?.minOrderAmount || 0) - todayTotalAmount,
+      totalAmount
+    };
+  }
+
+  async addToCartByType(cartData: AddToCartRequest & { Customer_Number: number }, salesId: number) {
+    // Check if item already exists in cart for this customer
+    cartData.TotalPrice = Number(cartData.TotalPrice);
+    cartData.TotalPriceWithTax = Number(cartData.TotalPriceWithTax);
+    cartData.discount = Number(cartData.discount);
+    cartData.originalPrice = Number(cartData.originalPrice);
+    cartData.Qty = Number(cartData.Qty);
+    const existingCartItem = await CustomerCart.findOne({
+      where: {
+        Customer_Number: cartData.Customer_Number,
+        Item_Number: cartData.Item_Number,
+        isActive: true,
+        type: cartData.type
+      }
+    });
+
+    if (existingCartItem) {
+      // Update existing cart item
+      const newQty = existingCartItem.Qty + cartData.Qty;
+      const newTotalPrice = Number(existingCartItem.TotalPrice) + Number(cartData.TotalPrice);
+      const newTotalPriceWithTax = Number(existingCartItem.TotalPriceWithTax) + Number(cartData.TotalPriceWithTax);
+      await existingCartItem.update({
+        Qty: newQty,
+        TotalPrice: newTotalPrice,
+        TotalPriceWithTax: newTotalPriceWithTax,
+        discount: cartData.discount || 0,
+        originalPrice: cartData.originalPrice || 0,
+        TotalprepaidTaxRate: cartData.TotalprepaidTaxRate || 0,
+        prepaidTaxRate: cartData.prepaidTaxRate || 0,
+      });
+
+      return existingCartItem;
+    } else {
+      // Create new cart item
+      const newCartItem = await CustomerCart.create({
+        ...cartData, type: cartData.type, placedBySalesPerson: true, salesPersonNumber: salesId,
+        discount: cartData.discount || 0,
+        originalPrice: cartData.originalPrice || 0
+      });
+      return newCartItem;
+    }
+  }
+  
 
   // OrderConfirmation CRUD methods
   async createOrderConfirmation(orderData: {

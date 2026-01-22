@@ -2105,3 +2105,53 @@ export const updatePriceClassSchema = Joi.object({
     'number.min': 'Product_ExpDays must be greater than or equal to 0',
   })
 });
+
+// PreBook validation schemas
+export const createPreBookSchema = Joi.object({
+  startDate: Joi.date().required().messages({
+    'date.base': 'Start date must be a valid date',
+    'any.required': 'Start date is required',
+  }),
+  endDate: Joi.date().required().messages({
+    'date.base': 'End date must be a valid date',
+    'any.required': 'End date is required',
+  }),
+  products: Joi.array().items(Joi.number().integer().positive()).min(1).required().messages({
+    'array.base': 'Products must be an array',
+    'array.min': 'Products must contain at least one item',
+    'any.required': 'Products array is required',
+  }),
+  showPrice: Joi.boolean().optional().default(false).messages({
+    'boolean.base': 'Show price must be a boolean',
+  }),
+  note: Joi.string().allow(null, '').optional().messages({
+    'string.base': 'Note must be a string',
+  }),
+});
+
+export const updatePreBookSchema = Joi.object({
+  startDate: Joi.date().optional().messages({
+    'date.base': 'Start date must be a valid date',
+  }),
+  endDate: Joi.date().optional().messages({
+    'date.base': 'End date must be a valid date',
+  }),
+  products: Joi.array().items(Joi.number().integer().positive()).min(1).optional().messages({
+    'array.base': 'Products must be an array',
+    'array.min': 'Products must contain at least one item',
+  }),
+  showPrice: Joi.boolean().optional().messages({
+    'boolean.base': 'Show price must be a boolean',
+  }),
+  note: Joi.string().allow(null, '').optional().messages({
+    'string.base': 'Note must be a string',
+  }),
+});
+
+export const getPreBooksQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+  search: Joi.string().optional(),
+  startDate: Joi.date().optional(),
+  endDate: Joi.date().optional(),
+});

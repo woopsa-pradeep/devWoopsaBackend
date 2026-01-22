@@ -38,6 +38,10 @@ router.post('/addToCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),veri
 
 router.post('/addToReturnCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.addToReturnCart.bind(listController)));
 router.get('/getReturnCartItems/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getReturnCartItems.bind(listController)));
+router.post('/addToCartByType/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.addToCartByType.bind(listController)));
+router.get('/getReturnCartItemsByType/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getReturnCartItemsByType.bind(listController)));
+
+
 
 router.get('/orderHistoryByProductNumber', 
     verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession,

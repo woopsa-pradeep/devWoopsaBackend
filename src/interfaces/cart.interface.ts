@@ -11,6 +11,7 @@ export interface CartItem {
 }
 
 export interface AddToCartRequest {
+  type?: string;
   Item_Number: number;
   Price: number;
   Qty: number;
