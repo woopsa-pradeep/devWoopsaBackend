@@ -1054,6 +1054,10 @@ export const getContactUsQuerySchema = Joi.object({
 
 // Email Management validation schemas
 export const createEmailConfigSchema = Joi.object({
+  module: Joi.string().trim().optional().allow('', null).messages({
+    'string.base': 'Module must be a string',
+    'string.empty': 'Module cannot be empty',
+  }),
   host: Joi.string().trim().required().messages({
     'string.base': 'Host must be a string',
     'string.empty': 'Host cannot be empty',

@@ -5,6 +5,7 @@ import { postgresSequelize } from '../../db';
 export class EmailConfig extends Model {
   public id!: number;
   public host!: string;
+  public module!: string;
   public port!: number;
   public secure!: boolean;
   public username!: string;
@@ -24,6 +25,11 @@ EmailConfig.init(
     host: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    module: {
+      type: DataTypes.STRING,
+      allowNull: true,
+     
     },
     port: {
       type: DataTypes.INTEGER,

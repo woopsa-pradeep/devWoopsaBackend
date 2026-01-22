@@ -462,7 +462,7 @@ export class RetailerService {
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         "Retail1","Retail2","Retail3",
         "CasesPerPallet",
-        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
+        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost','Unit_Price',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
         'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
       ],
@@ -546,6 +546,7 @@ export class RetailerService {
         Price1: e.Price1,
         Tax_Rate: taxRate,
         OTP_Number: e.OTP_Number,
+        Unit_Price: e.Unit_Price,
         price,
         isNewItem,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
@@ -991,7 +992,7 @@ export class RetailerService {
         size: product.Size,
         hasProductLimit: productLimit ? true : false,
         productLimit,
-
+        Unit_Price: product.Unit_Price,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
         prepaidTaxRate: prepaidTaxRate,
         hasPerpaidTaxChange: prepaidTaxRate != e.prepaidTaxRate,
