@@ -27,6 +27,8 @@ import { Order_Header_Costs } from "./orderHeaderCost.model";
 import { Record_Locks } from "./recordLock.model";
 import { Users } from "./user.model";
 import { CustBillTo } from "./custBillTo.model";
+import { CustFinanceCharges } from "./custFinanceCharges.model"
+import { ARDeletes } from "./arDeletes.mode";
 
 
 
@@ -350,6 +352,8 @@ CustReceivables.belongsTo(ARDeposits, {
 CustReceivables.belongsTo(ARDefinitions, {
   foreignKey: 'AR_Type',
   targetKey: 'AR_Type',
+  as: 'arTypeDef',
+  constraints: false,
 });
 
 // Record_Locks -> Order_Header
@@ -379,7 +383,9 @@ Users.hasMany(OrderHeader, {
   foreignKey: 'User_ID',
   sourceKey: 'UserNumber',
   as: 'orders',
-});Customer.hasMany(CustomerRoute, {
+});
+
+Customer.hasMany(CustomerRoute, {
   foreignKey: 'C_Number',
   as: 'routes',
 });
@@ -394,6 +400,44 @@ CustReceivables.belongsTo(CustBillTo, {
   foreignKey: 'C_Number',
   as: 'Cust_BillTo'
 });
+
+
+// CustFinanceCharges → Customer
+CustFinanceCharges.belongsTo(Customer, {
+  foreignKey: 'C_Number',
+  targetKey: 'C_Number',
+});
+
+// Customer → CustFinanceCharges
+Customer.hasMany(CustFinanceCharges, {
+  foreignKey: 'C_Number',
+  sourceKey: 'C_Number',
+});
+
+CustReceivables.hasMany(CustFinanceCharges, {
+  foreignKey: 'C_Number', // CustFinanceCharges.C_Number
+  sourceKey: 'C_Number',  // CustReceivables.C_Number
+  as: 'financeCharges',   // alias required
+  constraints: false,
+});
+
+CustFinanceCharges.belongsTo(CustReceivables, {
+  foreignKey: 'C_Number',
+  targetKey: 'C_Number',
+  as: 'receivable',
+  constraints: false,
+});
+
+CustReceivables.belongsTo(Users, {
+  foreignKey: 'User_Number',
+  targetKey: 'UserNumber'
+})
+
+ARDeletes.belongsTo(Customer, {
+  foreignKey: 'C_Number',
+  targetKey:'C_Number'
+})
+
 
 
 }

@@ -8,8 +8,10 @@ import { defaultValueSchemable } from 'sequelize/types/utils';
     salesRep: any;
     itemGlobal: any;
     showWithPerpaidTax: boolean;
+    splitSearchOption: boolean;
     retailer: any;
     warehouseProfile: any;
+    globalSearchOption: boolean;
     warehouseImage: string;
     orderEmailNotification: string | null;
   }
@@ -27,6 +29,8 @@ import { defaultValueSchemable } from 'sequelize/types/utils';
     public showWithPerpaidTax!: boolean;
     public retailer!: any;
     public warehouseProfile!: any;
+    public splitSearchOption!: boolean;
+    public globalSearchOption!: boolean;
     public warehouseImage!: string;
     public orderEmailNotification!: string | null;
   }
@@ -38,7 +42,16 @@ Setting.init(
       primaryKey: true,
       autoIncrement: true,
     },
+  
 
+    globalSearchOption: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    splitSearchOption:{
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
     salesRep: {
       type: DataTypes.JSONB,
       defaultValue: {

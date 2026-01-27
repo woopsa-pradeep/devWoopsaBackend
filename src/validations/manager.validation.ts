@@ -2159,3 +2159,318 @@ export const getPreBooksQuerySchema = Joi.object({
   startDate: Joi.date().optional(),
   endDate: Joi.date().optional(),
 });
+
+// TradeShow validation schemas
+export const createTradeShowSchema = Joi.object({
+  name: Joi.string().trim().required().messages({
+    'string.base': 'Name must be a string',
+    'string.empty': 'Name cannot be empty',
+    'any.required': 'Name is required',
+  }),
+  description: Joi.string().allow(null, '').optional().messages({
+    'string.base': 'Description must be a string',
+  }),
+  tradeShowDate: Joi.date().required().messages({
+    'date.base': 'Trade show date must be a valid date',
+    'any.required': 'Trade show date is required',
+  }),
+  deliveryStartDate: Joi.date().required().messages({
+    'date.base': 'Delivery start date must be a valid date',
+    'any.required': 'Delivery start date is required',
+  }),
+  deliveryEndDate: Joi.date().required().messages({
+    'date.base': 'Delivery end date must be a valid date',
+    'any.required': 'Delivery end date is required',
+  }),
+  deliveryWeeks: Joi.number().integer().min(0).required().messages({
+    'number.base': 'Delivery weeks must be a number',
+    'number.integer': 'Delivery weeks must be an integer',
+    'number.min': 'Delivery weeks must be greater than or equal to 0',
+    'any.required': 'Delivery weeks is required',
+  }),
+  status: Joi.string().valid('active', 'inactive').optional().default('inactive').messages({
+    'string.base': 'Status must be a string',
+    'any.only': 'Status must be either "active" or "inactive"',
+  }),
+});
+
+export const updateTradeShowSchema = Joi.object({
+  name: Joi.string().trim().optional().messages({
+    'string.base': 'Name must be a string',
+    'string.empty': 'Name cannot be empty',
+  }),
+  description: Joi.string().allow(null, '').optional().messages({
+    'string.base': 'Description must be a string',
+  }),
+  tradeShowDate: Joi.date().optional().messages({
+    'date.base': 'Trade show date must be a valid date',
+  }),
+  deliveryStartDate: Joi.date().optional().messages({
+    'date.base': 'Delivery start date must be a valid date',
+  }),
+  deliveryEndDate: Joi.date().optional().messages({
+    'date.base': 'Delivery end date must be a valid date',
+  }),
+  deliveryWeeks: Joi.number().integer().min(0).optional().messages({
+    'number.base': 'Delivery weeks must be a number',
+    'number.integer': 'Delivery weeks must be an integer',
+    'number.min': 'Delivery weeks must be greater than or equal to 0',
+  }),
+  status: Joi.string().valid('active', 'inactive').optional().messages({
+    'string.base': 'Status must be a string',
+    'any.only': 'Status must be either "active" or "inactive"',
+  }),
+});
+
+export const getTradeShowsQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+  search: Joi.string().optional(),
+  status: Joi.string().valid('active', 'inactive').optional(),
+  tradeShowDate: Joi.date().optional(),
+  deliveryStartDate: Joi.date().optional(),
+  deliveryEndDate: Joi.date().optional(),
+});
+
+export const createTradeShowItemSchema = Joi.object({
+  tradeShowId: Joi.number().integer().required().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+    'any.required': 'Trade show ID is required',
+  }),
+  itemNumber: Joi.string().required().messages({
+    'string.base': 'Item number must be a string',
+    'string.empty': 'Item number cannot be empty',
+    'any.required': 'Item number is required',
+  }),
+  discount: Joi.string().pattern(/^\d+(\.\d{1,2})?$/).required().messages({
+    'string.base': 'Discount must be a string',
+    'string.pattern.base': 'Discount must be a valid decimal number',
+    'any.required': 'Discount is required',
+  }),
+  minQuantity: Joi.number().integer().min(0).required().messages({
+    'number.base': 'Minimum quantity must be a number',
+    'number.integer': 'Minimum quantity must be an integer',
+    'number.min': 'Minimum quantity must be greater than or equal to 0',
+    'any.required': 'Minimum quantity is required',
+  }),
+  maxQuantity: Joi.number().integer().min(0).required().messages({
+    'number.base': 'Maximum quantity must be a number',
+    'number.integer': 'Maximum quantity must be an integer',
+    'number.min': 'Maximum quantity must be greater than or equal to 0',
+    'any.required': 'Maximum quantity is required',
+  }),
+  disType: Joi.string().valid('PERCENT', 'FLAT').required().messages({
+    'string.base': 'Discount type must be a string',
+    'any.only': 'Discount type must be either "PERCENT" or "FLAT"',
+    'any.required': 'Discount type is required',
+  }),
+}).custom((value, helpers) => {
+  if (value.minQuantity > value.maxQuantity) {
+    return helpers.error('any.invalid', {
+      message: 'Minimum quantity must be less than or equal to maximum quantity',
+    });
+  }
+  return value;
+});
+
+export const updateTradeShowItemSchema = Joi.object({
+  tradeShowId: Joi.number().integer().optional().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+  }),
+  itemNumber: Joi.string().optional().messages({
+    'string.base': 'Item number must be a string',
+    'string.empty': 'Item number cannot be empty',
+  }),
+  discount: Joi.string().pattern(/^\d+(\.\d{1,2})?$/).optional().messages({
+    'string.base': 'Discount must be a string',
+    'string.pattern.base': 'Discount must be a valid decimal number',
+  }),
+  minQuantity: Joi.number().integer().min(0).optional().messages({
+    'number.base': 'Minimum quantity must be a number',
+    'number.integer': 'Minimum quantity must be an integer',
+    'number.min': 'Minimum quantity must be greater than or equal to 0',
+  }),
+  maxQuantity: Joi.number().integer().min(0).optional().messages({
+    'number.base': 'Maximum quantity must be a number',
+    'number.integer': 'Maximum quantity must be an integer',
+    'number.min': 'Maximum quantity must be greater than or equal to 0',
+  }),
+  disType: Joi.string().valid('PERCENT', 'FLAT').optional().messages({
+    'string.base': 'Discount type must be a string',
+    'any.only': 'Discount type must be either "PERCENT" or "FLAT"',
+  }),
+});
+
+export const getTradeShowItemsQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+  tradeShowId: Joi.number().integer().optional(),
+  itemNumber: Joi.string().optional(),
+  disType: Joi.string().valid('PERCENT', 'FLAT').optional(),
+});
+
+export const createBulkTradeShowItemsSchema = Joi.object({
+  tradeShowId: Joi.number().integer().required().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+    'any.required': 'Trade show ID is required',
+  }),
+  items: Joi.array()
+    .items(
+      Joi.object({
+        itemNumber: Joi.string().required().messages({
+          'string.base': 'Item number must be a string',
+          'string.empty': 'Item number cannot be empty',
+          'any.required': 'Item number is required',
+        }),
+        discount: Joi.string().pattern(/^\d+(\.\d{1,2})?$/).required().messages({
+          'string.base': 'Discount must be a string',
+          'string.pattern.base': 'Discount must be a valid decimal number',
+          'any.required': 'Discount is required',
+        }),
+        minQuantity: Joi.number().integer().min(0).required().messages({
+          'number.base': 'Minimum quantity must be a number',
+          'number.integer': 'Minimum quantity must be an integer',
+          'number.min': 'Minimum quantity must be greater than or equal to 0',
+          'any.required': 'Minimum quantity is required',
+        }),
+        maxQuantity: Joi.number().integer().min(0).required().messages({
+          'number.base': 'Maximum quantity must be a number',
+          'number.integer': 'Maximum quantity must be an integer',
+          'number.min': 'Maximum quantity must be greater than or equal to 0',
+          'any.required': 'Maximum quantity is required',
+        }),
+        disType: Joi.string().valid('PERCENT', 'FLAT').required().messages({
+          'string.base': 'Discount type must be a string',
+          'any.only': 'Discount type must be either "PERCENT" or "FLAT"',
+          'any.required': 'Discount type is required',
+        }),
+      })
+    )
+    .min(1)
+    .max(100)
+    .required()
+    .messages({
+      'array.base': 'Items must be an array',
+      'array.min': 'Items array must contain at least one item',
+      'array.max': 'Cannot create more than 100 items at once',
+      'any.required': 'Items array is required',
+    }),
+}).custom((value, helpers) => {
+  // Validate that minQuantity <= maxQuantity for each item
+  const errors: string[] = [];
+  value.items.forEach((item: any, index: number) => {
+    // Validate that quantities are finite numbers
+    if (!Number.isFinite(item.minQuantity) || item.minQuantity < 0) {
+      errors.push(`Item at index ${index}: Minimum quantity must be a non-negative number`);
+    }
+    if (!Number.isFinite(item.maxQuantity) || item.maxQuantity < 0) {
+      errors.push(`Item at index ${index}: Maximum quantity must be a non-negative number`);
+    }
+    // Validate quantity range only if both are valid finite numbers
+    if (
+      Number.isFinite(item.minQuantity) &&
+      Number.isFinite(item.maxQuantity) &&
+      item.minQuantity > item.maxQuantity
+    ) {
+      errors.push(`Item at index ${index}: Minimum quantity must be less than or equal to maximum quantity`);
+    }
+    // Validate discount for PERCENT type
+    if (item.disType === 'PERCENT') {
+      const discountValue = parseFloat(item.discount);
+      if (!Number.isFinite(discountValue) || discountValue < 0) {
+        errors.push(`Item at index ${index}: Discount must be a valid non-negative number`);
+      }
+      if (Number.isFinite(discountValue) && discountValue > 100) {
+        errors.push(`Item at index ${index}: Percentage discount cannot exceed 100`);
+      }
+    }
+    // Validate discount for FLAT type
+    if (item.disType === 'FLAT') {
+      const discountValue = parseFloat(item.discount);
+      if (!Number.isFinite(discountValue) || discountValue < 0) {
+        errors.push(`Item at index ${index}: Discount must be a valid non-negative number`);
+      }
+    }
+  });
+
+  if (errors.length > 0) {
+    return helpers.error('any.invalid', {
+      message: errors.join('; '),
+    });
+  }
+  return value;
+});
+
+export const createTradeShowRetailerSchema = Joi.object({
+  tradeShowId: Joi.number().integer().required().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+    'any.required': 'Trade show ID is required',
+  }),
+  retailerId: Joi.number().integer().required().messages({
+    'number.base': 'Retailer ID must be a number',
+    'number.integer': 'Retailer ID must be an integer',
+    'any.required': 'Retailer ID is required',
+  }),
+});
+
+export const createBulkTradeShowRetailersSchema = Joi.object({
+  tradeShowId: Joi.number().integer().required().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+    'any.required': 'Trade show ID is required',
+  }),
+  retailerIds: Joi.array()
+    .items(Joi.number().integer().positive())
+    .min(1)
+    .max(100)
+    .required()
+    .messages({
+      'array.base': 'Retailer IDs must be an array',
+      'array.min': 'Retailer IDs array must contain at least one retailer ID',
+      'array.max': 'Cannot create more than 100 associations at once',
+      'any.required': 'Retailer IDs array is required',
+    }),
+}).custom((value, helpers) => {
+  // Check for duplicate retailer IDs in the request
+  const errors: string[] = [];
+  const seen = new Set<number>();
+
+  value.retailerIds.forEach((retailerId: number, index: number) => {
+    if (!Number.isFinite(retailerId) || retailerId <= 0 || !Number.isInteger(retailerId)) {
+      errors.push(`Retailer ID at index ${index}: Must be a valid positive integer`);
+    } else if (seen.has(retailerId)) {
+      errors.push(`Retailer ID at index ${index}: Retailer ID ${retailerId} is duplicated in the request`);
+    } else {
+      seen.add(retailerId);
+    }
+  });
+
+  if (errors.length > 0) {
+    return helpers.error('any.invalid', {
+      message: errors.join('; '),
+    });
+  }
+  return value;
+});
+
+export const updateTradeShowRetailerSchema = Joi.object({
+  tradeShowId: Joi.number().integer().optional().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+  }),
+  retailerId: Joi.number().integer().optional().messages({
+    'number.base': 'Retailer ID must be a number',
+    'number.integer': 'Retailer ID must be an integer',
+  }),
+});
+
+export const getTradeShowRetailersQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+  tradeShowId: Joi.number().integer().optional(),
+  retailerId: Joi.number().integer().optional(),
+});

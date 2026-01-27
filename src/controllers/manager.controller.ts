@@ -1385,4 +1385,119 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
       sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+  // TradeShow CRUD controller methods
+  async createTradeShow(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createTradeShow(req.body);
+    sendResponse(res, 201, true, data, 'TradeShow created successfully');
+  }
+
+  async getTradeShowById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShow fetched successfully');
+  }
+
+  async getAllTradeShows(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllTradeShows(req.query as PaginationOptions & { 
+      search?: string; 
+      status?: string; 
+      tradeShowDate?: string; 
+      deliveryStartDate?: string; 
+      deliveryEndDate?: string;
+    });
+    sendResponse(res, 200, true, data, 'TradeShows fetched successfully');
+  }
+
+  async updateTradeShow(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateTradeShow(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'TradeShow updated successfully');
+  }
+
+  async deleteTradeShow(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteTradeShow(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShow deleted successfully');
+  }
+
+  // TradeShowItem CRUD controller methods
+  async createTradeShowItem(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createTradeShowItem(req.body);
+    sendResponse(res, 201, true, data, 'TradeShowItem created successfully');
+  }
+
+  async getTradeShowItemById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowItemById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShowItem fetched successfully');
+  }
+
+  async getAllTradeShowItems(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllTradeShowItems(req.query as PaginationOptions & {
+      tradeShowId?: number;
+      itemNumber?: string;
+      disType?: "PERCENT" | "FLAT";
+    });
+    sendResponse(res, 200, true, data, 'TradeShowItems fetched successfully');
+  }
+
+  async updateTradeShowItem(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateTradeShowItem(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'TradeShowItem updated successfully');
+  }
+
+  async deleteTradeShowItem(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteTradeShowItem(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShowItem deleted successfully');
+  }
+
+  async createBulkTradeShowItems(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createBulkTradeShowItems(req.body);
+    sendResponse(res, 201, true, data, `${data.count} TradeShowItem(s) created successfully`);
+  }
+
+  // TradeShowRetailer CRUD controller methods
+  async createTradeShowRetailer(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createTradeShowRetailer(req.body);
+    sendResponse(res, 201, true, data, 'TradeShowRetailer created successfully');
+  }
+
+  async createBulkTradeShowRetailers(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createBulkTradeShowRetailers(req.body);
+    sendResponse(res, 201, true, data, `${data.count} TradeShowRetailer association(s) created successfully`);
+  }
+
+  async getTradeShowRetailerById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowRetailerById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShowRetailer fetched successfully');
+  }
+
+  async getAllTradeShowRetailers(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllTradeShowRetailers(req.query as PaginationOptions & {
+      tradeShowId?: number;
+      retailerId?: number;
+    });
+    sendResponse(res, 200, true, data, 'TradeShowRetailers fetched successfully');
+  }
+
+  async updateTradeShowRetailer(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateTradeShowRetailer(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'TradeShowRetailer updated successfully');
+  }
+
+  async deleteTradeShowRetailer(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteTradeShowRetailer(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShowRetailer deleted successfully');
+  }
+async getARUndepositeFund(req: AuthRequest, res: Response) {
+  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
+  const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
+  const data = await this.managerService.getARUndepositeFund(startDate, endDate);
+  sendResponse(res,200,true,data,'Account Receivable Undeposite Fund report fetched successfully');
+}
+
+async getARDeletedPayment(req: AuthRequest, res: Response) {
+  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
+  const endDate = typeof  req.query.endDate === 'string' ? req.query.endDate : '';
+  const data = await this.managerService.getARDeletedPayment({ startDate, endDate });
+  sendResponse(res,200,true,data,'AR Deleted report fetched successfully');
+}
+
+
 }

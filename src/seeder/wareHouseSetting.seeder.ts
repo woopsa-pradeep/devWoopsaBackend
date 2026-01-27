@@ -23,6 +23,10 @@ export async function seedWarehouseSetting() {
         showWithOutPrice: false,
 
       },
+      splitSearchOption: false,
+      
+      globalSearchOption: true,
+    
       itemGlobal: {
         InventoryThreshold: 10,
         maxOrderLimit: 100,

@@ -22,6 +22,11 @@ export class DashboardController {
         const data = await this.dashboardService.getDistributorDashboardV1(req.body as PaginationOptions);
         sendResponse(res, 200, true, data, General.SUCCESS);
       }
+      
+      async getHighDemandItems(req: AuthRequest, res: Response) {
+        const data = await this.dashboardService.getHighDemandItems(req.body as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+      }
 
       async getDiscountedItems(req: AuthRequest, res: Response) {
         const data = await this.dashboardService.getDiscountedItems(req.query as PaginationOptions,Number(req.user.id));

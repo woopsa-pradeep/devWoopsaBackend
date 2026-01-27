@@ -103,7 +103,21 @@ import { CustBillTo } from "../models/mmsql/custBillTo.model";
 import { formatCustomerVelocityItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
 import { Record_Locks } from "../models/mmsql/recordLock.model";
 import { PreBook } from "../models/postgres/preBook.model";
+import { TradeShow } from "../models/postgres/tradeShow.model";
+import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
+import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
+import { CustFinanceCharges } from "../models/mmsql/custFinanceCharges.model"
+import { ARDeletes } from "../models/mmsql/arDeletes.mode";
 
+type DisType = "PERCENT" | "FLAT";
+
+type BulkItemInput = {
+  itemNumber: string;
+  discount: string; // keeping as string since your model likely stores/accepts it; validate numeric
+  minQuantity: number;
+  maxQuantity: number;
+  disType: DisType;
+};
 
 export class ManagerService {
 
@@ -7830,7 +7844,11 @@ async getShortShipmentReport(
               attributes: ['C_Name'],
               required: false,
             },
-
+            {
+              model: Users,
+              required:false,
+              attributes:['UserNumber','UserName']
+            },
             {
               model: ARDefinitions,
               as: 'arDefinition',
@@ -7857,6 +7875,182 @@ async getShortShipmentReport(
 
     return {total,page,limit,data,};
   }
+
+ async getARUndepositeFund(startDate: string, endDate: string) {
+  const data = await CustReceivables.findAll({
+    attributes: {
+      include: [
+        // SubType from AR_Definitions (matching both AR_Type & AR_SubType)
+        [
+          sequelize.literal(`(
+            SELECT AR_SubTypeRef 
+            FROM AR_Definitions 
+            WHERE AR_Definitions.AR_Type = CustReceivables.AR_Type 
+              AND AR_Definitions.AR_SubType = CustReceivables.AR_SubType
+          )`),
+          'SubType'
+        ],
+        // RepName from SalesRep
+        [
+          sequelize.literal(`(
+            SELECT S_Desc 
+            FROM SalesRep 
+            WHERE SalesRep.S_Number = Customer.C_Salesman
+          )`),
+          'RepName'
+        ],
+        // DaysUntilDue from Invoice_Terms
+        [
+          sequelize.literal(`(
+            SELECT DaysUntilDue 
+            FROM Invoice_Terms 
+            WHERE Invoice_Terms.TermsCode = Customer.TermsCode
+          )`),
+          'DaysUntilDue'
+        ],
+        // Terms from Invoice_Terms
+        [
+          sequelize.literal(`(
+            SELECT Terms 
+            FROM Invoice_Terms 
+            WHERE Invoice_Terms.TermsCode = Customer.TermsCode
+          )`),
+          'Terms'
+        ],
+        // Sum of Finance_Charge
+        [
+          sequelize.literal(`ISNULL((
+            SELECT SUM(Finance_Charge) 
+            FROM Cust_FinanceCharges 
+            WHERE Cust_FinanceCharges.C_Number = CustReceivables.C_Number
+          ), 0)`),
+          'fCharge'
+        ],
+      ]
+    },
+    include: [
+      {
+        model: Customer,
+        as: 'customer',
+        attributes: [
+          'C_Name',
+          'C_Address',
+          'C_City',
+          'C_State',
+          'C_Zip',
+          'C_Phone',
+          'C_Fax',
+          'C_Email',
+          'TermsCode',
+          'C_Salesman',
+          'C_StatementAccount',
+        ]
+      }
+    ],
+    where: {
+      Deposit_ID: 0,
+      AR_Type: { [Op.ne]: 'I' },
+      AR_CheckDate: {
+        [Op.between]: [startDate, endDate]
+      }
+    },
+    order: [['AR_CheckDate', 'ASC']]
+  });
+
+  return data;
+}
+
+async getARDeletedPayment(filters: {
+  startDate?: string;
+  endDate?: string;
+}) {
+  const { startDate, endDate } = filters;
+
+  const whereCondition: any = {
+    AR_Type: {
+      [Op.in]: ['C', 'A'],
+    },
+  };
+
+  if (startDate && endDate) {
+    whereCondition.AR_CheckDate = {
+      [Op.between]: [startDate, endDate],
+    };
+  }
+
+  const data = await ARDeletes.findAll({
+    attributes: [
+      'P_Number',
+
+      // ✅ FIXED CAST
+      [
+        literal('CAST([ARDeletes].[C_Number] AS varchar)'),
+        'C_Number',
+      ],
+
+      'Invoice_Number',
+      'AR_Type',
+      'AR_SubType',
+      'AR_Date',
+
+      // ✅ FIXED CAST
+      [
+        literal('CAST([ARDeletes].[AR_CheckDate] AS date)'),
+        'AR_CheckDate',
+      ],
+
+      'AR_Ref',
+      'AR_Amount',
+      'User_Number',
+
+      // ✅ FIXED CAST
+      [
+        literal('CAST([ARDeletes].[AR_DeleteDate] AS date)'),
+        'AR_DeleteDate',
+      ],
+
+      [
+        literal(`(
+          SELECT AR_SubTypeRef
+          FROM AR_Definitions
+          WHERE AR_Definitions.AR_Type = ARDeletes.AR_Type
+            AND AR_Definitions.AR_SubType = ARDeletes.AR_SubType
+        )`),
+        'SubTypeRef',
+      ],
+
+      [
+        literal(`(
+          SELECT UserName
+          FROM Users
+          WHERE Users.UserNumber = ARDeletes.User_Number
+        )`),
+        'Deleted_UserName',
+      ],
+
+      // ✅ Association column
+      [col('Customer.C_Name'), 'C_Name'],
+    ],
+
+    include: [
+      {
+        model: Customer,
+        attributes: [],
+        required: false,
+      },
+    ],
+
+    order: [
+      [col('Customer.C_Name'), 'ASC'],
+      ['AR_CheckDate', 'ASC'],
+    ],
+
+    where: whereCondition,
+    raw: true,
+  });
+
+  return data;
+}
 
   async getARreportsHistory(){
     const arReportHistort = await ARDeposits.findAll({
@@ -8017,6 +8211,804 @@ async getShortShipmentReport(
 
     await preBook.destroy();
     return { success: true, message: 'PreBook deleted successfully' };
+  }
+
+  // TradeShow CRUD methods
+  async createTradeShow(body: { 
+    name: string; 
+    description?: string | null; 
+    tradeShowDate: string; 
+    deliveryStartDate: string; 
+    deliveryEndDate: string; 
+    deliveryWeeks: number; 
+    status?: string;
+  }) {
+    // Validate date ranges
+    const tradeShowDate = new Date(body.tradeShowDate);
+    const deliveryStartDate = new Date(body.deliveryStartDate);
+    const deliveryEndDate = new Date(body.deliveryEndDate);
+    
+    if (deliveryStartDate > deliveryEndDate) {
+      throw new AppError('Delivery start date must be before or equal to delivery end date', 400);
+    }
+
+    // Validate status
+    const validStatuses = ['active', 'inactive'];
+    const status = body.status || 'inactive';
+    if (!validStatuses.includes(status)) {
+      throw new AppError('Status must be either "active" or "inactive"', 400);
+    }
+
+    // Validate deliveryWeeks
+    if (body.deliveryWeeks < 0) {
+      throw new AppError('Delivery weeks must be a non-negative number', 400);
+    }
+
+    const tradeShow = await TradeShow.create({
+      name: body.name,
+      description: body.description || null,
+      tradeShowDate: body.tradeShowDate as any,
+      deliveryStartDate: body.deliveryStartDate as any,
+      deliveryEndDate: body.deliveryEndDate as any,
+      deliveryWeeks: body.deliveryWeeks,
+      status: status,
+    });
+
+    return tradeShow;
+  }
+
+  async getTradeShowById(id: number) {
+    const tradeShow = await TradeShow.findByPk(id);
+
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    return tradeShow;
+  }
+
+  async getAllTradeShows(query: PaginationOptions & { 
+    search?: string; 
+    status?: string; 
+    tradeShowDate?: string; 
+    deliveryStartDate?: string; 
+    deliveryEndDate?: string;
+  }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const offset = (page - 1) * limit;
+
+    const whereCondition: any = {};
+
+    // Search filter (by name or description)
+    if (query.search) {
+      whereCondition[Op.or] = [
+        { name: { [Op.iLike]: `%${query.search}%` } },
+        { description: { [Op.iLike]: `%${query.search}%` } },
+      ];
+    }
+
+    // Status filter
+    if (query.status) {
+      whereCondition.status = query.status;
+    }
+
+    // Trade show date filter
+    if (query.tradeShowDate) {
+      whereCondition.tradeShowDate = query.tradeShowDate;
+    }
+
+    // Delivery date range filter
+    if (query.deliveryStartDate || query.deliveryEndDate) {
+      whereCondition[Op.and] = whereCondition[Op.and] || [];
+      if (query.deliveryStartDate) {
+        whereCondition[Op.and].push({
+          deliveryStartDate: { [Op.gte]: query.deliveryStartDate }
+        });
+      }
+      if (query.deliveryEndDate) {
+        whereCondition[Op.and].push({
+          deliveryEndDate: { [Op.lte]: query.deliveryEndDate }
+        });
+      }
+    }
+
+    const { count: totalCount, rows: tradeShows } = await TradeShow.findAndCountAll({
+      where: whereCondition,
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    return {
+      data: tradeShows,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+    };
+  }
+
+  async updateTradeShow(id: number, body: Partial<{ 
+    name: string; 
+    description: string | null; 
+    tradeShowDate: string; 
+    deliveryStartDate: string; 
+    deliveryEndDate: string; 
+    deliveryWeeks: number; 
+    status: string;
+  }>) {
+    const tradeShow = await TradeShow.findByPk(id);
+
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    // Validate date ranges if dates are being updated
+    if (body.deliveryStartDate && body.deliveryEndDate) {
+      const deliveryStartDate = new Date(body.deliveryStartDate);
+      const deliveryEndDate = new Date(body.deliveryEndDate);
+      
+      if (deliveryStartDate > deliveryEndDate) {
+        throw new AppError('Delivery start date must be before or equal to delivery end date', 400);
+      }
+    } else if (body.deliveryStartDate) {
+      const deliveryStartDate = new Date(body.deliveryStartDate);
+      const deliveryEndDate = new Date(tradeShow.deliveryEndDate);
+      
+      if (deliveryStartDate > deliveryEndDate) {
+        throw new AppError('Delivery start date must be before or equal to delivery end date', 400);
+      }
+    } else if (body.deliveryEndDate) {
+      const deliveryStartDate = new Date(tradeShow.deliveryStartDate);
+      const deliveryEndDate = new Date(body.deliveryEndDate);
+      
+      if (deliveryStartDate > deliveryEndDate) {
+        throw new AppError('Delivery start date must be before or equal to delivery end date', 400);
+      }
+    }
+
+    // Validate status if being updated
+    if (body.status !== undefined) {
+      const validStatuses = ['active', 'inactive'];
+      if (!validStatuses.includes(body.status)) {
+        throw new AppError('Status must be either "active" or "inactive"', 400);
+      }
+    }
+
+    // Validate deliveryWeeks if being updated
+    if (body.deliveryWeeks !== undefined && body.deliveryWeeks < 0) {
+      throw new AppError('Delivery weeks must be a non-negative number', 400);
+    }
+
+    // Create update object with proper types for Sequelize
+    const updateData: any = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.tradeShowDate !== undefined) updateData.tradeShowDate = body.tradeShowDate;
+    if (body.deliveryStartDate !== undefined) updateData.deliveryStartDate = body.deliveryStartDate;
+    if (body.deliveryEndDate !== undefined) updateData.deliveryEndDate = body.deliveryEndDate;
+    if (body.deliveryWeeks !== undefined) updateData.deliveryWeeks = body.deliveryWeeks;
+    if (body.status !== undefined) updateData.status = body.status;
+
+    await tradeShow.update(updateData);
+    return tradeShow;
+  }
+
+  async deleteTradeShow(id: number) {
+    const tradeShow = await TradeShow.findByPk(id);
+
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    await tradeShow.destroy();
+    return { success: true, message: 'TradeShow deleted successfully' };
+  }
+
+  // TradeShowItem CRUD methods
+  async createTradeShowItem(body: {
+    tradeShowId: number;
+    itemNumber: string;
+    discount: string;
+    minQuantity: number;
+    maxQuantity: number;
+    disType: "PERCENT" | "FLAT";
+  }) {
+    // Validate that TradeShow exists
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    // Validate quantity range
+    if (body.minQuantity < 0) {
+      throw new AppError('Minimum quantity must be a non-negative number', 400);
+    }
+    if (body.maxQuantity < 0) {
+      throw new AppError('Maximum quantity must be a non-negative number', 400);
+    }
+    if (body.minQuantity > body.maxQuantity) {
+      throw new AppError('Minimum quantity must be less than or equal to maximum quantity', 400);
+    }
+
+    // Validate discount
+    const discountValue = parseFloat(body.discount);
+    if (isNaN(discountValue) || discountValue < 0) {
+      throw new AppError('Discount must be a valid non-negative number', 400);
+    }
+
+    // Validate discount type
+    if (body.disType !== 'PERCENT' && body.disType !== 'FLAT') {
+      throw new AppError('Discount type must be either "PERCENT" or "FLAT"', 400);
+    }
+
+    // Validate PERCENT discount range
+    if (body.disType === 'PERCENT' && discountValue > 100) {
+      throw new AppError('Percentage discount cannot exceed 100', 400);
+    }
+
+    try {
+      const tradeShowItem = await TradeShowItem.create({
+        tradeShowId: body.tradeShowId,
+        itemNumber: body.itemNumber,
+        discount: body.discount,
+        minQuantity: body.minQuantity,
+        maxQuantity: body.maxQuantity,
+        disType: body.disType,
+      });
+
+      return tradeShowItem;
+    } catch (error: any) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('Item number already exists for this trade show', 409);
+      }
+      throw error;
+    }
+  }
+
+   async  createBulkTradeShowItems(body: {
+    tradeShowId: number;
+    items: BulkItemInput[];
+  }) {
+    // 1) Validate TradeShow exists
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) throw new AppError("TradeShow not found", 404);
+  
+    // 2) Validate items array
+    if (!Array.isArray(body.items) || body.items.length === 0) {
+      throw new AppError("Items array must contain at least one item", 400);
+    }
+    if (body.items.length > 100) {
+      throw new AppError("Cannot create more than 100 items at once", 400);
+    }
+  
+    // 3) Validate each item + normalize itemNumbers (trim)
+    const validationErrors: string[] = [];
+    const seen = new Set<string>();
+  
+    const normalizedItems = body.items.map((item, index) => {
+      const itemNumber = (item.itemNumber ?? "").trim();
+  
+      if (!itemNumber) {
+        validationErrors.push(`Item at index ${index}: Item number is required`);
+      } else {
+        const key = itemNumber.toUpperCase(); // choose one normalization; adjust if item numbers are case-sensitive in DB
+        if (seen.has(key)) {
+          validationErrors.push(
+            `Item at index ${index}: Item number "${itemNumber}" is duplicated in the request`
+          );
+        }
+        seen.add(key);
+      }
+  
+    
+  
+      // discount
+      const discountValue = Number.parseFloat(String(item.discount));
+      if (!Number.isFinite(discountValue) || discountValue < 0) {
+        validationErrors.push(
+          `Item at index ${index}: Discount must be a valid non-negative number`
+        );
+      }
+  
+      // disType
+      if (item.disType !== "PERCENT" && item.disType !== "FLAT") {
+        validationErrors.push(
+          `Item at index ${index}: Discount type must be either "PERCENT" or "FLAT"`
+        );
+      }
+  
+      if (item.disType === "PERCENT" && Number.isFinite(discountValue) && discountValue > 100) {
+        validationErrors.push(
+          `Item at index ${index}: Percentage discount cannot exceed 100`
+        );
+      }
+  
+      return {
+        ...item,
+        itemNumber,
+        // keep original discount string, but ensure it’s consistent (optional)
+        discount: String(item.discount),
+      };
+    });
+  
+    if (validationErrors.length) {
+      throw new AppError(`Validation errors: ${validationErrors.join("; ")}`, 400);
+    }
+  
+    const itemNumbers = normalizedItems.map((i) => i.itemNumber);
+  
+    // 4) Transaction + duplicate check + bulk insert
+    return await postgresSequelize.transaction(async (transaction) => {
+      // Correct where clause: use Op.in (your previous code was wrong)
+      const existingItems = await TradeShowItem.findAll({
+        attributes: ["itemNumber"],
+        where: {
+          tradeShowId: body.tradeShowId,
+          itemNumber: { [Op.in]: itemNumbers },
+        },
+        transaction,
+        lock: transaction.LOCK.UPDATE, // optional; helps reduce race conditions on some DBs
+      });
+  
+      if (existingItems.length) {
+        const existingItemNumbers = existingItems.map((x: any) => x.itemNumber).join(", ");
+        throw new AppError(
+          `Item number(s) already exist for this trade show: ${existingItemNumbers}`,
+          409
+        );
+      }
+  
+      const itemsToCreate = normalizedItems.map((item) => ({
+        tradeShowId: body.tradeShowId,
+        itemNumber: item.itemNumber,
+        discount: item.discount,
+        minQuantity: item.minQuantity,
+        maxQuantity: item.maxQuantity,
+        disType: item.disType,
+      }));
+  
+      try {
+        const createdItems = await TradeShowItem.bulkCreate(itemsToCreate, {
+          transaction,
+          returning: true,
+          validate: true,
+        });
+  
+        return {
+          success: true,
+          count: createdItems.length,
+          items: createdItems,
+        };
+      } catch (err: any) {
+        // If DB unique constraint exists, this catches race-condition duplicates too
+        if (err?.name === "SequelizeUniqueConstraintError") {
+          throw new AppError("One or more item numbers already exist for this trade show", 409);
+        }
+        throw err;
+      }
+    });
+  }
+
+  async getTradeShowItemById(id: number) {
+    const tradeShowItem = await TradeShowItem.findByPk(id, {
+      include: [{
+        model: TradeShow,
+        as: 'tradeShow',
+        attributes: ['id', 'name', 'tradeShowDate', 'status'],
+      }],
+    });
+
+    if (!tradeShowItem) {
+      throw new AppError('TradeShowItem not found', 404);
+    }
+
+    return tradeShowItem;
+  }
+
+  async getAllTradeShowItems(query: PaginationOptions & {
+    tradeShowId?: number;
+    itemNumber?: string;
+    disType?: "PERCENT" | "FLAT";
+  }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const offset = (page - 1) * limit;
+
+    const whereCondition: any = {};
+
+    // Filter by tradeShowId
+    if (query.tradeShowId) {
+      whereCondition.tradeShowId = query.tradeShowId;
+    }
+
+    // Filter by itemNumber (partial match)
+    if (query.itemNumber) {
+      whereCondition.itemNumber = { [Op.iLike]: `%${query.itemNumber}%` };
+    }
+
+    // Filter by discount type
+    if (query.disType) {
+      whereCondition.disType = query.disType;
+    }
+
+    const { count: totalCount, rows: tradeShowItems } = await TradeShowItem.findAndCountAll({
+      where: whereCondition,
+      include: [{
+        model: TradeShow,
+        as: 'tradeShow',
+        attributes: ['id', 'name', 'tradeShowDate', 'status'],
+      }],
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    const finalData = await Promise.all(
+      tradeShowItems.map(async (item) => {
+        const inventory = await Inventory.findOne({
+          where: {
+            Item_Number: Number(item.itemNumber),
+          },
+          attributes: [
+            'Item_Number',
+            'Description',
+            'Pack',
+            'UOM',
+            'Retail1',
+            'Retail2',
+            'Retail3',
+          ],
+          include: [
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Category_Desc', 'Sales_Category'],
+            },
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: ['Class_Desc'],
+            },
+            {
+              model: InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              required: false,
+            },
+          ],
+        });
+
+        return {
+          ...item.toJSON(),
+          discount: item.discount.toString(),
+          inventory: inventory || null,
+        };
+      })
+    );
+
+    return {
+      data: finalData,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+    };
+  }
+
+  async updateTradeShowItem(id: number, body: Partial<{
+    tradeShowId: number;
+    itemNumber: string;
+    discount: string;
+    minQuantity: number;
+    maxQuantity: number;
+    disType: "PERCENT" | "FLAT";
+  }>) {
+    const tradeShowItem = await TradeShowItem.findByPk(id);
+
+    if (!tradeShowItem) {
+      throw new AppError('TradeShowItem not found', 404);
+    }
+
+    // Validate TradeShow exists if being updated
+    if (body.tradeShowId !== undefined) {
+      const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+      if (!tradeShow) {
+        throw new AppError('TradeShow not found', 404);
+      }
+    }
+
+    // Validate quantity range
+    const minQuantity = body.minQuantity !== undefined ? body.minQuantity : tradeShowItem.minQuantity;
+    const maxQuantity = body.maxQuantity !== undefined ? body.maxQuantity : tradeShowItem.maxQuantity;
+
+    if (minQuantity < 0) {
+      throw new AppError('Minimum quantity must be a non-negative number', 400);
+    }
+    if (maxQuantity < 0) {
+      throw new AppError('Maximum quantity must be a non-negative number', 400);
+    }
+    if (minQuantity > maxQuantity) {
+      throw new AppError('Minimum quantity must be less than or equal to maximum quantity', 400);
+    }
+
+    // Validate discount if being updated
+    if (body.discount !== undefined) {
+      const discountValue = parseFloat(body.discount);
+      if (isNaN(discountValue) || discountValue < 0) {
+        throw new AppError('Discount must be a valid non-negative number', 400);
+      }
+
+      const disType = body.disType !== undefined ? body.disType : tradeShowItem.disType;
+      if (disType === 'PERCENT' && discountValue > 100) {
+        throw new AppError('Percentage discount cannot exceed 100', 400);
+      }
+    }
+
+    // Validate discount type
+    if (body.disType !== undefined && body.disType !== 'PERCENT' && body.disType !== 'FLAT') {
+      throw new AppError('Discount type must be either "PERCENT" or "FLAT"', 400);
+    }
+
+    // Create update object with proper types
+    const updateData: any = {};
+    if (body.tradeShowId !== undefined) updateData.tradeShowId = body.tradeShowId;
+    if (body.itemNumber !== undefined) updateData.itemNumber = body.itemNumber;
+    if (body.discount !== undefined) updateData.discount = body.discount;
+    if (body.minQuantity !== undefined) updateData.minQuantity = body.minQuantity;
+    if (body.maxQuantity !== undefined) updateData.maxQuantity = body.maxQuantity;
+    if (body.disType !== undefined) updateData.disType = body.disType;
+
+    try {
+      await tradeShowItem.update(updateData);
+      return tradeShowItem;
+    } catch (error: any) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('Item number already exists for this trade show', 409);
+      }
+      throw error;
+    }
+  }
+
+  async deleteTradeShowItem(id: number) {
+    const tradeShowItem = await TradeShowItem.findByPk(id);
+
+    if (!tradeShowItem) {
+      throw new AppError('TradeShowItem not found', 404);
+    }
+
+    await tradeShowItem.destroy();
+    return { success: true, message: 'TradeShowItem deleted successfully' };
+  }
+
+  // TradeShowRetailer CRUD methods
+  async createTradeShowRetailer(body: {
+    tradeShowId: number;
+    retailerId: number;
+  }) {
+    // Validate that TradeShow exists
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    try {
+      const tradeShowRetailer = await TradeShowRetailer.create({
+        tradeShowId: body.tradeShowId,
+        retailerId: body.retailerId,
+      });
+
+      return tradeShowRetailer;
+    } catch (error: any) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('Retailer is already associated with this trade show', 409);
+      }
+      throw error;
+    }
+  }
+
+  async createBulkTradeShowRetailers(body: {
+    tradeShowId: number;
+    retailerIds: number[];
+  }) {
+    // Validate that TradeShow exists
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    // Validate retailerIds array
+    if (!Array.isArray(body.retailerIds) || body.retailerIds.length === 0) {
+      throw new AppError('Retailer IDs array must contain at least one retailer ID', 400);
+    }
+
+    if (body.retailerIds.length > 100) {
+      throw new AppError('Cannot create more than 100 associations at once', 400);
+    }
+
+    // Validate and normalize retailer IDs
+    const validationErrors: string[] = [];
+    const seen = new Set<number>();
+    const normalizedRetailerIds: number[] = [];
+
+    body.retailerIds.forEach((retailerId, index) => {
+      // Check if retailerId is a valid number
+      const id = Number(retailerId);
+      if (!Number.isFinite(id) || id <= 0 || !Number.isInteger(id)) {
+        validationErrors.push(`Retailer ID at index ${index}: Must be a valid positive integer`);
+        return;
+      }
+
+      // Check for duplicates in the request
+      if (seen.has(id)) {
+        validationErrors.push(`Retailer ID at index ${index}: Retailer ID ${id} is duplicated in the request`);
+        return;
+      }
+
+      seen.add(id);
+      normalizedRetailerIds.push(id);
+    });
+
+    if (validationErrors.length > 0) {
+      throw new AppError(`Validation errors: ${validationErrors.join('; ')}`, 400);
+    }
+
+    // Use transaction for bulk insert
+    const transaction = await postgresSequelize.transaction();
+
+    try {
+      
+
+      
+
+
+      // Prepare associations for bulk insert
+      const associationsToCreate = normalizedRetailerIds.map(retailerId => ({
+        tradeShowId: body.tradeShowId,
+        retailerId: retailerId,
+      }));
+
+      // Bulk create
+      const createdAssociations = await TradeShowRetailer.bulkCreate(associationsToCreate, {
+        transaction,
+        returning: true,
+      });
+
+      await transaction.commit();
+
+      return {
+        success: true,
+        count: createdAssociations.length,
+        associations: createdAssociations,
+      };
+    } catch (error: any) {
+      await transaction.rollback();
+
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('One or more retailers are already associated with this trade show', 409);
+      }
+
+      throw new AppError(`Failed to create trade show retailer associations: ${error.message}`, 500);
+    }
+  }
+
+  async getTradeShowRetailerById(id: number) {
+    const tradeShowRetailer = await TradeShowRetailer.findByPk(id, {
+      include: [
+        {
+          model: TradeShow,
+          as: 'tradeShow',
+          attributes: ['id', 'name', 'tradeShowDate', 'status'],
+        },
+      ],
+    });
+
+    if (!tradeShowRetailer) {
+      throw new AppError('TradeShowRetailer not found', 404);
+    }
+
+    return tradeShowRetailer;
+  }
+
+  async getAllTradeShowRetailers(query: PaginationOptions & {
+    tradeShowId?: number;
+    retailerId?: number;
+  }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const offset = (page - 1) * limit;
+
+    const whereCondition: any = {};
+
+    // Filter by tradeShowId
+    if (query.tradeShowId) {
+      whereCondition.tradeShowId = query.tradeShowId;
+    }
+
+    // Filter by retailerId
+    if (query.retailerId) {
+      whereCondition.retailerId = query.retailerId;
+    }
+
+    const { count: totalCount, rows: tradeShowRetailers } = await TradeShowRetailer.findAndCountAll({
+      where: whereCondition,
+      include: [
+        {
+          model: TradeShow,
+          as: 'tradeShow',
+          attributes: ['id', 'name', 'tradeShowDate', 'status'],
+        },
+      ],
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    return {
+      data: tradeShowRetailers,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+    };
+  }
+
+  async updateTradeShowRetailer(id: number, body: Partial<{
+    tradeShowId: number;
+    retailerId: number;
+  }>) {
+    const tradeShowRetailer = await TradeShowRetailer.findByPk(id);
+
+    if (!tradeShowRetailer) {
+      throw new AppError('TradeShowRetailer not found', 404);
+    }
+
+    // Validate TradeShow exists if being updated
+    if (body.tradeShowId !== undefined) {
+      const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+      if (!tradeShow) {
+        throw new AppError('TradeShow not found', 404);
+      }
+    }
+
+    // Validate Retailer exists if being updated
+    if (body.retailerId !== undefined) {
+      const retailer = await Retailer.findByPk(body.retailerId);
+      if (!retailer) {
+        throw new AppError('Retailer not found', 404);
+      }
+    }
+
+    // Create update object
+    const updateData: any = {};
+    if (body.tradeShowId !== undefined) updateData.tradeShowId = body.tradeShowId;
+    if (body.retailerId !== undefined) updateData.retailerId = body.retailerId;
+
+    try {
+      await tradeShowRetailer.update(updateData);
+      return tradeShowRetailer;
+    } catch (error: any) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('Retailer is already associated with this trade show', 409);
+      }
+      throw error;
+    }
+  }
+
+  async deleteTradeShowRetailer(id: number) {
+    const tradeShowRetailer = await TradeShowRetailer.findByPk(id);
+
+    if (!tradeShowRetailer) {
+      throw new AppError('TradeShowRetailer not found', 404);
+    }
+
+    await tradeShowRetailer.destroy();
+    return { success: true, message: 'TradeShowRetailer deleted successfully' };
   }
   
   async getArStatementReport(filters: {

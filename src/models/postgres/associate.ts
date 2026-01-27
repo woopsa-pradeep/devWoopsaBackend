@@ -25,6 +25,9 @@ import { EpickUser } from './epickUser.model';
 import { EpickConfirmation } from './epickConfirmation.model';
 import { DriverRouteAssignment } from './driverRouteAssignment.model';
 import { Driver } from './driver.model';
+import { TradeShowItem } from './tradeShowItem.model';
+import { TradeShowRetailer } from './tradeShowRetailer.model';
+import { TradeShow } from './tradeShow.model';
 // import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
 
 export function applyAssociations(): void {
@@ -140,6 +143,29 @@ DriverRouteAssignment.belongsTo(Driver, {
   foreignKey: 'driverId',
   as: 'driver',
 });
+
+// TradeShow associations
+TradeShow.hasMany(TradeShowItem, {
+  foreignKey: 'tradeShowId',
+  as: 'items',
+});
+
+TradeShowItem.belongsTo(TradeShow, {
+  foreignKey: 'tradeShowId',
+  as: 'tradeShow',
+});
+
+TradeShow.hasMany(TradeShowRetailer, {
+  foreignKey: 'tradeShowId',
+  as: 'retailers',
+});
+
+TradeShowRetailer.belongsTo(TradeShow, {
+  foreignKey: 'tradeShowId',
+  as: 'tradeShow',
+});
+
+
 
 
 // Inventory.belongsTo(InventoryStatus, {

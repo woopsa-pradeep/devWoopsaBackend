@@ -17,7 +17,7 @@ import { generateOrderConfirmationEmail, generateDistributorOrderNotificationEma
 import { sendEmail } from "../utils/sendMail";
 import { PuppeteerPDFGenerator } from "../utils/puppeteerPdfGenerator";
 import { Distributor } from "../models/mmsql/distributor.model";
-import { col, Op, Order, Sequelize, where } from "sequelize";
+import { col, literal, Op, Order, Sequelize, where } from "sequelize";
 import { AddToCartRequest, UpdateCartItemRequest, CartSummary, CartResponse, PlaceOrder } from "../interfaces/cart.interface";
 import { CustomerRoute } from "../models/mmsql/customerRoutes.model";
 import { getDefaultOrderDetailValues, getDefaultOrderValues, getNextOrderNumber, sendEmailToOrder } from "../utils/order";
@@ -337,56 +337,123 @@ export class RetailerService {
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
-        }
-        else {
-          if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        } else {
+          let globalSearch: any = await Setting.findOne({});
+          globalSearch = globalSearch?.dataValues || null;
+      
+          const term = search.toLowerCase().trim();
+          const anywhere = `%${term}%`;
+          const starts = `${term}%`;
+      
+          if (salesCategory.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
           }
-          const term = search.toLowerCase();
-          const anywhere = `%${term}%`;
-          const starts = `${term}%`
-
-
+      
+          // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
-            Sequelize.where(
-              Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
-              { [Op.like]: anywhere }
-            ),
-            Sequelize.where(
-              Sequelize.fn("LOWER", Sequelize.col("Description")),
-              { [Op.like]: anywhere }
-            ),
-            Sequelize.where(
-              Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
-              { [Op.like]: anywhere }
-            ),
-            Sequelize.where(
-              Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
-              { [Op.like]: anywhere }
-            )
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: starts }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: starts }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: starts }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: starts }),
           ];
+      
+          // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
+          const esc = (s: string) => s.replace(/'/g, "''");
+const startsEsc = esc(starts);
+const anywhereEsc = esc(anywhere);
+      console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
+          // If globalSearchOption = true => rank matches across all fields
+          if ( globalSearch?.splitSearchOption === true) {
+            const term = search.toLowerCase().trim();
+            const tokens = term.split(/\s+/).filter(Boolean);
+          
+            // remove the "full-term" OR, otherwise it kills split search results
+            delete whereClause[Op.or];
+          
+            // Each token must match the start of ANY word in ANY of these fields
+            whereClause[Op.and] = tokens.map((tok) => {
+              const startsWord = `${tok}%`;
+              const insideWord = `% ${tok}%`;
+          
+              return {
+                [Op.or]: [
+                  // Description
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: insideWord }),
+          
+                  // AltDesc
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: insideWord }),
+          
+                  // ALT_Description2
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: insideWord }),
+          
+                  // Item_Number (no spaces usually, but keep it)
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: insideWord }),
+                ],
+              };
+            });
 
-          // ORDER RULE:
-          // 1. Items starting with search term first
-          // 2. Then items containing it anywhere
-          // 3. Finally alphabetical
-          orderClause = [
-            [
-              Sequelize.literal(`
-        CASE 
-          WHEN LOWER("Description") LIKE '${starts}' THEN 0
-          WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
-          ELSE 2
-        END
-      `),
-              'ASC'
-            ],
-            ['Description', 'ASC']
-          ];
+       
+
+// build rank across ALL tokens (sum). lower total = better match.
+const rankSql = tokens
+  .map((tok) => {
+    const startsWord = `%${tok}%`;     // 'mar%'
+    const insideWord = `% ${tok}%`;   // '% mar%'
+    const anywhere   = `%${tok}%`;    // '%mar%'
+
+    // Put your searchable fields here (same as whereClause)
+    const fields = ["Description", "AltDesc", "ALT_Description2", "Item_Number"];
+
+    const startsAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
+      .join(" OR ");
+
+    const wordStartAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
+      .join(" OR ");
+
+    const containsAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
+      .join(" OR ");
+
+    return `(CASE
+      WHEN (${startsAny}) THEN 0
+      WHEN (${wordStartAny}) THEN 1
+      WHEN (${containsAny}) THEN 2
+      ELSE 3
+    END)`;
+  })
+  .join(" + ");
+
+// order: best rank first, then Description
+orderClause = [
+  [literal(rankSql), "ASC"],
+  [col("Description"), "ASC"],
+] as Order;
+          
+            // optional: order by Description
+          }
+          else {
+            // Your existing rule (Description-first)
+            orderClause = [
+              [
+                Sequelize.literal(`
+                  CASE 
+                    WHEN LOWER("Description") LIKE '${startsEsc}' THEN 0
+                    WHEN LOWER("Description") LIKE '${anywhereEsc}' THEN 1
+                    ELSE 2
+                  END
+                `),
+                "ASC",
+              ],
+              ["Description", "ASC"],
+            ];
+          }
         }
-
-
-
       }
 
     }
@@ -413,13 +480,13 @@ export class RetailerService {
 
     orderClause = [['Date_Created', 'DESC']] as Order;
 
-    if (search && !searchInUPC && !masterSearch) {
-      orderClause = [[col('Description'), 'ASC']] as Order;
-    } else if (Number(shortBy) === 1) {
+    if(!search){
+     if (Number(shortBy) === 1) {
       orderClause = [[col('Description'), 'ASC']] as Order;
     } else if (Number(shortBy) === 2) {
       orderClause = [[col('Description'), 'DESC']] as Order;
-    }
+    } 
+  }
 
 
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
@@ -3872,11 +3939,11 @@ export class RetailerService {
     const wareHouseDetail = await Distributor.findAll({
       attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone"],
     });
-    const storeDetail = await Customer.findOne({
+    let storeDetail: any = await Customer.findOne({
       where: { C_Number: Number(storeId) },
       attributes: [
         "C_CoName",
-        "C_Number",
+        "C_Name",
         "C_Address",
         "C_City",
         "C_State",
@@ -3927,7 +3994,8 @@ export class RetailerService {
       retailerId: storeId,
 
     })
-
+console.log(storeDetail, 'storeDetail')
+storeDetail.C_CoName = storeDetail.C_Name || "";
     return {
       wareHouseDetail,
       storeDetail,

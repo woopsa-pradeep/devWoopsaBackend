@@ -40,7 +40,7 @@ export class CheckerService {
       where: {
         status: 'ready_for_delivery', // Only get orders marked as ready for delivery by checker
       },
-      attributes: ['orderNumber', 'startedAt', 'completedAt'],
+      attributes: ['orderNumber', 'startedAt', 'completedAt', 'status'],
       raw: false,
     });
 
@@ -48,26 +48,27 @@ export class CheckerService {
     const readyForDeliveryOrderNumbers = Array.from(
       new Set(
         readyForDeliveryOrders
-        .map((o: any) => o?.orderNumber)
-        .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
-        .map((v: any) => Number(v)) // normalize to number
+          .map((o: any) => o?.orderNumber)
+          .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
+          .map((v: any) => Number(v)) // normalize to number
       )
     );
-    
+
     console.log(readyForDeliveryOrderNumbers, 'readyForDeliveryOrderNumbers for checker');
-  
+
     // If no ready for delivery orders, return empty array
     if (readyForDeliveryOrderNumbers.length === 0) {
       return [];
     }
 
-    // Create a map of orderNumber to startedAt and completedAt
+    // Create a map of orderNumber to startedAt, completedAt, and status
     const orderPickMap: any = {};
     readyForDeliveryOrders.forEach((order: any) => {
       if (order.orderNumber) {
         orderPickMap[order.orderNumber] = {
           startedAt: order.startedAt,
-          completedAt: order.completedAt
+          completedAt: order.completedAt,
+          status: order.status
         };
       }
     });
@@ -80,9 +81,9 @@ export class CheckerService {
       // Only get orders that are ready for delivery
       Order_Number: { [Op.in]: readyForDeliveryOrderNumbers }
     };
-    
+
     console.log(headerWhere, 'headerWhere for complete checker order');
-    
+
     const readyForDeliveryOrdersList = await OrderHeader.findAll({
       where: headerWhere,
       attributes: ['Order_Number', 'Order_Date', 'Invoice_Number', 'Picker_ID'],
@@ -106,17 +107,17 @@ export class CheckerService {
         ['Order_Number', 'DESC'], // Newest first
       ],
     });
-  
+
     console.log(readyForDeliveryOrdersList, 'readyForDeliveryOrdersList for checker');
-  
+
     // If no orders, return empty array
     if (readyForDeliveryOrdersList.length === 0) {
       return [];
     }
-  
+
     // Get all order numbers from the ready for delivery orders list
     const orderNumbers = readyForDeliveryOrdersList.map((order: any) => order.Order_Number);
-    
+
     // Get unique picker IDs and fetch picker names
     const pickerIds = Array.from(
       new Set(
@@ -125,20 +126,20 @@ export class CheckerService {
           .filter((id: any) => id !== null && id !== undefined)
       )
     );
-    
-    // Fetch picker names from Users table
-       const epickPickers = await EpickUser.findAll({
 
-    where: {
+    // Fetch picker names from Users table
+    const epickPickers = await EpickUser.findAll({
+
+      where: {
         userNumber: { [Op.in]: pickerIds.map((id: any) => String(id)) },
       },
       attributes: ['userNumber', 'firstName', 'lastName'],
       raw: true,
     });
-    
+
     // Create a map of picker ID to picker name
     const pickerMap: any = {};
-epickPickers.forEach((picker: any) => {
+    epickPickers.forEach((picker: any) => {
       const fullName = `${picker.firstName} ${picker.lastName}`.trim();
       pickerMap[picker.userNumber] = fullName;
     });
@@ -150,7 +151,7 @@ epickPickers.forEach((picker: any) => {
       attributes: ['id', 'orderNumber', 'type'],
       raw: true,
     });
-    
+
     // Group boxes by order number and collect IDs by type
     const boxIdsByOrder: any = {};
     orderBoxes.forEach((box: any) => {
@@ -170,40 +171,41 @@ epickPickers.forEach((picker: any) => {
         boxIdsByOrder[orderNum].drink.push(box.id);
       }
     });
-    
+
     // Transform to only include requested fields
     const simplifiedOrders = readyForDeliveryOrdersList.map((order: any) => {
       const orderNum = order.Order_Number;
       const boxIds = boxIdsByOrder[orderNum] || { box: [], tote: [], drink: [] };
-      const orderPickData = orderPickMap[orderNum] || { startedAt: null, completedAt: null };
-      
+      const orderPickData = orderPickMap[orderNum] || { startedAt: null, completedAt: null, status: null };
+
       // Get first route and stop if available
       const route = order.customer?.Routes?.[0]?.Route_Number || null;
       const stop = order.customer?.Routes?.[0]?.Stop_Number || null;
-      
+
       // Determine invoiced status: if Invoice_Number = 0, invoice not created (false), otherwise true
       const invoiceNumber = order.Invoice_Number || 0;
       const invoiced = invoiceNumber !== 0;
-      
+
       // Get picker name from picker map
       const pickerName = order.Picker_ID ? (pickerMap[String(order.Picker_ID)] || null) : null;
-      
+
       return {
         orderNumber: orderNum,
         route: route,
         stop: stop,
         customerName: order.customer?.C_Name || null,
         time: order.Order_Date,
-        box: boxIds.box, 
+        box: boxIds.box,
         tote: boxIds.tote,
         drink: boxIds.drink,
         startedAt: orderPickData.startedAt,
         completedAt: orderPickData.completedAt,
+        status: orderPickData.status,
         invoiced: invoiced,
         pickerName: pickerName
       };
     });
-    
+
     return simplifiedOrders;
   }
 
@@ -217,9 +219,9 @@ epickPickers.forEach((picker: any) => {
     // Get all completed orders from OrderPick (no date filter - get all completed orders)
     const completedOrders = await OrderPick.findAll({
       where: {
-      status: 'completed', // Only get completed orders (already picked by epick)
+        status: 'completed', // Only get completed orders (already picked by epick)
       },
-      attributes: ['orderNumber', 'startedAt', 'completedAt'],
+      attributes: ['orderNumber', 'startedAt', 'completedAt', 'status'],
       raw: false,
     });
 
@@ -227,26 +229,27 @@ epickPickers.forEach((picker: any) => {
     const completedOrderNumbers = Array.from(
       new Set(
         completedOrders
-        .map((o: any) => o?.orderNumber)
-        .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
-        .map((v: any) => Number(v)) // normalize to number
+          .map((o: any) => o?.orderNumber)
+          .filter((v: any) => v !== null && v !== undefined && String(v).trim() !== '')
+          .map((v: any) => Number(v)) // normalize to number
       )
     );
-    
+
     console.log(completedOrderNumbers, 'completedOrderNumbers for checker');
-  
+
     // If no completed orders, return empty array
     if (completedOrderNumbers.length === 0) {
       return [];
     }
 
-    // Create a map of orderNumber to startedAt and completedAt
+    // Create a map of orderNumber to startedAt, completedAt, and status
     const orderPickMap: any = {};
     completedOrders.forEach((order: any) => {
       if (order.orderNumber) {
         orderPickMap[order.orderNumber] = {
           startedAt: order.startedAt,
-          completedAt: order.completedAt
+          completedAt: order.completedAt,
+          status: order.status
         };
       }
     });
@@ -260,9 +263,9 @@ epickPickers.forEach((picker: any) => {
       // Only get orders that are completed (already picked)
       Order_Number: { [Op.in]: completedOrderNumbers }
     };
-    
+
     console.log(headerWhere, 'headerWhere for checker');
-    
+
     const completedOrdersList = await OrderHeader.findAll({
       where: headerWhere,
       attributes: ['Order_Number', 'Order_Date', 'Invoice_Number', 'Picker_ID'],
@@ -286,17 +289,17 @@ epickPickers.forEach((picker: any) => {
         ['Order_Number', 'DESC'], // Newest first
       ],
     });
-  
+
     console.log(completedOrdersList, 'completedOrdersList for checker');
-  
+
     // If no orders, return empty array
     if (completedOrdersList.length === 0) {
       return [];
     }
-  
+
     // Get all order numbers from the completed orders list
     const orderNumbers = completedOrdersList.map((order: any) => order.Order_Number);
-    
+
     // Validation: Check that ALL products in OrderDetail have Confirmed = 1
     // Only include orders where every item is confirmed
     let validatedOrderNumbers = orderNumbers;
@@ -316,38 +319,38 @@ epickPickers.forEach((picker: any) => {
           raw: true,
         }
       ) as any[];
-      
+
       const validatedOrderNumbersSet = new Set(
         confirmedOrdersQuery
           .map((row: any) => row.Order_Number)
           .filter((v: any) => v !== null && v !== undefined)
           .map((v: any) => Number(v))
       );
-      
+
       console.log(`Orders with all items confirmed: ${validatedOrderNumbersSet.size} out of ${orderNumbers.length}`);
-      
+
       // Filter completedOrdersList to only include orders where all items are confirmed
       validatedOrderNumbers = Array.from(validatedOrderNumbersSet);
-      
+
       // If no orders pass validation, return empty array
       if (validatedOrderNumbers.length === 0) {
         return [];
       }
-      
+
       // Filter completedOrdersList to only include validated orders
-      const filteredOrders = completedOrdersList.filter((order: any) => 
+      const filteredOrders = completedOrdersList.filter((order: any) =>
         validatedOrderNumbers.includes(order.Order_Number)
       );
-      
+
       // Update completedOrdersList to only include validated orders
       completedOrdersList.length = 0;
       completedOrdersList.push(...filteredOrders);
-      
+
       // Update orderNumbers to only include validated orders
       orderNumbers.length = 0;
       orderNumbers.push(...validatedOrderNumbers);
     }
-    
+
     // Get unique picker IDs and fetch picker names
     const pickerIds = Array.from(
       new Set(
@@ -356,7 +359,7 @@ epickPickers.forEach((picker: any) => {
           .filter((id: any) => id !== null && id !== undefined)
       )
     );
-    
+
     // Fetch picker names from EpickUser table
     const epickPickers = await EpickUser.findAll({
       where: {
@@ -364,14 +367,14 @@ epickPickers.forEach((picker: any) => {
       },
       attributes: ['userNumber', 'firstName', 'lastName'],
     });
-    
+
     // Create a map of picker ID to picker name (firstName + lastName)
     const pickerMap: any = {};
     epickPickers.forEach((picker: any) => {
       const fullName = `${picker.firstName} ${picker.lastName}`.trim();
       pickerMap[picker.userNumber] = fullName;
     });
-    
+
     // Query all OrderPickBox records for these orders
     const orderBoxes = await OrderPickBox.findAll({
       where: {
@@ -380,7 +383,7 @@ epickPickers.forEach((picker: any) => {
       attributes: ['id', 'orderNumber', 'type'],
       raw: true,
     });
-    
+
     // Group boxes by order number and collect IDs by type
     const boxIdsByOrder: any = {};
     orderBoxes.forEach((box: any) => {
@@ -400,40 +403,41 @@ epickPickers.forEach((picker: any) => {
         boxIdsByOrder[orderNum].drink.push(box.id);
       }
     });
-    
+
     // Transform to only include requested fields
     const simplifiedOrders = completedOrdersList.map((order: any) => {
       const orderNum = order.Order_Number;
       const boxIds = boxIdsByOrder[orderNum] || { box: [], tote: [], drink: [] };
-      const orderPickData = orderPickMap[orderNum] || { startedAt: null, completedAt: null };
-      
+      const orderPickData = orderPickMap[orderNum] || { startedAt: null, completedAt: null, status: null };
+
       // Get first route and stop if available
       const route = order.customer?.Routes?.[0]?.Route_Number || null;
       const stop = order.customer?.Routes?.[0]?.Stop_Number || null;
-      
+
       // Determine invoiced status: if Invoice_Number = 0, invoice not created (false), otherwise true
       const invoiceNumber = order.Invoice_Number || 0;
       const invoiced = invoiceNumber !== 0;
-      
+
       // Get picker name from picker map
       const pickerName = order.Picker_ID ? (pickerMap[String(order.Picker_ID)] || null) : null;
-      
+
       return {
         orderNumber: orderNum,
         route: route,
         stop: stop,
         customerName: order.customer?.C_Name || null,
         time: order.Order_Date,
-        box: boxIds.box, 
+        box: boxIds.box,
         tote: boxIds.tote,
         drink: boxIds.drink,
         startedAt: orderPickData.startedAt,
         completedAt: orderPickData.completedAt,
+        status: orderPickData.status,
         invoiced: invoiced,
         pickerName: pickerName
       };
     });
-  
+
     return simplifiedOrders;
   }
 
@@ -533,23 +537,23 @@ epickPickers.forEach((picker: any) => {
       scans.map(async (scan: any) => {
         const itemNumber = scan.itemNumber;
         const orderNumber = scan.orderNumber;
-        
+
         // Use actual scan qty from OrderPickScan (box-specific, this is the shipped quantity)
         const qtyShipped = scan.qty || 0;
-        
+
         // Get order detail info (Quantity_Ordered)
         const orderDetailKey = `${orderNumber}_${itemNumber}`;
         const orderDetail = orderDetailMap[orderDetailKey] || { qtyOrdered: 0, qtyShipped: 0 };
-        
+
         // Get inventory details
         const inventory = inventoryMap[itemNumber] || null;
-        
+
         // Get product image
         const productImage = imageMap[itemNumber.toString()] || null;
-        
+
         // Get inventory on hand
         const inventoryOnHand = inventory ? await getInventoryOnHand(itemNumber) : null;
-        
+
         // Build master image if UPC exists
         const masterImage = inventory?.UPCList?.[0]?.UPC_Number
           ? `${process.env.AZUREIMAGESERVER}${inventory.UPCList[0].UPC_Number}.jpg`
@@ -858,7 +862,7 @@ epickPickers.forEach((picker: any) => {
     const allPickers = allEpickConfirmations.map((confirmation: any) => {
       const picker = pickerMap[confirmation.pickerUserId];
       const categories = confirmation.category || [];
-      const categoryNames = categories.map((cat: number) => 
+      const categoryNames = categories.map((cat: number) =>
         categoryMap[cat] || `Category ${cat}`
       );
 
@@ -866,7 +870,7 @@ epickPickers.forEach((picker: any) => {
       // Items are filtered by Inventory.Sales_Category matching the picker's categories
       const pickerOrderItems = orderDetailsWithImages.filter((item: any) => {
         // Find the corresponding order detail to get the inventory Sales_Category
-        const orderDetail = orderDetails.find((detail: any) => 
+        const orderDetail = orderDetails.find((detail: any) =>
           detail.Item_Number === item.itemNumber
         );
         if (!orderDetail) {
@@ -882,7 +886,7 @@ epickPickers.forEach((picker: any) => {
       });
 
       // Filter overrideRequests for this picker by pickerUserNumber
-      const pickerOverrideRequests = formattedOverrideRequests.filter((req: any) => 
+      const pickerOverrideRequests = formattedOverrideRequests.filter((req: any) =>
         req.pickerUserNumber === confirmation.pickerUserNumber
       );
 
@@ -1059,14 +1063,14 @@ epickPickers.forEach((picker: any) => {
     const finalData = await Promise.all(
       orderDetails.map(async (orderDetail: any) => {
         const itemNumber = orderDetail.Item_Number;
-        
+
         // Get scan data for this item (if it was scanned)
         const itemScans = scanMap[itemNumber] || [];
         const firstScan = itemScans[0] || null;
-        
+
         // Use scan qty if scanned, otherwise use Quantity_Shipped from OrderDetail
         const qtyShipped = firstScan ? (firstScan.qty || 0) : (orderDetailMap[itemNumber]?.qtyShipped || 0);
-        
+
         // Get box info if item was scanned
         const box = firstScan ? (boxMap[firstScan.boxId] || null) : null;
 
@@ -1220,7 +1224,7 @@ epickPickers.forEach((picker: any) => {
         const moveQty = scan.qty;
         remainingQty -= moveQty;
         totalMovedQty += moveQty;
-        
+
         if (existingDestinationScan) {
           // Update existing destination scan using database-level increment to avoid stale values
           await OrderPickScan.update(
@@ -1245,7 +1249,7 @@ epickPickers.forEach((picker: any) => {
             isSubsitute: isSubsitute
           });
         }
-        
+
         // Delete source scan if all moved
         await scan.destroy();
       } else {
@@ -1305,7 +1309,7 @@ epickPickers.forEach((picker: any) => {
    * - Distributes images evenly across containers (1-2 images per container)
    * - Updates each container with assigned images
    */
-  
+
   async capturePhotos(req: Request, orderNumber: number) {
     // Validate order exists
     const orderPick = await OrderPick.findOne({
@@ -1376,6 +1380,9 @@ epickPickers.forEach((picker: any) => {
       notes: req.body.notes || orderPick.notes || " "
     });
 
+    // Reload to get current status from database
+    await orderPick.reload();
+
     return {
       success: true,
       message: `Photos captured successfully for order ${orderNumber}`,
@@ -1384,7 +1391,8 @@ epickPickers.forEach((picker: any) => {
       existingImages: existingImages.length,
       newImages: uploadedImages.length,
       photos: combinedImages,
-      notes: req.body.notes || orderPick.notes || " "
+      notes: req.body.notes || orderPick.notes || " ",
+      status: orderPick.status
     };
   }
 
@@ -1458,7 +1466,7 @@ epickPickers.forEach((picker: any) => {
     const state = customer?.C_State || null;
     const zip = customer?.C_Zip || null;
     const orderDate = moment((orderHeader as any).Order_Date).format('MM/DD/YYYY');
-    const deliveryDate = (orderHeader as any).Delivery_Date 
+    const deliveryDate = (orderHeader as any).Delivery_Date
       ? moment((orderHeader as any).Delivery_Date).format('MM/DD/YYYY')
       : null;
 
@@ -1581,7 +1589,7 @@ epickPickers.forEach((picker: any) => {
         itemCount: data.itemCount,
       });
     }
-    
+
     // Size-specific layouts
     switch (data.size) {
       case '4x3':
@@ -2401,7 +2409,7 @@ epickPickers.forEach((picker: any) => {
   }): string {
     // Split customer name into words for better fit
     const nameWords = data.customerName.split(' ');
-    
+
     return `
 <!DOCTYPE html>
 <html>
@@ -3133,15 +3141,15 @@ epickPickers.forEach((picker: any) => {
     deliveryDate?: string;
     itemCount?: number;
   }): string {
-    const { 
-      date, 
-      accountNumber, 
-      customerName, 
-      route, 
-      stop, 
-      xOfY, 
-      barcodeUrl, 
-      boxId, 
+    const {
+      date,
+      accountNumber,
+      customerName,
+      route,
+      stop,
+      xOfY,
+      barcodeUrl,
+      boxId,
       boxItems = [],
       customerAddress,
       city,
@@ -3514,10 +3522,10 @@ epickPickers.forEach((picker: any) => {
     containerType: 'box' | 'tote' | 'drink';
   }) {
     const { orderNumber, containerType } = data;
-    
+
     // Generate barcode value
     const barcodeValue = generateBarcode(orderNumber);
-    
+
     // Generate and upload barcode image
     const barcodeResult = await generateBarcodeAndUpload(barcodeValue, {
       folderName: 'barcodes/orders',
@@ -3541,7 +3549,7 @@ epickPickers.forEach((picker: any) => {
       barcode: barcodeResult.url,
       value: barcodeValue
     });
-    
+
     return container;
   }
   /**
@@ -3603,9 +3611,9 @@ epickPickers.forEach((picker: any) => {
         throw new AppError(`Insufficient quantity for item ${item.itemNumber}. Available: ${totalSourceQty}, Requested: ${item.qty}`, 400);
       }
     }
- // Generate barcode value
+    // Generate barcode value
     const barcodeValue = generateBarcode(orderNumber);
-    
+
     // Generate and upload barcode image
     const barcodeResult = await generateBarcodeAndUpload(barcodeValue, {
       folderName: 'barcodes/orders',
@@ -3778,7 +3786,7 @@ epickPickers.forEach((picker: any) => {
 
     try {
       const page = await browser.newPage();
-      
+
       // Set viewport size to match label dimensions (in pixels)
       // 1 inch = 96 pixels at 96 DPI
       if (size !== 'A4') {
@@ -3815,7 +3823,7 @@ epickPickers.forEach((picker: any) => {
         // Using inches format: "2in" instead of "144pt"
         pdfOptions.width = `${dimensions.width}in`;
         pdfOptions.height = `${dimensions.height}in`;
-        
+
         // Use CSS @page size - this ensures the PDF metadata matches
         pdfOptions.preferCSSPageSize = true;
       }
@@ -3837,7 +3845,7 @@ epickPickers.forEach((picker: any) => {
     const allSizes: Array<'4x3' | '4x6' | '3x6' | '3x2' | '4x4' | '2x2' | '2x3' | 'A4'> = [
       '4x3', '4x6', '3x6', '3x2', '4x4', '2x2', '2x3', 'A4'
     ];
-    
+
     // If size is provided, only generate that size
     const sizesToGenerate = size ? [size] : allSizes;
 
@@ -3918,7 +3926,7 @@ epickPickers.forEach((picker: any) => {
             success: true,
             pdfUrl: uploadResult.url,
             dimensions: this.getLabelDimensions(size),
-            description: size === 'A4' 
+            description: size === 'A4'
               ? 'A4 paper size with items table'
               : `${this.getLabelDimensions(size).width}" × ${this.getLabelDimensions(size).height}" label`
           });
@@ -3976,11 +3984,14 @@ epickPickers.forEach((picker: any) => {
       chcekerUserId: userId
     });
 
+    // Reload to get updated status from database
+    await orderPick.reload();
+
     return {
       success: true,
       message: `Order ${orderNumber} marked as ready for delivery`,
       orderNumber,
-      status: 'ready_for_delivery',
+      status: orderPick.status,
       updatedAt: orderPick.updatedAt
     };
   }
@@ -3993,7 +4004,7 @@ epickPickers.forEach((picker: any) => {
     // Validate order exists
     const orderPick = await OrderPick.findOne({
       where: { orderNumber },
-      attributes: ['orderNumber', 'images']
+      attributes: ['orderNumber', 'images', 'status']
     });
 
     if (!orderPick) {
@@ -4003,7 +4014,7 @@ epickPickers.forEach((picker: any) => {
     // Get photos directly from OrderPick.images
     const images = orderPick.images || [];
     const allPhotos: string[] = [];
-    
+
     // Handle both array of strings and array of objects
     images.forEach((img: any) => {
       if (typeof img === 'string') {
@@ -4020,7 +4031,8 @@ epickPickers.forEach((picker: any) => {
       success: true,
       orderNumber,
       photos: allPhotos,
-      totalPhotos: allPhotos.length
+      totalPhotos: allPhotos.length,
+      status: orderPick.status
     };
   }
 
@@ -4107,7 +4119,7 @@ epickPickers.forEach((picker: any) => {
 
     // Get current images from order
     const currentImages = orderPick.images || [];
-    
+
     if (!currentImages || currentImages.length === 0) {
       throw new AppError("No photos found for this order", 404);
     }
@@ -4115,16 +4127,16 @@ epickPickers.forEach((picker: any) => {
     // Filter out the photo to delete
     const filteredImages: any[] = [];
     let photoFound = false;
-    
+
     currentImages.forEach((img: any) => {
       let imgUrl: string | null = null;
-      
+
       if (typeof img === 'string') {
         imgUrl = img;
       } else if (img && img.url) {
         imgUrl = img.url;
       }
-      
+
       // Only keep images that don't match the photoUrl to delete
       if (imgUrl && imgUrl === photoUrl) {
         photoFound = true;
@@ -4164,15 +4176,15 @@ epickPickers.forEach((picker: any) => {
   }
 
 
-  async requestAllStatusOverride(orderNumber: number,query:any){
-    const {status} = query; 
-    
-        const overrideRequests = await OverrideRequest.update({status:status}, {
-          where: {
-            orderNumber: orderNumber,
-           
-          },
-        });
-        return overrideRequests;
-      }
+  async requestAllStatusOverride(orderNumber: number, query: any) {
+    const { status } = query;
+
+    const overrideRequests = await OverrideRequest.update({ status: status }, {
+      where: {
+        orderNumber: orderNumber,
+
+      },
+    });
+    return overrideRequests;
+  }
 }

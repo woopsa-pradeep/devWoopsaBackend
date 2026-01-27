@@ -1694,6 +1694,72 @@ const results = await OrderHeader.findAll({
         };
     }
 
+    async getHighDemandItems(query:PaginationOptions ){
+        
+        const highDemandProducts = await OrderDetail.findAll({
+        attributes: [
+            'Item_Number',
+            [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantityOrdered'],
+            [Sequelize.fn('COUNT', Sequelize.col('OrderDetail.Order_Number')), 'orderCount']
+        ],
+        include: [
+            {
+            model: OrderHeader,
+            as: 'orderHeader',
+            attributes: [],
+            where: {
+                Order_Deleted: false
+            },
+            required: true
+            }
+        ],
+        group: ['Item_Number'],
+        order: [[Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'DESC']],
+        raw: true
+        });
+
+        // ✅ Get ALL item numbers (no top 10)
+        const itemNumbers = highDemandProducts.map((item: any) => item.Item_Number);
+
+        const inventoryDetails = await Inventory.findAll({
+        where: {
+            Item_Number: { [Op.in]: itemNumbers },
+            ShortOrderForm: true,
+            I_Inactive: false,
+        },
+        attributes: [
+            'Item_Number',
+            'Description',
+            'Pack',
+            'CaseCount',
+            'UOM',
+            'UnitOunces'
+        ],
+        raw: true
+        });
+
+        // ✅ Combine ALL data
+        const highDemandProductsWithInventory = highDemandProducts.map((item: any) => {
+        const inventory = inventoryDetails.find(
+            (inv: any) => inv.Item_Number === item.Item_Number
+        );
+
+        return {
+            ...item,
+            inventory: inventory || {
+            Item_Number: item.Item_Number,
+            Description: 'Unknown',
+            Pack: 0,
+            CaseCount: 0,
+            UOM: ''
+            }
+        };
+        });
+
+        return highDemandProductsWithInventory
+
+    }
+
     async getDiscountedItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
         let { search, masterSearch, role, customerNumber, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
         let wareHouseSetting: any = await Setting.findOne({});

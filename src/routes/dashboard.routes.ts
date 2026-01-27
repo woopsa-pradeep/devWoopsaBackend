@@ -11,6 +11,7 @@ const dashboardController = new DashboardController();
 
 // router.post('/distributorDashboard',verifyRole(ROLES.MANAGER),catchAsync(dashboardController.getDistributorDashboard.bind(dashboardController)));
 router.post('/distributorDashboard',catchAsync(dashboardController.getDistributorDashboardV1.bind(dashboardController)));
+router.post('/highDemandItems',catchAsync(dashboardController.getHighDemandItems.bind(dashboardController)));
 router.post('/epickDashboard',catchAsync(dashboardController.getEpickDashboard.bind(dashboardController)));
 router.get('/discountedItems',verifyToken,catchAsync(dashboardController.getDiscountedItems.bind(dashboardController)));
 router.get('/newItem',verifyToken,catchAsync(dashboardController.getNewItem.bind(dashboardController)));

@@ -930,7 +930,7 @@ export class SalesService {
     }
 
     let searchInUPC = false;
-    let orderClause;
+    let orderClause: any = [['Date_Created', 'DESC'] as const];
 
 
     if (masterSearch && typeof masterSearch === 'string') {
@@ -958,59 +958,79 @@ export class SalesService {
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
-        }
-        else {
-
-          const term = search.toLowerCase();
+        } else {
+          let globalSearch: any = await Setting.findOne({});
+          globalSearch = globalSearch?.dataValues || null;
+      
+          const term = search.toLowerCase().trim();
           const anywhere = `%${term}%`;
-          const starts = `${term}%`
-
+          const starts = `${term}%`;
+      
           if (salesCategory.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
           }
-
+      
+          // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
-            Sequelize.where(
-              Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
-              { [Op.like]: anywhere }
-            ),
-            Sequelize.where(
-              Sequelize.fn("LOWER", Sequelize.col("Description")),
-              { [Op.like]: anywhere }
-            ),
-
-            Sequelize.where(
-              Sequelize.fn("LOWER", Sequelize.col("AltDesc")),
-              { [Op.like]: anywhere }
-            ),
-            Sequelize.where(
-              Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
-              { [Op.like]: anywhere }
-            )
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: anywhere }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: anywhere }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: anywhere }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: anywhere }),
           ];
+      
+          // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
+          const esc = (s: string) => s.replace(/'/g, "''");
+const startsEsc = esc(starts);
+const anywhereEsc = esc(anywhere);
+      console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
+          // If globalSearchOption = true => rank matches across all fields
+            if (globalSearch?.splitSearchOption == true) {
+            const term = search.toLowerCase().trim();
+const tokens = term.split(/\s+/); // split by spaces
 
-          // ORDER RULE:
-          // 1. Items starting with search term first
-          // 2. Then items containing it anywhere
-          // 3. Finally alphabetical
-          orderClause = [
-            [
-              Sequelize.literal(`
-        CASE 
-          WHEN LOWER("Description") LIKE '${starts}' THEN 0
-          WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
-          ELSE 2
-        END
-      `),
-              'ASC'
-            ],
-            ['Description', 'ASC']
-          ] as Order;
+const likeConditions: any[] = [];
+
+tokens.forEach((tok) => {
+  const startsWord = `${tok}%`;
+  const insideWord = `% ${tok}%`;
+
+  likeConditions.push({
+    [Op.or]: [
+      Sequelize.where(
+        Sequelize.fn("LOWER", Sequelize.col("Inventory.Description")),
+        { [Op.like]: startsWord }
+      ),
+      Sequelize.where(
+        Sequelize.fn("LOWER", Sequelize.col("Inventory.Description")),
+        { [Op.like]: insideWord }
+      ),
+    ],
+  });
+});
+
+whereClause[Op.and] = likeConditions;
+
+          } else {
+            // Your existing rule (Description-first)
+            orderClause = [
+              [
+                Sequelize.literal(`
+                  CASE 
+                    WHEN LOWER("Description") LIKE '${startsEsc}' THEN 0
+                    WHEN LOWER("Description") LIKE '${anywhereEsc}' THEN 1
+                    ELSE 2
+                  END
+                `),
+                "ASC",
+              ],
+              ["Description", "ASC"],
+            ];
+          }
         }
-
-
-
       }
+      
+
+
 
 
     }
@@ -1032,22 +1052,27 @@ export class SalesService {
       }
 
     }
-    orderClause = [['Date_Created', 'DESC']] as Order;
-
-    if (search && !searchInUPC && !masterSearch) {
-      orderClause = [[col('Description'), 'ASC']] as Order;
-    } else if (Number(shortBy) === 1) {
-      orderClause = [[col('Description'), 'ASC']] as Order;
-    } else if (Number(shortBy) === 2) {
-      orderClause = [[col('Description'), 'DESC']] as Order;
-    }
-
-
     // orderClause = [['Date_Created', 'DESC']] as Order;
 
     // if (search && !searchInUPC && !masterSearch) {
-    //   // When searching, sort by description alphabetically to get alphabetical order after common part
     //   orderClause = [[col('Description'), 'ASC']] as Order;
+    // } else
+    // 
+    if(!search){
+      if (Number(shortBy) === 1) {
+        orderClause = [[col('Description'), 'ASC']] as Order;
+      } else if (Number(shortBy) === 2) {
+        orderClause = [[col('Description'), 'DESC']] as Order;
+      }
+    }
+    
+
+
+    //  orderClause = [['Date_Created', 'DESC']] as Order;
+
+    // if (search && !searchInUPC && !masterSearch) {
+    //   // When searching, sort by description alphabetically to get alphabetical order after common part
+    //   orderClause = [[col('Description'), 'DESC']] as Order;
     // } else if (shortBy && Number(shortBy) === 1) {
     //   orderClause = [[col('Description'), 'ASC']] as Order;
     // } else if (shortBy && Number(shortBy) === 2) {
@@ -1076,6 +1101,8 @@ export class SalesService {
         logging: false
       });
     }
+
+    console.log(orderClause, 'orderClause')
 
     const productList = await Inventory.findAll({
       attributes: [
@@ -4659,6 +4686,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       POS_ChangeDue: 0,
       Points: 0,
       Total_Weight: 0,
+      Order_Type:6, // return order
       Delivery_Charge_Select: !!customer.Delivery_Charge,
       Other_Charge_Select: !!customer.Other_Amount,
     };
