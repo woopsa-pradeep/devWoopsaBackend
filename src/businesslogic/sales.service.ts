@@ -982,35 +982,85 @@ export class SalesService {
           const esc = (s: string) => s.replace(/'/g, "''");
 const startsEsc = esc(starts);
 const anywhereEsc = esc(anywhere);
-      console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
+      console.log(globalSearch?.splitSearchOption, 'globalSearch?.globalSearchOption')
           // If globalSearchOption = true => rank matches across all fields
-            if (globalSearch?.splitSearchOption == true) {
+          if ( globalSearch?.splitSearchOption === true) {
             const term = search.toLowerCase().trim();
-const tokens = term.split(/\s+/); // split by spaces
+            const tokens = term.split(/\s+/).filter(Boolean);
+          
+            // remove the "full-term" OR, otherwise it kills split search results
+            delete whereClause[Op.or];
+          
+            // Each token must match the start of ANY word in ANY of these fields
+            whereClause[Op.and] = tokens.map((tok) => {
+              const startsWord = `${tok}%`;
+              const insideWord = `% ${tok}%`;
+          
+              return {
+                [Op.or]: [
+                  // Description
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: insideWord }),
+          
+                  // AltDesc
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: insideWord }),
+          
+                  // ALT_Description2
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: insideWord }),
+          
+                  // Item_Number (no spaces usually, but keep it)
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: insideWord }),
+                ],
+              };
+            });
 
-const likeConditions: any[] = [];
+       
 
-tokens.forEach((tok) => {
-  const startsWord = `${tok}%`;
-  const insideWord = `% ${tok}%`;
+// build rank across ALL tokens (sum). lower total = better match.
+const rankSql = tokens
+  .map((tok) => {
+    const startsWord = `%${tok}%`;     // 'mar%'
+    const insideWord = `% ${tok}%`;   // '% mar%'
+    const anywhere   = `%${tok}%`;    // '%mar%'
 
-  likeConditions.push({
-    [Op.or]: [
-      Sequelize.where(
-        Sequelize.fn("LOWER", Sequelize.col("Inventory.Description")),
-        { [Op.like]: startsWord }
-      ),
-      Sequelize.where(
-        Sequelize.fn("LOWER", Sequelize.col("Inventory.Description")),
-        { [Op.like]: insideWord }
-      ),
-    ],
-  });
-});
+    // Put your searchable fields here (same as whereClause)
+    const fields = ["Description", "AltDesc", "ALT_Description2", "Item_Number"];
 
-whereClause[Op.and] = likeConditions;
+    const startsAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
+      .join(" OR ");
 
-          } else {
+    const wordStartAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
+      .join(" OR ");
+
+    const containsAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
+      .join(" OR ");
+
+    return `(CASE
+      WHEN (${startsAny}) THEN 0
+      WHEN (${wordStartAny}) THEN 1
+      WHEN (${containsAny}) THEN 2
+      ELSE 3
+    END)`;
+  })
+  .join(" + ");
+
+// order: best rank first, then Description
+orderClause = [
+  [literal(rankSql), "ASC"],
+  [col("Description"), "ASC"],
+] as Order;
+          
+            // optional: order by Description
+          }
+          
+          
+          {
             // Your existing rule (Description-first)
             orderClause = [
               [

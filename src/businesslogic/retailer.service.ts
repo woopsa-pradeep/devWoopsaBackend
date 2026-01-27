@@ -437,6 +437,7 @@ orderClause = [
           
             // optional: order by Description
           }
+          
           else {
             // Your existing rule (Description-first)
             orderClause = [
