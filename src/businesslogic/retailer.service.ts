@@ -305,8 +305,7 @@ export class RetailerService {
 
 
     let searchInUPC = false;
-    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
-    let orderClause;
+     let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
@@ -351,10 +350,10 @@ export class RetailerService {
       
           // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
-            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: starts }),
-            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: starts }),
-            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: starts }),
-            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: starts }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: anywhere }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: anywhere }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: anywhere }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: anywhere }),
           ];
       
           // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
@@ -479,7 +478,7 @@ orderClause = [
     };
 
 
-    orderClause = [['Date_Created', 'DESC']] as Order;
+    
 
     if(!search){
      if (Number(shortBy) === 1) {
