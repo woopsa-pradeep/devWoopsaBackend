@@ -368,7 +368,7 @@ router.delete('/retailer-location/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), c
 // Velocity Report - Customer Group route
 // router.get('/velocityReportCustomerGroup', verifyRole(ROLES.MANAGER), catchAsync(managerController.getVelocityReportCustomerGroup.bind(managerController)));
 
-router.get('/getShortShipmentReport', verifyRole(ROLES.MANAGER), catchAsync(managerController.getShortShipmentReport.bind(managerController)));
+router.get('/getShortShipmentReport',  catchAsync(managerController.getShortShipmentReport.bind(managerController)));
 router.get('/getVelocityReportCustomer', verifyRole(ROLES.MANAGER), catchAsync(managerController.getVelocityReportCustomer.bind(managerController)));
 
 router.get('/getARreports', verifyRole(ROLES.MANAGER), catchAsync(managerController.getARreports.bind(managerController)));

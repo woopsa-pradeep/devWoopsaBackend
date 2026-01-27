@@ -7349,11 +7349,31 @@ async getShortShipmentReport(
         Order_Deleted: false,
       };
 
-      if (filters.fromDate && filters.toDate) {
+      let start: Date | undefined;
+      let end: Date | undefined;
+
+      if (filters.fromDate) {
+        start = new Date(filters.fromDate);
+        start.setHours(0, 0, 0, 0);
+      }
+
+      if (filters.toDate) {
+        end = new Date(filters.toDate);
+        end.setHours(23, 59, 59, 999);
+      }
+
+      if (start && end) {
         orderHeaderWhere.Invoice_Date = {
-          [Op.between]: [filters.fromDate, filters.toDate],
+          [Op.gte]: start,
+          [Op.lte]: end, // ✅ IMPORTANT FIX
         };
       }
+
+      // if (filters.fromDate && filters.toDate) {
+      //   orderHeaderWhere.Invoice_Date = {
+      //     [Op.between]: [filters.fromDate, filters.toDate],
+      //   };
+      // }
 
       /** BASE ATTRIBUTES */
       const attributes: any[] = [
@@ -7521,25 +7541,40 @@ async getShortShipmentReport(
       };
     }
 
- async getVelocityReportCustomer(filters: {
-    startDate?: string;
-    endDate?: string;
-    page?: number;
-    limit?: number;
-  }) {
-    const { startDate, endDate, page = 1,limit = 10, } = filters;
-    const offset = (page - 1) * limit;
+async getVelocityReportCustomer(filters: {
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const { startDate, endDate, page = 1, limit = 10 } = filters;
+  const offset = (page - 1) * limit;
 
-    /**
-     * Order Header Filters
-     */
-    const orderHeaderWhere: any = {
-      Order_Updated: 'True',
-      Order_Deleted: 'False',
-      Invoice_Date: {
-        [Op.between]: [startDate, endDate],
-      },
-    };
+  let start: Date | undefined;
+  let end: Date | undefined;
+
+  if (startDate) {
+    start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+  }
+  if (endDate){
+  end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+  }
+
+  const invoiceDateWhere: any = {};
+
+  if (start) {
+    invoiceDateWhere[Op.gte] = start;
+  }
+
+  invoiceDateWhere[Op.lte] = end;
+
+  const orderHeaderWhere: any = {
+    Order_Updated: 'True',
+    Order_Deleted: 'False',
+    Invoice_Date: invoiceDateWhere,
+  };
 
     /**
      * Selected Attributes
@@ -7808,13 +7843,16 @@ async getShortShipmentReport(
     } = query;
 
     const offset = limit ? (page - 1) * limit : undefined;
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 1);
 
     const total = await ARDeposits.count({
       distinct: true,
       col: 'Deposit_ID',
       where: {
         Deposit_Date: {
-          [Op.between]: [startDate, endDate],
+          [Op.gte]: startDate,
+          [Op.lte]: end,
         },
       },
     });
@@ -7822,7 +7860,8 @@ async getShortShipmentReport(
     const data = await ARDeposits.findAll({
       where: {
         Deposit_Date: {
-          [Op.between]: [startDate, endDate],
+          [Op.gte]: startDate,
+          [Op.lte]: end,
         },
       },
 
@@ -7877,6 +7916,8 @@ async getShortShipmentReport(
   }
 
  async getARUndepositeFund(startDate: string, endDate: string) {
+  const end = new Date(endDate);
+  end.setDate(end.getDate() + 1);
   const data = await CustReceivables.findAll({
     attributes: {
       include: [
@@ -7951,7 +7992,9 @@ async getShortShipmentReport(
       Deposit_ID: 0,
       AR_Type: { [Op.ne]: 'I' },
       AR_CheckDate: {
-        [Op.between]: [startDate, endDate]
+        // [Op.between]: [startDate, endDate]
+        [Op.gte]: startDate,
+        [Op.lte]: end,
       }
     },
     order: [['AR_CheckDate', 'ASC']]
@@ -7972,11 +8015,31 @@ async getARDeletedPayment(filters: {
     },
   };
 
-  if (startDate && endDate) {
-    whereCondition.AR_CheckDate = {
-      [Op.between]: [startDate, endDate],
-    };
-  }
+      let start: Date | undefined;
+      let end: Date | undefined;
+
+      if (filters.startDate) {
+        start = new Date(filters.startDate);
+        start.setHours(0, 0, 0, 0);
+      }
+
+      if (filters.endDate) {
+        end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+      }
+
+      if (start && end) {
+        whereCondition.AR_CheckDate = {
+          [Op.gte]: start,
+          [Op.lte]: end, 
+        };
+      }
+
+  // if (startDate && endDate) {
+  //   whereCondition.AR_CheckDate = {
+  //     [Op.between]: [startDate, endDate],
+  //   };
+  // }
 
   const data = await ARDeletes.findAll({
     attributes: [
@@ -9012,27 +9075,42 @@ async getARDeletedPayment(filters: {
   }
   
   async getArStatementReport(filters: {
-  startDate?: string;
-  endDate?: string;
-  page?: number;
-  limit?: number;
-}) {
-  const {
-    startDate,
-    endDate,
-    page = 1,
-    limit ,
-  } = filters;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const {startDate,endDate,page = 1,limit ,} = filters;
+    const offset = limit ? (page - 1) * limit : undefined;
 
-  const offset = limit ? (page - 1) * limit : undefined;
+    /** Date Filter */
+    // const where: any = {};
+    // if (startDate && endDate) {
+    //   where.AR_Date = {
+    //     [Op.between]: [new Date(startDate), new Date(endDate)],
+    //   };
+    // }
+    const where: any = {};
 
-  /** Date Filter */
-  const where: any = {};
-  if (startDate && endDate) {
-    where.AR_Date = {
-      [Op.between]: [new Date(startDate), new Date(endDate)],
-    };
-  }
+    let start: Date | undefined;
+    let end: Date | undefined;
+
+    if (startDate) {
+      start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+    }
+
+    if (endDate) {
+      end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+    }
+
+    if (start || end) {
+      where.AR_Date = {
+        ...(start && { [Op.gte]: start }),
+        ...(end && { [Op.lte]: end }),
+      };
+    }
 
   const { rows, count } = await CustReceivables.findAndCountAll({
     distinct: true,

@@ -239,13 +239,12 @@ export class ListService {
         ShortOrderForm: true,
         [Op.or]: [
           { Item_Number: { [Op.like]: `%${search}%` } }, // exact match for Item_Number
-          { Description: { [Op.like]: `%${search}%` } }, // partial match in Description
+          { Description: { [Op.like]: `${search}%` }}, // partial match in Description
           { AltDesc: { [Op.like]: `%${search}%` } } // partial match in AltDesc
         ]
       },
       attributes: ['Item_Number', 'Description', 'AltDesc']
     });
-
     return productList;
   }
 

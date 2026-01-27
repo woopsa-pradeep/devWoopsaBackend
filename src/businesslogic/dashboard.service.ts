@@ -1694,7 +1694,37 @@ const results = await OrderHeader.findAll({
         };
     }
 
-    async getHighDemandItems(query:PaginationOptions ){
+    async getHighDemandItems(query:PaginationOptions & { fromDate?: string; toDate?: string; type?: string }) {
+
+        const { fromDate, toDate} = query;
+
+        // Parse dates and create date range - using proper date parsing
+        let startDate, endDate;
+
+        if (fromDate) {
+            // Parse date string like "2023-12-17" to Date object
+            const [year, month, day] = fromDate.split('-').map(Number);
+            startDate = new Date(year, month - 1, day, 0, 0, 0, 0); // month is 0-indexed
+        } else {
+            startDate = new Date(new Date().getFullYear(), 0, 1); // January 1st of current year
+        }
+
+        if (toDate) {
+            // Parse date string like "2024-12-17" to Date object
+            const [year, month, day] = toDate.split('-').map(Number);
+            endDate = new Date(year, month - 1, day, 23, 59, 59, 999); // month is 0-indexed
+        } else {
+            endDate = new Date();
+        }
+
+        console.log('Date range:', { startDate, endDate, fromDate, toDate });
+
+        // Date filter condition
+        const dateFilter = {
+            Order_Date: {
+                [Op.between]: [startDate, endDate]
+            }
+        };
         
         const highDemandProducts = await OrderDetail.findAll({
         attributes: [
@@ -1708,6 +1738,7 @@ const results = await OrderHeader.findAll({
             as: 'orderHeader',
             attributes: [],
             where: {
+                ...dateFilter,
                 Order_Deleted: false
             },
             required: true
