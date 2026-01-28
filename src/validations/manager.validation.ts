@@ -2474,3 +2474,195 @@ export const getTradeShowRetailersQuerySchema = Joi.object({
   tradeShowId: Joi.number().integer().optional(),
   retailerId: Joi.number().integer().optional(),
 });
+
+// TradeShowVendor validation schemas
+export const createTradeShowVendorSchema = Joi.object({
+  tradeShowId: Joi.number().integer().required().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+    'any.required': 'Trade show ID is required',
+  }),
+  vendorId: Joi.number().integer().required().messages({
+    'number.base': 'Vendor ID must be a number',
+    'number.integer': 'Vendor ID must be an integer',
+    'any.required': 'Vendor ID is required',
+  }),
+});
+
+export const createBulkTradeShowVendorsSchema = Joi.object({
+  tradeShowId: Joi.number().integer().required().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+    'any.required': 'Trade show ID is required',
+  }),
+  vendorIds: Joi.array().items(Joi.number().integer().positive()).min(1).max(100).required()
+  .messages({
+    'array.base': 'Vendor IDs must be an array',
+    'array.min': 'Vendor IDs array must contain at least one vendor ID',
+    'array.max': 'Cannot create more than 100 associations at once',
+    'any.required': 'Vendor IDs array is required',
+    'any.custom': 'Validation errors: {#message}',
+  }),
+});
+
+export const updateTradeShowVendorSchema = Joi.object({
+  tradeShowId: Joi.number().integer().optional().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+  }),
+  vendorId: Joi.number().integer().optional().messages({
+    'number.base': 'Vendor ID must be a number',
+    'number.integer': 'Vendor ID must be an integer',
+  }),
+});
+
+export const getTradeShowVendorsQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+  tradeShowId: Joi.number().integer().optional(),
+  vendorId: Joi.number().integer().optional(),
+});
+
+// TradeShowDeliveryProduct validation schemas
+export const createTradeShowDeliveryProductSchema = Joi.object({
+  tradeShowId: Joi.number().integer().required().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+    'any.required': 'Trade show ID is required',
+  }),
+  itemNumber: Joi.string().required().messages({
+    'string.base': 'Item number must be a string',
+    'string.empty': 'Item number cannot be empty',
+    'any.required': 'Item number is required',
+  }),
+  weekNumber: Joi.number().integer().min(1).required().messages({
+    'number.base': 'Week number must be a number',
+    'number.integer': 'Week number must be an integer',
+    'number.min': 'Week number must be at least 1',
+    'any.required': 'Week number is required',
+  }),
+  startDate: Joi.date().required().messages({
+    'date.base': 'Start date must be a valid date',
+    'any.required': 'Start date is required',
+  }),
+  endDate: Joi.date().required().messages({
+    'date.base': 'End date must be a valid date',
+    'any.required': 'End date is required',
+  }),
+  deliveryType: Joi.string().valid('pickup', 'delivery').required().messages({
+    'string.base': 'Delivery type must be a string',
+    'any.only': 'Delivery type must be either "pickup" or "delivery"',
+    'any.required': 'Delivery type is required',
+  }),
+}).custom((value, helpers) => {
+  if (value.startDate > value.endDate) {
+    return helpers.error('any.invalid', {
+      message: 'Start date must be before or equal to end date',
+    });
+  }
+  return value;
+});
+
+export const createBulkTradeShowDeliveryProductsSchema = Joi.object({
+  tradeShowId: Joi.number().integer().required().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+    'any.required': 'Trade show ID is required',
+  }),
+  deliveries: Joi.array()
+    .items(
+      Joi.object({
+        itemNumber: Joi.number().required().messages({
+          'string.base': 'Item number must be a string',
+          'string.empty': 'Item number cannot be empty',
+          'any.required': 'Item number is required',
+        }),
+        weekNumber: Joi.number().integer().min(1).required().messages({
+          'number.base': 'Week number must be a number',
+          'number.integer': 'Week number must be an integer',
+          'number.min': 'Week number must be at least 1',
+          'any.required': 'Week number is required',
+        }),
+        startDate: Joi.string().required().messages({
+          'date.base': 'Start date must be a valid date',
+          'any.required': 'Start date is required',
+        }),
+        endDate: Joi.string().required().messages({
+          'date.base': 'End date must be a valid date',
+          'any.required': 'End date is required',
+        }),
+        deliveryType: Joi.string().valid('pickup', 'delivery').required().messages({
+          'string.base': 'Delivery type must be a string',
+          'any.only': 'Delivery type must be either "pickup" or "delivery"',
+          'any.required': 'Delivery type is required',
+        }),
+      })
+    )
+    .min(1)
+    .max(100)
+    .required()
+    .messages({
+      'array.base': 'Deliveries must be an array',
+      'array.min': 'Deliveries array must contain at least one entry',
+      'array.max': 'Cannot create more than 100 deliveries at once',
+      'any.required': 'Deliveries array is required',
+    }),
+}).custom((value, helpers) => {
+  const errors: string[] = [];
+
+  value.deliveries.forEach((delivery: any, index: number) => {
+    if (delivery.startDate && delivery.endDate && delivery.startDate > delivery.endDate) {
+      errors.push(`Delivery at index ${index}: Start date must be before or equal to end date`);
+    }
+  });
+
+  if (errors.length > 0) {
+    return helpers.error('any.invalid', {
+      message: errors.join('; '),
+    });
+  }
+
+  return value;
+});
+
+export const updateTradeShowDeliveryProductSchema = Joi.object({
+  tradeShowId: Joi.number().integer().optional().messages({
+    'number.base': 'Trade show ID must be a number',
+    'number.integer': 'Trade show ID must be an integer',
+  }),
+  itemNumber: Joi.string().optional().messages({
+    'string.base': 'Item number must be a string',
+    'string.empty': 'Item number cannot be empty',
+  }),
+  weekNumber: Joi.number().integer().min(1).optional().messages({
+    'number.base': 'Week number must be a number',
+    'number.integer': 'Week number must be an integer',
+    'number.min': 'Week number must be at least 1',
+  }),
+  startDate: Joi.date().optional().messages({
+    'date.base': 'Start date must be a valid date',
+  }),
+  endDate: Joi.date().optional().messages({
+    'date.base': 'End date must be a valid date',
+  }),
+  deliveryType: Joi.string().valid('pickup', 'delivery').optional().messages({
+    'string.base': 'Delivery type must be a string',
+    'any.only': 'Delivery type must be either "pickup" or "delivery"',
+  }),
+}).custom((value, helpers) => {
+  if (value.startDate && value.endDate && value.startDate > value.endDate) {
+    return helpers.error('any.invalid', {
+      message: 'Start date must be before or equal to end date',
+    });
+  }
+  return value;
+});
+
+export const getTradeShowDeliveryProductsQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+  tradeShowId: Joi.number().integer().optional(),
+  itemNumber: Joi.string().optional(),
+  weekNumber: Joi.number().integer().optional(),
+  deliveryType: Joi.string().valid('pickup', 'delivery').optional(),
+});

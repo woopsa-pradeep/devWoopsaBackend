@@ -27,6 +27,8 @@ import { DriverRouteAssignment } from './driverRouteAssignment.model';
 import { Driver } from './driver.model';
 import { TradeShowItem } from './tradeShowItem.model';
 import { TradeShowRetailer } from './tradeShowRetailer.model';
+import { TradeShowVendor } from './tradeShowVendor';
+import { TradeShowDeliveryProduct } from './tradeShowDeliveryProduct.model';
 import { TradeShow } from './tradeShow.model';
 // import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
 
@@ -161,6 +163,26 @@ TradeShow.hasMany(TradeShowRetailer, {
 });
 
 TradeShowRetailer.belongsTo(TradeShow, {
+  foreignKey: 'tradeShowId',
+  as: 'tradeShow',
+});
+
+TradeShow.hasMany(TradeShowVendor, {
+  foreignKey: 'tradeShowId',
+  as: 'vendors',
+});
+
+TradeShowVendor.belongsTo(TradeShow, {
+  foreignKey: 'tradeShowId',
+  as: 'tradeShow',
+});
+
+TradeShow.hasMany(TradeShowDeliveryProduct, {
+  foreignKey: 'tradeShowId',
+  as: 'deliveryProducts',
+});
+
+TradeShowDeliveryProduct.belongsTo(TradeShow, {
   foreignKey: 'tradeShowId',
   as: 'tradeShow',
 });

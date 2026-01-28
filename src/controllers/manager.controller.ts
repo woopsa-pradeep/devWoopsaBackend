@@ -1485,6 +1485,76 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const data = await this.managerService.deleteTradeShowRetailer(Number(req.params.id));
     sendResponse(res, 200, true, data, 'TradeShowRetailer deleted successfully');
   }
+
+  // TradeShowVendor CRUD controller methods
+  async createTradeShowVendor(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createTradeShowVendor(req.body);
+    sendResponse(res, 201, true, data, 'TradeShowVendor created successfully');
+  }
+
+  async createBulkTradeShowVendors(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createBulkTradeShowVendors(req.body);
+    sendResponse(res, 201, true, data, `${data.count} TradeShowVendor association(s) created successfully`);
+  }
+
+  async getTradeShowVendorById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowVendorById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShowVendor fetched successfully');
+  }
+
+  async getAllTradeShowVendors(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllTradeShowVendors(req.query as PaginationOptions & {
+      tradeShowId?: number;
+      vendorId?: number;
+    });
+    sendResponse(res, 200, true, data, 'TradeShowVendors fetched successfully');
+  }
+
+  async updateTradeShowVendor(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateTradeShowVendor(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'TradeShowVendor updated successfully');
+  }
+
+  async deleteTradeShowVendor(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteTradeShowVendor(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShowVendor deleted successfully');
+  }
+
+  // TradeShowDeliveryProduct CRUD controller methods
+  async createTradeShowDeliveryProduct(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createTradeShowDeliveryProduct(req.body);
+    sendResponse(res, 201, true, data, 'TradeShowDeliveryProduct created successfully');
+  }
+  async createBulkTradeShowDeliveryProducts(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createBulkTradeShowDeliveryProducts(req.body);
+    sendResponse(res, 201, true, data, `${data.count} TradeShowDeliveryProduct(s) created successfully`);
+  }
+
+  async getTradeShowDeliveryProductById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowDeliveryProductById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShowDeliveryProduct fetched successfully');
+  }
+
+  async getAllTradeShowDeliveryProducts(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllTradeShowDeliveryProducts(req.query as PaginationOptions & {
+      tradeShowId?: number;
+      itemNumber?: string;
+      weekNumber?: number;
+      deliveryType?: "pickup" | "delivery";
+    });
+    sendResponse(res, 200, true, data, 'TradeShowDeliveryProducts fetched successfully');
+  }
+
+  async updateTradeShowDeliveryProduct(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateTradeShowDeliveryProduct(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'TradeShowDeliveryProduct updated successfully');
+  }
+
+  async deleteTradeShowDeliveryProduct(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteTradeShowDeliveryProduct(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShowDeliveryProduct deleted successfully');
+  }
+
 async getARUndepositeFund(req: AuthRequest, res: Response) {
   const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
   const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
@@ -1499,5 +1569,16 @@ async getARDeletedPayment(req: AuthRequest, res: Response) {
   sendResponse(res,200,true,data,'AR Deleted report fetched successfully');
 }
 
+async getAgingReport(req: AuthRequest, res: Response) {
+  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
+  const endDate = typeof  req.query.endDate === 'string' ? req.query.endDate : '';
+  const data = await this.managerService.getAgingReport({ startDate, endDate });
+  sendResponse(res,200,true,data,'AR Deleted report fetched successfully');
+}
 
+
+async getInventoryAsPerVendorIds(req: AuthRequest, res: Response) {
+  const data = await this.managerService.getInventoryAsPerVendorIds(req.body);
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
 }

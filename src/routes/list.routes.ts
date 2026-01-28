@@ -30,6 +30,6 @@ router.get('/listofLossQuantityReport',verifyToken,catchAsync(listController.get
 router.get('/listOfSalesCategories',verifyToken,catchAsync(listController.getListOfSalesCategories.bind(listController)));
 router.get('/listOfARreports', verifyToken,catchAsync(listController.getlistOfARreports.bind(listController)));
 router.get('/listOfARStatementreports', verifyToken,catchAsync(listController.getlistOfARStatementreports.bind(listController)));
-
+router.get('/listOfVendorForTradeShow', verifyToken,catchAsync(listController.getVendorListForTradeShow.bind(listController)));
 
  export default router;

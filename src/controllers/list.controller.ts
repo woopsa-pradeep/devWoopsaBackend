@@ -117,4 +117,9 @@ export class ListController {
         const data = await this.listService.getlistOfARStatementreports();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getVendorListForTradeShow(req: Request, res: Response) {
+        const data = await this.listService.getVendorListForTradeShow();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

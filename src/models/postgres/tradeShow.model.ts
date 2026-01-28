@@ -10,6 +10,7 @@ export interface ITradeShow {
   deliveryStartDate: Date;
   deliveryEndDate: Date;
   deliveryWeeks: number;
+  isActive: boolean;
   status: string;
   createdAt?: Date;
   updatedAt?: Date;
@@ -21,7 +22,7 @@ export class TradeShow extends Model<ITradeShow, TradeShowCreationAttributes> im
   public id!: number;
   public name!: string;
   public description!: string | null;
-
+  public isActive!: boolean;
   public tradeShowDate!: Date;
   public deliveryStartDate!: Date;
   public deliveryEndDate!: Date;
@@ -39,7 +40,10 @@ TradeShow.init(
       autoIncrement: true,
       primaryKey: true,
     },
-
+isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
     name: {
       type: DataTypes.STRING,
       allowNull: false,

@@ -438,6 +438,18 @@ ARDeletes.belongsTo(Customer, {
   targetKey:'C_Number'
 })
 
+CustReceivables.hasOne(CustBillTo, {
+  foreignKey: 'C_Number',
+  sourceKey: 'C_Number',
+  as: 'billTo',
+});
+
+CustBillTo.belongsTo(CustReceivables, {
+  foreignKey: 'C_Number',
+  targetKey: 'C_Number',
+});
+
+
 
 
 }

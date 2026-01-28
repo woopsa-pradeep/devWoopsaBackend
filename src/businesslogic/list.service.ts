@@ -687,4 +687,13 @@ export class ListService {
     return { salesRep,customer,route }
   }
 
+  async getVendorListForTradeShow() {
+    const vendor = await Vendor.findAll({
+      attributes: ['Primary_Vendor', 'V_Description','V_Email','V_Phone','V_Addr1','V_City','V_State','V_Zip','V_Fax','V_Status'],
+      where: { V_Inactive: false },
+      order: [['V_Description','ASC']]
+    })
+    return{ data: vendor, total: vendor.length };
+  }
+
 } 

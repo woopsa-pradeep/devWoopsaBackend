@@ -106,6 +106,8 @@ import { PreBook } from "../models/postgres/preBook.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
 import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
+import { TradeShowVendor } from "../models/postgres/tradeShowVendor";
+import { TradeShowDeliveryProduct } from "../models/postgres/tradeShowDeliveryProduct.model";
 import { CustFinanceCharges } from "../models/mmsql/custFinanceCharges.model"
 import { ARDeletes } from "../models/mmsql/arDeletes.mode";
 
@@ -8115,6 +8117,223 @@ async getARDeletedPayment(filters: {
   return data;
 }
 
+async getAgingReport(filters: {
+  startDate?: string;
+  endDate?: string;
+}) {
+  const { startDate, endDate } = filters;
+
+  const whereCondition: any = {
+    AR_Type: { [Op.in]: ["I", "C", "A"] },
+  };
+
+  if (startDate && endDate) {
+    whereCondition.AR_Date = {
+      [Op.between]: [new Date(startDate), new Date(endDate)],
+    };
+  }
+
+  return await CustReceivables.findAll({
+    where: whereCondition,
+    subQuery: false,
+
+    attributes: [
+      "C_Number",
+
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 C_Name
+           FROM Customer
+           WHERE Customer.C_Number = CustReceivables.C_Number)
+        `),
+        "C_Name",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 C_Salesman
+           FROM Customer
+           WHERE Customer.C_Number = CustReceivables.C_Number)
+        `),
+        "C_Salesman",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 Route_Number
+           FROM Customer_Routes
+           WHERE Customer_Routes.C_Number = CustReceivables.C_Number)
+        `),
+        "Route_Number",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 C_CoName
+           FROM Customer
+           WHERE Customer.C_Number = CustReceivables.C_Number)
+        `),
+        "C_CoName",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 C_Address
+           FROM Customer
+           WHERE Customer.C_Number = CustReceivables.C_Number)
+        `),
+        "C_Address",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 C_City
+           FROM Customer
+           WHERE Customer.C_Number = CustReceivables.C_Number)
+        `),
+        "C_City",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 C_State
+           FROM Customer
+           WHERE Customer.C_Number = CustReceivables.C_Number)
+        `),
+        "C_State",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 C_Zip
+           FROM Customer
+           WHERE Customer.C_Number = CustReceivables.C_Number)
+        `),
+        "C_Zip",
+      ],
+
+      /* ===================== BILL TO ===================== */
+      [
+        Sequelize.literal(`
+          ISNULL(
+            (SELECT TOP 1 C_Number
+             FROM Cust_BillTo
+             WHERE Cust_BillTo.C_Number = CustReceivables.C_Number),
+          0)
+        `),
+        "BT_Number",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 C_Name
+           FROM Cust_BillTo
+           WHERE Cust_BillTo.C_Number = CustReceivables.C_Number)
+        `),
+        "BT_Name",
+      ],
+
+      /* ===================== REP & TERMS ===================== */
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 S_Desc
+           FROM SalesRep
+           WHERE SalesRep.S_Number =
+             (SELECT TOP 1 C_Salesman
+              FROM Customer
+              WHERE Customer.C_Number = CustReceivables.C_Number))
+        `),
+        "RepName",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 DaysUntilDue
+           FROM Invoice_Terms
+           WHERE Invoice_Terms.TermsCode =
+             (SELECT TOP 1 TermsCode
+              FROM Customer
+              WHERE Customer.C_Number = CustReceivables.C_Number))
+        `),
+        "DaysUntilDue",
+      ],
+      [
+        Sequelize.literal(`
+          (SELECT TOP 1 Terms
+           FROM Invoice_Terms
+           WHERE Invoice_Terms.TermsCode =
+             (SELECT TOP 1 TermsCode
+              FROM Customer
+              WHERE Customer.C_Number = CustReceivables.C_Number))
+        `),
+        "Terms",
+      ],
+
+      /* ===================== FINANCE CHARGE ===================== */
+      [
+        Sequelize.literal(`
+          ISNULL(
+            (SELECT SUM(Finance_Charge)
+             FROM Cust_FinanceCharges
+             WHERE Cust_FinanceCharges.C_Number = CustReceivables.C_Number),
+          0)
+        `),
+        "fCharge",
+      ],
+
+      /* ===================== AGING TOTAL ===================== */
+      [
+        Sequelize.literal(`
+          SUM(AR_Amount - AR_Applied)
+        `),
+        "netAmount",
+      ],
+
+      /* ===================== AGING BUCKETS ===================== */
+      [
+        Sequelize.literal(`
+          SUM(CASE
+            WHEN DATEDIFF(DAY, AR_Date, GETDATE()) <= 7
+            THEN AR_Amount - AR_Applied ELSE 0 END)
+        `),
+        "current",
+      ],
+      [
+        Sequelize.literal(`
+          SUM(CASE
+            WHEN DATEDIFF(DAY, AR_Date, GETDATE()) BETWEEN 8 AND 14
+            THEN AR_Amount - AR_Applied ELSE 0 END)
+        `),
+        "over7",
+      ],
+      [
+        Sequelize.literal(`
+          SUM(CASE
+            WHEN DATEDIFF(DAY, AR_Date, GETDATE()) BETWEEN 15 AND 30
+            THEN AR_Amount - AR_Applied ELSE 0 END)
+        `),
+        "over14",
+      ],
+      [
+        Sequelize.literal(`
+          SUM(CASE
+            WHEN DATEDIFF(DAY, AR_Date, GETDATE()) BETWEEN 31 AND 60
+            THEN AR_Amount - AR_Applied ELSE 0 END)
+        `),
+        "over30",
+      ],
+      [
+        Sequelize.literal(`
+          SUM(CASE
+            WHEN DATEDIFF(DAY, AR_Date, GETDATE()) > 60
+            THEN AR_Amount - AR_Applied ELSE 0 END)
+        `),
+        "over60",
+      ],
+    ],
+
+    group: ["CustReceivables.C_Number"],
+
+    having: Sequelize.literal(`
+      SUM(AR_Amount - AR_Applied) <> 0
+    `),
+
+    order: [[Sequelize.literal("C_Name"), "ASC"]],
+  });
+}
+
+
   async getARreportsHistory(){
     const arReportHistort = await ARDeposits.findAll({
           attributes: ['Deposit_ID','Deposit_Date','Deposit_Reference','Deposit_Batch','QB_Transfer','QB_TransferDate','Deposit_Deleted','Deposit_DeleteDate','Deposit_DeleteUser',
@@ -8309,6 +8528,7 @@ async getARDeletedPayment(filters: {
 
     const tradeShow = await TradeShow.create({
       name: body.name,
+      isActive: true,
       description: body.description || null,
       tradeShowDate: body.tradeShowDate as any,
       deliveryStartDate: body.deliveryStartDate as any,
@@ -8341,7 +8561,9 @@ async getARDeletedPayment(filters: {
     const limit = parseInt(query.limit as any) || 10;
     const offset = (page - 1) * limit;
 
-    const whereCondition: any = {};
+    const whereCondition: any = {
+      isActive: true,
+    };
 
     // Search filter (by name or description)
     if (query.search) {
@@ -8978,48 +9200,78 @@ async getARDeletedPayment(filters: {
     return tradeShowRetailer;
   }
 
-  async getAllTradeShowRetailers(query: PaginationOptions & {
-    tradeShowId?: number;
-    retailerId?: number;
-  }) {
+  async getAllTradeShowRetailers(
+    query: PaginationOptions & { tradeShowId?: number; retailerId?: number }
+  ) {
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
     const offset = (page - 1) * limit;
-
+  
     const whereCondition: any = {};
-
-    // Filter by tradeShowId
-    if (query.tradeShowId) {
-      whereCondition.tradeShowId = query.tradeShowId;
-    }
-
-    // Filter by retailerId
-    if (query.retailerId) {
-      whereCondition.retailerId = query.retailerId;
-    }
-
-    const { count: totalCount, rows: tradeShowRetailers } = await TradeShowRetailer.findAndCountAll({
-      where: whereCondition,
-      include: [
-        {
-          model: TradeShow,
-          as: 'tradeShow',
-          attributes: ['id', 'name', 'tradeShowDate', 'status'],
-        },
-      ],
-      limit,
-      offset,
-      order: [['createdAt', 'DESC']],
-    });
-
+  
+    if (query.tradeShowId) whereCondition.tradeShowId = query.tradeShowId;
+    if (query.retailerId) whereCondition.retailerId = query.retailerId;
+  
+    const { count: totalCount, rows: tradeShowRetailers } =
+      await TradeShowRetailer.findAndCountAll({
+        where: whereCondition,
+        include: [
+          {
+            model: TradeShow,
+            as: "tradeShow",
+            attributes: ["id", "name", "tradeShowDate", "status"],
+          },
+        ],
+        limit,
+        offset,
+        order: [["createdAt", "DESC"]],
+      });
+  
+    const finalData = await Promise.all(
+      tradeShowRetailers.map(async (tradeShowRetailer: any) => {
+        const retailer = await Customer.findOne({
+          where: { C_Number: tradeShowRetailer.retailerId },
+          attributes: [
+            "C_Number",
+            "C_Name",
+            "C_Email",
+            "C_Phone",
+            "C_Address",
+            "C_City",
+            "C_State",
+            "C_Zip",
+            "C_Fax",
+            "C_Salesman",
+            "C_StatementAccount",
+            "C_Interest",
+            "C_StatementCode",
+            "C_ClassOfTrade",
+          ],
+          include: [
+            {
+              model: SalesRep,
+              as: "salesRep",
+              attributes: ["S_Desc"],
+            },
+          ],
+        });
+  
+        return {
+          ...tradeShowRetailer.toJSON(),
+          retailer: retailer ? retailer.toJSON() : null,
+        };
+      })
+    );
+  
     return {
-      data: tradeShowRetailers,
+      data: finalData,
       total: totalCount,
       page,
       limit,
       totalPages: Math.ceil(totalCount / limit),
     };
   }
+  
 
   async updateTradeShowRetailer(id: number, body: Partial<{
     tradeShowId: number;
@@ -9073,7 +9325,584 @@ async getARDeletedPayment(filters: {
     await tradeShowRetailer.destroy();
     return { success: true, message: 'TradeShowRetailer deleted successfully' };
   }
+
+  // TradeShowVendor CRUD methods
+  async createTradeShowVendor(body: {
+    tradeShowId: number;
+    vendorId: number;
+  }) {
+    // Validate that TradeShow exists
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    // Validate that Vendor exists
+    const vendor = await Vendor.findByPk(body.vendorId);
+    if (!vendor) {
+      throw new AppError('Vendor not found', 404);
+    }
+
+    try {
+      const tradeShowVendor = await TradeShowVendor.create({
+        tradeShowId: body.tradeShowId,
+        vendorId: body.vendorId,
+      });
+
+      return tradeShowVendor;
+    } catch (error: any) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('Vendor is already associated with this trade show', 409);
+      }
+      throw error;
+    }
+  }
+
+  async createBulkTradeShowVendors(body: {
+    tradeShowId: number;
+    vendorIds: number[];
+  }) {
+    // Validate that TradeShow exists
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    // Validate vendorIds array
+    if (!Array.isArray(body.vendorIds) || body.vendorIds.length === 0) {
+      throw new AppError('Vendor IDs array must contain at least one vendor ID', 400);
+    }
+
+    if (body.vendorIds.length > 100) {
+      throw new AppError('Cannot create more than 100 associations at once', 400);
+    }
+
+    // Validate and normalize vendor IDs
+    const validationErrors: string[] = [];
+    const seen = new Set<number>();
+    const normalizedVendorIds: number[] = [];
+
+    body.vendorIds.forEach((vendorId, index) => {
+      // Check if vendorId is a valid number
+      const id = Number(vendorId);
+      if (!Number.isFinite(id) || id <= 0 || !Number.isInteger(id)) {
+        validationErrors.push(`Vendor ID at index ${index}: Must be a valid positive integer`);
+        return;
+      }
+
+      // Check for duplicates in the request
+      if (seen.has(id)) {
+        validationErrors.push(`Vendor ID at index ${index}: Vendor ID ${id} is duplicated in the request`);
+        return;
+      }
+
+      seen.add(id);
+      normalizedVendorIds.push(id);
+    });
+
+    if (validationErrors.length > 0) {
+      throw new AppError(`Validation errors: ${validationErrors.join('; ')}`, 400);
+    }
+
+    // Use transaction for bulk insert
+    const transaction = await postgresSequelize.transaction();
+
+    try {
+      // Prepare associations for bulk insert
+      const associationsToCreate = normalizedVendorIds.map(vendorId => ({
+        tradeShowId: body.tradeShowId,
+        vendorId: vendorId,
+      }));
+
+      // Bulk create
+      const createdAssociations = await TradeShowVendor.bulkCreate(associationsToCreate, {
+        transaction,
+        returning: true,
+      });
+
+      await transaction.commit();
+
+      return {
+        success: true,
+        count: createdAssociations.length,
+        associations: createdAssociations,
+      };
+    } catch (error: any) {
+      await transaction.rollback();
+
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('One or more vendors are already associated with this trade show', 409);
+      }
+
+      throw new AppError(`Failed to create trade show vendor associations: ${error.message}`, 500);
+    }
+  }
+
+  async getTradeShowVendorById(id: number) {
+    const tradeShowVendor = await TradeShowVendor.findByPk(id, {
+      include: [
+        {
+          model: TradeShow,
+          as: 'tradeShow',
+          attributes: ['id', 'name', 'tradeShowDate', 'status'],
+        },
+      ],
+    });
+
+    if (!tradeShowVendor) {
+      throw new AppError('TradeShowVendor not found', 404);
+    }
+
+    return tradeShowVendor;
+  }
+
+  async getAllTradeShowVendors(
+    query: PaginationOptions & { tradeShowId?: number; vendorId?: number }
+  ) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const offset = (page - 1) * limit;
   
+    const whereCondition: any = {};
+  
+    if (query.tradeShowId) whereCondition.tradeShowId = query.tradeShowId;
+    if (query.vendorId) whereCondition.vendorId = query.vendorId;
+  
+    const { count: totalCount, rows: tradeShowVendors } =
+      await TradeShowVendor.findAndCountAll({
+        where: whereCondition,
+        include: [
+          {
+            model: TradeShow,
+            as: "tradeShow",
+            attributes: ["id", "name", "tradeShowDate", "status"],
+          },
+        ],
+        limit,
+        offset,
+        order: [["createdAt", "DESC"]],
+      });
+  
+    const finalData = await Promise.all(
+      tradeShowVendors.map(async (tradeShowVendor: any) => {
+        const vendor = await Vendor.findOne({
+          where: { Primary_Vendor: tradeShowVendor.vendorId },
+          attributes: [
+            "Primary_Vendor",
+            "V_Description",
+            "V_Email",
+            "V_Phone",
+            "V_Addr1",
+            "V_City",
+            "V_State",
+            "V_Zip",
+            "V_Fax",
+            "V_Status",
+          ],
+        });
+  
+        return {
+          ...tradeShowVendor.toJSON(),
+          vendor: vendor ? vendor.toJSON() : null,
+        };
+      })
+    );
+  
+    return {
+      data: finalData,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+    };
+  }
+  
+
+  async updateTradeShowVendor(id: number, body: Partial<{
+    tradeShowId: number;
+    vendorId: number;
+  }>) {
+    const tradeShowVendor = await TradeShowVendor.findByPk(id);
+
+    if (!tradeShowVendor) {
+      throw new AppError('TradeShowVendor not found', 404);
+    }
+
+    // Validate TradeShow exists if being updated
+    if (body.tradeShowId !== undefined) {
+      const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+      if (!tradeShow) {
+        throw new AppError('TradeShow not found', 404);
+      }
+    }
+
+    // Validate Vendor exists if being updated
+    if (body.vendorId !== undefined) {
+      const vendor = await Vendor.findByPk(body.vendorId);
+      if (!vendor) {
+        throw new AppError('Vendor not found', 404);
+      }
+    }
+
+    // Create update object
+    const updateData: any = {};
+    if (body.tradeShowId !== undefined) updateData.tradeShowId = body.tradeShowId;
+    if (body.vendorId !== undefined) updateData.vendorId = body.vendorId;
+
+    try {
+      await tradeShowVendor.update(updateData);
+      return tradeShowVendor;
+    } catch (error: any) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('Vendor is already associated with this trade show', 409);
+      }
+      throw error;
+    }
+  }
+
+  async deleteTradeShowVendor(id: number) {
+    const tradeShowVendor = await TradeShowVendor.findByPk(id);
+
+    if (!tradeShowVendor) {
+      throw new AppError('TradeShowVendor not found', 404);
+    }
+
+    await tradeShowVendor.destroy();
+    return { success: true, message: 'TradeShowVendor deleted successfully' };
+  }
+
+  // TradeShowDeliveryProduct CRUD methods
+  async createTradeShowDeliveryProduct(body: {
+    tradeShowId: number;
+    itemNumber: string;
+    weekNumber: number;
+    startDate: string;
+    endDate: string;
+    deliveryType: "pickup" | "delivery";
+  }) {
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    if (!Number.isInteger(body.weekNumber) || body.weekNumber < 1) {
+      throw new AppError('weekNumber must be a positive integer', 400);
+    }
+
+    const startDate = new Date(body.startDate);
+    const endDate = new Date(body.endDate);
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      throw new AppError('startDate and endDate must be valid dates', 400);
+    }
+
+    if (startDate > endDate) {
+      throw new AppError('startDate must be before or equal to endDate', 400);
+    }
+
+    if (body.deliveryType !== 'pickup' && body.deliveryType !== 'delivery') {
+      throw new AppError('deliveryType must be either "pickup" or "delivery"', 400);
+    }
+
+    try {
+      const record = await TradeShowDeliveryProduct.create({
+        tradeShowId: body.tradeShowId,
+        itemNumber: body.itemNumber,
+        weekNumber: body.weekNumber,
+        startDate: body.startDate as any,
+        endDate: body.endDate as any,
+        deliveryType: body.deliveryType,
+      });
+
+      return record;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  async createBulkTradeShowDeliveryProducts(body: {
+    tradeShowId: number;
+    deliveries: {
+      itemNumber: string;
+      weekNumber: number;
+      startDate: string;
+      endDate: string;
+      deliveryType: "pickup" | "delivery";
+    }[];
+  }) {
+    // Validate TradeShow exists
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError("TradeShow not found", 404);
+    }
+
+    // Validate deliveries array
+    if (!Array.isArray(body.deliveries) || body.deliveries.length === 0) {
+      throw new AppError("Deliveries array must contain at least one entry", 400);
+    }
+    if (body.deliveries.length > 100) {
+      throw new AppError("Cannot create more than 100 deliveries at once", 400);
+    }
+
+    const validationErrors: string[] = [];
+
+    const normalizedDeliveries = body.deliveries.map((delivery, index) => {
+      const itemNumber = delivery.itemNumber;
+
+      if (!itemNumber) {
+        validationErrors.push(`Delivery at index ${index}: itemNumber is required`);
+      }
+
+      if (!Number.isInteger(delivery.weekNumber) || delivery.weekNumber < 1) {
+        validationErrors.push(
+          `Delivery at index ${index}: weekNumber must be a positive integer`
+        );
+      }
+
+      const startDate = new Date(delivery.startDate);
+      const endDate = new Date(delivery.endDate);
+
+      if (isNaN(startDate.getTime())) {
+        validationErrors.push(
+          `Delivery at index ${index}: startDate must be a valid date`
+        );
+      }
+      if (isNaN(endDate.getTime())) {
+        validationErrors.push(
+          `Delivery at index ${index}: endDate must be a valid date`
+        );
+      }
+      if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime()) && startDate > endDate) {
+        validationErrors.push(
+          `Delivery at index ${index}: startDate must be before or equal to endDate`
+        );
+      }
+
+      if (
+        delivery.deliveryType !== "pickup" &&
+        delivery.deliveryType !== "delivery"
+      ) {
+        validationErrors.push(
+          `Delivery at index ${index}: deliveryType must be either "pickup" or "delivery"`
+        );
+      }
+
+      return {
+        ...delivery,
+        itemNumber,
+      };
+    });
+
+    if (validationErrors.length) {
+      throw new AppError(`Validation errors: ${validationErrors.join("; ")}`, 400);
+    }
+
+    // Bulk insert in a transaction
+    return await postgresSequelize.transaction(async (transaction) => {
+      const toCreate = normalizedDeliveries.map((delivery) => ({
+        tradeShowId: body.tradeShowId,
+        itemNumber: delivery.itemNumber,
+        weekNumber: delivery.weekNumber,
+        startDate: delivery.startDate as any,
+        endDate: delivery.endDate as any,
+        deliveryType: delivery.deliveryType,
+      }));
+
+      const created = await TradeShowDeliveryProduct.bulkCreate(toCreate, {
+        transaction,
+        returning: true,
+      });
+
+      return {
+        success: true,
+        count: created.length,
+        deliveries: created,
+      };
+    });
+  }
+
+  async getTradeShowDeliveryProductById(id: number) {
+    const record = await TradeShowDeliveryProduct.findByPk(id, {
+      include: [
+        {
+          model: TradeShow,
+          as: 'tradeShow',
+          attributes: ['id', 'name', 'tradeShowDate', 'status'],
+        },
+      ],
+    });
+
+    if (!record) {
+      throw new AppError('TradeShowDeliveryProduct not found', 404);
+    }
+
+    return record;
+  }
+
+  async getAllTradeShowDeliveryProducts(
+    query: PaginationOptions & {
+      tradeShowId?: number;
+      itemNumber?: string;
+      weekNumber?: number;
+      deliveryType?: "pickup" | "delivery";
+    }
+  ) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const offset = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (query.tradeShowId) where.tradeShowId = query.tradeShowId;
+    if (query.itemNumber) where.itemNumber = query.itemNumber;
+    if (query.weekNumber) where.weekNumber = query.weekNumber;
+    if (query.deliveryType) where.deliveryType = query.deliveryType;
+
+    const { count: total, rows } = await TradeShowDeliveryProduct.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+      include: [
+        {
+          model: TradeShow,
+          as: 'tradeShow',
+          attributes: ['id', 'name', 'tradeShowDate', 'status'],
+        },
+      ],
+    });
+
+
+    const finalData = await Promise.all(
+      rows.map(async (row: any) => {
+        const item = await Inventory.findOne({
+          where: {
+            Item_Number: row.itemNumber,
+          },
+          attributes: [
+            'Item_Number',
+            'Description',
+            'Pack',
+            'UOM',
+            'Retail1',
+            'Retail2',
+            'Retail3',
+          ],
+          include: [
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Category_Desc', 'Sales_Category'],
+              required: false,
+            },
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: ['Class_Desc'],
+              required: false,
+            },
+          ],
+        });
+        return {
+          ...row.toJSON(),
+          item: item ? item.toJSON() : null,
+        };
+      })
+    );
+
+    return {
+      data: finalData,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async updateTradeShowDeliveryProduct(
+    id: number,
+    body: Partial<{
+      tradeShowId: number;
+      itemNumber: string;
+      weekNumber: number;
+      startDate: string;
+      endDate: string;
+      deliveryType: "pickup" | "delivery";
+    }>
+  ) {
+    const record = await TradeShowDeliveryProduct.findByPk(id);
+
+    if (!record) {
+      throw new AppError('TradeShowDeliveryProduct not found', 404);
+    }
+
+    if (body.tradeShowId !== undefined) {
+      const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+      if (!tradeShow) {
+        throw new AppError('TradeShow not found', 404);
+      }
+    }
+
+    if (body.weekNumber !== undefined) {
+      if (!Number.isInteger(body.weekNumber) || body.weekNumber < 1) {
+        throw new AppError('weekNumber must be a positive integer', 400);
+      }
+    }
+
+    let startDate: Date | undefined;
+    let endDate: Date | undefined;
+
+    if (body.startDate !== undefined) {
+      startDate = new Date(body.startDate);
+      if (isNaN(startDate.getTime())) {
+        throw new AppError('startDate must be a valid date', 400);
+      }
+    }
+
+    if (body.endDate !== undefined) {
+      endDate = new Date(body.endDate);
+      if (isNaN(endDate.getTime())) {
+        throw new AppError('endDate must be a valid date', 400);
+      }
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+      throw new AppError('startDate must be before or equal to endDate', 400);
+    }
+
+    if (body.deliveryType !== undefined) {
+      if (body.deliveryType !== 'pickup' && body.deliveryType !== 'delivery') {
+        throw new AppError('deliveryType must be either "pickup" or "delivery"', 400);
+      }
+    }
+
+    const updateData: any = {};
+    if (body.tradeShowId !== undefined) updateData.tradeShowId = body.tradeShowId;
+    if (body.itemNumber !== undefined) updateData.itemNumber = body.itemNumber;
+    if (body.weekNumber !== undefined) updateData.weekNumber = body.weekNumber;
+    if (body.startDate !== undefined) updateData.startDate = body.startDate;
+    if (body.endDate !== undefined) updateData.endDate = body.endDate;
+    if (body.deliveryType !== undefined) updateData.deliveryType = body.deliveryType;
+
+    await record.update(updateData);
+    return record;
+  }
+
+  async deleteTradeShowDeliveryProduct(id: number) {
+    const record = await TradeShowDeliveryProduct.findByPk(id);
+
+    if (!record) {
+      throw new AppError('TradeShowDeliveryProduct not found', 404);
+    }
+
+    await record.destroy();
+    return { success: true, message: 'TradeShowDeliveryProduct deleted successfully' };
+  }
+
   async getArStatementReport(filters: {
     startDate?: string;
     endDate?: string;
@@ -9337,6 +10166,88 @@ async getOpenItemReport() {
       ['AR_Date', 'ASC']
     ]
   });
+}
+
+async getVendorListForTradeShowIds(ids: number) {
+  const tradeShowVendors = await TradeShowVendor.findAll({
+    where: { tradeShowId: ids },
+   attributes: ['vendorId'],
+  })
+  return{ data: tradeShowVendors, total: tradeShowVendors.length };
+}
+
+async getInventoryAsPerVendorIds(query:any) {
+  let {ids,page = 1,limit = 10,search,salesCategoryId,priceClassId} = query;
+
+  if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+    salesCategoryId = salesCategoryId.map(id => Number(id));
+  }
+
+  if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+    priceClassId = priceClassId.map(id => Number(id));
+  }
+
+
+  page = Number(page);
+  limit = Number(limit);
+  const offset = limit ? (page - 1) * limit : undefined;
+  let whereCondition: any = {};
+
+  if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+    // Both filters exist → use OR condition
+    whereCondition = {
+      Sales_Category: { [Op.in]: salesCategoryId },
+      Price_Class: { [Op.in]: priceClassId }
+    };
+
+    console.log(salesCategoryId, 'salesCategoryId', priceClassId, 'priceClassId', 'both filters exist')
+  } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+    // Only Sales_Category filter
+    whereCondition.Sales_Category = { [Op.in]: salesCategoryId };
+  } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+    // Only Price_Class filter
+    whereCondition.Price_Class = { [Op.in]: priceClassId };
+  }
+  if (ids && ids.length > 0) {
+    whereCondition.Primary_Vendor = { [Op.in]: ids };
+  }
+
+  if (search) {
+    whereCondition[Op.or] = [
+      { Item_Number: { [Op.like]: `%${search}%` } },
+      { Description: { [Op.like]: `%${search}%` } },
+      { ALT_Description2: { [Op.like]: `%${search}%` } },
+      { AltDesc: { [Op.like]: `%${search}%` } },
+    ];
+  }
+  const { count: totalCount, rows: inventory } = await Inventory.findAndCountAll({
+    where: {I_Inactive: false,ShortOrderForm: true,...whereCondition  },
+    attributes: ['Item_Number', 'Description', 'Retail1', 'Retail2', 'Retail3','Primary_Vendor'],
+    include: [
+      {
+        model: Vendor,
+        as: 'primaryVendor',
+        attributes: ['Primary_Vendor', 'V_Description','V_Email','V_Phone','V_Addr1','V_City','V_State','V_Zip','V_Fax','V_Status'],
+      },
+      
+       {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Category_Desc', 'Sales_Category'],
+          required: false
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
+          required: false
+        }
+    ],
+    order: [['Item_Number', 'ASC']],
+    limit,
+    offset,
+  })
+  return{ data: inventory, total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) };
 }
 
 
