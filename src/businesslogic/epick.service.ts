@@ -3199,9 +3199,23 @@ export class EpickService {
     let totalPickingTimeSeconds = 0;
     const orderPickingTimes: { [key: number]: number } = {};
 
-    // Build final response with picking time calculations, override requests, and order items
+    // Build final response with picking time calculations, override requests, order items, and recalculated totals
     const finalData = orders.map((order: any) => {
       const orderData = order.get({ plain: true });
+
+      // All items for this order (used for totals below)
+      const orderItems = orderItemsMap[orderData.orderNumber] || [];
+
+      // Recalculate totals from order items so report is always correct,
+      // even if aggregated fields on OrderPick were not updated.
+      const totalLines = orderItems.length;
+      const totalQty = orderItems.reduce((sum: number, item: any) => {
+        return sum + Number(item.Quantity_Ordered || 0);
+      }, 0);
+      const scannedLines = orderItems.filter((item: any) => Number(item.Quantity_Shipped || 0) > 0).length;
+      const scannedQty = orderItems.reduce((sum: number, item: any) => {
+        return sum + Number(item.Quantity_Shipped || 0);
+      }, 0);
 
       // Calculate picking time for this order in seconds
       let pickingTimeSeconds = 0;
@@ -3221,13 +3235,19 @@ export class EpickService {
 
       return {
         ...orderData,
+        // Recalculated totals for this order
+        totalLines,
+        totalQty: totalQty.toFixed(4),
+        scannedLines,
+        scannedQty: scannedQty.toFixed(4),
+        // Existing fields
         picker: userMap[orderData.pickerUserNumber] || null,
         customer: customerMap[orderData.customerNumber] || null,
         overrideRequestCount: overrideCountMap[orderData.orderNumber] || 0,
         overrideRequests: overrideRequestsMap[orderData.orderNumber] || [],
-        orderItems: orderItemsMap[orderData.orderNumber] || [],
-        pickingTimeSeconds: pickingTimeSeconds,
-        pickingTimeFormatted: pickingTimeFormatted
+        orderItems,
+        pickingTimeSeconds,
+        pickingTimeFormatted
       };
     });
 
