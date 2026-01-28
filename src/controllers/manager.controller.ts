@@ -1581,4 +1581,11 @@ async getInventoryAsPerVendorIds(req: AuthRequest, res: Response) {
   const data = await this.managerService.getInventoryAsPerVendorIds(req.body);
   sendResponse(res, 200, true, data, General.SUCCESS);
 }
+
+
+async getVendorListForTradeShowIds(req: AuthRequest, res: Response) {
+  const data = await this.managerService.getVendorListForTradeShowIds(Number(req.params.id));
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
 }
