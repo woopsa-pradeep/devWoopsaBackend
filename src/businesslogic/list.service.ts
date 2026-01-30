@@ -559,7 +559,7 @@ export class ListService {
     }),
 
      PriceClass.findAll({
-     attributes: ['Price_Class', 'Class_Desc'],
+     attributes: ['Price_Class', 'Class_Desc','Sales_Category_Group'],
      order: [['Price_Class','ASC']]
     }),
 

@@ -188,6 +188,20 @@ TradeShowDeliveryProduct.belongsTo(TradeShow, {
 });
 
 
+TradeShowDeliveryProduct.belongsTo(TradeShowItem, {
+  as: "item",
+  foreignKey: "itemNumber",   // column in tradeShowDeliveryProducts
+  targetKey: "itemNumber",    // column in tradeShowItems
+  constraints: false,
+});
+
+
+TradeShowItem.hasMany(TradeShowDeliveryProduct, {
+  foreignKey: 'itemNumber',
+  sourceKey: 'itemNumber',
+  as: 'deliveryProducts',
+  constraints: false, 
+});
 
 
 // Inventory.belongsTo(InventoryStatus, {

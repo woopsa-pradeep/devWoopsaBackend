@@ -6,6 +6,7 @@ export interface ITradeShowVendor {
   id: number;
   tradeShowId: number;
   vendorId: number;
+  vendorName: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -19,7 +20,7 @@ export class TradeShowVendor
   public id!: number;
   public tradeShowId!: number;
   public vendorId!: number;
-
+  public vendorName!: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -39,6 +40,10 @@ TradeShowVendor.init(
 
     vendorId: {
       type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    vendorName: {
+      type: DataTypes.STRING,
       allowNull: false,
     },
   },

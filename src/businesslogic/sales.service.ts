@@ -936,7 +936,7 @@ export class SalesService {
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
-      if (salesCategory.length > 0) {
+     if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
         whereClause.Sales_Category = { [Op.in]: salesCategory };
       }
 
@@ -966,9 +966,9 @@ export class SalesService {
           const anywhere = `%${term}%`;
           const starts = `${term}%`;
       
-          if (salesCategory.length > 0) {
-            whereClause.Sales_Category = { [Op.in]: salesCategory };
-          }
+           if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
       
           // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
@@ -1132,7 +1132,7 @@ orderClause = [
     if (searchInUPC) {
       const counted = await Inventory.findAll({
         attributes: ['Item_Number'],
-        where: whereClause,
+        where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
         include: [
           {
             ...includeUPC,
@@ -1147,7 +1147,7 @@ orderClause = [
       totalCount = counted.length;
     } else {
       totalCount = await Inventory.count({
-        where: whereClause,
+        where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
         logging: false
       });
     }
@@ -1213,7 +1213,20 @@ orderClause = [
       const productImage = imageMap.get(itemStr) || null;
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
 
-      let price = await getDiscount(e.Item_Number, customerId);
+      const customer = await Customer.findOne({
+        where: {
+          C_Number: customerId
+        },
+        attributes:['C_PricingAccount']
+      });
+  
+      let userId = customerId;
+      if(customer){
+        userId = customer?.dataValues.C_PricingAccount || customerId;
+      }
+
+      console.log(userId, 'userId')
+      let price = await getDiscount(e.Item_Number, userId);
       if (!price) {
         price = await getFirstValidPrice(e);
       }
@@ -1237,6 +1250,7 @@ orderClause = [
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number);
       }
 
+     
 
       return {
         Pack: e.Pack,

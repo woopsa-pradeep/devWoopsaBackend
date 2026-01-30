@@ -10,7 +10,11 @@ export interface ITradeShowItem {
   itemNumber: string;
   discount: string; // DECIMAL comes back as string in pg; keep string to avoid float bugs
   minQuantity: number;
+  description: string;
+  salesCategory: number;
+  priceClass: number;
   maxQuantity: number;
+  vendorId: number;
   disType: TradeShowDiscountType;
   createdAt?: Date;
   updatedAt?: Date;
@@ -25,6 +29,10 @@ export class TradeShowItem
   public id!: number;
   public tradeShowId!: number;
   public itemNumber!: string;
+  public description!: string;
+  public salesCategory!: number;
+  public priceClass!: number;
+  public vendorId!: number;
   public discount!: string;
   public minQuantity!: number;
   public maxQuantity!: number;
@@ -40,6 +48,26 @@ TradeShowItem.init(
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
+    },
+    vendorId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0,
+    },
+    description: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: '',
+    },
+    salesCategory: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    priceClass: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
     },
 
     tradeShowId: {

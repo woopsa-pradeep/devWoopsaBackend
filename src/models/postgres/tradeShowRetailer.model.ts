@@ -6,6 +6,7 @@ export interface ITradeShowRetailer {
   id: number;
   tradeShowId: number;
   retailerId: number;
+  retailerName: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -19,7 +20,7 @@ export class TradeShowRetailer
   public id!: number;
   public tradeShowId!: number;
   public retailerId!: number;
-
+  public retailerName!: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -40,6 +41,12 @@ TradeShowRetailer.init(
     retailerId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+
+    retailerName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: '',
     },
   },
   {

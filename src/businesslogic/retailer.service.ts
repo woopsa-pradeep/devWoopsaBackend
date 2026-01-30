@@ -344,7 +344,7 @@ export class RetailerService {
           const anywhere = `%${term}%`;
           const starts = `${term}%`;
       
-          if (salesCategory.length > 0) {
+          if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
           }
       
@@ -519,7 +519,7 @@ orderClause = [
       totalCount = counted.length;
     } else {
       totalCount = await Inventory.count({
-        where: whereClause,
+        where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
         logging: false
       });
     }
@@ -533,7 +533,7 @@ orderClause = [
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
         'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT'
       ],
-      where: whereClause,
+      where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
       include: [
         {
           model: SalesCategory,
@@ -570,8 +570,20 @@ orderClause = [
         isAllow: true
       }
     });
+
+    const customer = await Customer.findOne({
+      where: {
+        C_Number: user.id
+      },
+      attributes:['C_PricingAccount']
+    });
+
+    let userId = user.id;
+    if(customer){
+      userId = customer?.dataValues.C_PricingAccount || user.id;
+    }
     const imageMap = new Map(productImages.map(img => [img.product_number, img]));
-    const discountMap = await getDiscountsForItemNumbers(itemNumbers, user.id);
+    const discountMap = await getDiscountsForItemNumbers(itemNumbers, userId);
 
     // === Final mapping ===
     const finalProductList = await Promise.all(productList.map(async (e: any) => {

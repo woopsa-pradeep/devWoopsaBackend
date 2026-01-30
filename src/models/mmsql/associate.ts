@@ -27,8 +27,9 @@ import { Order_Header_Costs } from "./orderHeaderCost.model";
 import { Record_Locks } from "./recordLock.model";
 import { Users } from "./user.model";
 import { CustBillTo } from "./custBillTo.model";
-import { CustFinanceCharges } from "./custFinanceCharges.model"
+import { CustFinanceCharges } from "./custFinanceCharges.model";
 import { ARDeletes } from "./arDeletes.mode";
+import { InventorySavedDetail } from "./inventorySavedDetail.model";
 
 
 
@@ -437,6 +438,24 @@ ARDeletes.belongsTo(Customer, {
   foreignKey: 'C_Number',
   targetKey:'C_Number'
 })
+
+Inventory.hasOne(InventoryStatus, {
+  foreignKey: 'Item_Number',
+  sourceKey: 'Item_Number'
+
+});
+
+Inventory.hasOne(InventorySavedDetail,{
+  foreignKey: 'Item_Number',
+  sourceKey: 'Item_Number',
+})
+
+InventorySavedDetail.belongsTo(Inventory, {
+  foreignKey: 'Item_Number',
+  targetKey: 'Item_Number'
+});
+
+
 
 CustReceivables.hasOne(CustBillTo, {
   foreignKey: 'C_Number',

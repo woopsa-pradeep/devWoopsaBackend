@@ -110,13 +110,17 @@ import { TradeShowVendor } from "../models/postgres/tradeShowVendor";
 import { TradeShowDeliveryProduct } from "../models/postgres/tradeShowDeliveryProduct.model";
 import { CustFinanceCharges } from "../models/mmsql/custFinanceCharges.model"
 import { ARDeletes } from "../models/mmsql/arDeletes.mode";
-
+import { InventorySavedDetail } from "../models/mmsql/inventorySavedDetail.model"
 type DisType = "PERCENT" | "FLAT";
 
 type BulkItemInput = {
   itemNumber: string;
   discount: string; // keeping as string since your model likely stores/accepts it; validate numeric
   minQuantity: number;
+  description: string;
+  salesCategory: number;
+  priceClass: number;
+  vendorId: number;
   maxQuantity: number;
   disType: DisType;
 };
@@ -2178,7 +2182,7 @@ export class ManagerService {
     
     const currentStatus = query.currentStatus || 'all';
 
-   
+   console.log(query, 'query--->');
 
 
 
@@ -2482,8 +2486,8 @@ export class ManagerService {
     // Build where condition
     const whereCondition: any = {
     };
-    if(query.isDeleted){
-      whereCondition.Order_Deleted = query.isDeleted;
+    if(query.isDeleted == true){
+      whereCondition.Order_Deleted = true;
     }
     if(query.updated){
       whereCondition.Order_Updated = query.updated;
@@ -7846,12 +7850,13 @@ async getVelocityReportCustomer(filters: {
 
     const offset = limit ? (page - 1) * limit : undefined;
     const end = new Date(endDate);
-    end.setDate(end.getDate() + 1);
+    end.setDate(end.getDate() );
+
 
     const total = await ARDeposits.count({
       distinct: true,
       col: 'Deposit_ID',
-      where: {
+      where: { 
         Deposit_Date: {
           [Op.gte]: startDate,
           [Op.lte]: end,
@@ -8696,8 +8701,12 @@ async getAgingReport(filters: {
     tradeShowId: number;
     itemNumber: string;
     discount: string;
+    description: string;
+    salesCategory: number;
+    priceClass: number;
     minQuantity: number;
     maxQuantity: number;
+    vendorId: number;
     disType: "PERCENT" | "FLAT";
   }) {
     // Validate that TradeShow exists
@@ -8738,8 +8747,12 @@ async getAgingReport(filters: {
         tradeShowId: body.tradeShowId,
         itemNumber: body.itemNumber,
         discount: body.discount,
+        description: body.description,
+        salesCategory: body.salesCategory,
+        priceClass: body.priceClass,
         minQuantity: body.minQuantity,
         maxQuantity: body.maxQuantity,
+        vendorId: body.vendorId,
         disType: body.disType,
       });
 
@@ -8852,6 +8865,10 @@ async getAgingReport(filters: {
         minQuantity: item.minQuantity,
         maxQuantity: item.maxQuantity,
         disType: item.disType,
+        description: item.description,
+        salesCategory: item.salesCategory,
+        priceClass: item.priceClass,
+        vendorId: item.vendorId,
       }));
   
       try {
@@ -9078,10 +9095,21 @@ async getAgingReport(filters: {
       throw new AppError('TradeShow not found', 404);
     }
 
+    // Validate that Retailer exists and get name
+    const retailer = await Customer.findOne({
+      where: { C_Number: body.retailerId },
+      attributes: ['C_Number', 'C_Name'],
+    });
+
+    if (!retailer) {
+      throw new AppError('Retailer not found', 404);
+    }
+
     try {
       const tradeShowRetailer = await TradeShowRetailer.create({
         tradeShowId: body.tradeShowId,
         retailerId: body.retailerId,
+        retailerName: retailer.C_Name || '',
       });
 
       return tradeShowRetailer;
@@ -9095,7 +9123,7 @@ async getAgingReport(filters: {
 
   async createBulkTradeShowRetailers(body: {
     tradeShowId: number;
-    retailerIds: number[];
+    retailerIds: Array<{ id: number; name: string }>;
   }) {
     // Validate that TradeShow exists
     const tradeShow = await TradeShow.findByPk(body.tradeShowId);
@@ -9105,29 +9133,40 @@ async getAgingReport(filters: {
 
     // Validate retailerIds array
     if (!Array.isArray(body.retailerIds) || body.retailerIds.length === 0) {
-      throw new AppError('Retailer IDs array must contain at least one retailer ID', 400);
+      throw new AppError('Retailer IDs array must contain at least one retailer', 400);
     }
 
     if (body.retailerIds.length > 100) {
       throw new AppError('Cannot create more than 100 associations at once', 400);
     }
 
-    // Validate and normalize retailer IDs
+    // Validate and normalize retailer data
     const validationErrors: string[] = [];
     const seen = new Set<number>();
     const normalizedRetailerIds: number[] = [];
 
-    body.retailerIds.forEach((retailerId, index) => {
-      // Check if retailerId is a valid number
-      const id = Number(retailerId);
+    body.retailerIds.forEach((retailer, index) => {
+      // Check if id exists and is valid
+      if (retailer.id === undefined || retailer.id === null) {
+        validationErrors.push(`Retailer at index ${index}: id is required`);
+        return;
+      }
+
+      const id = Number(retailer.id);
       if (!Number.isFinite(id) || id <= 0 || !Number.isInteger(id)) {
-        validationErrors.push(`Retailer ID at index ${index}: Must be a valid positive integer`);
+        validationErrors.push(`Retailer at index ${index}: id must be a valid positive integer`);
         return;
       }
 
       // Check for duplicates in the request
       if (seen.has(id)) {
-        validationErrors.push(`Retailer ID at index ${index}: Retailer ID ${id} is duplicated in the request`);
+        validationErrors.push(`Retailer at index ${index}: Retailer ID ${id} is duplicated in the request`);
+        return;
+      }
+
+      // Validate name
+      if (!retailer.name || typeof retailer.name !== 'string' || retailer.name.trim() === '') {
+        validationErrors.push(`Retailer at index ${index}: name is required and must be a non-empty string`);
         return;
       }
 
@@ -9139,19 +9178,28 @@ async getAgingReport(filters: {
       throw new AppError(`Validation errors: ${validationErrors.join('; ')}`, 400);
     }
 
+    // Validate that all retailers exist in the database and get their names
+    const existingRetailers = await Customer.findAll({
+      where: { C_Number: { [Op.in]: normalizedRetailerIds } },
+      attributes: ['C_Number', 'C_Name'],
+    });
+
+    const existingRetailerMap = new Map(existingRetailers.map(r => [r.C_Number, r.C_Name || '']));
+    const missingRetailerIds = normalizedRetailerIds.filter(id => !existingRetailerMap.has(id));
+
+    if (missingRetailerIds.length > 0) {
+      throw new AppError(`The following retailer IDs do not exist: ${missingRetailerIds.join(', ')}`, 404);
+    }
+
     // Use transaction for bulk insert
     const transaction = await postgresSequelize.transaction();
 
     try {
-      
-
-      
-
-
-      // Prepare associations for bulk insert
+      // Prepare associations for bulk insert with retailer names
       const associationsToCreate = normalizedRetailerIds.map(retailerId => ({
         tradeShowId: body.tradeShowId,
         retailerId: retailerId,
+        retailerName: existingRetailerMap.get(retailerId) || '',
       }));
 
       // Bulk create
@@ -9347,6 +9395,7 @@ async getAgingReport(filters: {
       const tradeShowVendor = await TradeShowVendor.create({
         tradeShowId: body.tradeShowId,
         vendorId: body.vendorId,
+        vendorName: vendor.V_Description || '',
       });
 
       return tradeShowVendor;
@@ -9360,7 +9409,7 @@ async getAgingReport(filters: {
 
   async createBulkTradeShowVendors(body: {
     tradeShowId: number;
-    vendorIds: number[];
+    vendorIds: Array<{ Primary_Vendor: number; V_Description: string }>;
   }) {
     // Validate that TradeShow exists
     const tradeShow = await TradeShow.findByPk(body.tradeShowId);
@@ -9370,38 +9419,66 @@ async getAgingReport(filters: {
 
     // Validate vendorIds array
     if (!Array.isArray(body.vendorIds) || body.vendorIds.length === 0) {
-      throw new AppError('Vendor IDs array must contain at least one vendor ID', 400);
+      throw new AppError('Vendor IDs array must contain at least one vendor', 400);
     }
 
     if (body.vendorIds.length > 100) {
       throw new AppError('Cannot create more than 100 associations at once', 400);
     }
 
-    // Validate and normalize vendor IDs
+    // Validate and normalize vendor data
     const validationErrors: string[] = [];
     const seen = new Set<number>();
-    const normalizedVendorIds: number[] = [];
+    const normalizedVendors: Array<{ vendorId: number; vendorName: string }> = [];
 
-    body.vendorIds.forEach((vendorId, index) => {
-      // Check if vendorId is a valid number
-      const id = Number(vendorId);
+    body.vendorIds.forEach((vendor, index) => {
+      // Check if Primary_Vendor exists and is valid
+      if (vendor.Primary_Vendor === undefined || vendor.Primary_Vendor === null) {
+        validationErrors.push(`Vendor at index ${index}: Primary_Vendor is required`);
+        return;
+      }
+
+      const id = Number(vendor.Primary_Vendor);
       if (!Number.isFinite(id) || id <= 0 || !Number.isInteger(id)) {
-        validationErrors.push(`Vendor ID at index ${index}: Must be a valid positive integer`);
+        validationErrors.push(`Vendor at index ${index}: Primary_Vendor must be a valid positive integer`);
         return;
       }
 
       // Check for duplicates in the request
       if (seen.has(id)) {
-        validationErrors.push(`Vendor ID at index ${index}: Vendor ID ${id} is duplicated in the request`);
+        validationErrors.push(`Vendor at index ${index}: Vendor ID ${id} is duplicated in the request`);
+        return;
+      }
+
+      // Validate V_Description
+      if (!vendor.V_Description || typeof vendor.V_Description !== 'string' || vendor.V_Description.trim() === '') {
+        validationErrors.push(`Vendor at index ${index}: V_Description is required and must be a non-empty string`);
         return;
       }
 
       seen.add(id);
-      normalizedVendorIds.push(id);
+      normalizedVendors.push({
+        vendorId: id,
+        vendorName: vendor.V_Description.trim(),
+      });
     });
 
     if (validationErrors.length > 0) {
       throw new AppError(`Validation errors: ${validationErrors.join('; ')}`, 400);
+    }
+
+    // Validate that all vendors exist in the database
+    const vendorIdsToCheck = normalizedVendors.map(v => v.vendorId);
+    const existingVendors = await Vendor.findAll({
+      where: { Primary_Vendor: { [Op.in]: vendorIdsToCheck } },
+      attributes: ['Primary_Vendor'],
+    });
+
+    const existingVendorIds = new Set(existingVendors.map(v => v.Primary_Vendor));
+    const missingVendorIds = vendorIdsToCheck.filter(id => !existingVendorIds.has(id));
+
+    if (missingVendorIds.length > 0) {
+      throw new AppError(`The following vendor IDs do not exist: ${missingVendorIds.join(', ')}`, 404);
     }
 
     // Use transaction for bulk insert
@@ -9409,9 +9486,10 @@ async getAgingReport(filters: {
 
     try {
       // Prepare associations for bulk insert
-      const associationsToCreate = normalizedVendorIds.map(vendorId => ({
+      const associationsToCreate = normalizedVendors.map(vendor => ({
         tradeShowId: body.tradeShowId,
-        vendorId: vendorId,
+        vendorId: vendor.vendorId,
+        vendorName: vendor.vendorName,
       }));
 
       // Bulk create
@@ -9540,18 +9618,25 @@ async getAgingReport(filters: {
       }
     }
 
-    // Validate Vendor exists if being updated
+    // Validate Vendor exists if being updated and get vendor name
+    let vendorName: string | undefined;
     if (body.vendorId !== undefined) {
       const vendor = await Vendor.findByPk(body.vendorId);
       if (!vendor) {
         throw new AppError('Vendor not found', 404);
       }
+      vendorName = vendor.V_Description || '';
     }
 
     // Create update object
     const updateData: any = {};
     if (body.tradeShowId !== undefined) updateData.tradeShowId = body.tradeShowId;
-    if (body.vendorId !== undefined) updateData.vendorId = body.vendorId;
+    if (body.vendorId !== undefined) {
+      updateData.vendorId = body.vendorId;
+      if (vendorName !== undefined) {
+        updateData.vendorName = vendorName;
+      }
+    }
 
     try {
       await tradeShowVendor.update(updateData);
@@ -9567,11 +9652,27 @@ async getAgingReport(filters: {
   async deleteTradeShowVendor(id: number) {
     const tradeShowVendor = await TradeShowVendor.findByPk(id);
 
+    console.log(tradeShowVendor,'the tradeSHow');
+
     if (!tradeShowVendor) {
       throw new AppError('TradeShowVendor not found', 404);
     }
 
     await tradeShowVendor.destroy();
+let vendorId = tradeShowVendor?.dataValues.vendorId;
+    await TradeShowItem.destroy({
+      where: {
+        tradeShowId: tradeShowVendor.tradeShowId,
+        vendorId: vendorId,
+      },
+    });
+
+    await TradeShowDeliveryProduct.destroy({
+      where: {
+        tradeShowId: tradeShowVendor.tradeShowId,
+        vendorId: vendorId,
+      },
+    })
     return { success: true, message: 'TradeShowVendor deleted successfully' };
   }
 
@@ -9580,6 +9681,7 @@ async getAgingReport(filters: {
     tradeShowId: number;
     itemNumber: string;
     weekNumber: number;
+    vendorId: number;
     startDate: string;
     endDate: string;
     deliveryType: "pickup" | "delivery";
@@ -9616,6 +9718,7 @@ async getAgingReport(filters: {
         startDate: body.startDate as any,
         endDate: body.endDate as any,
         deliveryType: body.deliveryType,
+        vendorId: body.vendorId,
       });
 
       return record;
@@ -9630,6 +9733,7 @@ async getAgingReport(filters: {
       itemNumber: string;
       weekNumber: number;
       startDate: string;
+      vendorId: number;
       endDate: string;
       deliveryType: "pickup" | "delivery";
     }[];
@@ -9708,6 +9812,7 @@ async getAgingReport(filters: {
         itemNumber: delivery.itemNumber,
         weekNumber: delivery.weekNumber,
         startDate: delivery.startDate as any,
+        vendorId: delivery.vendorId,
         endDate: delivery.endDate as any,
         deliveryType: delivery.deliveryType,
       }));
@@ -9757,6 +9862,7 @@ async getAgingReport(filters: {
 
     const where: any = {};
 
+  
     if (query.tradeShowId) where.tradeShowId = query.tradeShowId;
     if (query.itemNumber) where.itemNumber = query.itemNumber;
     if (query.weekNumber) where.weekNumber = query.weekNumber;
@@ -9817,6 +9923,83 @@ async getAgingReport(filters: {
     return {
       data: finalData,
       total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  
+
+
+  async getRemainItemInDelivery(tradeShowId:number,query:PaginationOptions){
+let {page = 1,limit = 10} = query;
+page = parseInt(page as any) || 1;
+limit = parseInt(limit as any) || 10;
+const offset = (page - 1) * limit;
+
+    const tradeShow = await TradeShowDeliveryProduct.findAll({
+      where: {
+        tradeShowId: tradeShowId,
+      },
+      attributes: ['itemNumber'],
+    });
+
+    const itemInDelivery = tradeShow.map((item: any) => item.itemNumber);
+
+    const {rows: items, count: total} = await TradeShowItem.findAndCountAll({
+      where: {
+        tradeShowId: tradeShowId,
+        itemNumber: {
+          [Op.notIn]: itemInDelivery,
+        },
+      },
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+      
+    });
+
+    const finalData = await Promise.all(
+      items.map(async (item: any) => {
+        const inventory = await Inventory.findOne({
+          where: {
+            Item_Number: item.itemNumber,
+          },
+          attributes: [
+            'Item_Number',
+            'Description',
+            'Pack',
+            'UOM',
+            'Retail1',
+            'Retail2',
+            'Retail3',
+          ],
+          include: [
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Category_Desc', 'Sales_Category'],
+              required: false,
+            },
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: ['Class_Desc'],
+              required: false,
+            },
+          ],
+        });
+        return {
+          ...item.toJSON(),
+          inventory: inventory ? inventory.toJSON() : null,
+        };
+      })
+    );
+
+    return {
+      data: finalData,
+      total: total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
@@ -10069,8 +10252,15 @@ async getAgingReport(filters: {
   };
 }
 
-async getOpenItemReport() {
+async getOpenItemReport(query:any) {
+  const {startDate,endDate,} = query;
   return await CustReceivables.findAll({
+
+    where: {
+      AR_Date: {
+        [Op.between]: [new Date(startDate), new Date(endDate)],
+      },
+    },
     include: [
       {
         model: Customer,
@@ -10168,6 +10358,323 @@ async getOpenItemReport() {
   });
 }
 
+async getInventorySpotCheck() {
+  const data = await Inventory.findAll({
+    attributes: [
+      "Item_Number",
+      "Sales_Category",
+      "Section",
+      "Location",
+      "Price_Class",
+      "OTP_Number",
+      "Description",
+      "Pack",
+      "UOM",
+      "Price1",
+      "Sequence",
+      "Basecost",
+      "NetCost",
+      "AvgCost",
+      "Invoice_Cost",
+      "Retail1",
+      "HeadingFlag",
+      "Primary_Vendor",
+      "PickArea",
+
+      // UPC_Number
+      [
+        Sequelize.literal(`(
+          SELECT TOP 1 UPC_Number
+          FROM Inventory_UPC
+          WHERE Inventory.Item_Number = Inventory_UPC.Item_Number
+            AND Status = 0
+            AND Priority = 1
+        )`),
+        "UPC_Number"
+      ],
+
+      // classDesc
+      [
+        Sequelize.literal(`(
+          SELECT Class_Desc
+          FROM Price_Classes
+          WHERE Inventory.Price_Class = Price_Classes.Price_Class
+        )`),
+        "classDesc"
+      ],
+
+      // categoryDesc
+      [
+        Sequelize.literal(`(
+          SELECT Category_Desc
+          FROM Sales_Categories
+          WHERE Inventory.Sales_Category = Sales_Categories.Sales_Category
+        )`),
+        "categoryDesc"
+      ],
+
+      // otpDesc
+      [
+        Sequelize.literal(`(
+          SELECT OTP_Description
+          FROM OtherTaxes
+          WHERE Inventory.OTP_Number = OtherTaxes.OTP_Number
+        )`),
+        "otpDesc"
+      ],
+
+      // Inventory_OnHand
+      [
+        Sequelize.literal(`ISNULL((
+          SELECT SUM(Inventory_OnHand)
+          FROM Inventory_Status
+          WHERE Inventory_Status.Code = 0
+            AND Inventory_Status.Item_Number = Inventory.Item_Number
+        ), 0)`),
+        "Inventory_OnHand"
+      ],
+
+      // iPend
+      [
+        Sequelize.literal(`ISNULL((
+          SELECT SUM(Quantity_Ordered)
+          FROM Order_Detail
+          WHERE Order_Detail.Item_Number = Inventory.Item_Number
+            AND DetailUpdated = 'False'
+        ), 0)`),
+        "iPend"
+      ],
+
+      // Avail
+      [
+        Sequelize.literal(`(
+          ISNULL((
+            SELECT SUM(Inventory_OnHand)
+            FROM Inventory_Status
+            WHERE Inventory_Status.Code = 0
+              AND Inventory_Status.Item_Number = Inventory.Item_Number
+          ), 0)
+          -
+          ISNULL((
+            SELECT SUM(Quantity_Ordered)
+            FROM Order_Detail
+            WHERE Order_Detail.Item_Number = Inventory.Item_Number
+              AND DetailUpdated = 'False'
+          ), 0)
+        )`),
+        "Avail"
+      ]
+    ],
+
+    order: [
+      ["Sales_Category", "ASC"],
+      ["Description", "ASC"]
+    ]
+  });
+
+  return data;
+}
+
+
+async getInventoryValuationSalesCategTotal(){
+  return await Inventory.findAll({
+     limit: 50000,
+    attributes: [
+      'Item_Number',
+      'Sales_Category',
+      'Price_Class',
+      'OTP_Number',
+      'Description',
+      'Pack',
+      'UOM',
+      'Price1',
+      'Sequence',
+      'Cig_Sticks',
+      'UnitOunces',
+      'Basecost',
+      'NetCost',
+      'AvgCost',
+      'Invoice_Cost',
+      'Retail1',
+      'HeadingFlag',
+
+      // UPC_Number
+      [
+        Sequelize.literal(`
+          (
+            SELECT TOP 1 UPC_Number
+            FROM Inventory_UPC
+            WHERE Inventory.Item_Number = Inventory_UPC.Item_Number
+           
+          )
+        `),
+        'UPC_Number'
+      ],
+
+      // classDesc
+      [
+        Sequelize.literal(`
+          (
+            SELECT Class_Desc
+            FROM Price_Classes
+            WHERE Inventory.Price_Class = Price_Classes.Price_Class
+          )
+        `),
+        'classDesc'
+      ],
+
+      // categoryDesc
+      [
+        Sequelize.literal(`
+          (
+            SELECT Category_Desc
+            FROM Sales_Categories
+            WHERE Inventory.Sales_Category = Sales_Categories.Sales_Category
+          )
+        `),
+        'categoryDesc'
+      ],
+
+      // otpDesc
+      [
+        Sequelize.literal(`
+          (
+            SELECT OTP_Description
+            FROM OtherTaxes
+            WHERE Inventory.OTP_Number = OtherTaxes.OTP_Number
+          )
+        `),
+        'otpDesc'
+      ],
+
+      // TaxValue function
+      [
+        Sequelize.literal(`
+          ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0)
+        `),
+        'TaxValue'
+      ],
+      [
+        Sequelize.literal(`
+          ( ISNULL(Inventory.AvgCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
+        `),
+        'ext_AvgCost'
+      ],
+      [
+        Sequelize.literal(`
+          ( ISNULL(Inventory.BaseCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
+        `),
+        'ext_BaseCost'
+      ],
+      [
+        Sequelize.literal(`
+          ( ISNULL(Inventory.NetCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
+        `),
+        'ext_NetCost'
+      ],
+      [
+        Sequelize.literal(`
+          ( ISNULL(Inventory.Invoice_Cost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
+        `),
+        'ext_Invoice_Cost'
+      ],
+    ],
+
+    include: [
+      {
+        model: InventoryStatus,
+        required: false,
+        attributes: {
+          include: [
+            // State Tax
+            [
+              Sequelize.literal(`
+                (
+                  SELECT TaxDescription
+                  FROM TaxRates
+                  WHERE TaxRates.Jurisdiction_State = InventoryStatus.Jurisdiction_State
+                )
+              `),
+              'tState'
+            ],
+
+            // County Tax
+            [
+              Sequelize.literal(`
+                (
+                  SELECT TaxDescription
+                  FROM TaxRates_County
+                  WHERE TaxRates_County.Jurisdiction_County = InventoryStatus.Jurisdiction_County
+                )
+              `),
+              'tCounty'
+            ],
+
+            // City Tax
+            [
+              Sequelize.literal(`
+                (
+                  SELECT TaxDescription
+                  FROM TaxRates_City
+                  WHERE TaxRates_City.Jurisdiction_City = InventoryStatus.Jurisdiction_City
+                )
+              `),
+              'tCity'
+            ],
+          ]
+        }
+      },
+
+      {
+        model: InventorySavedDetail,
+        required: false,
+        // where: { Code: 1 },
+        attributes: {
+          include: [
+            [
+              Sequelize.literal(`
+                (
+                  SELECT TaxDescription
+                  FROM TaxRates
+                  WHERE TaxRates.Jurisdiction_State = InventorySavedDetail.Jurisdiction_State
+                )
+              `),
+              'tState'
+            ],
+            [
+              Sequelize.literal(`
+                (
+                  SELECT STMP_VALUE20
+                  FROM TaxRates
+                  WHERE TaxRates.Jurisdiction_State = InventorySavedDetail.Jurisdiction_State
+                )
+              `),
+              'STMP_VALUE20'
+            ],
+            [
+              Sequelize.literal(`
+                (
+                  SELECT STMP_VALUE25
+                  FROM TaxRates
+                  WHERE TaxRates.Jurisdiction_State = InventorySavedDetail.Jurisdiction_State
+                )
+              `),
+              'STMP_VALUE25'
+            ],
+          ]
+        }
+      }
+    ],
+
+    // where: {
+    //   // Code: 0,
+    //   PickArea: 'NOV1'
+    // },
+
+    order: [['Description', 'ASC']]
+})
+}
+
 async getVendorListForTradeShowIds(ids: number) {
   const tradeShowVendors = await TradeShowVendor.findAll({
     where: { tradeShowId: ids },
@@ -10222,7 +10729,7 @@ async getInventoryAsPerVendorIds(query:any) {
   }
   const { count: totalCount, rows: inventory } = await Inventory.findAndCountAll({
     where: {I_Inactive: false,ShortOrderForm: true,...whereCondition  },
-    attributes: ['Item_Number', 'Description', 'Retail1', 'Retail2', 'Retail3','Primary_Vendor'],
+    attributes: ['Item_Number', 'Description', 'Retail1', 'Retail2', 'Retail3','Primary_Vendor','Price1','Price2'],
     include: [
       {
         model: Vendor,
@@ -10249,6 +10756,220 @@ async getInventoryAsPerVendorIds(query:any) {
   })
   return{ data: inventory, total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) };
 }
+
+async getInventoryAsPerTradeWeek(query:any) {
+  let {page = 1,limit = 10,tradeId,weekNumber,search} = query;
+  tradeId = Number(tradeId);
+  weekNumber = Number(weekNumber);
+  page = Number(page);
+  limit = Number(limit);
+  const offset = limit ? (page - 1) * limit : undefined;
+
+  let whereCondition: any = {};
+ 
+  const {rows: tradeShowItem, count: total} = await TradeShowDeliveryProduct.findAndCountAll({
+    where: {
+      tradeShowId: tradeId,
+      weekNumber: weekNumber,
+      ...whereCondition,
+    },
+    attributes: ['itemNumber','startDate','endDate'],
+    include: [
+      {
+        model: TradeShowItem,
+        as: 'item',
+        attributes: ['description','salesCategory','priceClass'],
+      },
+    ],
+    limit,
+    offset,
+  })
+
+ 
+    return{ data: tradeShowItem, total: total, page, limit, totalPages: Math.ceil(total / limit) };
+  
+}
+
+async getTradeShowSummary(id:number,query:any) {
+  let {page = 1,limit = 10} = query;
+  page = Number(page);
+  limit = Number(limit);
+  const offset = limit ? (page - 1) * limit : undefined;
+
+  const tradeShow = await TradeShow.findByPk(id, {
+   
+  });
+
+  const {rows: deliveryProducts, count: total} = await TradeShowItem.findAndCountAll({
+    where: {
+      tradeShowId: id,
+    },
+    limit,
+    offset,
+    order: [['createdAt', 'DESC']],
+  });
+
+  const vendorsIds = await TradeShowVendor.findAndCountAll({
+    where: {
+      tradeShowId: id,
+    },
+    attributes: ['vendorId'],
+    limit,
+    offset,
+    order: [['createdAt', 'DESC']],
+  });
+
+  const mapVendors = vendorsIds.rows.map((vendor: any) => vendor.vendorId);
+  const vendors = await Vendor.findAll({
+    where: {
+      Primary_Vendor: {
+        [Op.in]: mapVendors,
+      },
+      
+    },
+    attributes: ['Primary_Vendor', 'V_Description','V_Email','V_Phone','V_Addr1','V_City','V_State','V_Zip','V_Fax','V_Status'],
+  });
+
+  return { data: deliveryProducts, vendors: vendors, total: total, page, limit, totalPages: Math.ceil(total / limit),tradeShow: tradeShow};
+}
+
+async getTradeShowItemList(id:number,query:any) {
+  let {page = 1,limit = 10,search} = query;
+  page = Number(page);
+  limit = Number(limit);
+  const offset = limit ? (page - 1) * limit : undefined;
+let whereCondition: any = {};
+if (search) {
+  whereCondition[Op.or] = [
+    { description: { [Op.like]: `%${search}%` } },
+  ];
+}
+  const {rows: tradeShowItem, count: total} = await TradeShowItem.findAndCountAll({
+    where: {
+      tradeShowId: id,
+      ...whereCondition,
+    },
+    limit,
+    offset, 
+    order: [['createdAt', 'DESC']],
+  });
+  return { data: tradeShowItem, total: total, page, limit, totalPages: Math.ceil(total / limit) };
+}
+
+async getTradeShowVendorsList(id:number,query:any) {
+  let {page = 1,limit = 10,search} = query;
+  page = Number(page);
+  limit = Number(limit);
+  const offset = limit ? (page - 1) * limit : undefined;
+  let whereCondition: any = {};
+  if (search) {
+    whereCondition[Op.or] = [
+      { vendorName: { [Op.like]: `%${search}%` } },
+    ];
+  }
+  const {rows: tradeShowVendors, count: total} = await TradeShowVendor.findAndCountAll({
+    where: {
+      tradeShowId: id,
+      ...whereCondition,
+    },
+    limit,
+    offset,
+    order: [['createdAt', 'DESC']],
+  });
+  return { data: tradeShowVendors, total: total, page, limit, totalPages: Math.ceil(total / limit) };
+}
+
+async deleteBulkTradeShowVendors(body: {
+  tradeShowId: number;
+  vendorIds: number[];
+}) {
+  const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+  if (!tradeShow) {
+    throw new AppError('TradeShow not found', 404);
+  }
+  const vendorIds = body.vendorIds;
+  if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
+    throw new AppError('Vendor IDs array must contain at least one vendor', 400);
+  }
+
+ 
+  
+  await TradeShowVendor.destroy({
+    where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
+  });
+
+  await TradeShowItem.destroy({
+    where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
+  });
+
+  await TradeShowDeliveryProduct.destroy({
+    where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
+  });
+
+  return { success: true, message: 'TradeShowVendor deleted successfully' };
+}
+
+async deleteBulkTradeShowItems(body: {
+  tradeShowId: number;
+  itemNumbers: string[];
+}) {
+  const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+  if (!tradeShow) {
+    throw new AppError('TradeShow not found', 404);
+  }
+  const itemIds = body.itemNumbers;
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    throw new AppError('Item IDs array must contain at least one item', 400);
+  }
+  await TradeShowItem.destroy({
+    where: { tradeShowId: tradeShow.id, id: { [Op.in]: itemIds } },
+  });
+
+  await TradeShowDeliveryProduct.destroy({
+    where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemIds } },
+  });
+  return { success: true, message: 'TradeShowItem deleted successfully' };
+}
+
+async deleteBulkTradeShowDeliveryProducts(body: {
+  tradeShowId: number;
+  itemNumbers: string[];
+}) {
+  const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+  if (!tradeShow) {
+    throw new AppError('TradeShow not found', 404);
+  }
+
+  const itemNumbers = body.itemNumbers;
+  if (!Array.isArray(itemNumbers) || itemNumbers.length === 0) {
+    throw new AppError('Item numbers array must contain at least one item number', 400);
+  }
+  await TradeShowDeliveryProduct.destroy({
+    where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemNumbers } },
+  });
+  return { success: true, message: 'TradeShowDeliveryProduct deleted successfully' };
+}
+
+
+async deleteBulkTradeShowRetailers(body: {
+  tradeShowId: number;
+  retailerIds: number[];
+}) {
+  const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+  if (!tradeShow) {
+    throw new AppError('TradeShow not found', 404);
+  }
+
+  const retailerIds = body.retailerIds;
+  if (!Array.isArray(retailerIds) || retailerIds.length === 0) {
+    throw new AppError('Retailer IDs array must contain at least one retailer', 400);
+  }
+  await TradeShowRetailer.destroy({
+    where: { tradeShowId: tradeShow.id, retailerId: { [Op.in]: retailerIds } },
+  });
+  return { success: true, message: 'TradeShowRetailer deleted successfully' };
+}
+
 
 
 

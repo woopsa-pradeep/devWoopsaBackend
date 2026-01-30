@@ -8,7 +8,7 @@ export interface ITradeShowDeliveryProduct {
   id: number;
   tradeShowId: number;
   itemNumber: string;
-
+  vendorId: number;
   weekNumber: number;
   startDate: Date;
   endDate: Date;
@@ -30,7 +30,7 @@ export class TradeShowDeliveryProduct
   public id!: number;
   public tradeShowId!: number;
   public itemNumber!: string;
-
+  public vendorId!: number;
   public weekNumber!: number;
   public startDate!: Date;
   public endDate!: Date;
@@ -51,6 +51,12 @@ TradeShowDeliveryProduct.init(
     tradeShowId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+
+    vendorId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
     },
 
     itemNumber: {

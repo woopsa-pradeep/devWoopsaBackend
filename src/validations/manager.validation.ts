@@ -2336,6 +2336,23 @@ export const createBulkTradeShowItemsSchema = Joi.object({
           'number.min': 'Minimum quantity must be greater than or equal to 0',
           'any.required': 'Minimum quantity is required',
         }),
+        description: Joi.string().required().messages({
+          'string.base': 'Description must be a string',
+          'string.empty': 'Description cannot be empty',
+          'any.required': 'Description is required',
+        }),
+        salesCategory: Joi.number().integer().min(0).required().messages({
+          'number.base': 'Sales category must be a number',
+          'number.integer': 'Sales category must be an integer',
+          'number.min': 'Sales category must be greater than or equal to 0',
+          'any.required': 'Sales category is required',
+        }),
+        priceClass: Joi.number().integer().min(0).required().messages({
+          'number.base': 'Price class must be a number',
+          'number.integer': 'Price class must be an integer',
+          'number.min': 'Price class must be greater than or equal to 0',
+          'any.required': 'Price class is required',
+        }),
         maxQuantity: Joi.number().integer().min(0).required().messages({
           'number.base': 'Maximum quantity must be a number',
           'number.integer': 'Maximum quantity must be an integer',
@@ -2346,6 +2363,10 @@ export const createBulkTradeShowItemsSchema = Joi.object({
           'string.base': 'Discount type must be a string',
           'any.only': 'Discount type must be either "PERCENT" or "FLAT"',
           'any.required': 'Discount type is required',
+        }),
+        vendorId: Joi.number().integer().optional().messages({
+          'number.base': 'Vendor ID must be a number',
+          'number.integer': 'Vendor ID must be an integer',
         }),
       })
     )
@@ -2424,37 +2445,50 @@ export const createBulkTradeShowRetailersSchema = Joi.object({
     'any.required': 'Trade show ID is required',
   }),
   retailerIds: Joi.array()
-    .items(Joi.number().integer().positive())
+    .items(
+      Joi.object({
+        id: Joi.number().integer().positive().required().messages({
+          'number.base': 'id must be a number',
+          'number.integer': 'id must be an integer',
+          'number.positive': 'id must be a positive number',
+          'any.required': 'id is required',
+        }),
+        name: Joi.string().trim().required().messages({
+          'string.base': 'name must be a string',
+          'string.empty': 'name cannot be empty',
+          'any.required': 'name is required',
+        }),
+      })
+    )
     .min(1)
     .max(100)
     .required()
+    .custom((value, helpers) => {
+      const seen = new Set<number>();
+      const errors: string[] = [];
+
+      value.forEach((retailer: any, index: number) => {
+        if (retailer.id && seen.has(retailer.id)) {
+          errors.push(`Retailer at index ${index}: id ${retailer.id} is duplicated in the request`);
+        } else if (retailer.id) {
+          seen.add(retailer.id);
+        }
+      });
+
+      if (errors.length > 0) {
+        return helpers.error('any.custom', {
+          message: errors.join('; '),
+        });
+      }
+      return value;
+    })
     .messages({
       'array.base': 'Retailer IDs must be an array',
-      'array.min': 'Retailer IDs array must contain at least one retailer ID',
+      'array.min': 'Retailer IDs array must contain at least one retailer',
       'array.max': 'Cannot create more than 100 associations at once',
       'any.required': 'Retailer IDs array is required',
+      'any.custom': 'Validation errors: {#message}',
     }),
-}).custom((value, helpers) => {
-  // Check for duplicate retailer IDs in the request
-  const errors: string[] = [];
-  const seen = new Set<number>();
-
-  value.retailerIds.forEach((retailerId: number, index: number) => {
-    if (!Number.isFinite(retailerId) || retailerId <= 0 || !Number.isInteger(retailerId)) {
-      errors.push(`Retailer ID at index ${index}: Must be a valid positive integer`);
-    } else if (seen.has(retailerId)) {
-      errors.push(`Retailer ID at index ${index}: Retailer ID ${retailerId} is duplicated in the request`);
-    } else {
-      seen.add(retailerId);
-    }
-  });
-
-  if (errors.length > 0) {
-    return helpers.error('any.invalid', {
-      message: errors.join('; '),
-    });
-  }
-  return value;
 });
 
 export const updateTradeShowRetailerSchema = Joi.object({
@@ -2495,14 +2529,51 @@ export const createBulkTradeShowVendorsSchema = Joi.object({
     'number.integer': 'Trade show ID must be an integer',
     'any.required': 'Trade show ID is required',
   }),
-  vendorIds: Joi.array().items(Joi.number().integer().positive()).min(1).max(100).required()
-  .messages({
-    'array.base': 'Vendor IDs must be an array',
-    'array.min': 'Vendor IDs array must contain at least one vendor ID',
-    'array.max': 'Cannot create more than 100 associations at once',
-    'any.required': 'Vendor IDs array is required',
-    'any.custom': 'Validation errors: {#message}',
-  }),
+  vendorIds: Joi.array()
+    .items(
+      Joi.object({
+        Primary_Vendor: Joi.number().integer().positive().required().messages({
+          'number.base': 'Primary_Vendor must be a number',
+          'number.integer': 'Primary_Vendor must be an integer',
+          'number.positive': 'Primary_Vendor must be a positive number',
+          'any.required': 'Primary_Vendor is required',
+        }),
+        V_Description: Joi.string().trim().required().messages({
+          'string.base': 'V_Description must be a string',
+          'string.empty': 'V_Description cannot be empty',
+          'any.required': 'V_Description is required',
+        }),
+      })
+    )
+    .min(1)
+    .max(100)
+    .required()
+    .custom((value, helpers) => {
+      const seen = new Set<number>();
+      const errors: string[] = [];
+
+      value.forEach((vendor: any, index: number) => {
+        if (vendor.Primary_Vendor && seen.has(vendor.Primary_Vendor)) {
+          errors.push(`Vendor at index ${index}: Primary_Vendor ${vendor.Primary_Vendor} is duplicated in the request`);
+        } else if (vendor.Primary_Vendor) {
+          seen.add(vendor.Primary_Vendor);
+        }
+      });
+
+      if (errors.length > 0) {
+        return helpers.error('any.custom', {
+          message: errors.join('; '),
+        });
+      }
+      return value;
+    })
+    .messages({
+      'array.base': 'Vendor IDs must be an array',
+      'array.min': 'Vendor IDs array must contain at least one vendor',
+      'array.max': 'Cannot create more than 100 associations at once',
+      'any.required': 'Vendor IDs array is required',
+      'any.custom': 'Validation errors: {#message}',
+    }),
 });
 
 export const updateTradeShowVendorSchema = Joi.object({

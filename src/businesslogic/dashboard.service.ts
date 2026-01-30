@@ -25,6 +25,7 @@ import { OrderPickScan } from "../models/postgres/epickOrderScan.model";
 import { sequelize } from "../db";
 import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model";
 import { Users } from "../models/mmsql/user.model";
+import { CustomerSpecialGroup } from "../models/mmsql/customerSpecialGroup.model";
 
 
 export class DashboardService {
@@ -1722,7 +1723,7 @@ const results = await OrderHeader.findAll({
         // Date filter condition
         const dateFilter = {
             Order_Date: {
-                [Op.between]: [startDate, endDate]
+                [Op.between]: [fromDate, toDate]
             }
         };
         
@@ -1795,9 +1796,18 @@ const results = await OrderHeader.findAll({
         let { search, masterSearch, role, customerNumber, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
         let wareHouseSetting: any = await Setting.findOne({});
         wareHouseSetting = wareHouseSetting?.dataValues || null;
+        let customerGroup: any = null;
 
         // Get current date
         const today = new Date();
+        if(customerNumber){
+            customerGroup = await CustomerSpecialGroup.findOne({
+                where: {
+                    C_Number: customerNumber
+                }
+            });
+         
+        }
         // if(customerNumber){
         //     salesCategory = await getAllowedSalesCategories(customerNumber);
         //     console.log(salesCategory, 'salesCategory')
@@ -1820,9 +1830,10 @@ const results = await OrderHeader.findAll({
                         { Perpetual: true }, // optional if you want perpetual promos
                     ],
                 },
-            ],
+            ]
         };
 
+        whereClause.Order_Source = { [Op.in]: [0, 1, 12, 13] };
         if (salesCategory.length > 0) {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
         }
@@ -1878,6 +1889,9 @@ const results = await OrderHeader.findAll({
             whereClause.Item_Number = { [Op.in]: masterArray };
         }
 
+       
+        whereClause.Special_GroupID = { [Op.in]: [0, customerGroup?.dataValues?.Special_GroupID || 0] };
+
         // First get the specials with basic inventory info
         const { count: totalCount, rows: specialsList } = await InventorySpecials.findAndCountAll({
             where: whereClause,
@@ -1905,7 +1919,8 @@ const results = await OrderHeader.findAll({
                         'Sales_Category',
                         'Price_Class',
                         'OTP_Number',
-                        'UnitOunces'
+                        'UnitOunces',
+                       
                     ],
                     required: true
                 }
@@ -2044,7 +2059,7 @@ const results = await OrderHeader.findAll({
                 OTP_Number: special.inventory.OTP_Number,
                 price: price,
                 UnitOunces: special.inventory.UnitOunces,
-
+                Order_Source: special.inventory.Order_Source,
                 hasPrepaidTaxRate: prepaidTaxRate ? true : false,
                 prepaidTaxRate: prepaidTaxRate,
                 hasProductLimit: productLimit ? true : false,

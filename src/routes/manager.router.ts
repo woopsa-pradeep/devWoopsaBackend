@@ -409,6 +409,9 @@ router.get('/trade-show-retailers/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), c
 router.put('/trade-show-retailers/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateTradeShowRetailerSchema), catchAsync(managerController.updateTradeShowRetailer.bind(managerController)));
 router.delete('/trade-show-retailers/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteTradeShowRetailer.bind(managerController)));
 
+// Inventory Valuation
+router.get('/getInventorySpotCheck', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getInventorySpotCheck.bind(managerController)));
+router.get('/getInventoryValuationSalesCategTotal',  catchAsync(managerController.getInventoryValuationSalesCategTotal.bind(managerController)));
 // TradeShowVendor CRUD routes
 router.post('/trade-show-vendors', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(createTradeShowVendorSchema), catchAsync(managerController.createTradeShowVendor.bind(managerController)));
 router.post('/trade-show-vendors/bulk', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(createBulkTradeShowVendorsSchema), catchAsync(managerController.createBulkTradeShowVendors.bind(managerController)));
@@ -428,5 +431,17 @@ router.get('/trade-show-delivery-products', verifyRole(ROLES.MANAGER,ROLES.SALES
 router.get('/trade-show-delivery-products/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getTradeShowDeliveryProductById.bind(managerController)));
 router.put('/trade-show-delivery-products/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateTradeShowDeliveryProductSchema), catchAsync(managerController.updateTradeShowDeliveryProduct.bind(managerController)));
 router.delete('/trade-show-delivery-products/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteTradeShowDeliveryProduct.bind(managerController)));
+router.get('/getInventoryAsPerTradeWeek', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getInventoryAsPerTradeWeek.bind(managerController)));
+router.get('/getTradeShowSummary/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getTradeShowSummary.bind(managerController)));
+router.get('/getTradeShowItemList/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getTradeShowItemList.bind(managerController)));
+router.post('/deleteBulkTradeShowVendors', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteBulkTradeShowVendors.bind(managerController)));
+router.post('/deleteBulkTradeShowItems', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteBulkTradeShowItems.bind(managerController)));
+router.post('/deleteBulkTradeShowDeliveryProducts', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteBulkTradeShowDeliveryProducts.bind(managerController)));
+router.post('/deleteBulkTradeShowRetailers', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteBulkTradeShowRetailers.bind(managerController)));
+// Remain Item In Delivery routes
+router.get('/remain-item-in-delivery/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getRemainItemInDelivery.bind(managerController)));
+// Inventory Valuation
+router.get('/getInventorySpotCheck', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getInventorySpotCheck.bind(managerController)));
+
 
 export default router; 
