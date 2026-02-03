@@ -2425,6 +2425,121 @@ export const createBulkTradeShowItemsSchema = Joi.object({
   return value;
 });
 
+export const updateBulkTradeShowItemsSchema = Joi.object({
+  items: Joi.array()
+    .items(
+      Joi.object({
+        id: Joi.number().integer().positive().required().messages({
+          'number.base': 'id must be a number',
+          'number.integer': 'id must be an integer',
+          'number.positive': 'id must be a positive number',
+          'any.required': 'id is required',
+        }),
+        tradeShowId: Joi.number().integer().optional().messages({
+          'number.base': 'Trade show ID must be a number',
+          'number.integer': 'Trade show ID must be an integer',
+        }),
+        itemNumber: Joi.string().optional().messages({
+          'string.base': 'Item number must be a string',
+          'string.empty': 'Item number cannot be empty',
+        }),
+        discount: Joi.string().pattern(/^\d+(\.\d{1,2})?$/).optional().messages({
+          'string.base': 'Discount must be a string',
+          'string.pattern.base': 'Discount must be a valid decimal number',
+        }),
+        minQuantity: Joi.number().integer().min(0).optional().messages({
+          'number.base': 'Minimum quantity must be a number',
+          'number.integer': 'Minimum quantity must be an integer',
+          'number.min': 'Minimum quantity must be greater than or equal to 0',
+        }),
+        maxQuantity: Joi.number().integer().min(0).optional().messages({
+          'number.base': 'Maximum quantity must be a number',
+          'number.integer': 'Maximum quantity must be an integer',
+          'number.min': 'Maximum quantity must be greater than or equal to 0',
+        }),
+        disType: Joi.string().valid('PERCENT', 'FLAT').optional().messages({
+          'string.base': 'Discount type must be a string',
+          'any.only': 'Discount type must be either "PERCENT" or "FLAT"',
+        }),
+        description: Joi.string().optional().messages({
+          'string.base': 'Description must be a string',
+        }),
+        salesCategory: Joi.number().integer().min(0).optional().messages({
+          'number.base': 'Sales category must be a number',
+          'number.integer': 'Sales category must be an integer',
+          'number.min': 'Sales category must be greater than or equal to 0',
+        }),
+        priceClass: Joi.number().integer().min(0).optional().messages({
+          'number.base': 'Price class must be a number',
+          'number.integer': 'Price class must be an integer',
+          'number.min': 'Price class must be greater than or equal to 0',
+        }),
+        vendorId: Joi.number().integer().optional().messages({
+          'number.base': 'Vendor ID must be a number',
+          'number.integer': 'Vendor ID must be an integer',
+        }),
+      })
+    )
+    .min(1)
+    .max(100)
+    .required()
+    .custom((value, helpers) => {
+      const errors: string[] = [];
+      const seen = new Set<number>();
+
+      value.forEach((item: any, index: number) => {
+        // Check for duplicate IDs
+        if (item.id && seen.has(item.id)) {
+          errors.push(`Item at index ${index}: id ${item.id} is duplicated in the request`);
+        } else if (item.id) {
+          seen.add(item.id);
+        }
+
+        // Validate quantity range if both are provided
+        if (item.minQuantity !== undefined && item.maxQuantity !== undefined) {
+          if (!Number.isFinite(item.minQuantity) || item.minQuantity < 0) {
+            errors.push(`Item at index ${index}: Minimum quantity must be a non-negative number`);
+          }
+          if (!Number.isFinite(item.maxQuantity) || item.maxQuantity < 0) {
+            errors.push(`Item at index ${index}: Maximum quantity must be a non-negative number`);
+          }
+          if (
+            Number.isFinite(item.minQuantity) &&
+            Number.isFinite(item.maxQuantity) &&
+            item.minQuantity > item.maxQuantity
+          ) {
+            errors.push(`Item at index ${index}: Minimum quantity must be less than or equal to maximum quantity`);
+          }
+        }
+
+        // Validate discount for PERCENT type
+        if (item.discount !== undefined) {
+          const discountValue = parseFloat(item.discount);
+          if (!Number.isFinite(discountValue) || discountValue < 0) {
+            errors.push(`Item at index ${index}: Discount must be a valid non-negative number`);
+          }
+          const disType = item.disType || 'PERCENT'; // Default to PERCENT if not provided
+          if (disType === 'PERCENT' && Number.isFinite(discountValue) && discountValue > 100) {
+            errors.push(`Item at index ${index}: Percentage discount cannot exceed 100`);
+          }
+        }
+      });
+
+      if (errors.length > 0) {
+        return helpers.error('any.invalid', {
+          message: errors.join('; '),
+        });
+      }
+      return value;
+    })
+    .messages({
+      'array.base': 'Items must be an array',
+      'array.min': 'Items array must contain at least one item',
+      'array.max': 'Cannot update more than 100 items at once',
+      'any.required': 'Items array is required',
+    }),
+});
+
 export const createTradeShowRetailerSchema = Joi.object({
   tradeShowId: Joi.number().integer().required().messages({
     'number.base': 'Trade show ID must be a number',
@@ -2538,10 +2653,8 @@ export const createBulkTradeShowVendorsSchema = Joi.object({
           'number.positive': 'Primary_Vendor must be a positive number',
           'any.required': 'Primary_Vendor is required',
         }),
-        V_Description: Joi.string().trim().required().messages({
+        V_Description: Joi.string().trim().optional().allow('',null).messages({
           'string.base': 'V_Description must be a string',
-          'string.empty': 'V_Description cannot be empty',
-          'any.required': 'V_Description is required',
         }),
       })
     )

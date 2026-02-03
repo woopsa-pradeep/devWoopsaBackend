@@ -1452,6 +1452,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 201, true, data, `${data.count} TradeShowItem(s) created successfully`);
   }
 
+  async updateBulkTradeShowItems(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateBulkTradeShowItems(req.body);
+    sendResponse(res, 200, true, data, `${data.count} TradeShowItem(s) updated successfully`);
+  }
+
   // TradeShowRetailer CRUD controller methods
   async createTradeShowRetailer(req: AuthRequest, res: Response) {
     const data = await this.managerService.createTradeShowRetailer(req.body);

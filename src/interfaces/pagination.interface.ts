@@ -10,6 +10,7 @@ export interface PaginationOptions {
   currentStatus?:string;
   isDeleted?:boolean;
   status?:string;
+  tradeShowId?:number;
   isIncludeAllImg?:any;
     page?: number;
     pageSize?:number;

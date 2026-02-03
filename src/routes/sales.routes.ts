@@ -22,6 +22,7 @@ router.post('/customerListPaginated',verifyRole(ROLES.CHECKER, ROLES.SALES),catc
 router.get('/orderHistoryByOrderNumber/:orderNumber',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.getOrderHistoryByOrderNumber.bind(listController)));
 router.get('/orderHistory/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getOrderHistory.bind(listController)));
 router.post('/placeOrder/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.placeOrder.bind(listController)));
+router.post('/placeTradeShowOrder/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.placeTradeShowOrder.bind(listController)));
 
 // return order
 
@@ -33,11 +34,14 @@ router.post('/getInventoryItemsBySalesMan/:customerId',verifyRole(ROLES.CHECKER,
 router.get('/cartItem/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getCartItem.bind(listController)));
 router.delete('/cartItem/:cartItemId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.removeFromCart.bind(listController)));
 router.delete('/clearCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.clearCart.bind(listController)));
+router.delete('/clearTradeShowCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.clearTradeShowCart.bind(listController)));
 router.put('/cartItem/:cartItemId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.updateCartItem.bind(listController)));
 router.post('/addToCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.addToCart.bind(listController)));
-
+router.delete('/removeFromTradeShowCart/:cartItemId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.removeFromTradeShowCart.bind(listController)));
 router.post('/addToReturnCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.addToReturnCart.bind(listController)));
+router.post('/addToTradeShowCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.addToTradeShowCart.bind(listController)));
 router.get('/getReturnCartItems/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getReturnCartItems.bind(listController)));
+router.get('/getTradeShowCartItems/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getTradeShowCartItems.bind(listController)));
 router.post('/addToCartByType/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.addToCartByType.bind(listController)));
 router.get('/getReturnCartItemsByType/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getReturnCartItemsByType.bind(listController)));
 

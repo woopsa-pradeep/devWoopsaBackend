@@ -54,6 +54,8 @@ import { SupportTicket } from "../models/postgres/supportTicket.model";
 import EpickSetting from "../models/postgres/epickSetting.model";
 import { Driver } from "../models/postgres/driver.model";
 import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.model";
+import { TradeShow } from "../models/postgres/tradeShow.model";
+import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
 
 export class AuthService {
 
@@ -385,6 +387,11 @@ export class AuthService {
         retailerId: storeDetail?.C_Number,
 
       })
+      const isTradeShow = await TradeShowRetailer.findOne({ where: { retailerId: 5000 } });
+      let showTradeShow = false;
+      if (isTradeShow) {
+        showTradeShow = true;
+      }
 
       const salesCategory = await getAllowedSalesCategories(storeDetail?.C_Number || 0);
       return {
@@ -393,7 +400,8 @@ export class AuthService {
         role: "retailer",
         token,
         logo: logo?.warehouseImage || null,
-        salesCategory
+        salesCategory,
+        showTradeShow
       };
     }
 
@@ -461,6 +469,11 @@ export class AuthService {
           })
           const salesCategory = await getAllowedSalesCategories(Number(record.customerId));
           storeDetail.C_CoName = storeDetail.C_Name || "";
+          const isTradeShow = await TradeShowRetailer.findOne({ where: { retailerId: Number(record.customerId) } });
+          let showTradeShow = false;
+          if (isTradeShow) {
+            showTradeShow = true;
+          }
 
           return {
             wareHouseDetail,
@@ -468,7 +481,8 @@ export class AuthService {
             role: "retailer",
             token,
             logo: logo?.warehouseImage || null,
-            salesCategory
+            salesCategory,
+            showTradeShow
           };
         }
 

@@ -434,6 +434,311 @@ export class SalesService {
     };
   }
 
+  async placeTradeShowOrder(orderData: PlaceOrder, req: any, customerId: any) {
+    const { shippingDetails, hasDiscount, discountAmount, order_type } = orderData;
+    const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
+    const isWebOrder = req.headers['is-web-order'];
+    const isWeb = isWebOrder === 'true' ? true : false;
+
+    const { orderPlayload, Delivery_Charge } = orderData;
+
+    const { method } = shippingDetails;
+    let deliveryId = 0;
+    if (method === 'delivery') {
+      deliveryId = 0;
+    }
+    if (method === 'pickup') {
+      deliveryId = 99
+    }
+
+    // Get customer and route info
+
+    let customer = await Customer.findOne({ where: { C_Number: customerId } });
+
+
+    console.log(customer?.dataValues, 'customer-->---->')
+    customer = customer?.dataValues as any;
+    const customerRoutes = await CustomerRoute.findOne({ where: { C_Number: customerId } });
+
+
+
+    if (!customer) {
+      throw new AppError("Customer not found", 404);
+    }
+    const orderNumber = await getNextOrderNumber();
+    let Order_Type = 0;
+
+    if (order_type == 'regular') {
+      Order_Type = 0;
+    }
+    if (order_type == 'prebook') {
+      Order_Type = 1;
+    }
+    if (order_type == 'backorder') {
+      Order_Type = 2;
+    }
+    if (order_type == 'price_quote') {
+      Order_Type = 4;
+    }
+    if (order_type == 'return_sales') {
+      Order_Type = 5;
+    }
+    if (order_type == 'return_order') {
+      Order_Type = 6;
+    }
+    if (order_type == 'trade_show') {
+      Order_Type = 7;
+    }
+    if (order_type == 'pos') {
+      Order_Type = 8;
+    }
+
+
+    // Prepare dynamic header data
+    const orderHeaderObject = {
+      Order_Number: orderNumber,
+
+      C_Number: customerId,
+      S_Number: customer.C_Salesman || 0,
+      Order_Source: isWeb ? 13 : 12,
+      AR_C_Number: customer.C_StatementAccount || customerId,
+      Jurisdiction_State: customer.Jurisdiction_State || '',
+      Jurisdiction_County: customer.Jurisdiction_County || '',
+      Jurisdiction_City: customer.Jurisdiction_City || '',
+      Route_Number: customerRoutes?.Route_Number || 0,
+      Stop_Number: customerRoutes?.Stop_Number || 0,
+      Delivery_ID: deliveryId,
+      Order_Type:7,
+      User_ID: Number(req.user.userNumber),
+      Reference: `USER-${req.user.userNumber}`,
+      Invoice_Type: customer.C_InvoiceFormat || 0,
+      Invoice_Deposit: 0,
+      Delivery_Charge: Delivery_Charge || 0,
+      Other_Charge: customer.Other_Amount || 0,
+      Invoice_Total: 0,
+      Sales_Taxable: 0,
+      Sales_NonTaxable: 0,
+      Cig20: 0,
+      Cig10tax: 0,
+      Cig20tax: 0,
+      Cig25tax: 0,
+      POS_ChangeDue: 0,
+      Order_Pricing_Account: customer.C_PricingAccount || customerId,
+      Points: 0,
+      Total_Weight: 0,
+      Delivery_Charge_Select: !!customer.Delivery_Charge,
+      Other_Charge_Select: !!customer.Other_Amount,
+    };
+
+
+
+    // Combine with defaults (exclude Order_Number since it's auto-increment)
+    const { Order_Number, ...defaultValues } = getDefaultOrderValues();
+    const finalOrderHeader: any = {
+      ...defaultValues,
+      ...orderHeaderObject,
+    };
+
+
+
+    // Ensure no null values in required fields
+    Object.keys(finalOrderHeader).forEach(key => {
+      if (finalOrderHeader[key] === null || finalOrderHeader[key] === undefined) {
+        if (typeof finalOrderHeader[key] === 'number') {
+          finalOrderHeader[key] = 0;
+        } else if (typeof finalOrderHeader[key] === 'boolean') {
+          finalOrderHeader[key] = false;
+        } else if (typeof finalOrderHeader[key] === 'string') {
+          finalOrderHeader[key] = '';
+        }
+      }
+    });
+
+
+
+    console.log(finalOrderHeader, 'finalOrderHeader-->---->------------------------>')
+
+
+    let orderHeaderCreated: any;
+    try {
+      orderHeaderCreated = await OrderHeader.create(finalOrderHeader) as any;
+    } catch (error) {
+      throw new AppError('Failed to create order header', 500);
+    }
+
+    // Fetch products and options
+    const itemNumbers = orderPlayload.map(item => item.Item_Number);
+    const [products] = await Promise.all([
+      Inventory.findAll({ where: { Item_Number: itemNumbers }, raw: true }),
+    ]);
+
+
+
+    const productMap = new Map(products.map(product => [product.Item_Number, product]));
+
+    const orderDetails = orderPlayload.map(async (item: any, index) => {
+      const product = productMap.get(item.Item_Number);
+
+      if (!product) {
+        throw new AppError(`Product with Item_Number ${item.Item_Number} not found`, 404);
+      }
+
+      if (item.Qty <= 0) {
+        throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
+      }
+
+      console.log(item.Price, 'item.Price-->', 'item.Sales_Category', product.Sales_Category, 'item.OTP_Number', product.OTP_Number)
+
+      console.log(hasDiscount == true, 'hasDiscount == true')
+      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.Sales_Category }, raw: true })
+
+      if (!optionDefsValues) {
+        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.OTP_Number }, raw: true })
+      }
+
+      console.log(optionDefsValues, 'optionDefsValues-->')
+      if (!optionDefsValues) {
+        optionDefsValues = 0
+      } else {
+        optionDefsValues = Number(item.Qty)
+      }
+
+      let PPD_PackType = 0
+      let PPD_Packs = 0
+
+      if (product.OTP_Number == 255) {
+        if (product.Cig_Pack == 20) {
+          PPD_PackType = 20
+          PPD_Packs = 10
+        }
+        else if (product.Cig_Pack == 10) {
+          PPD_PackType = 10
+          PPD_Packs = 20
+        }
+
+      }
+
+      let adjprice = hasDiscount == true ? Number(item.discountPrice || 0) : Number(item.Price);
+      const orderDetail = {
+        PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
+        Order_Number: orderHeaderCreated.Order_Number,
+        Item_Number: item.Item_Number,
+        Line_Number: index + 1,
+        Sales_Category: product.Sales_Category,
+        OTP_Number: product.OTP_Number,
+        Quantity_Ordered: Number(item.Qty),
+        Quantity_Shipped: item.Qty,
+        Pack: product.Pack,
+        UOM: product.UOM,
+        Price: Number(adjprice),
+        Price_Reference: Number(adjprice),
+        Retail: product.Retail1,
+        NetCost: product.NetCost,
+        BaseCost: product.BaseCost,
+        Invoice_Cost: product.Invoice_Cost,
+        AvgCost: product.AvgCost,
+        OTP_Amount_State: Number(item.Tax_Rate ?? 0),
+
+        OTP_Amount_County: 0,
+        OTP_Amount_City: 0,
+        Item_Message: product.Item_Message ? product.Item_Message : ' ',
+
+        DepositAmount: product.DepositAmount,
+        Price_Subclass: product.Price_Subclass,
+        OffInvoice_Amount: 0,
+        OffInvoice_OffCost: 0,
+        OffInvoice_Special: false,
+        EBT: product.EBT,
+        Points: product.Points,
+        Stamp_Qty: optionDefsValues || 0,
+        ItemDescription: product.Description,
+        CaseWeight: product.CaseWeight,
+        CaseCount: product.CaseCount,
+        PPD_PackType: PPD_PackType,
+        PPD_Packs: PPD_Packs,
+        // CasesPerPallet: product.CasesPerPallet,
+      };
+
+      return {
+        ...getDefaultOrderDetailValues(),
+        ...orderDetail
+      };
+    });
+
+
+    try {
+      const resolvedOrderDetails = await Promise.all(orderDetails);
+
+      await OrderDetail.bulkCreate(resolvedOrderDetails);
+
+      try {
+        sendEmailToOrder(orderHeaderCreated, resolvedOrderDetails, customer, Delivery_Charge);
+      } catch (error) {
+        console.log(error, 'error-->')
+      }
+
+      console.log('Order details created successfully');
+    } catch (error) {
+      console.log(error, 'error-->')
+      throw new AppError('Failed to create order details', 500);
+    }
+
+
+
+    console.log(customer, 'customer-->---->------------------------>')
+
+
+    await CustomerCart.update({ isActive: false }, { where: { Customer_Number: customerId } });
+
+    let orderOptionValue = shippingDetails.method + '--' + shippingDetails.selectedTimeSlot + '--' + shippingDetails.instructions
+    if (shippingDetails.method === 'delivery') {
+      orderOptionValue = shippingDetails.method + '--' + shippingDetails.instructions
+    }
+    await OrderHeaderExt.create({
+      Order_Number: orderHeaderCreated.Order_Number,
+      Order_Option: 0,
+      Order_OptionValue: orderOptionValue
+    })
+
+    await OrderHistory.create({
+      C_Number: customerId,
+      type: 'order',
+      orderPrice: totalPrice,
+      Order_Number: orderHeaderCreated.Order_Number,
+      order_Source: isWeb ? 'Web' : 'App',
+      orderPlaceBy: 'sales',
+      discount: Number(discountAmount || 0),
+      salesId: req.user.id, // postgress user id
+      isActive: true
+    });
+
+
+
+    try {
+
+      if (hasDiscount == true) {
+
+        await OrderDiscount.create({
+          orderNumber: orderHeaderCreated.Order_Number,
+          discount: Number(discountAmount || 0),
+          discountType: 'flat',
+          salesId: customer.C_Salesman || 0,
+          CustomerNumber: customerId
+        })
+
+      }
+    } catch (error) {
+      console.log(error, 'error--> in sales discount')
+    }
+
+
+    return {
+      orderHeader: orderHeaderCreated,
+      orderDetails,
+      message: "Order placed successfully"
+    };
+  }
+
 
   async getOrderHistory(customerNumber: number, query: PaginationOptions & { search?: string, startDate?: string, endDate?: string }) {
     let { page = 1, limit = 10, search, startDate, endDate } = query;
@@ -1867,9 +2172,35 @@ console.log(findTheLimit, 'findTheLimit-->22')
     return { message: "Item removed from cart successfully" };
   }
 
+  async removeFromTradeShowCart(cartItemId: number): Promise<CartResponse> {
+    const cartItem = await CustomerCart.findByPk(cartItemId);
+
+    if (!cartItem) {
+      throw new AppError("Cart item not found", 404);
+    }
+
+    // Soft delete by setting isActive to false
+    await cartItem.update({ isActive: false });
+    return { message: "Item removed from cart successfully" };
+  }
+
   async clearCart(customerNumber: number): Promise<CartResponse> {
     const result = await CustomerCart.update(
       { isActive: false },
+      {
+        where: {
+          Customer_Number: customerNumber,
+          isActive: true
+        }
+      }
+    );
+
+    return { message: "Cart cleared successfully", affectedRows: result[0] };
+  }
+
+  async clearTradeShowCart(customerNumber: number): Promise<CartResponse> {
+    const result = await CustomerCart.update(
+      { isActive: false, type: 'tradeShow' },
       {
         where: {
           Customer_Number: customerNumber,
@@ -5046,6 +5377,157 @@ console.log(findTheLimit, 'findTheLimit-->22')
   }
 
 
+  async getTradeShowCartItems(customerNumber: number) {
+    const cartItems: any = await CustomerCart.findAll({
+      where: {
+        Customer_Number: customerNumber,
+        isActive: true,
+        type: 'tradeShow'
+      },
+      order: [['createdAt', 'DESC']]
+    });
+
+    let todayTotalAmount = 0;
+    const start = moment().startOf("week").toDate(); // start of this week
+    const end = moment().endOf("week").toDate();     // end of this week
+
+    const weekUserOrders: any[] = await OrderHistory.findAll({
+      where: {
+        C_Number: customerNumber,
+        isActive: true,
+        type: "tradeShow",
+        createdAt: {
+          [Op.between]: [start, end],
+        },
+      },
+      order: [["createdAt", "DESC"]],
+    });
+    if (weekUserOrders && weekUserOrders?.length > 0) {
+      todayTotalAmount = weekUserOrders.reduce(
+        (sum: any, item: any) => sum + Number(item.orderPrice),
+        0
+      );
+    }
+
+    console.log(todayTotalAmount, 'todayTotalAmount---->')
+    const finalCartItems = await Promise.all(cartItems.map(async (es: any) => {
+      const e: any = es.dataValues
+      const productImage = await ProductImage.findOne({
+        where: {
+          product_number: e.Item_Number.toString(),
+          isAllow: true
+        },
+      });
+
+      let price = await getDiscount(Number(e.Item_Number), Number(e.Customer_Number))
+      if (!price) {
+        const data = await Inventory.findByPk(e.Item_Number)
+        price = await getFirstValidPrice(data?.dataValues)
+      }
+      // price = Math.ceil(price * 100) / 100;
+      let product: any = await Inventory.findOne({
+        where: {
+          Item_Number: e.Item_Number
+        },
+        include: [{
+          model: InventoryUPC,
+          as: 'UPCList',
+          attributes: ['UPC_Number'],
+          where: {
+            Status: 0,
+          },
+          required: false,
+
+        }]
+      })
+      product = product?.dataValues || null;
+
+
+      let itemInActive = await isItemInActive(e.Item_Number)
+      const inventoryOnHand = await getInventoryOnHand(e.Item_Number)
+      let wareHouseSetting: any = await Setting.findOne({});
+      wareHouseSetting = wareHouseSetting?.dataValues || null;
+      let allowToOrder = true;
+      console.log(wareHouseSetting?.salesRep)
+
+      let userJurisdiction = await getJurisdiction(customerNumber);
+      if (wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible) {
+        allowToOrder = true;
+      }
+      else if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+        allowToOrder = false;
+      }
+
+      const topLatestItems = await getTopLatestItems();
+      const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+
+      const productLimit = await getProductLimit(e.Item_Number);
+      const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
+      const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
+
+      let prepaidTaxRate = 0
+      console.log(product.Sales_Category, 'product.Sales_Category')
+      if (userJurisdiction != null && product.Sales_Category) {
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
+      }
+
+      return {
+
+        isNewItem,
+        Description: product.Description,
+        isDiscounted,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
+        // Description: product.Description,
+        Item_Number: e.Item_Number,
+        CaseCount: product.CaseCount,
+        UOM: product.UOM,
+        Price1: product.Price1,
+        price: price,
+        BaseCost: product.BaseCost,
+        Invoice_Cost: product.Invoice_Cost,
+        hasProductLimit: productLimit ? true : false,
+        productLimit,
+        Inventory_OnHand: inventoryOnHand || 0,
+        allowToOrder,
+        showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
+        showLowStock: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+        showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+        itemInActive,
+        AvgCost: product.AvgCost,
+        NetCost: product.NetCost,
+        isPriceChanged: price != e?.originalPrice,
+        UPCList: product.UPCList,
+        oldPrice: Number(e?.originalPrice),
+        newPrice: price,
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
+        Product: e,
+        hasQtyDiscount: hasQtyDiscount.allowToDiscount,
+        qtyDiscount: hasQtyDiscount,
+      }
+    }))
+    const findTheLimit = await Retailer.findOne({
+      where: {
+        Customer_Number: customerNumber,
+        isActive: true
+      }
+    })
+    const totalItems = cartItems.reduce((sum: any, item: any) => sum + item.Qty, 0);
+    const totalAmount = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPrice), 0);
+    const totalAmountWithTax = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
+    return {
+      finalCartItems,
+      totalItems,
+      totalAmountWithTax,
+      userItemLimitQty: findTheLimit?.maxOrderLimit,
+      userLimitMinOrderAmount: (findTheLimit?.minOrderAmount || 0) - todayTotalAmount,
+      totalAmount
+    };
+  }
+
+
   async addToReturnCart(cartData: AddToCartRequest & { Customer_Number: number }, salesId: number) {
     // Check if item already exists in cart for this customer
     cartData.TotalPrice = Number(cartData.TotalPrice);
@@ -5088,6 +5570,49 @@ console.log(findTheLimit, 'findTheLimit-->22')
       return newCartItem;
     }
   }
+  async addToTradeShowCart(cartData: AddToCartRequest & { Customer_Number: number }, salesId: number) {
+    // Check if item already exists in cart for this customer
+    cartData.TotalPrice = Number(cartData.TotalPrice);
+    cartData.TotalPriceWithTax = Number(cartData.TotalPriceWithTax);
+    cartData.discount = Number(cartData.discount);
+    cartData.originalPrice = Number(cartData.originalPrice);
+    cartData.Qty = Number(cartData.Qty);
+    const existingCartItem = await CustomerCart.findOne({
+      where: {
+        Customer_Number: cartData.Customer_Number,
+        Item_Number: cartData.Item_Number,
+        isActive: true,
+        type: 'tradeShow'
+      }
+    });
+
+    if (existingCartItem) {
+      // Update existing cart item
+      const newQty = existingCartItem.Qty + cartData.Qty;
+      const newTotalPrice = Number(existingCartItem.TotalPrice) + Number(cartData.TotalPrice);
+      const newTotalPriceWithTax = Number(existingCartItem.TotalPriceWithTax) + Number(cartData.TotalPriceWithTax);
+      await existingCartItem.update({
+        Qty: newQty,
+        TotalPrice: newTotalPrice,
+        TotalPriceWithTax: newTotalPriceWithTax,
+        discount: cartData.discount || 0,
+        originalPrice: cartData.originalPrice || 0,
+        TotalprepaidTaxRate: cartData.TotalprepaidTaxRate || 0,
+        prepaidTaxRate: cartData.prepaidTaxRate || 0,
+      });
+
+      return existingCartItem;
+    } else {
+      // Create new cart item
+      const newCartItem = await CustomerCart.create({
+        ...cartData, type: 'tradeShow', placedBySalesPerson: true, salesPersonNumber: salesId,
+        discount: cartData.discount || 0,
+        originalPrice: cartData.originalPrice || 0
+      });
+      return newCartItem;
+    }
+  }
+
 
 
   async getReturnCartItemsByType(customerNumber: number, type: string) {

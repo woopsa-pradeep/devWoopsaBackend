@@ -9073,6 +9073,246 @@ async getAgingReport(filters: {
     }
   }
 
+  async updateBulkTradeShowItems(body: {
+    items: Array<{
+      id: number;
+      tradeShowId?: number;
+      itemNumber?: string;
+      discount?: string;
+      minQuantity?: number;
+      maxQuantity?: number;
+      disType?: "PERCENT" | "FLAT";
+      description?: string;
+      salesCategory?: number;
+      priceClass?: number;
+      vendorId?: number;
+    }>;
+  }) {
+    // Validate items array
+    if (!Array.isArray(body.items) || body.items.length === 0) {
+      throw new AppError('Items array must contain at least one item', 400);
+    }
+
+    if (body.items.length > 100) {
+      throw new AppError('Cannot update more than 100 items at once', 400);
+    }
+
+    // Validate and normalize items
+    const validationErrors: string[] = [];
+    const seen = new Set<number>();
+    const itemIds: number[] = [];
+
+    body.items.forEach((item, index) => {
+      // Check if id exists and is valid
+      if (item.id === undefined || item.id === null) {
+        validationErrors.push(`Item at index ${index}: id is required`);
+        return;
+      }
+
+      const id = Number(item.id);
+      if (!Number.isFinite(id) || id <= 0 || !Number.isInteger(id)) {
+        validationErrors.push(`Item at index ${index}: id must be a valid positive integer`);
+        return;
+      }
+
+      // Check for duplicates in the request
+      if (seen.has(id)) {
+        validationErrors.push(`Item at index ${index}: Item ID ${id} is duplicated in the request`);
+        return;
+      }
+
+      seen.add(id);
+      itemIds.push(id);
+
+      // Only validate fields that are actually being updated
+      // Validate quantity range if both are provided
+      if (item.minQuantity !== undefined && item.maxQuantity !== undefined) {
+        if (item.minQuantity < 0 || item.maxQuantity < 0) {
+          validationErrors.push(`Item at index ${index}: Quantities must be non-negative`);
+        } else if (item.minQuantity > item.maxQuantity) {
+          validationErrors.push(`Item at index ${index}: Minimum quantity must be less than or equal to maximum quantity`);
+        }
+      }
+
+      // Validate individual quantities if only one is provided
+      if (item.minQuantity !== undefined && item.minQuantity < 0) {
+        validationErrors.push(`Item at index ${index}: Minimum quantity must be non-negative`);
+      }
+      if (item.maxQuantity !== undefined && item.maxQuantity < 0) {
+        validationErrors.push(`Item at index ${index}: Maximum quantity must be non-negative`);
+      }
+
+      // Validate discount if provided
+      if (item.discount !== undefined) {
+        const discountValue = parseFloat(item.discount);
+        if (isNaN(discountValue) || discountValue < 0) {
+          validationErrors.push(`Item at index ${index}: Discount must be a valid non-negative number`);
+        }
+        // Note: PERCENT validation will be done after fetching current disType
+      }
+
+      // Validate discount type
+      if (item.disType !== undefined && item.disType !== 'PERCENT' && item.disType !== 'FLAT') {
+        validationErrors.push(`Item at index ${index}: Discount type must be either "PERCENT" or "FLAT"`);
+      }
+    });
+
+    if (validationErrors.length > 0) {
+      throw new AppError(`Validation errors: ${validationErrors.join('; ')}`, 400);
+    }
+
+    // Use transaction for bulk update
+    const transaction = await postgresSequelize.transaction();
+
+    try {
+      // Fetch all items to update
+      const itemsToUpdate = await TradeShowItem.findAll({
+        where: { id: { [Op.in]: itemIds } },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (itemsToUpdate.length !== itemIds.length) {
+        const foundIds = new Set(itemsToUpdate.map(item => item.id));
+        const missingIds = itemIds.filter(id => !foundIds.has(id));
+        throw new AppError(`The following item IDs do not exist: ${missingIds.join(', ')}`, 404);
+      }
+
+      // Create a map for quick lookup
+      const itemMap = new Map(itemsToUpdate.map(item => [item.id, item]));
+
+      // Validate TradeShow exists if any item is updating tradeShowId
+      const tradeShowIdsToCheck = new Set<number>();
+      body.items.forEach(item => {
+        if (item.tradeShowId !== undefined) {
+          tradeShowIdsToCheck.add(item.tradeShowId);
+        } else {
+          const existingItem = itemMap.get(item.id!);
+          if (existingItem) {
+            tradeShowIdsToCheck.add(existingItem.tradeShowId);
+          }
+        }
+      });
+
+      if (tradeShowIdsToCheck.size > 0) {
+        const tradeShows = await TradeShow.findAll({
+          where: { id: { [Op.in]: Array.from(tradeShowIdsToCheck) } },
+          transaction,
+        });
+
+        if (tradeShows.length !== tradeShowIdsToCheck.size) {
+          const foundTradeShowIds = new Set(tradeShows.map(ts => ts.id));
+          const missingTradeShowIds = Array.from(tradeShowIdsToCheck).filter(id => !foundTradeShowIds.has(id));
+          throw new AppError(`The following trade show IDs do not exist: ${missingTradeShowIds.join(', ')}`, 404);
+        }
+      }
+
+      // Update each item - only update fields that are provided
+      const updatePromises = body.items.map(async (itemData) => {
+        const item = itemMap.get(itemData.id!);
+        if (!item) return null;
+
+        // Get current values for cross-field validation
+        const currentMinQuantity = item.minQuantity;
+        const currentMaxQuantity = item.maxQuantity;
+        const currentDisType = item.disType;
+
+        // Validate quantity range with current values (only if both quantities are being checked)
+        const minQuantity = itemData.minQuantity !== undefined ? itemData.minQuantity : currentMinQuantity;
+        const maxQuantity = itemData.maxQuantity !== undefined ? itemData.maxQuantity : currentMaxQuantity;
+
+        // Only validate if at least one quantity is being updated
+        if (itemData.minQuantity !== undefined || itemData.maxQuantity !== undefined) {
+          if (minQuantity < 0 || maxQuantity < 0) {
+            throw new AppError(`Item ID ${itemData.id}: Quantities must be non-negative`, 400);
+          }
+          if (minQuantity > maxQuantity) {
+            throw new AppError(`Item ID ${itemData.id}: Minimum quantity must be less than or equal to maximum quantity`, 400);
+          }
+        }
+
+        // Validate discount with current disType if discount is being updated
+        if (itemData.discount !== undefined) {
+          const discountValue = parseFloat(itemData.discount);
+          if (isNaN(discountValue) || discountValue < 0) {
+            throw new AppError(`Item ID ${itemData.id}: Discount must be a valid non-negative number`, 400);
+          }
+
+          // Use provided disType or current disType for validation
+          const disType = itemData.disType !== undefined ? itemData.disType : currentDisType;
+          if (disType === 'PERCENT' && discountValue > 100) {
+            throw new AppError(`Item ID ${itemData.id}: Percentage discount cannot exceed 100`, 400);
+          }
+        }
+
+        // Build update data - only include fields that are explicitly provided (not undefined)
+        const updateData: any = {};
+        if (itemData.tradeShowId !== undefined && itemData.tradeShowId !== null) {
+          updateData.tradeShowId = itemData.tradeShowId;
+        }
+        if (itemData.itemNumber !== undefined && itemData.itemNumber !== null) {
+          updateData.itemNumber = itemData.itemNumber;
+        }
+        if (itemData.discount !== undefined && itemData.discount !== null) {
+          updateData.discount = itemData.discount;
+        }
+        if (itemData.minQuantity !== undefined && itemData.minQuantity !== null) {
+          updateData.minQuantity = itemData.minQuantity;
+        }
+        if (itemData.maxQuantity !== undefined && itemData.maxQuantity !== null) {
+          updateData.maxQuantity = itemData.maxQuantity;
+        }
+        if (itemData.disType !== undefined && itemData.disType !== null) {
+          updateData.disType = itemData.disType;
+        }
+        if (itemData.description !== undefined && itemData.description !== null) {
+          updateData.description = itemData.description;
+        }
+        if (itemData.salesCategory !== undefined && itemData.salesCategory !== null) {
+          updateData.salesCategory = itemData.salesCategory;
+        }
+        if (itemData.priceClass !== undefined && itemData.priceClass !== null) {
+          updateData.priceClass = itemData.priceClass;
+        }
+        if (itemData.vendorId !== undefined && itemData.vendorId !== null) {
+          updateData.vendorId = itemData.vendorId;
+        }
+
+        // Only update if there are fields to update
+        if (Object.keys(updateData).length > 0) {
+          await item.update(updateData, { transaction });
+        }
+
+        // Reload to get updated values
+        await item.reload({ transaction });
+        return item;
+      });
+
+      const updatedItems = await Promise.all(updatePromises);
+      const successfulUpdates = updatedItems.filter(item => item !== null);
+
+      await transaction.commit();
+
+      return {
+        success: true,
+        count: successfulUpdates.length,
+        items: successfulUpdates,
+      };
+    } catch (error: any) {
+      await transaction.rollback();
+
+      if (error instanceof AppError) {
+        throw error;
+      }
+
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new AppError('One or more item numbers already exist for their respective trade shows', 409);
+      }
+
+      throw new AppError(`Failed to update trade show items: ${error.message}`, 500);
+    }
+  }
+
   async deleteTradeShowItem(id: number) {
     const tradeShowItem = await TradeShowItem.findByPk(id);
 
@@ -9450,11 +9690,11 @@ async getAgingReport(filters: {
         return;
       }
 
-      // Validate V_Description
-      if (!vendor.V_Description || typeof vendor.V_Description !== 'string' || vendor.V_Description.trim() === '') {
-        validationErrors.push(`Vendor at index ${index}: V_Description is required and must be a non-empty string`);
-        return;
-      }
+      // // Validate V_Description
+      // if (!vendor.V_Description || typeof vendor.V_Description !== 'string' || vendor.V_Description.trim() === '') {
+      //   validationErrors.push(`Vendor at index ${index}: V_Description is required and must be a non-empty string`);
+      //   return;
+      // }
 
       seen.add(id);
       normalizedVendors.push({
@@ -10774,19 +11014,31 @@ async getInventoryAsPerTradeWeek(query:any) {
       ...whereCondition,
     },
     attributes: ['itemNumber','startDate','endDate'],
-    include: [
-      {
-        model: TradeShowItem,
-        as: 'item',
-        attributes: ['description','salesCategory','priceClass'],
-      },
-    ],
+    
+    
     limit,
     offset,
   })
 
+
+  const finalData = await Promise.all(
+    tradeShowItem.map(async (item: any) => {
+      const inventory = await Inventory.findOne({
+        where: {
+          Item_Number: Number(item.itemNumber),
+
+        },
+        attributes: ['Item_Number', 'Description', 'Pack', 'UOM', 'Retail1', 'Retail2', 'Retail3'],
+      });
+      return {
+        ...item.toJSON(),
+        inventory: inventory ? inventory.toJSON() : null,
+      };
+    })
+  );
+
  
-    return{ data: tradeShowItem, total: total, page, limit, totalPages: Math.ceil(total / limit) };
+    return{ data: finalData, total: total, page, limit, totalPages: Math.ceil(total / limit) };
   
 }
 
@@ -10830,7 +11082,46 @@ async getTradeShowSummary(id:number,query:any) {
     attributes: ['Primary_Vendor', 'V_Description','V_Email','V_Phone','V_Addr1','V_City','V_State','V_Zip','V_Fax','V_Status'],
   });
 
-  return { data: deliveryProducts, vendors: vendors, total: total, page, limit, totalPages: Math.ceil(total / limit),tradeShow: tradeShow};
+  const tradeShowItemDeliveryWeeks = await TradeShowDeliveryProduct.findAll({
+    where: {
+      tradeShowId: id,
+    },
+    attributes: [
+      'weekNumber',
+      [fn('COUNT', col('id')), 'count']
+    ],
+    group: ['weekNumber'],
+    order: [['weekNumber', 'ASC']],
+    raw: true,
+  });
+
+  // Format the week-wise counts
+  const weekWiseCounts = tradeShowItemDeliveryWeeks.map((week: any) => ({
+    weekNumber: week.weekNumber,
+    count: Number(week.count) || 0
+  }));
+
+  const retails= await TradeShowRetailer.findAndCountAll({
+    where: {
+      tradeShowId: id,
+    },
+    attributes: ['retailerId','retailerName'],
+    order: [['createdAt', 'DESC']],
+    limit,
+    offset,
+  });
+
+  return { 
+    data: deliveryProducts, 
+    vendors: vendors, 
+    total: total, 
+    retails: retails,
+    page, 
+    limit, 
+    totalPages: Math.ceil(total / limit),
+    tradeShow: tradeShow,
+    weekWiseCounts: weekWiseCounts
+  };
 }
 
 async getTradeShowItemList(id:number,query:any) {
@@ -10922,7 +11213,7 @@ async deleteBulkTradeShowItems(body: {
     throw new AppError('Item IDs array must contain at least one item', 400);
   }
   await TradeShowItem.destroy({
-    where: { tradeShowId: tradeShow.id, id: { [Op.in]: itemIds } },
+    where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemIds } },
   });
 
   await TradeShowDeliveryProduct.destroy({
@@ -10969,6 +11260,9 @@ async deleteBulkTradeShowRetailers(body: {
   });
   return { success: true, message: 'TradeShowRetailer deleted successfully' };
 }
+
+
+
 
 
 

@@ -1890,6 +1890,27 @@ export async function getCustomerExcludeItem(
   return rows.map((r :any)=> Number(r.Item_Number));
 }
 
+
+export async function getCustomerExcludeItemForTradeShow(
+  state: string,
+  zip: string,
+  jurisdiction: number
+) {
+  const rows = await Inventory_ExcludeState.findAll({
+    where: {
+      [Op.or]: [
+        { C_State: state },
+        { C_Zip: zip },
+        { Jurisdiction_State: jurisdiction }
+      ]
+    },
+    attributes: ["Item_Number"],   // return only Item_Number
+    raw: true                      // return plain objects
+  });
+
+  // convert array of objects → array of Item_Number
+  return rows.map((r :any)=> String(r.Item_Number));
+}
 export async function excludeItemByUser(userId: number){
   const excludeItem = await CustAuthorized.findAll({
     where: {
@@ -1900,6 +1921,20 @@ export async function excludeItemByUser(userId: number){
   })
   if(excludeItem.length > 0){
     return excludeItem.map((item: any) => Number(item.Item_Number));
+  }
+  return [];
+}
+
+export async function excludeItemByUserInTradeShow(userId: number){
+  const excludeItem = await CustAuthorized.findAll({
+    where: {
+      C_Number: userId,
+      Item_Option: 99
+    },
+    attributes: ['Item_Number'],
+  })
+  if(excludeItem.length > 0){
+    return excludeItem.map((item: any) => String(item.Item_Number));
   }
   return [];
 }

@@ -44,7 +44,8 @@ TradeShowVendor.init(
     },
     vendorName: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
+      defaultValue: '',
     },
   },
   {

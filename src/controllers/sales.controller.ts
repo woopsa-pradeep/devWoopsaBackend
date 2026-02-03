@@ -48,9 +48,18 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async placeTradeShowOrder(req: AuthRequest, res: Response) {
+        const data = await this.salesService.placeTradeShowOrder(req.body, req, req.params.customerId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 
     async getReturnCartItems(req: AuthRequest, res: Response) {
         const data = await this.salesService.getReturnCartItems(Number(req.params.customerId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getTradeShowCartItems(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getTradeShowCartItems(Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -114,12 +123,22 @@ export class SalesController {
         const data = await this.salesService.clearCart(Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async clearTradeShowCart(req: AuthRequest, res: Response) {
+        const data = await this.salesService.clearTradeShowCart(Number(req.params.customerId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
     async updateCartItem(req: AuthRequest, res: Response) {
         const data = await this.salesService.updateCartItem(Number(req.params.cartItemId), req.body);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
     async removeFromCart(req: AuthRequest, res: Response) {
         const data = await this.salesService.removeFromCart(Number(req.params.cartItemId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async removeFromTradeShowCart(req: AuthRequest, res: Response) {
+        const data = await this.salesService.removeFromTradeShowCart(Number(req.params.cartItemId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
     async addToCart(req: AuthRequest, res: Response) {
@@ -158,6 +177,24 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+
+    async addToTradeShowCart(req: AuthRequest, res: Response) {
+
+        const cartData = {
+            ...req.body,
+            Customer_Number: req.params.customerId,
+            Tax_Rate: req.body.Tax_Rate,
+            Price_With_Tax: req.body.Price_With_Tax,
+            placedBySalesPerson: true,
+            salesPersonNumber: Number(req.user.id),
+            originalPrice: req.body.originalPrice || 0,
+            discount: req.body.discount || 0,
+            TotalprepaidTaxRate: req.body.TotalprepaidTaxRate || 0,
+            prepaidTaxRate: req.body.prepaidTaxRate || 0,
+        };
+        const data = await this.salesService.addToTradeShowCart(cartData, Number(req.user.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 
     async addToCartByType(req: AuthRequest, res: Response) {
 

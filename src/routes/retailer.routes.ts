@@ -26,6 +26,7 @@ const retailerController = new RetailerController();
 
 router.get('/getNewItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getNewItems.bind(retailerController)));
 router.post('/getInventory',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getInventoryItems.bind(retailerController)));
+router.post('/getTradeShowItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getTradeShowItems.bind(retailerController)));
 router.get('/getInventoryShowPrepaidTax', verifyRole(ROLES.RETAILER),catchAsync(retailerController.getInventoryShowPrepaidTax.bind(retailerController)));
 
 router.get('/getAllInventoryData',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getAllInventoryData.bind(retailerController)));
@@ -66,6 +67,33 @@ router.post('/cart/removeMultipleItems',
   catchAsync(retailerController.removeMultipleItemsFromCart.bind(retailerController))
 );
 
+
+
+// Trade Show Cart CRUD Routes
+router.post('/tradeShow/add', 
+  verifyRole(ROLES.RETAILER), 
+  validateRequest(addToCartValidation),
+  catchAsync(retailerController.addToTradeShowCart.bind(retailerController))
+);
+router.get('/tradeShow/items', 
+  verifyRole(ROLES.RETAILER), 
+  catchAsync(retailerController.getTradeShowCartItems.bind(retailerController))
+);
+router.put('/tradeShow/items/:id', 
+  verifyRole(ROLES.RETAILER), 
+  validateRequest(updateCartItemValidation),
+  catchAsync(retailerController.updateTradeShowCartItem.bind(retailerController))
+);
+router.delete('/tradeShow/items/:id', 
+  verifyRole(ROLES.RETAILER), 
+  catchAsync(retailerController.removeFromTradeShowCart.bind(retailerController))
+);
+router.delete('/tradeShow/clear', 
+  verifyRole(ROLES.RETAILER), 
+  catchAsync(retailerController.clearTradeShowCart.bind(retailerController))
+);  
+
+
 router.get('/cart/items/:id', 
   verifyRole(ROLES.RETAILER), 
   catchAsync(retailerController.getCartItemById.bind(retailerController))
@@ -82,6 +110,11 @@ router.post('/placeOrder',
   verifyRole(ROLES.RETAILER), 
   validateRequest(placeOrderSchema),
   catchAsync(retailerController.placeOrder.bind(retailerController))
+);
+router.post('/placeTradeShowOrder', 
+  verifyRole(ROLES.RETAILER), 
+  validateRequest(placeOrderSchema),
+  catchAsync(retailerController.placeTradeShowOrder.bind(retailerController))
 );
   router.get('/orderHistoryByProductNumber/:id', 
   verifyRole(ROLES.RETAILER), 

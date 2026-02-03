@@ -27,6 +27,11 @@ export class RetailerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getTradeShowItems(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.getTradeShowItems(req.body,req.user);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async getInventoryShowPrepaidTax(req: AuthRequest, res: Response) {
   const data = await this.retailerService.getInventoryShowPrepaidTax(req.user);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -82,6 +87,30 @@ export class RetailerController {
     sendResponse(res, 201, true, data, "Item added to cart successfully");
   }
 
+  async addToTradeShowCart(req: AuthRequest, res: Response) {
+    const cartData = {
+      ...req.body,
+      Customer_Number: req.user.id,
+      Tax_Rate: req.body.Tax_Rate,
+      Price_With_Tax: req.body.Price_With_Tax || 0,
+      TotalprepaidTaxRate: req.body.TotalprepaidTaxRate || 0,
+      prepaidTaxRate: req.body.prepaidTaxRate || 0,
+    };
+    const data = await this.retailerService.addToTradeShowCart(cartData);
+    sendResponse(res, 201, true, data, "Item added to trade show cart successfully");
+  }
+
+  async getTradeShowCartItems(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.getTradeShowCartItems(req.user.id);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async updateTradeShowCartItem(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+    const data = await this.retailerService.updateTradeShowCartItem(Number(id), req.body);
+    sendResponse(res, 200, true, data, "Trade show cart item updated successfully");
+  }
+
   async getCartItems(req: AuthRequest, res: Response) {
     const data = await this.retailerService.getCartItems(req.user.id);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -98,9 +127,18 @@ export class RetailerController {
     const data = await this.retailerService.removeFromCart(Number(id));
     sendResponse(res, 200, true, data, data.message);
   }
+  async removeFromTradeShowCart(req: AuthRequest, res: Response) {
+    const { id } = req.params;
+    const data = await this.retailerService.removeFromTradeShowCart(Number(id));
+    sendResponse(res, 200, true, data, data.message);
+  }
 
   async clearCart(req: AuthRequest, res: Response) {
     const data = await this.retailerService.clearCart(req.user.id);
+    sendResponse(res, 200, true, data, data.message);
+  }
+  async clearTradeShowCart(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.clearTradeShowCart(req.user.id);
     sendResponse(res, 200, true, data, data.message);
   }
 
@@ -121,6 +159,11 @@ export class RetailerController {
   }
   async placeOrder(req: AuthRequest, res: Response) {
     const data = await this.retailerService.placeOrder(req.body, req);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async placeTradeShowOrder(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.placeTradeShowOrder(req.body, req);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
   async getOrderHistoryByProductNumber(req: AuthRequest, res: Response) {
