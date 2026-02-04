@@ -1134,6 +1134,8 @@ export async function hasDiscountedItem(
 }
 
 
+
+
 export function checkTimeOut(isTImeOut: string) {
   const currentTimeUTC = moment.utc();
   const isTimeOutMoment = moment.utc(isTImeOut, 'HH:mm:ss');
@@ -2044,4 +2046,26 @@ export async function getAllowedSalesCategories(customerNumber: number) {
  
 
   return   retrunSalesCategories ;
+}
+
+export function getDiscountedPrice(price: number, discount: number, disType: string) {
+  const originalPrice = Number(price);
+  const discountValue = Number(discount);
+
+  if (isNaN(originalPrice) || isNaN(discountValue)) {
+    throw new Error("Invalid price or discount");
+  }
+
+  let finalPrice = originalPrice;
+
+  if (disType === "FLAT") {
+    finalPrice = originalPrice - discountValue;
+  } else if (disType === "PERCENT") {
+    finalPrice = originalPrice - (originalPrice * discountValue) / 100;
+  } else {
+    throw new Error("Invalid disType. Use 'FLAT' or 'PERSENT'");
+  }
+
+  // Avoid negative values & return 2 decimals
+  return Number(Math.max(finalPrice, 0).toFixed(2));
 }

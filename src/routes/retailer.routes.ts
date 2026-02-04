@@ -75,7 +75,7 @@ router.post('/tradeShow/add',
   validateRequest(addToCartValidation),
   catchAsync(retailerController.addToTradeShowCart.bind(retailerController))
 );
-router.get('/tradeShow/items', 
+router.get('/tradeShow/items/:id', 
   verifyRole(ROLES.RETAILER), 
   catchAsync(retailerController.getTradeShowCartItems.bind(retailerController))
 );
@@ -133,6 +133,8 @@ router.post('/orderedProducts',
   catchAsync(retailerController.
     getOrderedProducts.bind(retailerController))
 );
+
+
 router.get('/orderDeliveryStatus/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getOrderDeliveryStatus.bind(retailerController)));
 router.get('/scanItemByBarcode/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.scanItemByBarcode.bind(retailerController)));
 router.post('/cart/addMultipleItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.addMultipleItems.bind(retailerController)));
@@ -227,7 +229,12 @@ router.put('/retailer-documents/:id',verifyRole(ROLES.RETAILER),catchAsync(retai
 router.delete('/retailer-documents/:id',verifyRole(ROLES.RETAILER),catchAsync(retailerController.deleteRetailerDocuments.bind(retailerController)));
 router.post('/retailer-documents',verifyRole(ROLES.RETAILER),validateRequest(createRetailerDocumentsSchema),catchAsync(retailerController.createRetailerDocuments.bind(retailerController)));
 
+// trade show
+router.get('/tradeShow',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getTradeShow.bind(retailerController)));
+
 // upload images
 router.post('/uploadImages',verifyRole(ROLES.RETAILER),multerUpload.single('image'),catchAsync(retailerController.uploadImages.bind(retailerController)));
+
+
 
 export default router; 

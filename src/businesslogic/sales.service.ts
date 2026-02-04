@@ -2,7 +2,7 @@ import { IChangePassword } from "../interfaces/request.body.interface";
 import { SalesRep } from "../models/mmsql/salesrep.model"
 import { WebUsers } from "../models/postgres/users.model"
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, comparePassword, excludeItemByUser, generatePDFFromHTML, getAllowedSalesCategories, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP, toNum } from "../utils/helper";
+import { checkQtyDiscount, comparePassword, excludeItemByUser, excludeItemByUserInTradeShow, generatePDFFromHTML, getAllowedSalesCategories, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getCustomerExcludeItemForTradeShow, getDiscount, getDiscountedPrice, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP, toNum } from "../utils/helper";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { col, literal, Op, Order, Sequelize } from "sequelize";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
@@ -48,6 +48,9 @@ import { OrderPick } from "../models/postgres/epickOrder.model";
 import { generateRandomBarCode } from "../utils/barCodeGenerate";
 import { DriverPickupOrder } from "../models/postgres/driverPickerOrder.model";
 import { ContactUs } from "../models/postgres/contactUs.model";
+import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
+import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
+import { TradeShow } from "../models/postgres/tradeShow.model";
 
 export class SalesService {
 
@@ -1610,6 +1613,394 @@ orderClause = [
     };
   }
 
+
+  async getTradeShowItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] ,tradeShowId} = query;
+
+    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+      salesCategoryId = salesCategoryId.map(id => Number(id));
+    }
+
+    if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      priceClassId = priceClassId.map(id => Number(id));
+    }
+
+    const userJurisdiction = await getJurisdiction(Number(customerId));
+
+    let wareHouseSetting: any = await Setting.findOne({});
+    wareHouseSetting = wareHouseSetting?.dataValues || null;
+
+    page = Number(page);
+    limit = Number(limit);
+
+    let whereClause: any = {
+      
+    };
+
+    const excludeItem = await excludeItemByUserInTradeShow(Number(customerId));
+    if (excludeItem.length > 0) {
+      whereClause.itemNumber = { [Op.notIn]: excludeItem };
+    }
+    if (state || zip || jurisdiction) {
+      const excludeItem = await getCustomerExcludeItemForTradeShow(state as string, zip as string, Number(jurisdiction) as number);
+      whereClause.itemNumber = { [Op.notIn]: excludeItem };
+    }
+
+
+
+    let searchInUPC = false;
+     let orderClause: Order = [['createdAt', 'DESC'] as const];
+
+    if (masterSearch && typeof masterSearch === 'string') {
+      let  masterArray = masterSearch.split(',').map(i => i.trim());
+      masterArray = masterArray.map(i => String(i));
+      whereClause.itemNumber = { [Op.in]: masterArray };
+
+      if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        whereClause.salesCategory = { [Op.in]: salesCategory };
+      }
+    } else {
+
+      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Both filters exist → use OR condition
+        whereClause = {
+          salesCategory: { [Op.in]: salesCategoryId },
+          priceClass: { [Op.in]: priceClassId }
+        };
+
+        console.log(salesCategoryId, 'salesCategoryId', priceClassId, 'priceClassId', 'both filters exist')
+      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+        // Only Sales_Category filter
+        whereClause.salesCategory = { [Op.in]: salesCategoryId };
+      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Only Price_Class filter
+        whereClause.priceClass = { [Op.in]: priceClassId };
+      }
+
+
+      if (search) {
+        if (/^\d{8,}$/.test(search)) {
+          searchInUPC = true;
+        } else {
+          let globalSearch: any = await Setting.findOne({});
+          globalSearch = globalSearch?.dataValues || null;
+      
+          const term = search.toLowerCase().trim();
+          const anywhere = `%${term}%`;
+          const starts = `${term}%`;
+      
+          if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+            whereClause.salesCategory = { [Op.in]: salesCategory };
+          }
+      
+          // WHERE stays same (your "global" WHERE is already global across these fields)
+          whereClause[Op.or] = [
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: anywhere }),
+            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: anywhere }),
+            
+          ];
+      
+          // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
+          const esc = (s: string) => s.replace(/'/g, "''");
+const startsEsc = esc(starts);
+const anywhereEsc = esc(anywhere);
+      console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
+          // If globalSearchOption = true => rank matches across all fields
+          if ( globalSearch?.splitSearchOption === true) {
+            const term = search.toLowerCase().trim();
+            const tokens = term.split(/\s+/).filter(Boolean);
+          
+            // remove the "full-term" OR, otherwise it kills split search results
+            delete whereClause[Op.or];
+          
+            // Each token must match the start of ANY word in ANY of these fields
+            whereClause[Op.and] = tokens.map((tok) => {
+              const startsWord = `${tok}%`;
+              const insideWord = `% ${tok}%`;
+          
+              return {
+                [Op.or]: [
+                  // Description
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: insideWord }),
+          
+                  // Item_Number (no spaces usually, but keep it)
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: startsWord }),
+                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: insideWord }),
+                ],
+              };
+            });
+
+       
+
+// build rank across ALL tokens (sum). lower total = better match.
+const rankSql = tokens
+  .map((tok) => {
+    const startsWord = `%${tok}%`;     // 'mar%'
+    const insideWord = `% ${tok}%`;   // '% mar%'
+    const anywhere   = `%${tok}%`;    // '%mar%'
+
+    // Put your searchable fields here (same as whereClause)
+    const fields = ["description", "itemNumber"];
+
+    const startsAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
+      .join(" OR ");
+
+    const wordStartAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
+      .join(" OR ");
+
+    const containsAny = fields
+      .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
+      .join(" OR ");
+
+    return `(CASE
+      WHEN (${startsAny}) THEN 0
+      WHEN (${wordStartAny}) THEN 1
+      WHEN (${containsAny}) THEN 2
+      ELSE 3
+    END)`;
+  })
+  .join(" + ");
+
+// order: best rank first, then Description
+orderClause = [
+  [literal(rankSql), "ASC"],
+  [col("description"), "ASC"],
+] as Order;
+          
+            // optional: order by Description
+          }
+          
+          else {
+            // Your existing rule (Description-first)
+            orderClause = [
+              [
+                Sequelize.literal(`
+                  CASE 
+                    WHEN LOWER("description") LIKE '${startsEsc}' THEN 0
+                    WHEN LOWER("description") LIKE '${anywhereEsc}' THEN 1
+                    ELSE 2
+                  END
+                `),
+                "ASC",
+              ],
+              ["description", "ASC"],
+            ];
+          }
+        }
+      }
+
+    }
+
+    if (searchInUPC) {
+      if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        whereClause.salesCategory = { [Op.in]: salesCategory };
+      }
+    }
+
+
+    // === UPC JOIN logic ===
+    // const includeUPC = {
+    //   model: InventoryUPC,
+    //   as: 'UPCList',
+    //   attributes: ['UPC_Number'],
+    //   where: {
+    //     Status: 0,
+    //     ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {})
+    //   },
+    //   required: searchInUPC
+    // };
+
+
+    
+
+    if(!search){
+     if (Number(shortBy) === 1) {
+      orderClause = [[col('description'), 'ASC']] as Order;
+    } else if (Number(shortBy) === 2) {
+      orderClause = [[col('description'), 'DESC']] as Order;
+    } 
+  }
+
+
+    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
+
+    // if (shortBy && Number(shortBy) === 1) {
+    //   orderClause = [[col('Description'), 'ASC']];
+    // }
+
+    // if (shortBy && Number(shortBy) === 2) {
+    //   orderClause = [[col('Description'), 'DESC']];
+    // }
+
+    let totalCount = 0;
+
+    if (searchInUPC) {
+      // const counted = await Inventory.findAll({
+      //   attributes: ['Item_Number'],
+      //   where: whereClause,
+      //   include: [
+      //     {
+      //       ...includeUPC,
+      //       attributes: []
+      //     }
+      //   ],
+      //   group: ['Inventory.Item_Number'],
+      //   raw: true,
+      //   logging: false
+      // });
+
+      // totalCount = counted.length;
+    } else {
+      totalCount = await TradeShowItem.count({
+
+        where: {...whereClause,tradeShowId:tradeShowId},
+        logging: false
+      });
+    }
+    const topLatestItems = await getTopLatestItems();
+    const productList = await TradeShowItem.findAll({
+      attributes: [
+        'description', 'itemNumber', 'discount', 'minQuantity', 'maxQuantity', 'disType'
+      ],
+      where: {...whereClause, tradeShowId:tradeShowId},
+    
+      order: orderClause,
+      limit,
+      offset: (page - 1) * limit,
+      logging: console.log,
+    });
+
+    const itemNumbers = productList.map(e => e.itemNumber);
+    // const otpNumbers = productList.map(e => e.OTP_Number);
+
+    const productImages = await ProductImage.findAll({
+      where: {
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
+      }
+    });
+
+    const customer = await Customer.findOne({
+      where: {
+        C_Number: Number(customerId)
+      },
+      attributes:['C_PricingAccount']
+    });
+
+    let userId = Number(customerId);
+    if(customer){
+      userId = customer?.dataValues.C_PricingAccount || Number(customerId);
+    }
+    const imageMap = new Map(productImages.map(img => [img.product_number, img]));
+    const discountMap = await getDiscountsForItemNumbers(itemNumbers.map(Number), userId);
+
+    // === Final mapping ===
+    const finalProductList = await Promise.all(productList.map(async (e: any) => {
+      let findProduct: any = await Inventory.findOne({
+        where: {
+          Item_Number: Number(e.itemNumber)
+        },
+        attributes: [
+          'Item_Number',
+          'Description',
+          'Pack',
+          'UOM',
+          'Retail1',
+          'Retail2',
+          'Retail3',
+          'CasesPerPallet',
+          'EBT',
+          'UnitOunces',
+          'OTP_Number',
+          'Price_Subclass',
+          'Sales_Category',
+        ],
+        include: [
+          {
+            model: InventoryUPC,
+            as: 'UPCList',
+            attributes: ['UPC_Number'],
+            required: false
+          },
+          {
+            model: SalesCategory,
+            as: 'SalesCategory',
+            attributes: ['Category_Desc', 'Sales_Category'],
+            required: false
+          },
+          {
+            model: PriceClass,
+            as: 'PriceClass',
+            attributes: ['Class_Desc'],
+            required: false
+          }
+        ]
+      });
+
+console.log(e,'trade show item')
+let tradeShowItem = e.dataValues
+
+      if(!findProduct){
+        throw new AppError("Product not found", 404);
+      }
+findProduct = findProduct?.dataValues || null;
+      const itemStr = e.itemNumber.toString();
+      const productImage = imageMap.get(itemStr) || null;
+      const inventoryOnHand = await getInventoryOnHand(Number(e.itemNumber)) || 0;
+
+      let price = discountMap[Number(e.itemNumber)] ?? await getFirstValidPrice(findProduct as any);
+      const isDiscounted = await hasDiscountedItem(Number(e.itemNumber), findProduct?.Price_Subclass ?? 0);
+      // price = Math.ceil(price * 100) / 100;
+      price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
+      const productLimit = await getProductLimit(Number(e.itemNumber));
+      let taxRate = await getTaxRateV1(Number(findProduct?.OTP_Number), userJurisdiction as number, Number(e.itemNumber), price);
+      taxRate = Math.ceil(taxRate * 100) / 100;
+
+      let prepaidTaxRate = 0
+      if (userJurisdiction != null && findProduct?.Sales_Category) {
+
+        console.log(findProduct?.Sales_Category, 'findProduct?.Sales_Category')
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category));
+      }
+
+
+
+      return {
+       
+        isDiscounted,
+        ...findProduct,
+       
+        Tax_Rate: taxRate,
+        ...tradeShowItem,
+        price,
+        Inventory_OnHand:inventoryOnHand,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
+        priceWithTax: price + taxRate,
+       
+        hasProductLimit: productLimit ? true : false,
+        productLimit,
+       
+        
+      
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+      };
+    }));
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      finalProductList
+    };
+  }
+
   async getInventoryShowPrepaidTax(user: any) {
     const setting = await Setting.findOne({
       where: { showWithPerpaidTax: true },
@@ -2033,6 +2424,17 @@ orderClause = [
       if (userJurisdiction != null && product.Sales_Category) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
       }
+      let priceChange = false;
+
+      const p1 = Number(price.toFixed(2));
+      const p2 = Number(Number(e?.originalPrice).toFixed(2));
+
+if (p1 !== p2) {
+  priceChange = true;
+}
+
+
+     
 
       return {
 
@@ -2066,7 +2468,7 @@ orderClause = [
         itemInActive,
         AvgCost: product.AvgCost,
         NetCost: product.NetCost,
-        isPriceChanged: price != e?.originalPrice,
+        isPriceChanged: priceChange,
         UPCList: product.UPCList,
         oldPrice: Number(e?.originalPrice),
         newPrice: price,
@@ -2160,6 +2562,22 @@ console.log(findTheLimit, 'findTheLimit-->22')
     return cartItem;
   }
 
+  async updateTradeShowCartItem(cartItemId: number, updateData: UpdateCartItemRequest) {
+    const cartItem = await CustomerCart.findByPk(cartItemId);
+
+    if (!cartItem) {
+      throw new AppError("Cart item not found", 404);
+    }
+
+    if (!cartItem.isActive) {
+      throw new AppError("Cart item is inactive", 400);
+    }
+
+    await cartItem.update(updateData);
+    return cartItem;
+  }
+
+
   async removeFromCart(cartItemId: number): Promise<CartResponse> {
     const cartItem = await CustomerCart.findByPk(cartItemId);
 
@@ -2231,7 +2649,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
     else {
       storeDetail = await SalesSession.create({ userId: userId, currentCustomerId: customerId });
     }
-    const store = await Customer.findOne({
+    const store :any = await Customer.findOne({
       where: { C_Number: customerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'Jurisdiction_State', 'C_Phone', 'LastBalance', 'C_Salesman', 'C_Name', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
       include: [
         {
@@ -2246,6 +2664,12 @@ console.log(findTheLimit, 'findTheLimit-->22')
         }
       ],
     });
+    const isTradeShow = await TradeShowRetailer.findOne({ where: { retailerId: Number(customerId) } });
+    let showTradeShow = false;
+    if (isTradeShow) {
+      showTradeShow = true;
+    }
+    store.dataValues.showTradeShow = showTradeShow;
     console.log(store, 'strore -->')
     return store
   }
@@ -7254,5 +7678,15 @@ console.log(findTheLimit, 'findTheLimit-->22')
       salesRep: salesRep?.dataValues,
       contact: contact?.dataValues
     }
+  }
+
+  async getTradeShow() {
+    const tradeShow = await TradeShow.findOne({
+      where: {
+        status: 'active',
+        isActive: true
+      }
+    });
+    return tradeShow;
   }
 }

@@ -22,6 +22,7 @@ const router = Router();
  router.get('/loginDevice',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(managerController.getRetailerLoginDevice.bind(managerController)));
  router.get('/customerList',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(managerController.getCustomerList.bind(managerController)));
  router.post('/productList',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(managerController.getProductList.bind(managerController)));
+ router.post('/productListWithTax',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(managerController.getProductListWithTax.bind(managerController)));
  router.post('/uploadProductImage',verifyRole(ROLES.MANAGER,ROLES.SALES),multerUpload.single('image'),validateRequest(uploadProductImageSchema),catchAsync(managerController.uploadProductImage.bind(managerController)));
  router.put('/updateProductImage/:id',verifyRole(ROLES.MANAGER,ROLES.SALES),multerUpload.single('image'),validateRequest(uploadProductImageSchema),catchAsync(managerController.updateProductImage.bind(managerController)));
  router.post('/createBanner',verifyRole(ROLES.MANAGER,ROLES.SALES),multerUpload.single('image_url'),catchAsync(managerController.createBanner.bind(managerController)));

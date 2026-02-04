@@ -81,6 +81,12 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+
+    async getTradeShowItems(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getTradeShowItems(req.body as PaginationOptions & { search?: string, masterSearch?: string }, Number(req.params.customerId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async getInventoryShowPrepaidTax(req: AuthRequest, res: Response) {
       const data = await this.salesService.getInventoryShowPrepaidTax(req.user);
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -130,6 +136,12 @@ export class SalesController {
     }
     async updateCartItem(req: AuthRequest, res: Response) {
         const data = await this.salesService.updateCartItem(Number(req.params.cartItemId), req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+
+    async updateTradeShowCartItem(req: AuthRequest, res: Response) {
+        const data = await this.salesService.updateTradeShowCartItem(Number(req.params.cartItemId), req.body);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
     async removeFromCart(req: AuthRequest, res: Response) {
@@ -512,6 +524,11 @@ export class SalesController {
 
     async getDistributorContactDetails(req: AuthRequest, res: Response) {
         const data = await this.salesService.getDistributorContactDetails(Number(req.params.id));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getTradeShow(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getTradeShow();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 }

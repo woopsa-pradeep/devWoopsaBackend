@@ -28,6 +28,7 @@ router.post('/placeTradeShowOrder/:customerId',verifyRole(ROLES.CHECKER, ROLES.S
 
 router.post('/returnPlaceOrder/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.returnPlaceOrder.bind(listController)));
 router.post('/getInventoryItems/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getInventoryItems.bind(listController)));
+router.post('/getTradeShowItems/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getTradeShowItems.bind(listController)));
 router.get('/getInventoryShowPrepaidTax', verifyRole(ROLES.SALES),catchAsync(listController.getInventoryShowPrepaidTax.bind(listController)));
 router.post('/getInventoryItemsBySalesMan/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.getInventoryItemsBySalesMan.bind(listController)));
 
@@ -36,6 +37,7 @@ router.delete('/cartItem/:cartItemId',verifyRole(ROLES.CHECKER, ROLES.SALES),ver
 router.delete('/clearCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.clearCart.bind(listController)));
 router.delete('/clearTradeShowCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.clearTradeShowCart.bind(listController)));
 router.put('/cartItem/:cartItemId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.updateCartItem.bind(listController)));
+router.put('/updateTradeShowCartItem/:cartItemId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.updateTradeShowCartItem.bind(listController)));
 router.post('/addToCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.addToCart.bind(listController)));
 router.delete('/removeFromTradeShowCart/:cartItemId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.removeFromTradeShowCart.bind(listController)));
 router.post('/addToReturnCart/:customerId',verifyRole(ROLES.CHECKER, ROLES.SALES),verifySalesSession,catchAsync(listController.addToReturnCart.bind(listController)));
@@ -123,5 +125,7 @@ router.get('/orderHistoryByProductNumber',
   router.put('/updateSalesCategory/:id',verifyRole(ROLES.MANAGER, ROLES.SALES),catchAsync(listController.updateSalesCategory.bind(listController)));
 
   router.get('/getDistributorContactDetails/:id',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.getDistributorContactDetails.bind(listController)));
+
+  router.get('/getTradeShow',verifyRole(ROLES.CHECKER, ROLES.SALES),catchAsync(listController.getTradeShow.bind(listController)));
 
  export default router;

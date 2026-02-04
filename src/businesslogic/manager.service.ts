@@ -21,7 +21,7 @@ import { Users } from "../models/mmsql/user.model"
 import { CustReceivables } from "../models/mmsql/custReceivables.model";
 import { Token } from "../models/postgres/token.model";
 import { Retailer } from "../models/postgres/retailer.model";
-import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getTaxRateV1, hashPassword, hasPriceChange, pgArrayToJsArray, sendEmailToMarketing, toNum } from "../utils/helper";
+import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getTaxRateV1, hashPassword, hasPriceChange, pgArrayToJsArray, sendEmailToMarketing, toNum } from "../utils/helper";
 import { generateNewCredentialsEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
 import { sendDistributorEmail, sendEmail } from "../utils/sendMail";
 import { WebUsers } from "../models/postgres/users.model";
@@ -789,6 +789,250 @@ export class ManagerService {
 
     
     
+
+
+      return {
+        Pack: e.Pack,
+        Description: e.Description,
+        Item_Number: e.Item_Number,
+        CaseCount: e.CaseCount,
+        UOM: e.UOM,
+        QtyLimit: getProductList || null,
+        markAsBundle: getProductList?.markAsBundle || false,
+        Price1: e.Price1,
+        Price2: e.Price2,
+        EBT: e.EBT,
+        UnitOunces: e.UnitOunces,
+        OTP_Number: e.OTP_Number,
+        BaseCost: e.BaseCost,
+        Invoice_Cost: e.Invoice_Cost,
+        AvgCost: e.AvgCost,
+        NetCost: e.NetCost,
+        UPCList: e.UPCList,
+        imageId: productImage?.id || null,
+        Inventory_OnHand: inventoryOnHand,
+        SalesCategory: e.SalesCategory?.Category_Desc || null,
+        PriceClass: e.PriceClass?.Class_Desc || null,
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+      };
+    }));
+
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      finalProductList
+    };
+  }
+
+  async getProductListWithTax(query: PaginationOptions & { search?: string }) {
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId,I_Inactive,ShortOrderForm ,customerId} = query;
+
+    page = Number(page);
+    limit = Number(limit);
+    if(!I_Inactive){
+      I_Inactive = false;
+    }else {
+      I_Inactive = true;
+    }
+    if(!ShortOrderForm){
+      ShortOrderForm = false;
+    }else {
+      ShortOrderForm = true;
+    }
+
+    let whereClause: any = {
+      I_Inactive: I_Inactive,
+      ShortOrderForm: ShortOrderForm,
+    };
+
+
+
+
+
+    let searchInUPC = false;
+    let orderClause: Order = [['Date_Created', 'DESC'] as const];
+
+   
+ 
+
+      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Both filters exist → use OR condition
+        whereClause[Op.or] = [
+          { Sales_Category: { [Op.in]: salesCategoryId } },
+          { Price_Class: { [Op.in]: priceClassId } }
+        ];
+      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+        // Only Sales_Category filter
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+        // Only Price_Class filter
+        whereClause.Price_Class = { [Op.in]: priceClassId };
+      }
+
+
+      if (search) {
+        if (/^\d{8,}$/.test(search)) {
+          searchInUPC = true;
+        } 
+        else {
+        
+          const term = search.toLowerCase();
+          const anywhere = `%${term}%`;
+          const starts = `${term}%`
+
+          
+  whereClause[Op.or] = [
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("Description")),
+      { [Op.like]: anywhere }
+    ),
+    Sequelize.where(
+      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+      { [Op.like]: anywhere }
+    )
+  ];
+
+  // ORDER RULE:
+  // 1. Items starting with search term first
+  // 2. Then items containing it anywhere
+  // 3. Finally alphabetical
+  orderClause = [
+    [
+      Sequelize.literal(`
+        CASE 
+          WHEN LOWER("Description") LIKE '${starts}' THEN 0
+          WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
+          ELSE 2
+        END
+      `),
+      'ASC'
+    ],
+    ['Description', 'ASC']
+  ];
+}
+
+
+        
+      }
+
+    
+
+    // === UPC JOIN logic ===
+    const includeUPC = {
+      model: InventoryUPC,
+      as: 'UPCList',
+      attributes: ['UPC_Number'],
+      where: {
+        Status: 0,
+        ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {})
+      },
+      required: searchInUPC
+    };
+
+
+    // let orderClause: Order = [['Date_Created', 'DESC'] as const];
+
+    
+
+    let totalCount = 0;
+
+    if (searchInUPC) {
+      const counted = await Inventory.findAll({
+        attributes: ['Item_Number'],
+        where: whereClause,
+        include: [
+          {
+            ...includeUPC,
+            attributes: []
+          }
+        ],
+        group: ['Inventory.Item_Number'],
+        raw: true,
+        logging: false
+      });
+
+      totalCount = counted.length;
+    } else {
+      totalCount = await Inventory.count({
+        where: whereClause,
+        logging: false
+      });
+    }
+
+    
+    const productList = await Inventory.findAll({
+      attributes: [
+        'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
+        'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
+        'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
+      ],
+      where: whereClause,
+      include: [
+        {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Category_Desc','Sales_Category'],
+          required: false
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
+          required: false
+        },
+        {
+          model: InventoryStatus,
+          as: 'inventoryStatus',
+          attributes: ['Inventory_OnHand'],
+          required: false
+        },
+        includeUPC
+      ],
+      order: orderClause,
+      limit,
+      offset: (page - 1) * limit,
+      logging: false
+    });
+
+    const itemNumbers = productList.map(e => e.Item_Number);
+    
+
+    const productImages = await ProductImage.findAll({
+      where: {
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
+      }
+    });
+    const imageMap = new Map(productImages.map(img => [img.product_number, img]));
+
+    // === Final mapping ===
+    const finalProductList = await Promise.all(productList.map(async (e: any) => {
+      const itemStr = e.Item_Number.toString();
+      const productImage = imageMap.get(itemStr) || null;
+      let getProductList = await ItemLimit.findOne({
+        where: {
+          Item_Number: e.Item_Number
+        }
+      });
+
+      const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
+      let userJurisdiction = null;
+      if(customerId){
+       userJurisdiction = await getJurisdiction(Number(customerId));
+      }
+      if(userJurisdiction){
+        const taxRate = await getTaxRateV1(Number(e.OTP_Number), userJurisdiction as number, e.Item_Number, Number(e.Price1));
+        e.Price1 = Number(e.Price1) + Number(taxRate);
+      }
 
 
       return {

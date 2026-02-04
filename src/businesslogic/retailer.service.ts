@@ -10,7 +10,7 @@ import Banner from "../models/postgres/banner.model";
 import { ProductImage } from "../models/postgres/product.model";
 import CustomerCart from "../models/postgres/retailerCart.model";
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, checkTimeOut, excludeItemByUser, excludeItemByUserInTradeShow, generatePDFFromHTML, generateToken, getAllowedSalesCategories, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getCustomerExcludeItemForTradeShow, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP, toNum } from "../utils/helper";
+import { checkQtyDiscount, checkTimeOut, excludeItemByUser, excludeItemByUserInTradeShow, generatePDFFromHTML, generateToken, getAllowedSalesCategories, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getCustomerExcludeItemForTradeShow, getDiscount, getDiscountedPrice, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, isItemInActive, renderOrderTableFromERP, toNum } from "../utils/helper";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { Operations } from "../utils/operations";
 import { generateOrderConfirmationEmail, generateDistributorOrderNotificationEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
@@ -59,6 +59,7 @@ import { Token } from "../models/postgres/token.model";
 import InventoryLocation from '../models/postgres/inventoryLocation';
 import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
+import { TradeShow } from "../models/postgres/tradeShow.model";
 
 
 
@@ -916,7 +917,6 @@ orderClause = [
         logging: false
       });
     }
-    const topLatestItems = await getTopLatestItems();
     const productList = await TradeShowItem.findAll({
       attributes: [
         'description', 'itemNumber', 'discount', 'minQuantity', 'maxQuantity', 'disType'
@@ -996,6 +996,8 @@ orderClause = [
         ]
       });
 
+console.log(e,'trade show item')
+let tradeShowItem = e.dataValues
 
       if(!findProduct){
         throw new AppError("Product not found", 404);
@@ -1008,6 +1010,7 @@ findProduct = findProduct?.dataValues || null;
       let price = discountMap[Number(e.itemNumber)] ?? await getFirstValidPrice(findProduct as any);
       const isDiscounted = await hasDiscountedItem(Number(e.itemNumber), findProduct?.Price_Subclass ?? 0);
       // price = Math.ceil(price * 100) / 100;
+      price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
       const productLimit = await getProductLimit(Number(e.itemNumber));
       let taxRate = await getTaxRateV1(Number(findProduct?.OTP_Number), userJurisdiction as number, Number(e.itemNumber), price);
       taxRate = Math.ceil(taxRate * 100) / 100;
@@ -1025,7 +1028,7 @@ findProduct = findProduct?.dataValues || null;
        
         isDiscounted,
         ...findProduct,
-       
+       ...tradeShowItem,
         Tax_Rate: taxRate,
        
         price,
@@ -1258,7 +1261,7 @@ findProduct = findProduct?.dataValues || null;
   }
 
 
-  async getTradeShowCartItems(customerNumber: number) {
+  async getTradeShowCartItems(customerNumber: number, tradeShowId: number) {
     let todayTotalAmount = 0;
     const cartItems: any = await CustomerCart.findAll({
       where: {
@@ -1311,6 +1314,17 @@ findProduct = findProduct?.dataValues || null;
         const data = await Inventory.findByPk(e.Item_Number)
         price = await getFirstValidPrice(data?.dataValues)
       }
+let tradeShowItem: any = await TradeShowItem.findOne({
+  where: {
+    itemNumber: String(e.Item_Number),
+    tradeShowId: tradeShowId
+  }
+})
+tradeShowItem = tradeShowItem?.dataValues || null;
+if(tradeShowItem){
+  price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
+}
+
       let product: any = await Inventory.findOne({
         where: {
           Item_Number: e.Item_Number
@@ -1368,6 +1382,14 @@ findProduct = findProduct?.dataValues || null;
 
 
 
+      let priceChange = false;
+      const p1 = Number(price.toFixed(2));
+      const p2 = Number(Number(e?.originalPrice).toFixed(2));
+
+if (p1 !== p2) {
+  priceChange = true;
+}
+
 
       return {
         isDiscounted,
@@ -1404,7 +1426,7 @@ findProduct = findProduct?.dataValues || null;
         AvgCost: product.AvgCost,
         NetCost: product.NetCost,
         placedBySalesPerson: e.placedBySalesPerson,
-        isPriceChanged: price != e?.originalPrice,
+        isPriceChanged: priceChange,
         UPCList: product.UPCList,
         oldPrice: Number(e?.originalPrice),
         newPrice: price,
@@ -1643,6 +1665,7 @@ findProduct = findProduct?.dataValues || null;
     const cartItems: any = await CustomerCart.findAll({
       where: {
         Customer_Number: customerNumber,
+        type: 'order',
         isActive: true
       },
       order: [['createdAt', 'DESC']]
@@ -1745,7 +1768,13 @@ findProduct = findProduct?.dataValues || null;
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category);
       }
 
+      let priceChange = false;
+      const p1 = Number(price.toFixed(2));
+      const p2 = Number(Number(e?.originalPrice).toFixed(2));
 
+if (p1 !== p2) {
+  priceChange = true;
+}
 
 
       return {
@@ -1783,7 +1812,7 @@ findProduct = findProduct?.dataValues || null;
         AvgCost: product.AvgCost,
         NetCost: product.NetCost,
         placedBySalesPerson: e.placedBySalesPerson,
-        isPriceChanged: price != e?.originalPrice,
+        isPriceChanged: priceChange,
         UPCList: product.UPCList,
         oldPrice: Number(e?.originalPrice),
         newPrice: price,
@@ -1894,7 +1923,13 @@ findProduct = findProduct?.dataValues || null;
   }
 
   async getCartItemById(cartItemId: number) {
-    const cartItem = await CustomerCart.findByPk(cartItemId);
+    const cartItem = await CustomerCart.findOne({
+      where: {
+        id: cartItemId,
+        isActive: true,
+        type: 'order'
+      },
+    });
 
     if (!cartItem) {
       throw new AppError("Cart item not found", 404);
@@ -1914,7 +1949,8 @@ findProduct = findProduct?.dataValues || null;
     const cartItems = await CustomerCart.findAll({
       where: {
         Customer_Number: customerNumber,
-        isActive: true
+        isActive: true,
+        type: 'order'
       },
       attributes: [
         'Qty',
@@ -4886,12 +4922,19 @@ findProduct = findProduct?.dataValues || null;
               [Op.in]: storeId
             }
           },
-          attributes: ['C_Number', 'C_CoName', 'C_Number']
+          attributes: ['C_Number', 'C_Name', 'C_CoName', 'C_Number']
+        })
+
+        let storesData = stores.map((e: any) => {
+          return {
+            ...e.dataValues,
+            C_CoName: e.C_Name || e.C_CoName
+          }
         })
 
         return {
           hasMultipleStore: true,
-          stores: stores
+          stores: storesData
         }
       } else {
         return {
@@ -5041,6 +5084,15 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
     return retailerDocuments;
   }
 
+  async getTradeShow(){
+    const tradeShow = await TradeShow.findOne({
+      where: {
+        status: 'active',
+        isActive: true
+      }
+    });
+    return tradeShow;
+  }
 
 
   async uploadImages(req: Request) {

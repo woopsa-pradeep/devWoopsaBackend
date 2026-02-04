@@ -101,7 +101,8 @@ export class RetailerController {
   }
 
   async getTradeShowCartItems(req: AuthRequest, res: Response) {
-    const data = await this.retailerService.getTradeShowCartItems(req.user.id);
+    const { id } = req.params;
+    const data = await this.retailerService.getTradeShowCartItems(req.user.id, Number(id));
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
@@ -380,6 +381,11 @@ export class RetailerController {
     const data = await this.retailerService.createRetailerDocuments(req.body);
     sendResponse(res, 201, true, data, General.SUCCESS);
   } 
+
+  async getTradeShow(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.getTradeShow();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
   async uploadImages(req: AuthRequest, res: Response) {
     const data = await this.retailerService.uploadImages(req);

@@ -40,6 +40,11 @@ export class ManagerController {
     sendResponse(res, 200, true, data, Manager.UPDATE_SUCCESSFULLY_DEVICE_STATUS);
   }
 
+  async getProductListWithTax(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getProductListWithTax(req.body as PaginationOptions);
+    sendResponse(res, 200, true, data, Manager.UPDATE_SUCCESSFULLY_DEVICE_STATUS);
+  }
+
   async uploadProductImage(req: AuthRequest, res: Response) {
     const data = await this.managerService.uploadProductImage(req.body, req);
     sendResponse(res, 200, true, data, Manager.PRODUCT_IMAGE_UPLOADED);

@@ -733,6 +733,7 @@ export class AuthService {
 
     const isSessionActive = await SalesSession.findOne({ where: { userId: isUserExist.id } });
     let storeDetail: any = null;
+    let showTradeShow = false;
     if (isSessionActive) {
       const store = await Customer.findOne({
         where: { C_Number: isSessionActive.currentCustomerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'Jurisdiction_State','C_Phone', 'LastBalance', 'C_Name', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
@@ -751,6 +752,10 @@ export class AuthService {
       });
       if (store) {
         storeDetail = store;
+      }
+      const isTradeShow = await TradeShowRetailer.findOne({ where: { retailerId: Number(isSessionActive.currentCustomerId) } });
+      if (isTradeShow) {
+        showTradeShow = true;
       }
     }
     const wholeStoreDetail = await Distributor.findOne({ attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"], });
@@ -772,9 +777,11 @@ export class AuthService {
         allowDeliveryCharge:isUserExist.allowDeliveryCharge,
         isSessionActive: isSessionActive,
         allowDiscount:isUserExist.allowDiscount,
+
         discountLimit:isUserExist.setUserDiscountLimit,
       },
       storeDetail: storeDetail,
+      showTradeShow: showTradeShow,
       wholeStoreDetail: wholeStoreDetail
     }
     }else{
