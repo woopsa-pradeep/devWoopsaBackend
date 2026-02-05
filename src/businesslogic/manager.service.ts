@@ -801,6 +801,7 @@ export class ManagerService {
         markAsBundle: getProductList?.markAsBundle || false,
         Price1: e.Price1,
         Price2: e.Price2,
+        I_Inactive: e.I_Inactive,
         EBT: e.EBT,
         UnitOunces: e.UnitOunces,
         OTP_Number: e.OTP_Number,

@@ -59,7 +59,7 @@ export class SalesController {
     }
 
     async getTradeShowCartItems(req: AuthRequest, res: Response) {
-        const data = await this.salesService.getTradeShowCartItems(Number(req.params.customerId));
+        const data = await this.salesService.getTradeShowCartItems(Number(req.params.customerId),Number(req.query.tradeShowId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 

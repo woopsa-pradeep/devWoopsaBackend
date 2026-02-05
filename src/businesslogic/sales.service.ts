@@ -5801,7 +5801,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
   }
 
 
-  async getTradeShowCartItems(customerNumber: number) {
+  async getTradeShowCartItems(customerNumber: number, tradeShowId: number) {
     const cartItems: any = await CustomerCart.findAll({
       where: {
         Customer_Number: customerNumber,
@@ -5844,9 +5844,29 @@ console.log(findTheLimit, 'findTheLimit-->22')
       });
 
       let price = await getDiscount(Number(e.Item_Number), Number(e.Customer_Number))
+
+
+      let tradeShowItem: any = await TradeShowItem.findOne({
+        where: {
+          itemNumber: String(e.Item_Number),
+          tradeShowId: Number(tradeShowId)
+        }
+      })
+      tradeShowItem = tradeShowItem?.dataValues || null;
+     
       if (!price) {
         const data = await Inventory.findByPk(e.Item_Number)
         price = await getFirstValidPrice(data?.dataValues)
+      }
+
+      if(tradeShowItem){
+        price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
+      }
+      let priceChange = false;
+      const p1 = Number(price.toFixed(2));
+      const p2 = Number(Number(e?.originalPrice).toFixed(2));
+      if (p1 !== p2) {
+        priceChange = true;
       }
       // price = Math.ceil(price * 100) / 100;
       let product: any = await Inventory.findOne({
@@ -5920,7 +5940,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
         itemInActive,
         AvgCost: product.AvgCost,
         NetCost: product.NetCost,
-        isPriceChanged: price != e?.originalPrice,
+        isPriceChanged: priceChange,
         UPCList: product.UPCList,
         oldPrice: Number(e?.originalPrice),
         newPrice: price,
