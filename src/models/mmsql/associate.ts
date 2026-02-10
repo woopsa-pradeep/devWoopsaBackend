@@ -30,6 +30,8 @@ import { CustBillTo } from "./custBillTo.model";
 import { CustFinanceCharges } from "./custFinanceCharges.model";
 import { ARDeletes } from "./arDeletes.mode";
 import { InventorySavedDetail } from "./inventorySavedDetail.model";
+import { PODetail } from "./poDetail.model";
+import { POHeader } from "./poHeader.model";
 
 
 
@@ -466,6 +468,26 @@ CustReceivables.hasOne(CustBillTo, {
 CustBillTo.belongsTo(CustReceivables, {
   foreignKey: 'C_Number',
   targetKey: 'C_Number',
+});
+
+POHeader.hasMany(PODetail, {
+  foreignKey: 'PO_Number',
+  sourceKey: 'PO_Number',
+});
+
+PODetail.belongsTo(POHeader, {
+  foreignKey: 'PO_Number',
+  targetKey: 'PO_Number',
+});
+
+PODetail.belongsTo(Inventory, {
+  foreignKey: 'Item_Number',
+  targetKey: 'Item_Number',
+});
+
+POHeader.belongsTo(Vendor, {
+  foreignKey: 'Primary_Vendor',
+  targetKey: 'Primary_Vendor',
 });
 
 

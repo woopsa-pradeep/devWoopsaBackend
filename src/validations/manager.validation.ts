@@ -1052,6 +1052,155 @@ export const getContactUsQuerySchema = Joi.object({
   }),
 });
 
+// EmailModule validation schemas
+export const createEmailModuleSchema = Joi.object({
+  name: Joi.string().trim().required().messages({
+    'string.base': 'Name must be a string',
+    'string.empty': 'Name cannot be empty',
+    'any.required': 'Name is required',
+  }),
+  isEmailSetup: Joi.boolean().optional().default(false).messages({
+    'boolean.base': 'isEmailSetup must be a boolean',
+  }),
+});
+
+export const updateEmailModuleSchema = Joi.object({
+  name: Joi.string().trim().optional().messages({
+    'string.base': 'Name must be a string',
+    'string.empty': 'Name cannot be empty',
+  }),
+  isEmailSetup: Joi.boolean().optional().messages({
+    'boolean.base': 'isEmailSetup must be a boolean',
+  }),
+}).min(1);
+
+export const getEmailModulesQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().default(1).messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be greater than 0',
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().default(10).messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be greater than 0',
+    'number.max': 'Limit must be greater than 0 and less than or equal to 100',
+  }),
+  search: Joi.string().optional().messages({
+    'string.base': 'Search must be a string',
+  }),
+});
+
+// EmailModuleConfig validation schemas
+export const createEmailModuleConfigSchema = Joi.object({
+  emailModuleId: Joi.number().integer().positive().required().messages({
+    'number.base': 'Email module ID must be a number',
+    'number.integer': 'Email module ID must be an integer',
+    'number.positive': 'Email module ID must be positive',
+    'any.required': 'Email module ID is required',
+  }),
+  host: Joi.string().trim().required().messages({
+    'string.base': 'Host must be a string',
+    'string.empty': 'Host cannot be empty',
+    'any.required': 'Host is required',
+  }),
+  port: Joi.number().integer().min(1).max(65535).required().messages({
+    'number.base': 'Port must be a number',
+    'number.integer': 'Port must be an integer',
+    'number.min': 'Port must be at least 1',
+    'number.max': 'Port cannot exceed 65535',
+    'any.required': 'Port is required',
+  }),
+  username: Joi.string().trim().required().messages({
+    'string.base': 'Username must be a string',
+    'string.empty': 'Username cannot be empty',
+    'any.required': 'Username is required',
+  }),
+  secure: Joi.boolean().optional().default(false).messages({
+    'boolean.base': 'Secure must be a boolean',
+  }),
+  password: Joi.string().trim().required().messages({
+    'string.base': 'Password must be a string',
+    'string.empty': 'Password cannot be empty',
+    'any.required': 'Password is required',
+  }),
+  fromEmail: Joi.string().email().required().messages({
+    'string.email': 'From email must be a valid email address',
+    'string.empty': 'From email cannot be empty',
+    'any.required': 'From email is required',
+  }),
+  fromName: Joi.string().trim().optional().allow('', null).messages({
+    'string.base': 'From name must be a string',
+  }),
+  isActive: Joi.boolean().optional().default(true).messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
+});
+
+export const updateEmailModuleConfigSchema = Joi.object({
+  emailModuleId: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Email module ID must be a number',
+    'number.integer': 'Email module ID must be an integer',
+    'number.positive': 'Email module ID must be positive',
+  }),
+  host: Joi.string().trim().optional().messages({
+    'string.base': 'Host must be a string',
+    'string.empty': 'Host cannot be empty',
+  }),
+  port: Joi.number().integer().min(1).max(65535).optional().messages({
+    'number.base': 'Port must be a number',
+    'number.integer': 'Port must be an integer',
+    'number.min': 'Port must be at least 1',
+    'number.max': 'Port cannot exceed 65535',
+  }),
+  username: Joi.string().trim().optional().messages({
+    'string.base': 'Username must be a string',
+    'string.empty': 'Username cannot be empty',
+  }),
+  secure: Joi.boolean().optional().messages({
+    'boolean.base': 'Secure must be a boolean',
+  }),
+  password: Joi.string().trim().optional().messages({
+    'string.base': 'Password must be a string',
+    'string.empty': 'Password cannot be empty',
+  }),
+  fromEmail: Joi.string().email().optional().messages({
+    'string.email': 'From email must be a valid email address',
+    'string.empty': 'From email cannot be empty',
+  }),
+  fromName: Joi.string().trim().optional().allow('', null).messages({
+    'string.base': 'From name must be a string',
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
+}).min(1);
+
+export const getEmailModuleConfigsQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().default(1).messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be greater than 0',
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().default(10).messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be greater than 0',
+    'number.max': 'Limit must be greater than 0 and less than or equal to 100',
+  }),
+  search: Joi.string().optional().messages({
+    'string.base': 'Search must be a string',
+  }),
+  emailModuleId: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Email module ID must be a number',
+    'number.integer': 'Email module ID must be an integer',
+    'number.positive': 'Email module ID must be positive',
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
+});
+
 // Email Management validation schemas
 export const createEmailConfigSchema = Joi.object({
   module: Joi.string().trim().optional().allow('', null).messages({

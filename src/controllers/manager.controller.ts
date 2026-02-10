@@ -259,6 +259,11 @@ async getOrderHistory(req: AuthRequest, res: Response) {
   sendResponse(res, 200, true, data, General.SUCCESS);
 }
 
+async getOrderForPickListConfirmation(req: AuthRequest, res: Response) {
+  const data = await this.managerService.getOrderForPickListConfirmation(req.query);
+  sendResponse(res, 200, true, data, General.SUCCESS);
+} 
+
 async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
   const data = await this.managerService.getOrderHistoryByOrderNumber(Number(req.params.id), req.query as PaginationOptions);
   sendResponse(res, 200, true, data, General.SUCCESS);
@@ -799,6 +804,62 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Contact us information deleted successfully');
   }
 
+  // EmailModule CRUD controller methods
+  async createEmailModule(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createEmailModule(req.body);
+    sendResponse(res, 201, true, data, 'Email module created successfully');
+  }
+
+  async getEmailModuleById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getEmailModuleById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Email module retrieved successfully');
+  }
+
+  async getAllEmailModules(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllEmailModules(req.query as PaginationOptions & { search?: string });
+    sendResponse(res, 200, true, data, 'Email modules list retrieved successfully');
+  }
+
+  async updateEmailModule(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateEmailModule(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Email module updated successfully');
+  }
+
+  async deleteEmailModule(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteEmailModule(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Email module deleted successfully');
+  }
+
+  // EmailModuleConfig CRUD controller methods
+  async createEmailModuleConfig(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createEmailModuleConfig(req.body);
+    sendResponse(res, 201, true, data, 'Email module config created successfully');
+  }
+
+  async getEmailModuleConfigById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getEmailModuleConfigById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Email module config retrieved successfully');
+  }
+
+  async getAllEmailModuleConfigs(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllEmailModuleConfigs(req.query as PaginationOptions & { 
+      search?: string; 
+      emailModuleId?: number; 
+      isActive?: boolean 
+    });
+    sendResponse(res, 200, true, data, 'Email module configs list retrieved successfully');
+  }
+
+  async updateEmailModuleConfig(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateEmailModuleConfig(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Email module config updated successfully');
+  }
+
+  async deleteEmailModuleConfig(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteEmailModuleConfig(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Email module config deleted successfully');
+  }
+
   // Email Management CRUD controller methods
   async createEmailConfig(req: AuthRequest, res: Response) {
     const data = await this.managerService.createEmailConfig(req.body);
@@ -841,6 +902,16 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Email configuration tested successfully');
   }
 
+  async testEmail(req: AuthRequest, res: Response) {
+    const data = await this.managerService.testEmail(req.body);
+    sendResponse(res, 200, true, data, 'Email configuration tested successfully');
+  }
+
+
+  async testEmailMarketing(req: AuthRequest, res: Response) {
+    const data = await this.managerService.testEmailMarketing(req.body);
+    sendResponse(res, 200, true, data, 'Email marketing tested successfully');
+  }
   // Email Marketing CRUD controller methods
   async createEmailMarketing(req: AuthRequest, res: Response) {
     const data = await this.managerService.createEmailMarketing(req.body);
@@ -1125,6 +1196,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Order numbers retrieved successfully');
   }
 
+  async getAllOrderNumbersByCustomer(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllOrderNumbersByCustomer(req.body);
+    sendResponse(res, 200, true, data, 'Order numbers retrieved successfully');
+  }
+
   async distributorUpdate(req: AuthRequest, res: Response) {
     const pmId = req.user.id; 
     const data = await this.managerService.distributorUpdate(Number(pmId), req.body);
@@ -1159,6 +1235,11 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async makePickListPrinted(req: AuthRequest, res: Response) {
     const data = await this.managerService.makePickListPrinted(Number(req.params.orderNumber));
     sendResponse(res, 200, true, data, 'Picklist printed successfully');
+  }
+
+  async makeBulkPickListPrinted(req: AuthRequest, res: Response) {
+    const data = await this.managerService.makeBulkPickListPrinted(req.body.orderNumbers);
+    sendResponse(res, 200, true, data, 'Bulk picklist printed successfully');
   }
 
   // FuturePricing CRUD controller methods
@@ -1651,6 +1732,11 @@ async deleteBulkTradeShowDeliveryProducts(req: AuthRequest, res: Response) {
 
 async deleteBulkTradeShowRetailers(req: AuthRequest, res: Response) {
   const data = await this.managerService.deleteBulkTradeShowRetailers(req.body);
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async getProductsByOrderNumber(req: AuthRequest, res: Response) {
+  const data = await this.managerService.getProductsByOrderNumber(req.body);
   sendResponse(res, 200, true, data, General.SUCCESS);
 }
 }

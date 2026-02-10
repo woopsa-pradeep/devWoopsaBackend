@@ -21,9 +21,9 @@ import { Users } from "../models/mmsql/user.model"
 import { CustReceivables } from "../models/mmsql/custReceivables.model";
 import { Token } from "../models/postgres/token.model";
 import { Retailer } from "../models/postgres/retailer.model";
-import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getTaxRateV1, hashPassword, hasPriceChange, pgArrayToJsArray, sendEmailToMarketing, toNum } from "../utils/helper";
+import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getTaxRateV1, hasDiscountedItem, hashPassword, hasPriceChange, pgArrayToJsArray, sendEmailToMarketing, toNum } from "../utils/helper";
 import { generateNewCredentialsEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
-import { sendDistributorEmail, sendEmail } from "../utils/sendMail";
+import { sendDistributorEmail, sendEmail, sendEmailMarketing, sendTestEmail } from "../utils/sendMail";
 import { WebUsers } from "../models/postgres/users.model";
 import { EpickUser } from "../models/postgres/epickUser.model";
 import { EpickConfirmation } from "../models/postgres/epickConfirmation.model";
@@ -61,6 +61,8 @@ import SalesCallTime from "../models/postgres/salesCallTime.model";
 import { Terms } from "../models/mmsql/invoiceTerm.model";
 import { SalesNote } from "../models/postgres/salesNotes";
 import { ContactUs } from "../models/postgres/contactUs.model";
+import { EmailModule } from "../models/postgres/emailModules.model";
+import { EmailModuleConfig } from "../models/postgres/emailModuleConfig.model";
 import { POHeader } from "../models/mmsql/poHeader.model";
 import { EmailConfig } from "../models/postgres/emailManagement.model";
 import { EmailMarketing } from "../models/postgres/emailMarketing.model";
@@ -796,12 +798,12 @@ export class ManagerService {
         Description: e.Description,
         Item_Number: e.Item_Number,
         CaseCount: e.CaseCount,
+        I_Inactive: e.I_Inactive,
         UOM: e.UOM,
         QtyLimit: getProductList || null,
         markAsBundle: getProductList?.markAsBundle || false,
         Price1: e.Price1,
         Price2: e.Price2,
-        I_Inactive: e.I_Inactive,
         EBT: e.EBT,
         UnitOunces: e.UnitOunces,
         OTP_Number: e.OTP_Number,
@@ -2898,6 +2900,252 @@ export class ManagerService {
   }
   }
 
+
+  async getOrderForPickListConfirmation(query: PaginationOptions) {
+    
+    const currentStatus = query.currentStatus || 'all';
+
+   console.log(query, 'query--->');
+
+
+
+    // Handle query parameters with potential trailing spaces
+   
+   
+
+    if(currentStatus === 'recordLocks'){
+      const recordLocks = await Record_Locks.findAll({
+        where: {
+          Lock_Type: 0
+        },
+        attributes: ['Lock_Number'],
+        raw: true
+      });
+      const recordLocksOrderNumbers = recordLocks.map((lock: any) => lock.Lock_Number);
+      const whereCondition: any = {
+        Invoice_Number: { [Op.gt]: 0 }
+      };
+      if(recordLocksOrderNumbers.length > 0){
+        whereCondition.Order_Number = {
+          [Op.in]: recordLocksOrderNumbers
+        };
+      }else {
+        return {
+          totalCount: 0,
+        
+          totalPages: 0,
+          orderList: [],
+        };
+      }
+  
+        whereCondition.Order_Deleted = false
+      whereCondition.Picklist_Printed = false;
+        whereCondition.Order_Updated = false;
+      
+  
+  
+    
+      
+    
+    
+  
+      // First, get the order headers with pagination
+      const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+        attributes: [
+          'Order_Number',
+          'C_Number'
+        ],
+        where: whereCondition,
+        include: [
+          {
+            model:OrderDetail,
+            as: 'orderDetails',
+            attributes: ['Order_Number', 'Quantity_Ordered'],
+            required: true
+           
+          },
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: ['C_Name'],
+            required: false,
+            include: [
+              {
+                model: CustomerRoute,
+                as: 'Routes',
+                attributes: ['Route_Number', 'Stop_Number'],
+                required: false
+              }
+            ]
+          }
+        ],
+        distinct: true,
+        col: 'Order_Number',
+  
+        order: [['Order_Number', 'DESC']],
+       
+      });
+  
+      // Get the order numbers to fetch quantities
+  
+      // Get total quantities for these orders
+    
+  
+      // Format the response
+     
+  
+      return {
+        totalCount,
+       
+        orderList: orderList,
+      };
+
+    }
+
+    else if(currentStatus === 'orderConfirmation') {
+
+      const whereCondition: any = {
+        Invoice_Number: { [Op.gt]: 0 }
+
+      };
+     
+      whereCondition.Order_Deleted = false
+      whereCondition.Picklist_Printed = false;
+        whereCondition.Order_Updated = false;
+  
+   
+  
+   
+     
+      // First, get the order headers with pagination
+      const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+        attributes: [
+          'Order_Number',
+          'C_Number',
+          
+        ],
+        where: {
+          ...whereCondition,
+        
+        },
+        include: [
+
+          {
+            model:OrderDetail,
+            as: 'orderDetails',
+            attributes: ['Order_Number', 'Quantity_Ordered'],
+            required: true
+           
+          },
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: ['C_Name'],
+            required: false,
+            include: [
+              {
+                model: CustomerRoute,
+                as: 'Routes',
+                attributes: ['Route_Number', 'Stop_Number'],
+                required: false
+              }
+            ]
+          }
+        ],
+        distinct: true,
+        col: 'Order_Number',
+        order: [['Order_Number', 'DESC']],
+       
+      });
+      
+  
+  
+    
+  
+      return {
+        totalCount,
+       
+        orderList: orderList,
+      };
+
+    }
+    
+    else {
+    // Build where condition
+    const whereCondition: any = {
+      Invoice_Number: { [Op.gt]: 0 }
+
+    };
+    whereCondition.Order_Deleted = false
+    whereCondition.Picklist_Printed = false;
+      whereCondition.Order_Updated = false;
+
+ 
+  if(currentStatus === 'non_invoices'){
+      whereCondition.Invoice_Number = {
+        [Op.eq]: 0
+      };
+    }else if(currentStatus === 'EpickStatusFromPicker'){
+      whereCondition.EpickStatusFromPicker ='completed'
+    }
+    
+    
+
+    // First, get the order headers with pagination
+    const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+      attributes: [
+        'Order_Number',
+        'C_Number'
+       
+      ],
+      where: whereCondition,
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+            attributes: ['C_Name'],
+          required: false,
+          include: [
+            {
+              model: CustomerRoute,
+              as: 'Routes',
+              attributes: ['Route_Number', 'Stop_Number'],
+              required: false
+            }
+          ]
+        },
+        {
+          model:OrderDetail,
+          as: 'orderDetails',
+          attributes: ['Order_Number', 'Quantity_Ordered'],
+          required: true
+         
+        }
+      ],
+      distinct: true,
+      col: 'Order_Number',
+
+      order: [['Order_Number', 'DESC']],
+     
+    });
+
+    // Get the order numbers to fetch quantities
+
+   
+
+    // Format the response
+    
+
+    return {
+      totalCount,
+     
+      orderList: orderList,
+    };
+  }
+  }
+ 
+
+  
   async getOrderHistoryByOrderNumber(orderNumber: number, query: PaginationOptions) {
     let { page = 1, limit = 10 } = query;
     page = Number(query.page || (query as any)['page ']) || 1;
@@ -5492,6 +5740,259 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return { message: 'Contact us information deleted successfully' };
   }
 
+  // EmailModules CRUD service methods
+  async createEmailModule(data: { name: string; isEmailSetup?: boolean }) {
+    const emailModule = await EmailModule.create({
+      name: data.name,
+      isEmailSetup: data.isEmailSetup ?? false,
+    });
+    return emailModule;
+  }
+
+  async getEmailModuleById(id: number) {
+    const emailModule = await EmailModule.findByPk(id, {
+      include: [
+        {
+          model: EmailModuleConfig,
+          as: 'configs',
+          required: false,
+          where: { isActive: true },
+          order: [['createdAt', 'DESC']],
+          limit: 1,
+        },
+      ],
+    });
+    if (!emailModule) {
+      throw new AppError('Email module not found', 404);
+    }
+
+    // Transform the data to include configuration status and config data
+    const moduleData: any = emailModule.toJSON();
+    const hasConfig = moduleData.configs && moduleData.configs.length > 0;
+    
+    return {
+      ...moduleData,
+      configuration: hasConfig,
+      emailModuleConfig: hasConfig ? moduleData.configs[0] : null,
+      configs: undefined, // Remove the configs array from response
+    };
+  }
+
+  async getAllEmailModules(query: PaginationOptions & { search?: string }) {
+    const { page = 1, limit = 10, search = '' } = query;
+    const offset = (page - 1) * limit;
+
+    const whereClause: any = {};
+
+    if (search) {
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    const { count, rows } = await EmailModule.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: EmailModuleConfig,
+          as: 'configs',
+          required: false,
+          where: { isActive: true },
+          order: [['createdAt', 'DESC']],
+          limit: 1,
+        },
+      ],
+      limit: Number(limit),
+      offset: Number(offset),
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Transform the data to include configuration status and config data
+    const transformedData = rows.map((module) => {
+      const moduleData: any = module.toJSON();
+      const hasConfig = moduleData.configs && moduleData.configs.length > 0;
+      
+      return {
+        ...moduleData,
+        configuration: hasConfig,
+        emailModuleConfig: hasConfig ? moduleData.configs[0] : null,
+        configs: undefined, // Remove the configs array from response
+      };
+    });
+
+    return {
+      data: transformedData,
+      pagination: {
+        total: count,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(count / Number(limit)),
+      },
+    };
+  }
+
+  async updateEmailModule(id: number, data: { name?: string; isEmailSetup?: boolean }) {
+    const emailModule = await EmailModule.findByPk(id);
+    if (!emailModule) {
+      throw new AppError('Email module not found', 404);
+    }
+
+    await emailModule.update(data);
+    return emailModule;
+  }
+
+  async deleteEmailModule(id: number) {
+    const emailModule = await EmailModule.findByPk(id);
+    if (!emailModule) {
+      throw new AppError('Email module not found', 404);
+    }
+
+    await emailModule.destroy();
+    return { message: 'Email module deleted successfully' };
+  }
+
+  // EmailModuleConfig CRUD service methods
+  async createEmailModuleConfig(data: {
+    emailModuleId: number;
+    host: string;
+    port: number;
+    username: string;
+    secure?: boolean;
+    password: string;
+    fromEmail: string;
+    fromName?: string | null;
+    isActive?: boolean;
+  }) {
+    // Verify that the emailModuleId exists
+    const emailModule = await EmailModule.findByPk(data.emailModuleId);
+    if (!emailModule) {
+      throw new AppError('Email module not found', 404);
+    }
+
+    const emailModuleConfig = await EmailModuleConfig.create({
+      emailModuleId: data.emailModuleId,
+      host: data.host,
+      port: data.port,
+      username: data.username,
+      secure: data.secure ?? false,
+      password: data.password,
+      fromEmail: data.fromEmail,
+      fromName: data.fromName ?? null,
+      isActive: data.isActive ?? true,
+    });
+    emailModule.update({ isEmailSetup: true });
+    return emailModuleConfig;
+  }
+
+  async getEmailModuleConfigById(id: number) {
+    const emailModuleConfig = await EmailModuleConfig.findByPk(id, {
+      include: [
+        {
+          model: EmailModule,
+          as: 'emailModule',
+          attributes: ['id', 'name', 'isEmailSetup'],
+        },
+      ],
+    });
+    if (!emailModuleConfig) {
+      throw new AppError('Email module config not found', 404);
+    }
+    return emailModuleConfig;
+  }
+
+  async getAllEmailModuleConfigs(query: PaginationOptions & { 
+    search?: string; 
+    emailModuleId?: number; 
+    isActive?: boolean 
+  }) {
+    const { page = 1, limit = 10, search = '', emailModuleId, isActive } = query;
+    const offset = (page - 1) * limit;
+
+    const whereClause: any = {};
+
+    if (search) {
+      whereClause[Op.or] = [
+        { host: { [Op.iLike]: `%${search}%` } },
+        { username: { [Op.iLike]: `%${search}%` } },
+        { fromEmail: { [Op.iLike]: `%${search}%` } },
+        { fromName: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    if (emailModuleId) {
+      whereClause.emailModuleId = emailModuleId;
+    }
+
+    if (isActive !== undefined) {
+      whereClause.isActive = isActive;
+    }
+
+    const { count, rows } = await EmailModuleConfig.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: EmailModule,
+          as: 'emailModule',
+          attributes: ['id', 'name', 'isEmailSetup'],
+        },
+      ],
+      limit: Number(limit),
+      offset: Number(offset),
+      order: [['createdAt', 'DESC']],
+    });
+
+    return {
+      data: rows,
+      pagination: {
+        total: count,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(count / Number(limit)),
+      },
+    };
+  }
+
+  async updateEmailModuleConfig(
+    id: number,
+    data: {
+      emailModuleId?: number;
+      host?: string;
+      port?: number;
+      username?: string;
+      secure?: boolean;
+      password?: string;
+      fromEmail?: string;
+      fromName?: string | null;
+      isActive?: boolean;
+    }
+  ) {
+    const emailModuleConfig = await EmailModuleConfig.findByPk(id);
+    if (!emailModuleConfig) {
+      throw new AppError('Email module config not found', 404);
+    }
+
+    // If emailModuleId is being updated, verify it exists
+    if (data.emailModuleId) {
+      const emailModule = await EmailModule.findByPk(data.emailModuleId);
+      if (!emailModule) {
+        throw new AppError('Email module not found', 404);
+      }
+    }
+
+    await emailModuleConfig.update(data);
+    return emailModuleConfig;
+  }
+
+  async deleteEmailModuleConfig(id: number) {
+    const emailModuleConfig = await EmailModuleConfig.findByPk(id);
+    if (!emailModuleConfig) {
+      throw new AppError('Email module config not found', 404);
+    }
+
+    await emailModuleConfig.destroy();
+    return { message: 'Email module config deleted successfully' };
+  }
+
   // Email Management CRUD service methods  
   async createEmailConfig(data: any) {
     const emailConfig = await EmailConfig.create(data);
@@ -5605,8 +6106,30 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return result;
   }
 
+  async testEmail(data: any) {
+    const { to, subject, html, emailConfig, attachments, cc } = data;
+    const result = await sendTestEmail(to, subject, html, attachments, cc, emailConfig);
+    return result;
+  }
+
+  async testEmailMarketing(data: any) {
+    const { to, subject, html,  attachments, cc } = data;
+    const result = await sendEmailMarketing({ to, subject, html, attachments, cc });
+    return result;
+  }
+  
   // Email Marketing CRUD service methods
   async createEmailMarketing(data: any) {
+
+    const checkEmailModule = await EmailModule.findOne({ where: { name: 'email_marketing' } });
+    if (!checkEmailModule) {
+      throw new AppError('Email module not found', 404);
+    }
+    if (!checkEmailModule.isEmailSetup) {
+      throw new AppError('Email module is not setup, please setup the email module first', 400);
+    }
+
+
     if (data.status == 'draft') {
       const emailMarketing = await EmailMarketing.create(data);
       return emailMarketing;
@@ -6763,6 +7286,28 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return orderNumbers;
   }
 
+   async getAllOrderNumbersByCustomer (body:any){
+    const {customerId} = body
+ let orderNumbers : any
+    if(customerId.length === 0){
+       orderNumbers = await OrderHeader.findAll({ 
+        attributes: ['Order_Number'],
+        order: [['Order_Number', 'DESC']]
+      });
+    }else {
+       orderNumbers = await OrderHeader.findAll({ where: { C_Number: { [Op.in]: customerId } },
+        attributes: ['Order_Number'],
+        order: [['Order_Number', 'DESC']]
+      });
+    }
+   
+    
+    return {
+      totalCount: orderNumbers.length,
+      orderNumbers
+    };
+  }
+
   async distributorUpdate(id: number, body: any) {
     const updateDistributor = await Distributor.update(body, {
       where: { PM_ID: id }
@@ -6864,6 +7409,14 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     now.toISOString().slice(0, 19).replace("T", " "); // 
     await OrderHeader.update({ Picklist_Printed: true, Picklist_Time: formatted}, { where: { Order_Number: orderNumber } });
     return { message: "Picklist printed successfully" };
+  }
+
+  async makeBulkPickListPrinted(orderNumbers: number[]) {
+    const now = new Date();
+    const formatted =
+    now.toISOString().slice(0, 19).replace("T", " "); // 
+    await OrderHeader.update({ Picklist_Printed: true, Picklist_Time: formatted}, { where: { Order_Number: { [Op.in]: orderNumbers } } });
+    return { message: "Bulk picklist printed successfully" };
   }
 
   // FuturePricing CRUD methods
@@ -11505,6 +12058,132 @@ async deleteBulkTradeShowRetailers(body: {
   });
   return { success: true, message: 'TradeShowRetailer deleted successfully' };
 }
+
+
+async getProductsByOrderNumber(body: {
+  orderNumbers: number[];
+  customerId?: number;
+}) {
+  const { orderNumbers, customerId } = body;
+
+  if (!Array.isArray(orderNumbers) || orderNumbers.length === 0) {
+    throw new AppError('Order numbers array must contain at least one order number', 400);
+  }
+
+  const products = await OrderDetail.findAll({
+    where: {
+      Order_Number: { [Op.in]: orderNumbers },
+    },
+    attributes: ['Order_Number', 'Item_Number', 'Quantity_Ordered'],
+    include: [
+      {
+        model: Inventory,
+        as: 'inventory',
+        attributes: ['Item_Number', 'Description', 'Pack', 'CaseCount', 'UOM', 'OTP_Number', 'Price1'],
+
+        include: [
+          {
+            model: InventoryUPC,
+            as: 'UPCList',
+            attributes: ['UPC_Number'],
+            where: { Status: 0 },
+            required: false,
+          },
+          {
+            model: SalesCategory,
+            as: 'SalesCategory',
+            attributes: ['Sales_Category', 'Category_Desc'],
+          },
+          {
+            model: PriceClass,
+            as: 'PriceClass',
+            attributes: ['Price_Class', 'Class_Desc'],
+          },
+        ],
+      },
+    ],
+  });
+
+  /* ------------------------------------
+     STEP 1 → Flatten order + inventory
+  ------------------------------------ */
+
+  const productList = products.map((row: any) => ({
+    Order_Number: row.Order_Number,
+    Quantity_Ordered: row.Quantity_Ordered,
+    ...row.inventory?.dataValues,
+  }));
+
+  /* ------------------------------------
+     STEP 2 → Your Promise.all mapping
+  ------------------------------------ */
+
+  const finalProductList = await Promise.all(
+    productList.map(async (e: any) => {
+      const itemStr = e.Item_Number.toString();
+      const productImage = await ProductImage.findOne({ where: { product_number: itemStr, isAllow: true } });
+
+      
+
+     let taxRate = 0;
+      if(customerId && e.OTP_Number){
+        let userJurisdiction: number | null = null;
+        if(customerId){
+          userJurisdiction = await getJurisdiction(Number(customerId));
+         }
+       taxRate = await getTaxRateV1(
+        e?.OTP_Number || 0,
+          userJurisdiction || 0,
+          e.Item_Number,
+          e.Price1
+        );
+      }
+      console.log(e.Price1,'e.Price1')
+      let price = (e.Price1 || 0) + taxRate;
+      taxRate = Math.ceil(taxRate * 100) / 100;
+
+      price = Math.ceil(price * 100) / 100;
+
+     
+
+      return {
+        Order_Number: e.Order_Number,
+
+        Pack: e.Pack,
+        Description: e.Description,
+        Item_Number: e.Item_Number,
+        CaseCount: e.CaseCount,
+        UOM: e.UOM,
+        Price1: price,
+       
+        Tax_Rate: taxRate,
+        
+        price,
+        priceWithTax: price + taxRate,
+
+      
+
+        UPCList: e.UPCList,
+
+     
+
+        SalesCategory: e.SalesCategory?.Category_Desc || null,
+        PriceClass: e.PriceClass?.Class_Desc || null,
+
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+
+      };
+    })
+  );
+
+
+ 
+
+  return finalProductList;
+}
+
 
 
 

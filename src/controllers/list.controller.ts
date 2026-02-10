@@ -122,4 +122,9 @@ export class ListController {
         const data = await this.listService.getVendorListForTradeShow();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getListOfCustomersByOrderNumbers(req: Request, res: Response) {
+        const data = await this.listService.getListOfCustomersByOrderNumbers();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

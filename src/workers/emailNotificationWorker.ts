@@ -2,7 +2,7 @@
 import { Worker, Job } from 'bullmq';
 import { EMAIL_NOTIFICATION_QUEUE_NAME, redisConnection, emailNotificationQueue } from '../configuration/config';
 import { BulkEmailJobData } from '../interfaces/redis.interface';
-import { sendEmail } from '../utils/sendMail';
+import { sendEmail, sendEmailMarketing } from '../utils/sendMail';
 import { EmailMarketing } from '../models/postgres/emailMarketing.model';
 
 // Helper function to check and update campaign status when all emails are processed
@@ -93,11 +93,12 @@ const worker = new Worker(
     console.log(`📬 Sending notification email to: ${to} (Campaign ID: ${id})`);
 
     try {
-      const success = await sendEmail({
+      const success = await sendEmailMarketing({
         to,
         subject,
         html,
         attachments,
+        cc,
       });
 
       if (!success) {

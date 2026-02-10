@@ -9,6 +9,7 @@ import { syncPostgresModels } from './models/postgres';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting, seedInvoiceSetting } from './seeder/wareHouseSetting.seeder';
+import { seedEmailModules } from './seeder/emailModule.seeder';
 import { startCronJobs } from './cron'; // adjust path if needed
 import { getAllowedSalesCategories, getDiscount, getPrepaidTaxRate } from './utils/helper';
 import moment from 'moment';
@@ -188,6 +189,7 @@ testConnections()
     await seedInvoiceSetting();
     await seedPolicies();
     console.log('✅ Policies seeded');
+    await seedEmailModules();
     app.listen(Number(PORT),'localhost', () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
       console.log(`📊 Dual database setup: MSSQL + PostgreSQL`);

@@ -696,4 +696,12 @@ export class ListService {
     return{ data: vendor, total: vendor.length };
   }
 
+  async getListOfCustomersByOrderNumbers() {
+    const customers = await Customer.findAll({
+      attributes: ['C_Number', 'C_Name'],
+      // where: { C_Inactive: false }
+    })
+    return customers;
+  }
+
 } 

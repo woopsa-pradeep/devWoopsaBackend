@@ -4922,16 +4922,14 @@ if (p1 !== p2) {
               [Op.in]: storeId
             }
           },
-          attributes: ['C_Number', 'C_Name', 'C_CoName', 'C_Number']
+          attributes: ['C_Number','C_Name' ,'C_CoName', 'C_Number']
         })
-
-        let storesData = stores.map((e: any) => {
-          return {
-            ...e.dataValues,
-            C_CoName: e.C_Name || e.C_CoName
-          }
-        })
-
+let storesData = stores.map((e: any) => {
+  return {
+    ...e.dataValues,
+    C_CoName: e.C_Name || e.C_CoName
+  }
+})
         return {
           hasMultipleStore: true,
           stores: storesData

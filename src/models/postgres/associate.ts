@@ -30,6 +30,8 @@ import { TradeShowRetailer } from './tradeShowRetailer.model';
 import { TradeShowVendor } from './tradeShowVendor';
 import { TradeShowDeliveryProduct } from './tradeShowDeliveryProduct.model';
 import { TradeShow } from './tradeShow.model';
+import { EmailModule } from './emailModules.model';
+import { EmailModuleConfig } from './emailModuleConfig.model';
 // import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
 
 export function applyAssociations(): void {
@@ -203,6 +205,16 @@ TradeShowItem.hasMany(TradeShowDeliveryProduct, {
   constraints: false, 
 });
 
+// EmailModule associations
+EmailModule.hasMany(EmailModuleConfig, {
+  foreignKey: 'emailModuleId',
+  as: 'configs',
+});
+
+EmailModuleConfig.belongsTo(EmailModule, {
+  foreignKey: 'emailModuleId',
+  as: 'emailModule',
+});
 
 // Inventory.belongsTo(InventoryStatus, {
 //   foreignKey: 'Item_Number',
