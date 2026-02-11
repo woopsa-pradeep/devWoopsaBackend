@@ -334,7 +334,6 @@ export class RetailerService {
         whereClause.Price_Class = { [Op.in]: priceClassId };
       }
 
-
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
@@ -346,9 +345,9 @@ export class RetailerService {
           const anywhere = `%${term}%`;
           const starts = `${term}%`;
       
-          if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
-            whereClause.Sales_Category = { [Op.in]: salesCategory };
-          }
+           if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
       
           // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
@@ -362,7 +361,7 @@ export class RetailerService {
           const esc = (s: string) => s.replace(/'/g, "''");
 const startsEsc = esc(starts);
 const anywhereEsc = esc(anywhere);
-      console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
+      console.log(globalSearch?.splitSearchOption, 'globalSearch?.globalSearchOption')
           // If globalSearchOption = true => rank matches across all fields
           if ( globalSearch?.splitSearchOption === true) {
             const term = search.toLowerCase().trim();
@@ -439,7 +438,8 @@ orderClause = [
             // optional: order by Description
           }
           
-          else {
+          
+          {
             // Your existing rule (Description-first)
             orderClause = [
               [
@@ -457,6 +457,8 @@ orderClause = [
           }
         }
       }
+      
+      
 
     }
 

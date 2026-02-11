@@ -466,4 +466,16 @@ router.get('/remain-item-in-delivery/:id', verifyRole(ROLES.MANAGER,ROLES.SALES)
 router.get('/getInventorySpotCheck', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getInventorySpotCheck.bind(managerController)));
 router.post('/getProductsByOrderNumber',verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getProductsByOrderNumber.bind(managerController)));
 
-export default router; 
+// TradeShowItemForEdit routes
+router.get('/trade-show-item-for-edit/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getTradeShowItemForEdit.bind(managerController)));
+
+// TradeDeliverProductsForEdit routes
+router.get('/trade-deliver-products-for-edit', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getTradeDeliverProductsForEdit.bind(managerController)));
+
+// TradeDeliveryProductSummary routes
+router.get('/trade-delivery-product-summary/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getTradeDeliveryProductSummary.bind(managerController)));
+
+// TradeShowRetailerForEdit routes
+router.get('/trade-show-retailer-for-edit/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getTradeShowRetailerForEdit.bind(managerController)));
+
+export default router;  

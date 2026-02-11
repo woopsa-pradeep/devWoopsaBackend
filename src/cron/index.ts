@@ -43,15 +43,6 @@ export const startCronJobs = () => {
     });
     
 
-    cron.schedule('30 0 * * *', async () => {
-      try {
-        console.log('[Cron] Starting future pricing updates...');
-        await processFuturePricingUpdates();
-        console.log('[Cron] Future pricing updates completed.');
-      } catch (error) {
-        console.error('[Cron] Error during future pricing updates:', error);
-      }
-    });
     
     
   };

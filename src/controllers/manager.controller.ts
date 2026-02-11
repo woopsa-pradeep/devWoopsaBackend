@@ -8,6 +8,7 @@ import { IGetProductInformation, ICreateLink, ICreateNotificationScheduler, ICre
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { parseReportFilters } from "../utils/parseReportFilters";
 import { number } from "joi";
+import { AppError } from "../utils/AppError";
 
 
 export class ManagerController {
@@ -1473,6 +1474,12 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
 
   // TradeShow CRUD controller methods
   async createTradeShow(req: AuthRequest, res: Response) {
+
+    const findActiveTradeShow = await this.managerService.findActiveTradeShow();
+      if(findActiveTradeShow) {
+        throw new AppError('Active trade show already exists', 400);
+    }
+
     const data = await this.managerService.createTradeShow(req.body);
     sendResponse(res, 201, true, data, 'TradeShow created successfully');
   }
@@ -1739,4 +1746,26 @@ async getProductsByOrderNumber(req: AuthRequest, res: Response) {
   const data = await this.managerService.getProductsByOrderNumber(req.body);
   sendResponse(res, 200, true, data, General.SUCCESS);
 }
+
+  async getTradeShowItemForEdit(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowItemForEdit(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getTradeDeliverProductsForEdit(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeDeliverProductsForEdit(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+
+  async getTradeDeliveryProductSummary(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeDeliveryProductSummary(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+
+  async getTradeShowRetailerForEdit(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowRetailerForEdit(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 }

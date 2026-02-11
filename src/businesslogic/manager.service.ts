@@ -9308,6 +9308,9 @@ async getAgingReport(filters: {
     deliveryWeeks: number; 
     status?: string;
   }) {
+
+
+
     // Validate date ranges
     const tradeShowDate = new Date(body.tradeShowDate);
     const deliveryStartDate = new Date(body.deliveryStartDate);
@@ -9329,6 +9332,18 @@ async getAgingReport(filters: {
       throw new AppError('Delivery weeks must be a non-negative number', 400);
     }
 
+    // Check if a trade show with the same tradeShowDate already exists
+    const existingTradeShow = await TradeShow.findOne({
+      where: {
+        tradeShowDate: body.tradeShowDate,
+        isActive: true,
+      },
+    });
+
+    if (existingTradeShow) {
+      throw new AppError(`A trade show with the date ${body.tradeShowDate} already exists`, 400);
+    }
+
     const tradeShow = await TradeShow.create({
       name: body.name,
       isActive: true,
@@ -9343,6 +9358,16 @@ async getAgingReport(filters: {
     return tradeShow;
   }
 
+  async findActiveTradeShow() {
+    const tradeShow = await TradeShow.findOne({
+      where: {
+        status: 'active',
+        isActive: true
+      }
+    });
+    return tradeShow;
+  }
+  
   async getTradeShowById(id: number) {
     const tradeShow = await TradeShow.findByPk(id);
 
@@ -9436,7 +9461,11 @@ async getAgingReport(filters: {
     if (body.deliveryStartDate && body.deliveryEndDate) {
       const deliveryStartDate = new Date(body.deliveryStartDate);
       const deliveryEndDate = new Date(body.deliveryEndDate);
+
+
       
+
+
       if (deliveryStartDate > deliveryEndDate) {
         throw new AppError('Delivery start date must be before or equal to delivery end date', 400);
       }
@@ -9479,6 +9508,18 @@ async getAgingReport(filters: {
     if (body.deliveryWeeks !== undefined) updateData.deliveryWeeks = body.deliveryWeeks;
     if (body.status !== undefined) updateData.status = body.status;
 
+
+    if (body.tradeShowDate !== undefined) {
+      const existingTradeShow = await TradeShow.findOne({
+        where: {
+          tradeShowDate: body.tradeShowDate,
+          isActive: true,
+        },
+      });
+      if (existingTradeShow) {
+        throw new AppError(`A trade show with the date ${body.tradeShowDate} already exists`, 400);
+      }
+    }
     await tradeShow.update(updateData);
     return tradeShow;
   }
@@ -12185,10 +12226,56 @@ async getProductsByOrderNumber(body: {
 }
 
 
+async getTradeShowItemForEdit(tradeShowId:number) {
+  const tradeShowItem = await TradeShowItem.findAll({
+    where: {
+      tradeShowId: tradeShowId,
+    },
+  });
+  return tradeShowItem;
+}
 
 
+async getTradeDeliverProductsForEdit(body:any) {
+
+  const {tradeShowId,weekNumber} = body;
+  const {rows:tradeShowDeliveryProducts,count:total} = await TradeShowDeliveryProduct.findAndCountAll({
+    where: {
+      tradeShowId: tradeShowId,
+      weekNumber: weekNumber,
+    },
+   
+  });
+  return {data:tradeShowDeliveryProducts,total:total};
+}
 
 
+async getTradeDeliveryProductSummary(tradeShowId:number) {
+  const result = await TradeShowDeliveryProduct.findAll({
+    where: {
+      tradeShowId: tradeShowId,
+    },
+    attributes: [
+      "weekNumber",
+      [fn("MIN", col("startDate")), "startDate"],
+      [fn("MAX", col("endDate")), "endDate"],
+      [fn("COUNT", col("id")), "totalCount"],
+    ],
+    group: ["weekNumber"],
+    order: [["weekNumber", "ASC"]],
+  });
 
+  return result;
+}
+
+async getTradeShowRetailerForEdit(tradeShowId:number) {
+  const {rows:tradeShowRetailers,count:total} = await TradeShowRetailer.findAndCountAll({
+    where: {
+      tradeShowId: tradeShowId,
+    },
+    attributes: ['retailerId']
+  });
+  return {data:tradeShowRetailers,total:total};
+}
 
 }

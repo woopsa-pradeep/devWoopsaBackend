@@ -77,6 +77,7 @@ async function sendNotification(notification: any) {
 
     let UserNumber = deviceTokens[0];
    
+    console.log(notification, 'notification');
     // Mark as expired after sending
     await NotificationScheduler.update(
       { isExpire: true },
