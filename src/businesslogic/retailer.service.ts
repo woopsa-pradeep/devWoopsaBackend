@@ -60,6 +60,7 @@ import InventoryLocation from '../models/postgres/inventoryLocation';
 import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
+import TradeShowOrderHistory from "../models/postgres/tradeShowOrderHistory.model";
 
 
 
@@ -1011,6 +1012,7 @@ findProduct = findProduct?.dataValues || null;
 
       let price = discountMap[Number(e.itemNumber)] ?? await getFirstValidPrice(findProduct as any);
       const isDiscounted = await hasDiscountedItem(Number(e.itemNumber), findProduct?.Price_Subclass ?? 0);
+      let priceWitoutTradeShow=  price || 0;
       // price = Math.ceil(price * 100) / 100;
       price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
       const productLimit = await getProductLimit(Number(e.itemNumber));
@@ -1032,7 +1034,7 @@ findProduct = findProduct?.dataValues || null;
         ...findProduct,
        ...tradeShowItem,
         Tax_Rate: taxRate,
-       
+        priceWitoutTradeShow:priceWitoutTradeShow + taxRate,
         price,
         Inventory_OnHand:inventoryOnHand,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
@@ -1554,7 +1556,8 @@ if (p1 !== p2) {
       where: {
         Customer_Number: cartData.Customer_Number,
         Item_Number: cartData.Item_Number,
-        isActive: true
+        isActive: true,
+        type:'order'
       },
 
     });
@@ -2243,7 +2246,18 @@ if (p1 !== p2) {
   }
 
   async placeTradeShowOrder(orderData: PlaceOrder, req: any) {
-    const { shippingDetails } = orderData;
+    const { shippingDetails,tradeShowId } = orderData;
+
+
+
+    const tradeShow = await TradeShow.findByPk(tradeShowId);
+    if (!tradeShow) {
+      throw new AppError("TradeShow not found", 404);
+    }
+    if (tradeShow.status === 'expire' || tradeShow.status === 'inactive') {
+      throw new AppError("TradeShow is expired", 400);
+    }
+
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
     const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
@@ -2498,12 +2512,22 @@ if (p1 !== p2) {
     await OrderHistory.create({
       C_Number: req.user.id,
       orderPlaceBy: 'retailer',
-      type: 'order',
+      type: 'tradeShow',
       Order_Number: orderHeaderCreated.Order_Number,
       order_Source: isWeb ? 'Web' : 'App',
       orderPrice: totalPrice,
       isActive: true
     });
+
+    try{
+      await TradeShowOrderHistory.create({
+        tradeShowId: tradeShowId || 0,
+        orderNumber: orderHeaderCreated.Order_Number,
+        orderDate: new Date(),
+      });
+    }catch(error){
+      console.log(error, 'error--> in trade show order history')
+    }
 
     // Send order confirmation email to customer
 

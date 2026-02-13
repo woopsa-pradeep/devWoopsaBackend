@@ -49,6 +49,7 @@ export interface PlaceOrderRequest {
 export type PlaceOrderRequestArray = PlaceOrderRequest[];
 
 export interface PlaceOrder {
+  tradeShowId?: number;
   orderPlayload: PlaceOrderRequest[];
   Delivery_Charge: number;
   shippingDetails: any;

@@ -8,26 +8,52 @@ interface DriverAttributes {
   email: string;
   password: string;
   isActive: boolean;
-  currentLatitude: number;
-  currentLongitude: number;
+  currentLatitude: number | null;
+  currentLongitude: number | null;
+
+  driverLicenseNo: string | null;
+  licenseExpirationDate: Date | null;
+  licenseClass: 'A' | 'B' | 'C' | 'D' | null;
+  driverPicture: string | null;
+  dotMedicalCertificate: string | null;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-type DriverCreation = Optional<DriverAttributes, 'id' | 'createdAt' | 'updatedAt'>;
+type DriverCreation = Optional<
+  DriverAttributes,
+  | 'id'
+  | 'currentLatitude'
+  | 'currentLongitude'
+  | 'driverLicenseNo'
+  | 'licenseExpirationDate'
+  | 'licenseClass'
+  | 'driverPicture'
+  | 'dotMedicalCertificate'
+  | 'createdAt'
+  | 'updatedAt'
+>;
 
 export class Driver
   extends Model<DriverAttributes, DriverCreation>
-  implements DriverAttributes 
+  implements DriverAttributes
 {
   public id!: number;
   public firstName!: string;
   public lastName!: string;
   public email!: string;
-  public isActive!: boolean;
   public password!: string;
-  public currentLatitude!: number;
-  public currentLongitude!: number;
+  public isActive!: boolean;
+  public currentLatitude!: number | null;
+  public currentLongitude!: number | null;
+
+  public driverLicenseNo!: string | null;
+  public licenseExpirationDate!: Date | null;
+  public licenseClass!: 'A' | 'B' | 'C' | 'D' | null;
+  public driverPicture!: string | null;
+  public dotMedicalCertificate!: string | null;
+
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -39,38 +65,69 @@ Driver.init(
       autoIncrement: true,
       primaryKey: true,
     },
+
+   
     firstName: {
       type: DataTypes.STRING,
       allowNull: false,
     },
+
     lastName: {
       type: DataTypes.STRING,
       allowNull: false,
     },
-    password: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: true,
-    },
+
     email: {
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,
-      validate: {
-        isEmail: true,
-      },
+      validate: { isEmail: true },
     },
+
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+
+    driverLicenseNo: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    licenseExpirationDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+
+    licenseClass: {
+      type: DataTypes.ENUM('A', 'B', 'C', 'D'),
+      allowNull: true,
+    },
+
+    driverPicture: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    dotMedicalCertificate: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
     currentLatitude: {
       type: DataTypes.DECIMAL(10, 8),
       allowNull: true,
     },
+
     currentLongitude: {
       type: DataTypes.DECIMAL(11, 8),
       allowNull: true,
+    },
+
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
     },
   },
   {
@@ -78,7 +135,5 @@ Driver.init(
     tableName: 'drivers',
     modelName: 'Driver',
     timestamps: true,
-  
   }
 );
-

@@ -53,7 +53,7 @@ isActive: {
       allowNull: false,
       defaultValue: 'inactive',
       validate: {
-        isIn: [['active', 'inactive']],
+        isIn: [['active', 'inactive', 'expire']],
       },
     },
 

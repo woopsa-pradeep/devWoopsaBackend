@@ -1,7 +1,6 @@
 // models/Setting.ts
-import { DataTypes, Model,Optional } from 'sequelize';
+import { DataTypes, Model, Optional } from 'sequelize';
 import { postgresSequelize } from '../../db';
-import { defaultValueSchemable } from 'sequelize/types/utils';
 
   interface SettingAttributes {
     id: number;
@@ -11,6 +10,12 @@ import { defaultValueSchemable } from 'sequelize/types/utils';
     splitSearchOption: boolean;
     retailer: any;
     warehouseProfile: any;
+    deliveryStartAddress: any;
+    deliveryEndAddress: any;
+    deliveryStartLat: number | null;
+    deliveryStartLong: number | null;
+    deliveryEndLat: number | null;
+    deliveryEndLong: number | null;
     globalSearchOption: boolean;
     warehouseImage: string;
     orderEmailNotification: string | null;
@@ -33,6 +38,12 @@ import { defaultValueSchemable } from 'sequelize/types/utils';
     public globalSearchOption!: boolean;
     public warehouseImage!: string;
     public orderEmailNotification!: string | null;
+    public deliveryStartAddress!: any;
+    public deliveryEndAddress!: any;
+    public deliveryStartLat!: number | null;
+    public deliveryStartLong!: number | null;
+    public deliveryEndLat!: number | null;
+    public deliveryEndLong!: number | null;
   }
 
 Setting.init(
@@ -119,10 +130,51 @@ Setting.init(
       type: DataTypes.STRING,
       defaultValue: null,
       allowNull: true
-    }
-
-
+    },
+    deliveryStartAddress:{
+      type: DataTypes.JSONB,
+      defaultValue: {
+        address: '',
+        city: '',
+        state: '',
+        zip: '',
+        country: '',
+      },
+      allowNull: true,
+    },
+    deliveryEndAddress:{
+      type: DataTypes.JSONB,
+      defaultValue: {
+        address: '',
+        city: '',
+        state: '',
+        zip: '',
+        country: '',
+      },
+      allowNull: true,
+    },
+    deliveryStartLat:{
+      type: DataTypes.DECIMAL(10, 8),
+      allowNull: true,
+      defaultValue: null,
+    },
+    deliveryStartLong:{
+      type: DataTypes.DECIMAL(11, 8),
+      allowNull: true,
+      defaultValue: null,
+    },
+    deliveryEndLat:{
+      type: DataTypes.DECIMAL(10, 8),
+      allowNull: true,
+      defaultValue: null,
+    },
+    deliveryEndLong: {
+      type: DataTypes.DECIMAL(11, 8),
+      allowNull: true,
+      defaultValue: null,
+    },
   },
+
   {
     sequelize: postgresSequelize,
     modelName: 'Setting',

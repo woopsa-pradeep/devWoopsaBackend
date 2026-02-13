@@ -12,7 +12,7 @@ import { AppError } from "../utils/AppError";
 import { Operations } from "../utils/operations";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
-import { cast, col, literal, Op, fn, Order, Sequelize, where, and } from 'sequelize';
+import { cast, col, literal, Op, fn, Order, Sequelize, where, and ,FindAttributeOptions, FindOptions} from 'sequelize';
 import { PriceClass } from "../models/mmsql/priceClass.model";
 import Banner from "../models/postgres/banner.model";
 import { SalesCategory } from "../models/mmsql/salesCategory.model";
@@ -62,7 +62,8 @@ import { Terms } from "../models/mmsql/invoiceTerm.model";
 import { SalesNote } from "../models/postgres/salesNotes";
 import { ContactUs } from "../models/postgres/contactUs.model";
 import { EmailModule } from "../models/postgres/emailModules.model";
-import { EmailModuleConfig } from "../models/postgres/emailModuleConfig.model";
+import { EmailModuleConfig, IEmailModuleConfig } from "../models/postgres/emailModuleConfig.model";
+import { InvoiceTemplate, IInvoiceTemplate } from "../models/postgres/invoiceTemplate.model";
 import { POHeader } from "../models/mmsql/poHeader.model";
 import { EmailConfig } from "../models/postgres/emailManagement.model";
 import { EmailMarketing } from "../models/postgres/emailMarketing.model";
@@ -93,16 +94,20 @@ import { getDefaultPOHeaderValues, getNextPONumber } from "../utils/purchaseOrde
 import {  PODetail } from "../models/mmsql/poDetail.model";
 import { now } from "moment";
 import { Driver } from "../models/postgres/driver.model";
-import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.model";
 import { Picklist } from "../models/postgres/picklist.model";
 import { FuturePricing } from "../models/postgres/futurePricing.model";
 import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 import { Inventory_ItemGroups } from "../models/mmsql/inventoryItemGroup.model";
 import { InventoryBrands,getNextInventoryBrand } from "../models/mmsql/inventoryBrand.model";
 import { RetailerLocation } from "../models/postgres/retailerLocation.model";
-import { CustBillTo } from "../models/mmsql/custBillTo.model";
+import Vehicle from "../models/postgres/vehicle.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
 import { formatCustomerVelocityItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
+import { getOptimizedDirections } from "../utils/map.utlis";
+import { DeliveryRoute } from "../models/postgres/deliveryRoute.model";
+import { DeliveryRouteStop } from "../models/postgres/deliveryRouteStop.model";
+import { CustBillTo } from "../models/mmsql/custBillTo.model";
+// import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
 import { Record_Locks } from "../models/mmsql/recordLock.model";
 import { PreBook } from "../models/postgres/preBook.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
@@ -110,6 +115,7 @@ import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
 import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
 import { TradeShowVendor } from "../models/postgres/tradeShowVendor";
 import { TradeShowDeliveryProduct } from "../models/postgres/tradeShowDeliveryProduct.model";
+import { CustomerAssignInvoiceTemplate } from "../models/postgres/customerAssingInvoiceTemplate.model";
 import { CustFinanceCharges } from "../models/mmsql/custFinanceCharges.model"
 import { ARDeletes } from "../models/mmsql/arDeletes.mode";
 import { InventorySavedDetail } from "../models/mmsql/inventorySavedDetail.model"
@@ -588,26 +594,30 @@ export class ManagerService {
     };
   }
 
-  async getProductList(query: PaginationOptions & { search?: string }) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId,I_Inactive,ShortOrderForm } = query;
+  async getProductList(query: PaginationOptions & { search?: string; all?: boolean }) {
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, I_Inactive, ShortOrderForm, all } = query;
 
     page = Number(page);
     limit = Number(limit);
-    if(!I_Inactive){
-      I_Inactive = false;
-    }else {
-      I_Inactive = true;
-    }
-    if(!ShortOrderForm){
-      ShortOrderForm = false;
-    }else {
-      ShortOrderForm = true;
-    }
+    
+    let whereClause: any = {};
 
-    let whereClause: any = {
-      I_Inactive: I_Inactive,
-      ShortOrderForm: ShortOrderForm,
-    };
+    // If all = true, skip I_Inactive and ShortOrderForm filters
+    if (all !== true) {
+      if(!I_Inactive){
+        I_Inactive = false;
+      }else {
+        I_Inactive = true;
+      }
+      if(!ShortOrderForm){
+        ShortOrderForm = false;
+      }else {
+        ShortOrderForm = true;
+      }
+
+      whereClause.I_Inactive = I_Inactive;
+      whereClause.ShortOrderForm = ShortOrderForm;
+    }
 
 
 
@@ -2490,6 +2500,7 @@ export class ManagerService {
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
         attributes: [
           'Order_Number',
+          'Invoice_Number',
           'C_Number',
           'Order_Source',
           'Order_Date',
@@ -2558,6 +2569,7 @@ export class ManagerService {
         return {
           Order_Number: order.Order_Number,
           C_Number: order.C_Number,
+          Invoice_Number: order.Invoice_Number,
           Order_Source: order.Order_Source,
           Order_Deleted: order.Order_Deleted,
           Order_Source_Name: orderSourceName,
@@ -2613,6 +2625,7 @@ export class ManagerService {
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
         attributes: [
           'Order_Number',
+          'Invoice_Number',
           'C_Number',
           'Order_Source',
           'Order_Date',
@@ -2699,6 +2712,7 @@ export class ManagerService {
         return {
           Order_Number: order.Order_Number,
           C_Number: order.C_Number,
+          Invoice_Number: order.Invoice_Number,
           Order_Source: order.Order_Source,
           Order_Deleted: order.Order_Deleted,
           Order_Source_Name: orderSourceName,
@@ -2727,9 +2741,6 @@ export class ManagerService {
     }
     
     else {
-
-    
-
     // Build where condition
     const whereCondition: any = {
     };
@@ -2771,6 +2782,7 @@ export class ManagerService {
       attributes: [
         'Order_Number',
         'C_Number',
+        'Invoice_Number',
         'Order_Source',
         'Order_Date',
         'Picklist_Printed',
@@ -2872,6 +2884,7 @@ export class ManagerService {
       return {
         Order_Number: order.Order_Number,
         C_Number: order.C_Number,
+        Invoice_Number: order.Invoice_Number,
         Order_Source: order.Order_Source,
         Order_Deleted: order.Order_Deleted,
         Order_Source_Name: orderSourceName,
@@ -7038,22 +7051,10 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     if (existingDriver) {
       throw new AppError('Driver with this email already exists', 400);
     }
-    const password = generateRandomString(9);
-    const hashedPassword = await hashPassword(password);
+   
+    const hashedPassword = await hashPassword(body.password);
 
     body.password = hashedPassword;
-
- const htmlContent = generateNewCredentialsEmail(body.firstName + " " + body.lastName, body.email, password);
-    await sendEmail({
-      to: body.email,
-      subject: `Welcome to Driver Portal – Your Account is Ready!`,
-      html: htmlContent,
-    });
-
-
-
-
-
 
     const driver = await Driver.create(body);
     return driver;
@@ -7143,130 +7144,69 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return driver;
   }
 
-  // DriverRouteAssignment CRUD methods
-  async createDriverRouteAssignment(body: any) {
-    // Verify driver (user) exists
-    const driver = await Driver.findByPk(body.driverId);
-    if (!driver) {
-      throw new AppError('Driver not found', 404);
-    }
+  // Vehicle CRUD methods
+  async createVehicle(body: any) {
+    // Check if VIN number already exists (if provided)
+    if (body.vinNumber) {
+      const existingVehicle = await Vehicle.findOne({
+        where: { vinNumber: body.vinNumber }
+      });
 
-    const routeAssignment = await DriverRouteAssignment.create(body);
-    return routeAssignment;
-  }
-
-  async getDriverRouteAssignmentById(id: number) {
-    const routeAssignment = await DriverRouteAssignment.findByPk(id, {
-      include: [
-        {
-          model: Driver,
-          as: 'driver',
-          attributes: ['id', 'firstName', 'lastName', 'email'],
-          required: false
-        }
-      ]
-    });
-
-    if (!routeAssignment) {
-      throw new AppError('Driver route assignment not found', 404);
-    }
-    return routeAssignment;
-  }
-
-  async getAllDriverRouteAssignments(query: PaginationOptions & { search?: string; driverId?: number; deliveryDay?: string }) {
-    const page = parseInt(query.page as any) || 1;
-    const limit = parseInt(query.limit as any) || 10;
-    const search = query.search || '';
-    const driverId = query.driverId ? Number(query.driverId) : undefined;
-    const deliveryDay = query.deliveryDay || '';
-
-    const whereCondition: any = {};
-
-    if (driverId) {
-      whereCondition.driverId = driverId;
-    }
-
-    if (deliveryDay) {
-      whereCondition.deliveryDay = { [Op.iLike]: `%${deliveryDay}%` };
-    }
-
-    if (search) {
-      whereCondition[Op.or] = [
-        { deliveryDay: { [Op.iLike]: `%${search}%` } },
-        Sequelize.where(
-          Sequelize.cast(Sequelize.col('routes'), 'TEXT'),
-          { [Op.iLike]: `%${search}%` }
-        )
-      ];
-    }
-
-    const { count: totalCount, rows: routeAssignments } = await DriverRouteAssignment.findAndCountAll({
-      where: whereCondition,
-      include: [
-        {
-          model: Driver,
-          as: 'driver',
-          attributes: ['id', 'firstName', 'lastName', 'email'],
-          required: false
-        }
-      ],
-      limit,
-      offset: (page - 1) * limit,
-      order: [['deliveryDayNumber', 'ASC'], ['createdAt', 'DESC']],
-    });
-
-    return {
-      totalCount,
-      page,
-      limit,
-      totalPages: Math.ceil(totalCount / limit),
-      routeAssignments,
-    };
-  }
-
-  async updateDriverRouteAssignment(id: number, body: any) {
-    const routeAssignment = await DriverRouteAssignment.findByPk(id);
-    if (!routeAssignment) {
-      throw new AppError('Driver route assignment not found', 404);
-    }
-
-    // If driverId is being updated, verify the driver exists
-    if (body.driverId && body.driverId !== routeAssignment.driverId) {
-      const driver = await WebUsers.findByPk(body.driverId);
-      if (!driver) {
-        throw new AppError('Driver not found', 404);
+      if (existingVehicle) {
+        throw new AppError('Vehicle with this VIN number already exists', 400);
       }
     }
 
-    await routeAssignment.update(body);
-    return routeAssignment;
-  }
+    // Check if license registration number already exists (if provided)
+    if (body.licenseRegistrationNumber) {
+      const existingVehicle = await Vehicle.findOne({
+        where: { licenseRegistrationNumber: body.licenseRegistrationNumber }
+      });
 
-  async deleteDriverRouteAssignment(id: number) {
-    const routeAssignment = await DriverRouteAssignment.findByPk(id);
-    if (!routeAssignment) {
-      throw new AppError('Driver route assignment not found', 404);
+      if (existingVehicle) {
+        throw new AppError('Vehicle with this license registration number already exists', 400);
+      }
     }
 
-    await routeAssignment.destroy();
-    return { message: 'Driver route assignment deleted successfully' };
+    const vehicle = await Vehicle.create(body);
+    return vehicle;
   }
 
-  async getDriverRouteAssignmentsByDriver(driverId: number, query: PaginationOptions) {
+  async getVehicleById(id: number) {
+    const vehicle = await Vehicle.findByPk(id);
+    if (!vehicle) {
+      throw new AppError('Vehicle not found', 404);
+    }
+    return vehicle;
+  }
+
+  async getAllVehicles(query: PaginationOptions & { search?: string; isActive?: boolean }) {
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
+    const search = query.search || '';
 
-    // Verify driver (user) exists
-    const driver = await Driver.findByPk(driverId);
-    if (!driver) {
-      throw new AppError('Driver not found', 404);
+    const whereCondition: any = {};
+
+    if (search) {
+      whereCondition[Op.or] = [
+        { description: { [Op.iLike]: `%${search}%` } },
+        { truckType: { [Op.iLike]: `%${search}%` } },
+        { licenseRegistrationNumber: { [Op.iLike]: `%${search}%` } },
+        { vinNumber: { [Op.iLike]: `%${search}%` } },
+        { insurancePolicyNumber: { [Op.iLike]: `%${search}%` } },
+        { insuranceCarrier: { [Op.iLike]: `%${search}%` } }
+      ];
     }
 
-    const { count: totalCount, rows: routeAssignments } = await DriverRouteAssignment.findAndCountAll({
-      where: { driverId },
+    if (query.isActive !== undefined) {
+      whereCondition.isActive = query.isActive === true || (typeof query.isActive === 'string' && query.isActive === 'true');
+    }
+
+    const { count: totalCount, rows: vehicles } = await Vehicle.findAndCountAll({
+      where: whereCondition,
       limit,
       offset: (page - 1) * limit,
-      order: [['deliveryDayNumber', 'ASC'], ['createdAt', 'DESC']],
+      order: [['createdAt', 'DESC']],
     });
 
     return {
@@ -7274,9 +7214,57 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
       page,
       limit,
       totalPages: Math.ceil(totalCount / limit),
-      routeAssignments,
+      vehicles,
     };
   }
+
+  async updateVehicle(id: number, body: any) {
+    const vehicle = await Vehicle.findByPk(id);
+    if (!vehicle) {
+      throw new AppError('Vehicle not found', 404);
+    }
+
+    // Check if VIN number is being updated and if it already exists
+    if (body.vinNumber && body.vinNumber !== vehicle.vinNumber) {
+      const existingVehicle = await Vehicle.findOne({
+        where: { vinNumber: body.vinNumber }
+      });
+
+      if (existingVehicle) {
+        throw new AppError('Vehicle with this VIN number already exists', 400);
+      }
+    }
+
+    // Check if license registration number is being updated and if it already exists
+    if (body.licenseRegistrationNumber && body.licenseRegistrationNumber !== vehicle.licenseRegistrationNumber) {
+      const existingVehicle = await Vehicle.findOne({
+        where: { licenseRegistrationNumber: body.licenseRegistrationNumber }
+      });
+
+      if (existingVehicle) {
+        throw new AppError('Vehicle with this license registration number already exists', 400);
+      }
+    }
+
+    await vehicle.update(body);
+    return vehicle;
+  }
+
+  async deleteVehicle(id: number) {
+    const vehicle = await Vehicle.findByPk(id);
+    if (!vehicle) {
+      throw new AppError('Vehicle not found', 404);
+    }
+
+    await vehicle.destroy();
+    return { message: 'Vehicle deleted successfully' };
+  }
+
+
+
+
+
+ 
 
   async getAllOrderNumbers (){
     const orderNumbers = await OrderHeader.findAll({
@@ -8633,6 +8621,407 @@ async getVelocityReportCustomer(filters: {
     };
   }
 
+  async setRetailerLocation(body: any) {
+    const retailerLocation = await RetailerLocation.create(body);
+    return retailerLocation;
+  }
+
+  async getAllOrderForDriver(query: PaginationOptions) {
+    let { page = 1, limit = 10, routeNumber } = query;
+  
+    page = Number(page);
+    limit = Number(limit);
+    const offset = (page - 1) * limit;
+  
+    const driverStartDate = process.env.DELIVERY_START_DATE;
+  
+    const whereCondition: any = {
+      Order_Date: {
+        [Op.gte]: driverStartDate,
+      },
+      Delivery_ID: {
+        [Op.not]: 99,
+      },
+      Invoice_Number: {
+        [Op.gt]: 0,
+      },
+      Invoice_Total: {
+        [Op.gt]: 0,
+      },
+      Order_Deleted: false,
+      Suspend: false,
+    };
+  
+    if (routeNumber) {
+      whereCondition.Route_Number = routeNumber;
+    }
+  
+    const { rows: orders, count: totalRecords } =
+      await OrderHeader.findAndCountAll({
+        where: whereCondition,
+        attributes: [
+          'Order_Number',
+          'Order_Date',
+          'Invoice_Number',
+          'Invoice_Total',
+          'Delivery_ID',
+          'Route_Number',
+          'C_Number',
+          'Stop_Number',
+        ],
+        include: [
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: [
+              'C_Number',
+              'C_Name',
+              'C_Address',
+              'C_City',
+              'C_State',
+              'C_Zip',
+              'C_Phone',
+              'C_PhoneMobile',
+            ],
+          },
+        ],
+        order: [
+          ['Order_Date', 'DESC'],
+          ['Order_Number', 'DESC'],
+        ],
+        limit,
+        offset,
+      });
+
+      const finalOrders= await Promise.all(orders.map(async (order: any) => {
+        let orderData = order.dataValues;
+        const customerLocation = await RetailerLocation.findOne({
+          where: {
+            C_Number: orderData.C_Number,
+          },
+        });
+        return {
+          ...orderData,
+          customerLocation : customerLocation ? customerLocation.dataValues : null,
+        };
+      }));
+
+    return {
+      data: finalOrders,
+      pagination: {
+        page,
+        limit,
+        totalRecords,
+        totalPages: Math.ceil(totalRecords / limit),
+      },
+    };
+  }
+
+  async getDeliverRouteByGoogleMap(body: any) {
+    const { origin, destination, stops } = body;
+
+    if (!origin || !destination || !stops || !Array.isArray(stops)) {
+      throw new AppError("origin, destination, and stops array are required", 400);
+    }
+
+    // Get optimized directions from Google Maps API
+    const { waypointOrder, polyline, legs, totalKilometers } = await getOptimizedDirections(
+      origin,
+      destination,
+      stops.map((s: any) => ({ lat: s.lat, lng: s.lng }))
+    );
+
+    // Calculate per-stop distances and cumulative distances
+    // Note: legs array has N+1 elements (N stops + 1 leg to destination)
+    // legs[0] = origin -> first optimized stop
+    // legs[1] = first optimized stop -> second optimized stop
+    // legs[N] = last optimized stop -> destination
+    const optimizedStops = waypointOrder.map((originalIndex: number, optimizedIndex: number) => {
+      const stop = stops[originalIndex];
+      
+      // Get the leg that ends at this stop (leg index = optimizedIndex)
+      // This leg goes from previous point (or origin) to this stop
+      const leg = legs[optimizedIndex];
+      
+      if (!leg) {
+        throw new AppError(`Missing leg data for stop at index ${optimizedIndex}`, 500);
+      }
+      
+      // Per-stop distance (distance for this specific leg to reach this stop)
+      const legDistanceMeters = Number(leg?.distance?.value ?? 0);
+      const legDistanceKm = Number((legDistanceMeters / 1000).toFixed(3));
+      
+      // Cumulative distance (sum of all legs from origin up to and including this stop)
+      const cumulativeMeters = legs
+        .slice(0, optimizedIndex + 1)
+        .reduce((sum, l) => sum + Number(l?.distance?.value ?? 0), 0);
+      const cumulativeKm = Number((cumulativeMeters / 1000).toFixed(3));
+      
+      // Get coordinates from the leg's end location (where the stop is)
+      // This is more accurate than the original coordinates as Google geocodes the exact route location
+      const stopLocation = leg?.end_location || { lat: stop.lat, lng: stop.lng };
+      
+      return {
+        stopSequence: optimizedIndex + 1,
+        C_Number: stop.C_Number,
+        orderNumbers: stop.orderNumbers,
+        lat: Number(stopLocation.lat),
+        lng: Number(stopLocation.lng),
+        distanceKm: legDistanceKm, // Distance for this specific leg (to reach this stop)
+        cumulativeDistanceKm: cumulativeKm, // Total distance traveled from origin to this stop
+      };
+    });
+
+    // Get the distance from the last stop to the destination
+    // The last leg (legs[stops.length]) is from the last stop to the destination
+    const lastStopToDestinationLeg = legs[stops.length];
+    const lastStopToDestinationMeters = Number(lastStopToDestinationLeg?.distance?.value ?? 0);
+    const lastStopToDestinationKm = Number((lastStopToDestinationMeters / 1000).toFixed(3));
+
+    return {
+      route: {
+        polyline, // Encoded polyline for drawing the route
+        totalDistanceKm: totalKilometers, // Total distance for entire route (origin -> all stops -> destination)
+        lastStopToDestinationKm: lastStopToDestinationKm, // Distance from last stop to destination
+      },
+      optimizedStops, // Array of stops in optimized order with coordinates and distances
+      waypointOrder, // Original indices in optimized order (for reference)
+    };
+  }
+
+   async  createDeliveryRoute(body: any) {
+    return await postgresSequelize.transaction(async (t) => {
+      // CASE A: normal route (no children)
+      if (body.deliveryRoute && Array.isArray(body.deliveryRouteStops)) {
+        const deliveryRoute = body.deliveryRoute;
+        const deliveryRouteStops = body.deliveryRouteStops;
+  
+        // enforce parent fields for normal route
+        deliveryRoute.hasChildren = false;
+        deliveryRoute.parentRouteId = null;
+        deliveryRoute.splitIndex = 0;
+        deliveryRoute.routeGroupKey = deliveryRoute.routeGroupKey || deliveryRoute.routeNumber;
+  
+        const newRoute = await DeliveryRoute.create(deliveryRoute, { transaction: t });
+  
+        const stopsToInsert = deliveryRouteStops.map((stop: any) => ({
+          ...stop,
+          routeId: newRoute.id,
+        }));
+  
+        await DeliveryRouteStop.bulkCreate(stopsToInsert, { transaction: t });
+  
+        return { parentRoute: newRoute, children: [] };
+      }
+  
+      // CASE B: split route (parent + children)
+      if (body.parentDeliveryRoute && Array.isArray(body.children) && body.children.length) {
+        const parentPayload = body.parentDeliveryRoute;
+  
+        parentPayload.hasChildren = true;
+        parentPayload.parentRouteId = null;
+        parentPayload.splitIndex = 0;
+        parentPayload.routeGroupKey = parentPayload.routeGroupKey || parentPayload.routeNumber;
+  
+        // 1) create parent
+        const parentRoute = await DeliveryRoute.create(parentPayload, { transaction: t });
+  
+        // 2) create children and their stops
+        const createdChildren: any[] = [];
+  
+        for (const child of body.children) {
+          if (!child.deliveryRoute || !Array.isArray(child.deliveryRouteStops)) {
+            throw new Error("Each child must contain deliveryRoute and deliveryRouteStops");
+          }
+  
+          const childRoutePayload = child.deliveryRoute;
+  
+          // enforce child linkage
+          childRoutePayload.parentRouteId = parentRoute.id;
+          childRoutePayload.routeGroupKey = parentRoute.routeGroupKey;
+          childRoutePayload.hasChildren = false;
+  
+          const childRoute = await DeliveryRoute.create(childRoutePayload, { transaction: t });
+  
+          const childStops = child.deliveryRouteStops.map((stop: any) => ({
+            ...stop,
+            routeId: childRoute.id,
+          }));
+  
+          await DeliveryRouteStop.bulkCreate(childStops, { transaction: t });
+  
+          createdChildren.push(childRoute);
+        }
+  
+        return { parentRoute, children: createdChildren };
+      }
+  
+      throw new Error("Invalid payload. Send either {deliveryRoute, deliveryRouteStops} OR {parentDeliveryRoute, children[]}");
+    });
+  }
+
+  async getDeliveryRoutes(query: PaginationOptions & { 
+    routeId?: number;
+    day?: string;
+    driverId?: number;
+    routeStatus?: string;
+    includeStops?: boolean;
+    includeChildren?: boolean;
+}) {
+    const { 
+      page = 1, 
+      limit = 10, 
+      routeId,
+      day,
+      driverId,
+      routeStatus,
+      includeStops = true,
+      includeChildren = true
+    } = query;
+
+    const offset = (Number(page) - 1) * Number(limit);
+
+    // If routeId is provided, get single route with details
+    if (routeId) {
+      const route = await DeliveryRoute.findByPk(routeId, {
+        include: includeStops ? [
+          {
+            model: DeliveryRouteStop,
+            as: 'stops',
+            where: { isActive: true },
+            required: false,
+            order: [['stopSequence', 'ASC']],
+          }
+        ] : [],
+      });
+
+      if (!route) {
+        throw new AppError("Delivery route not found", 404);
+      }
+
+      const routeData: any = route.toJSON();
+
+      // If route has children, fetch them
+      if (includeChildren && routeData.hasChildren) {
+        const children = await DeliveryRoute.findAll({
+          where: {
+            parentRouteId: routeId,
+            isActive: true,
+          },
+          include: includeStops ? [
+            {
+              model: DeliveryRouteStop,
+              as: 'stops',
+              where: { isActive: true },
+              required: false,
+              order: [['stopSequence', 'ASC']],
+            }
+          ] : [],
+          order: [['splitIndex', 'ASC']],
+        });
+        routeData.children = children.map((child: any) => child.toJSON());
+      } else {
+        routeData.children = [];
+      }
+
+      return {
+        data: routeData,
+        pagination: {
+          page: 1,
+          limit: 1,
+          totalRecords: 1,
+        },
+      };
+    }
+
+    // Build where clause for filtering
+    const whereClause: any = {
+      isActive: true,
+    };
+
+    if (day) {
+      whereClause.day = day;
+    }
+
+    if (driverId) {
+      whereClause.driverId = Number(driverId);
+    }
+
+    if (routeStatus) {
+      whereClause.routeStatus = routeStatus;
+    }
+
+    // Get only parent routes (not children) for list view
+    whereClause.parentRouteId = null;
+
+    // Get routes with pagination
+    const { rows: routes, count: totalRecords } = await DeliveryRoute.findAndCountAll({
+      where: whereClause,
+      include: includeStops ? [
+        {
+          model: DeliveryRouteStop,
+          as: 'stops',
+          where: { isActive: true },
+          required: false,
+          order: [['stopSequence', 'ASC']],
+        }
+      ] : [],
+      order: [['day', 'DESC'], ['routeNumber', 'ASC']],
+      limit: Number(limit),
+      offset,
+    });
+
+    // If includeChildren is true, fetch children for each parent route
+    if (includeChildren) {
+      const routeIds = routes.map((r: any) => r.id);
+      const childrenRoutes = await DeliveryRoute.findAll({
+        where: {
+          parentRouteId: { [Op.in]: routeIds },
+          isActive: true,
+        },
+        include: includeStops ? [
+          {
+            model: DeliveryRouteStop,
+            as: 'stops',
+            where: { isActive: true },
+            required: false,
+            order: [['stopSequence', 'ASC']],
+          }
+        ] : [],
+        order: [['parentRouteId', 'ASC'], ['splitIndex', 'ASC']],
+      });
+
+      // Group children by parentRouteId
+      const childrenMap = new Map();
+      childrenRoutes.forEach((child: any) => {
+        const parentId = child.parentRouteId;
+        if (!childrenMap.has(parentId)) {
+          childrenMap.set(parentId, []);
+        }
+        childrenMap.get(parentId).push(child.toJSON());
+      });
+
+      // Attach children to parent routes
+      const routesWithChildren = routes.map((route: any) => {
+        const routeData = route.toJSON();
+        routeData.children = childrenMap.get(route.id) || [];
+        return routeData;
+      });
+
+      return {
+        data: routesWithChildren,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          totalRecords,
+          totalPages: Math.ceil(totalRecords / Number(limit)),
+        },
+      };
+    }
+
+   
+
+    }
  async getARreports(query: {
     startDate: string;
     endDate: string;
@@ -9524,6 +9913,15 @@ async getAgingReport(filters: {
     return tradeShow;
   }
 
+ async deActiveTradeShow(id: number) {
+  const tradeShow = await TradeShow.findByPk(id);
+  if (!tradeShow) {
+    throw new AppError('TradeShow not found', 404);
+  }
+  await tradeShow.update({ status: 'expire' });
+  return tradeShow;
+ }
+
   async deleteTradeShow(id: number) {
     const tradeShow = await TradeShow.findByPk(id);
 
@@ -9534,7 +9932,7 @@ async getAgingReport(filters: {
     await tradeShow.destroy();
     return { success: true, message: 'TradeShow deleted successfully' };
   }
-
+    
   // TradeShowItem CRUD methods
   async createTradeShowItem(body: {
     tradeShowId: number;
@@ -9764,9 +10162,12 @@ async getAgingReport(filters: {
       whereCondition.tradeShowId = query.tradeShowId;
     }
 
-    // Filter by itemNumber (partial match)
+    // Filter by itemNumber (partial match in itemNumber or description)
     if (query.itemNumber) {
-      whereCondition.itemNumber = { [Op.iLike]: `%${query.itemNumber}%` };
+      whereCondition[Op.or] = [
+        { itemNumber: { [Op.iLike]: `%${query.itemNumber}%` } },
+        { description: { [Op.iLike]: `%${query.itemNumber}%` } }
+      ];
     }
 
     // Filter by discount type
@@ -10336,6 +10737,12 @@ async getAgingReport(filters: {
   
     const whereCondition: any = {};
   
+    if (query.search) {
+      whereCondition[Op.or] = [
+        { retailerName: { [Op.like]: `%${query.search}%` } },
+        {retailerId: { [Op.like]: `%${query.search}%` } },
+      ];
+    }
     if (query.tradeShowId) whereCondition.tradeShowId = query.tradeShowId;
     if (query.retailerId) whereCondition.retailerId = query.retailerId;
   
@@ -10618,13 +11025,21 @@ async getAgingReport(filters: {
   }
 
   async getAllTradeShowVendors(
-    query: PaginationOptions & { tradeShowId?: number; vendorId?: number }
+    query: PaginationOptions & { tradeShowId?: number; vendorId?: number; search?: string }
   ) {
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
     const offset = (page - 1) * limit;
+    const search = query.search || '';
+  
   
     const whereCondition: any = {};
+    if (search) {
+      whereCondition[Op.or] = [
+        { vendorName: { [Op.like]: `%${search}%` } },
+        { vendorId: { [Op.like]: `%${search}%` } },
+      ];
+    }
   
     if (query.tradeShowId) whereCondition.tradeShowId = query.tradeShowId;
     if (query.vendorId) whereCondition.vendorId = query.vendorId;
@@ -11009,13 +11424,25 @@ let vendorId = tradeShowVendor?.dataValues.vendorId;
   }
 
   
+  
 
 
   async getRemainItemInDelivery(tradeShowId:number,query:PaginationOptions){
-let {page = 1,limit = 10} = query;
+let {page = 1,limit = 10,salesCategory,priceClass} = query;
 page = parseInt(page as any) || 1;
 limit = parseInt(limit as any) || 10;
 const offset = (page - 1) * limit;
+
+let whereCondition:any = {};
+
+if (salesCategory?.length > 0) {
+  const salesCategoryNumbers = salesCategory.map((v: any) => Number(v));
+  whereCondition.salesCategory = { [Op.in]: salesCategoryNumbers };
+}
+if (priceClass?.length > 0 ) {
+  const priceClassNumbers = priceClass.map((v: any) => Number(v));
+  whereCondition.priceClass = { [Op.in]: priceClassNumbers };
+}
 
     const tradeShow = await TradeShowDeliveryProduct.findAll({
       where: {
@@ -11032,6 +11459,7 @@ const offset = (page - 1) * limit;
         itemNumber: {
           [Op.notIn]: itemInDelivery,
         },
+        ...whereCondition,
       },
       limit,
       offset,
@@ -12100,6 +12528,937 @@ async deleteBulkTradeShowRetailers(body: {
   return { success: true, message: 'TradeShowRetailer deleted successfully' };
 }
 
+async poReceivingHistoryReport(query:any) {
+  let {startDate,endDate} = query;
+
+   const end = new Date(endDate);
+    end.setDate(end.getDate() );
+    const startEnd = new Date(startDate);
+    startEnd.setDate(startEnd.getDate());
+
+  const result = await PODetail.findAndCountAll({
+    subQuery: false,
+    distinct: true,
+    col: 'PO_Number',
+
+    attributes: {
+      include: [
+        [
+          literal(`Quantity_Recd * PO_Detail.Pack`),
+          'qtyRecd',
+        ],
+      ],
+    },
+
+    include: [
+      {
+        model: POHeader,
+        as: 'POHeader',
+        required: true,
+        where: {
+          PO_Posted: 'True',
+          PO_Deleted: 'False',
+          Receiving_Code: 'P',
+          Date_Received: {
+            [Op.between]: [startEnd, end],
+          },
+        },
+        attributes: [
+          'PO_Number',
+          'Invoice_Number',
+          'Date_Received',
+          'Primary_Vendor',
+        ],
+        include: [
+          {
+            model: Vendor,
+            attributes: [
+              'Primary_Vendor',
+              'V_Description',
+              'V_Addr1',
+              'V_City',
+              'V_State',
+              'V_Zip',
+              'V_Phone',
+            ],
+          },
+        ],
+      },
+      {
+        model: Inventory,
+        attributes: [
+          'Description',
+          'Cig_Pack',
+          'Cig_Sticks',
+          'UnitOunces',
+          'UOM',
+          'Price_Class',
+          'location',
+          'section',
+          'PickArea',
+          ['Pack', 'iPack'],
+          ['OTP_Number', 'iOTP'],
+          [
+            literal(`
+              (SELECT OTP_Description
+               FROM OtherTaxes
+               WHERE OtherTaxes.OTP_Number = Inventory.OTP_Number)
+            `),
+            'otpName',
+          ],
+          [
+            literal(`
+              (SELECT Brand_Family
+               FROM Inventory_Brands
+               WHERE Inventory_Brands.Brand_ID = Inventory.Brand_ID)
+            `),
+            'Brand',
+          ],
+          [
+            literal(`
+              (SELECT V_Description
+               FROM Vendor
+               WHERE Vendor.Primary_Vendor = Inventory.Manufacturer)
+            `),
+            'Manuf',
+          ],
+        ],
+      },
+    ],
+
+    order: [
+      [{ model: POHeader, as: 'POHeader' }, 'Date_Received', 'ASC'],
+      ['PO_Number', 'ASC'],
+    ],
+  });
+
+  return {
+    total: result.count,
+    data: result.rows,
+  };
+}
+
+async poTransferAdjustmentReport(query: any) {
+  const { startDate, endDate } = query;
+
+  const data = await PODetail.findAll({
+    attributes: {
+      include: [
+        [
+          literal(
+                    'ISNULL([PO_Detail].[Quantity_Recd], 0) * ISNULL([PO_Detail].[Cost], 0)'
+                  ),
+          'Ext_Cost',
+        ],
+      ],
+    },
+
+    include: [
+      {
+        model: POHeader,
+        as: 'POHeader',
+        required: true, 
+        attributes: [
+          'PO_Number',
+          'PO_Date',
+          'Date_Received',
+          'Receiving_Code',
+        ],
+        where: {
+          PO_Posted: true,
+          PO_Deleted: false,
+          Receiving_Code: 'A',
+          Date_Received: {
+            [Op.between]: [startDate, endDate],
+          },
+        },
+        include: [
+          {
+            model: Vendor,
+            required: false, // LEFT JOIN Vendor
+            attributes: [
+              'V_Description',
+              'V_Addr1',
+              'V_City',
+              'V_State',
+              'V_Zip',
+              'V_Phone',
+            ],
+          },
+        ],
+      },
+      {
+        model: Inventory,
+        required: false, // LEFT JOIN Inventory
+        attributes: [
+          'Item_Number',
+          'Description',
+          'UOM',
+          'Price_Class',
+          'location',
+          'section',
+          'PickArea',
+          ['Pack', 'iPack'],
+        ],
+      },
+    ],
+
+    order: [
+      [{ model: POHeader, as: 'POHeader' }, 'Date_Received', 'ASC'],
+      [{ model: POHeader, as: 'POHeader' }, 'PO_Number', 'ASC'],
+    ],
+  });
+  return data;
+}
+
+async poCigOtpReport(query: any) {
+  const { startDate, endDate } = query;
+
+  const end = new Date(endDate);
+  const startEnd = new Date(startDate);
+
+  return await POHeader.findAll({
+    where: {
+      PO_Posted: true,
+      PO_Deleted: false,
+      Receiving_Code: 'P',
+      Date_Received: {
+        [Op.between]: [startEnd, end],
+      },
+    },
+    order: [
+      ['Date_Received', 'ASC'],
+      ['PO_Number', 'ASC'],
+    ],
+    include: [
+      {
+        model: PODetail,
+        as: 'PO_Details',
+        required: true,
+        separate: true,
+
+        attributes: {
+          include: [
+            [
+              Sequelize.literal(
+                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Pack]'
+              ),
+              'qtyRecd',
+            ],
+            [
+              Sequelize.literal(
+                '[PO_Detail].[Quantity_Recd] * [Inventory].[UnitOunces]'
+              ),
+              'qtyOz',
+            ],
+            [
+              Sequelize.literal(
+                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[AvgCost]'
+              ),
+              'Ext_AvgCost',
+            ],
+            [
+              Sequelize.literal(
+                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[BaseCost]'
+              ),
+              'Ext_BaseCost',
+            ],
+            [
+              Sequelize.literal(
+                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[NetCost]'
+              ),
+              'Ext_NetCost',
+            ],
+            [
+              Sequelize.literal(
+                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Invoice_Cost]'
+              ),
+              'Ext_InvoiceCost',
+            ],
+            [
+              Sequelize.literal(
+                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Cost]'
+              ),
+              'Ext_POCost',
+            ],
+            [
+              Sequelize.literal(
+                '[PO_Detail].[Quantity_Recd] * [Inventory].[Cig_Sticks]'
+              ),
+              'Total_Cig_Sticks',
+            ],
+            [
+              Sequelize.literal(
+                '([PO_Detail].[Quantity_Recd] * [Inventory].[Cig_Sticks]) / NULLIF([Inventory].[Cig_Pack], 0)'
+              ),
+              'Total_Pack',
+            ],
+
+          ],
+        },
+
+        include: [
+          {
+            model: Inventory,
+            required: false,
+            attributes: [
+              'Description',
+              'Cig_Pack',
+              'Cig_Sticks',
+              'UnitOunces',
+              'UOM',
+              ['Pack', 'iPack'],
+              ['OTP_Number', 'iOTP'],
+              
+
+              [
+                Sequelize.literal(`(
+                  SELECT OT.OTP_Description
+                  FROM OtherTaxes OT
+                  WHERE OT.OTP_Number = [Inventory].[OTP_Number]
+                )`),
+                'otpName',
+              ],
+
+              [
+                Sequelize.literal(`(
+                  SELECT IB.Brand_Family
+                  FROM Inventory_Brands IB
+                  WHERE IB.Brand_ID = [Inventory].[Brand_ID]
+                )`),
+                'Brand',
+              ],
+
+              [
+                Sequelize.literal(`(
+                  SELECT V.V_Description
+                  FROM Vendor V
+                  WHERE V.Primary_Vendor = [Inventory].[Manufacturer]
+                )`),
+                'Manuf',
+              ],
+            ],
+          },
+        ],
+      }
+      ,
+      {
+        model: Vendor,
+        required: true,
+        attributes: [
+          'Primary_Vendor',
+          'V_Description',
+          'V_Addr1',
+          'V_City',
+          'V_State',
+          'V_Zip',
+          'V_Phone',
+        ],
+      },
+    ],
+
+    subQuery: false,
+  });
+}
+
+async createInvoice(orderNumber: number) {
+
+  // 1. Order Header + Customer + SalesRep
+  const orderHeader = await OrderHeader.findOne({
+    where: { Order_Number: orderNumber },
+    attributes: [
+      'Order_Number',
+      'Order_Date',
+      'C_Number',
+      'S_Number',
+      'Delivery_Date',
+      'Delivery_Charge',
+      'Tracking_Number',
+      'Invoice_Date',
+      'Invoice_time',
+      'Invoice_Total',
+      'PrepaidTax_Amount',
+      'Route_Number',
+      'Stop_Number',
+      ...Array.from({ length: 12 }, (_, i) => `Sales${String(i + 1).padStart(2, '0')}`),
+      ...Array.from({ length: 12 }, (_, i) => `Taxes${String(i + 1).padStart(2, '0')}`)
+    ],
+    include: [
+      {
+        model: Customer,
+        as: 'customer',
+        attributes: [
+          'C_Number',
+          'C_Name',
+          'C_CoName',
+          'C_Address',
+          'C_City',
+          'C_State',
+          'C_Zip',
+          'C_Country',
+          'C_Email','C_Phone','TermsCode','C_Fax','C_SalesTaxNumber','C_CigtLicenseNumber','Credit_Limit','EDI_Format','C_FEIN','C_PhoneMobile',
+          'LastBalance','LastInvoiceNumber','LastInvoiceAmount','LastPaymentAmount','LastPaymentDate',
+        ]
+      },
+      {
+        model: SalesRep,
+        as: "salesRep",
+        attributes: ['S_Number', 'S_Desc']
+      }
+    ]
+  });
+
+  if (!orderHeader) {
+    throw new Error('Order not found');
+  }
+
+  // 2. Order Detail + Inventory + UPC
+  const orderItems = await OrderDetail.findAll({
+    where: { Order_Number: orderNumber },
+    attributes: [
+      'Item_Number',
+      'Sales_Category',
+      'OTP_Number',
+      'Quantity_Ordered',
+      'Quantity_Shipped',
+      'Pack',
+      'Price',
+      'CaseCount',
+      'Taxable','EBT','CasesPerPallet','Item_Message','ItemDescription','Special_ID','Tote_ID', 'OTP_Amount_State','OTP_Amount_County','OTP_Amount_City',
+      'OffInvoice_Amount','OffInvoice_OffCost','OffInvoice_Special','Points','PrepaidTax_Amount','DepositAmount'  ],
+    include: [
+      {
+        model: Inventory,
+        as: 'inventory',
+        attributes: ['Item_Number','Description','UOM','Price_Class','location','section','PickArea','Retail1','Retail2','Retail3','UnitOunces','CaseLength','CaseWidth','CaseHeight','CasesPerPallet',
+          'EBT','FrozenFlag','CoolerFlag','HazMatFlag','StandardUnitDescription','MSA_Promotion_Code','MSA_Promotion','Lot_ID','NACS_Unit','Brand_ID','NACS','MSA_Category_Code','Sequence','Retail1','Retail2','Retail3',
+        ],
+        include: [
+          {
+            model: InventoryUPC,
+            as: 'UPCList',
+            attributes: ['UPC_Number'],
+            where: { Status: 0 },
+            required: false
+          }
+        ]
+      }
+    ]
+  });
+
+  // 3. Final Invoice Object
+  return {
+    invoiceHeader: orderHeader,
+    invoiceItems: orderItems
+  };
+}
+
+
+// async currentOrderStatusReport(query: any) {
+//   const {
+//     startDate,
+//     endDate,
+//     customerNumber,
+//     currentStatus,
+//   } = query;
+
+//   const whereCondition: any = {
+//     Order_Updated: false,
+//     Order_Deleted: false,
+//   };
+
+//   if (startDate && endDate) {
+//     whereCondition.Order_Date = {
+//       [Op.between]: [startDate, endDate],
+//     };
+//   }
+
+//   if (customerNumber) {
+//     whereCondition.C_Number = Number(customerNumber);
+//   }
+
+//   if (currentStatus === 'invoices') {
+//     whereCondition.Invoice_Number = { [Op.gt]: 0 };
+//   }
+
+//   if (currentStatus === 'non_invoices') {
+//     whereCondition.Invoice_Number = { [Op.eq]: 0 };
+//   }
+
+//   if (currentStatus === 'picklist') {
+//     whereCondition.Picklist_Printed = true;
+//   }
+
+//   if (currentStatus === 'EpickStatusFromPicker') {
+//     whereCondition.EpickStatusFromPicker = 'completed';
+//   }
+
+//   const data = await OrderHeader.findAll({
+//     where: whereCondition,
+//     order: [['Order_Number', 'DESC']],
+
+//     attributes: [
+//       'Order_Number',
+//       'Invoice_Number',
+//       'Invoice_Date',
+//       'Invoice_Total',
+//       'Picklist_Printed',
+//       'Order_Date',
+//       'Delivery_Date',
+//       'Order_Source',
+//       'C_Number',
+//       'S_Number',
+//       'Route_Number',
+//       'Stop_Number',
+
+//       [
+//         Sequelize.literal(`
+//           IIF(
+//             OrderHeader.Invoice_Number_Legacy <> 0,
+//             CONVERT(varchar(10), OrderHeader.Invoice_Number_Legacy),
+//             IIF(
+//               OrderHeader.Invoice_Number > 1,
+//               CONCAT(OrderHeader.Order_Number, '-', OrderHeader.Invoice_Number),
+//               CONVERT(varchar(10), OrderHeader.Order_Number)
+//             )
+//           )
+//         `),
+//         'Document_Number',
+//       ],
+
+//       [
+//         Sequelize.fn(
+//           'SUM',
+//           Sequelize.col('orderDetails.Quantity_Ordered')
+//         ),
+//         'total_item_quantity',
+//       ],
+
+//       [
+//         Sequelize.fn(
+//           'COUNT',
+//           Sequelize.col('orderDetails.Line_Number')
+//         ),
+//         'total_line_number',
+//       ],
+//     ],
+
+//     include: [
+//       {
+//         model: OrderDetail,
+//         as: 'orderDetails',
+//         required: false,
+//         attributes: [],
+//       },
+//       {
+//         model: Customer,
+//         as: 'customer',
+//         attributes: [
+//           'C_Number',
+//           'C_Name',
+//           'C_CoName',
+//           'C_Address',
+//           'C_City',
+//           'C_State',
+//           'C_Zip',
+//           'C_PhoneMobile',
+//         ],
+//       },
+//       {
+//         model: SalesRep,
+//         as: 'salesRep',
+//         attributes: ['S_Number', 'S_Desc'],
+//       },
+//     ],
+
+//     group: [
+//       'OrderHeader.Order_Number',
+//       'OrderHeader.Invoice_Number',
+//       'OrderHeader.Invoice_Date',
+//       'OrderHeader.Invoice_Total',
+//       'OrderHeader.Picklist_Printed',
+//       'OrderHeader.Order_Date',
+//       'OrderHeader.Delivery_Date',
+//       'OrderHeader.Order_Source',
+//       'OrderHeader.C_Number',
+//       'OrderHeader.S_Number',
+//       'OrderHeader.Route_Number',
+//       'OrderHeader.Stop_Number',
+//       'OrderHeader.Invoice_Number_Legacy',
+//       'customer.C_Number',
+//       'customer.C_Name',
+//       'customer.C_CoName',
+//       'customer.C_Address',
+//       'customer.C_City',
+//       'customer.C_State',
+//       'customer.C_Zip',
+//       'customer.C_PhoneMobile',
+//       'salesRep.S_Number',
+//       'salesRep.S_Desc',
+//     ],
+//   });
+
+//   return data;
+// }
+
+async currentOrderStatusReport(query: any) {
+  const { startDate, endDate } = query;
+
+  if (!startDate || !endDate) {
+    throw new Error('startDate and endDate are required');
+  }
+
+  const baseWhere = {
+    Order_Date: {
+      [Op.between]: [startDate, endDate],
+    },
+  };
+
+  const recordLocks = await Record_Locks.findAll({
+    where: { Lock_Type: 0 },
+    attributes: ['Lock_Number'],
+    raw: true,
+  });
+
+  const lockedOrderNumbers = recordLocks.map(
+    (r: { Lock_Number: number }) => r.Lock_Number
+  );
+
+  const commonAttributes: FindAttributeOptions = [
+    'Order_Number',
+    'Invoice_Number',
+    'Invoice_Date',
+    'Invoice_Total',
+    'Picklist_Printed',
+    'Order_Date',
+    'Delivery_Date',
+    'Order_Source',
+    'C_Number',
+    'S_Number',
+    'Route_Number',
+    'Stop_Number',
+    'Invoice_Number_Legacy',
+    'Order_Deleted',
+    'Order_Updated',
+
+    [
+      Sequelize.literal(`
+        IIF(
+          OrderHeader.Invoice_Number_Legacy <> 0,
+          CONVERT(varchar(10), OrderHeader.Invoice_Number_Legacy),
+          IIF(
+            OrderHeader.Invoice_Number > 1,
+            CONCAT(OrderHeader.Order_Number, '-', OrderHeader.Invoice_Number),
+            CONVERT(varchar(10), OrderHeader.Order_Number)
+          )
+        )
+      `),
+      'Document_Number',
+    ],
+
+    [
+      Sequelize.fn('SUM', Sequelize.col('orderDetails.Quantity_Ordered')),
+      'total_item_quantity',
+    ],
+
+    [
+      Sequelize.fn('COUNT', Sequelize.col('orderDetails.Line_Number')),
+      'total_line_number',
+    ],
+  ];
+
+  const commonQuery: Omit<FindOptions, 'where'> = {
+    include: [
+      {
+        model: OrderDetail,
+        as: 'orderDetails',
+        attributes: [],
+        required: true,
+      },
+      {
+        model: Customer,
+        as: 'customer',
+        attributes: [
+          'C_Number',
+          'C_Name',
+          'C_CoName',
+          'C_Address',
+          'C_City',
+          'C_State',
+          'C_Zip',
+          'C_PhoneMobile',
+        ],
+      },
+      {
+        model: SalesRep,
+        as: 'salesRep',
+        attributes: ['S_Number', 'S_Desc'],
+      },
+    ],
+    attributes: commonAttributes,
+    group: [
+      'OrderHeader.Order_Number',
+      'OrderHeader.Invoice_Number',
+      'OrderHeader.Invoice_Date',
+      'OrderHeader.Invoice_Total',
+      'OrderHeader.Picklist_Printed',
+      'OrderHeader.Order_Date',
+      'OrderHeader.Delivery_Date',
+      'OrderHeader.Order_Source',
+      'OrderHeader.C_Number',
+      'OrderHeader.S_Number',
+      'OrderHeader.Route_Number',
+      'OrderHeader.Stop_Number',
+      'OrderHeader.Invoice_Number_Legacy',
+      'OrderHeader.Order_Deleted',
+      'OrderHeader.Order_Updated',
+      'customer.C_Number',
+      'customer.C_Name',
+      'customer.C_CoName',
+      'customer.C_Address',
+      'customer.C_City',
+      'customer.C_State',
+      'customer.C_Zip',
+      'customer.C_PhoneMobile',
+      'salesRep.S_Number',
+      'salesRep.S_Desc',
+    ],
+  };
+
+  const results = await Promise.allSettled([
+
+    // Invoices
+    OrderHeader.findAll({
+      ...commonQuery,
+      where: { ...baseWhere, Invoice_Number: { [Op.gt]: 0 } },
+    }),
+
+    // Non Invoices (FIXED)
+    OrderHeader.findAll({
+      ...commonQuery,
+      where: { ...baseWhere, Invoice_Number: { [Op.eq]: 0 } },
+    }),
+
+    // Picklist Printed
+    OrderHeader.findAll({
+      ...commonQuery,
+      where: { ...baseWhere, Picklist_Printed: true },
+    }),
+
+    // Epick Completed
+    OrderHeader.findAll({
+      ...commonQuery,
+      where: { ...baseWhere, EpickStatusFromPicker: 'completed' },
+    }),
+
+    // Order Confirmation (NEW)
+    OrderHeader.findAll({
+      ...commonQuery,
+      where: {
+        ...baseWhere,
+        [Op.and]: [
+          Sequelize.literal(`
+            EXISTS (
+              SELECT 1
+              FROM [Order_Detail] od
+              WHERE od.Order_Number = [OrderHeader].[Order_Number]
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM [Order_Detail] od2
+              WHERE od2.Order_Number = [OrderHeader].[Order_Number]
+                AND (od2.Confirmed = 0 OR od2.Confirmed IS NULL)
+            )
+          `),
+        ],
+      },
+    }),
+
+  // Locked Orders
+  lockedOrderNumbers.length
+    ? OrderHeader.findAll({
+        ...commonQuery,
+        where: {
+          ...baseWhere,
+          Order_Number: { [Op.in]: lockedOrderNumbers },
+        },
+      })
+    : Promise.resolve([]),
+
+]);
+
+  const [
+    invoices,
+    non_invoices,
+    picklist,
+    epickCompleted,
+    lockedOrders,
+  ] = results.map((r) =>
+    r.status === 'fulfilled' ? r.value : []
+  );
+
+  return {
+    invoices,
+    non_invoices,
+    picklist,
+    epickCompleted,
+    recordLocks: lockedOrders,
+  };
+}
+async getInvoiceRegister(query: any) {
+  const { startDate, endDate } = query;
+
+  const data = await OrderHeader.findAll({
+    attributes: [
+      'Order_Number',
+      'C_Number',
+      'POS_Cash',
+      'POS_Check',
+      'POS_Credit',
+      'POS_Debit',
+      'POS_Other',
+      'POS_House',
+      'Invoice_Total',
+      'Workstation_ID',
+      'User_ID',
+      'Invoice_Date',
+      'Reprint_Invoice_Required',
+
+      // Document_Number calculation
+      [
+        Sequelize.literal(`
+          IIF(
+            OrderHeader.Invoice_Number_Legacy <> 0,
+            CONVERT(varchar(10), OrderHeader.Invoice_Number_Legacy),
+            IIF(
+              OrderHeader.Invoice_Number > 1,
+              CONCAT(OrderHeader.Order_Number, '-', OrderHeader.Invoice_Number),
+              CONVERT(varchar(10), OrderHeader.Order_Number)
+            )
+          )
+        `),
+        'Document_Number',
+      ],
+
+      // Subqueries
+      [
+        Sequelize.literal(`(
+          SELECT S_Desc 
+          FROM SalesRep 
+          WHERE SalesRep.s_number = OrderHeader.s_number
+        )`),
+        'repName',
+      ],
+      [
+        Sequelize.literal(`(
+          SELECT Route_Description 
+          FROM Routes 
+          WHERE Routes.Route_Number = OrderHeader.Route_Number
+        )`),
+        'routeName',
+      ],
+      [
+        Sequelize.literal(`(
+          SELECT Source_Description 
+          FROM Order_Source 
+          WHERE Order_Source.Order_Source = OrderHeader.Order_Source
+        )`),
+        'sourceName',
+      ],
+      [
+        Sequelize.literal(`(
+          SELECT UserName 
+          FROM Users 
+          WHERE Users.UserNumber = OrderHeader.User_ID
+        )`),
+        'userName',
+      ],
+      [
+        Sequelize.literal(`(
+          SELECT Workstation_Name 
+          FROM Workstation_Defs 
+          WHERE Workstation_Defs.Workstation_ID = OrderHeader.Workstation_ID
+        )`),
+        'workstationName',
+      ],
+    ],
+
+    include: [
+      {
+        model: Customer,
+        as: 'customer',
+        attributes: [
+          'C_Name',
+          'C_Address',
+          'C_City',
+          'C_State',
+          'C_Zip',
+        ],
+        required: false, // LEFT JOIN
+      },
+    ],
+
+    where: {
+      Order_Deleted: 'False',
+      Order_Updated: 'True',
+      Invoice_Number: {
+        [Op.ne]: 0,
+      },
+      Invoice_Date: {
+        [Op.between]: [startDate, endDate],
+      },
+    },
+
+    order: [['Order_Number', 'ASC']],
+    raw: true,
+  });
+
+  return data;
+}
+
+async currentOrderDetailStatus(orderNumber: number) {
+  const orderDetails = await OrderDetail.findAll({  
+    where: { Order_Number: orderNumber },
+    attributes: [
+      'Line_Number',
+      'Item_Number',
+      'Quantity_Ordered',
+      'Quantity_Shipped',
+      'Price',
+      'OTP_Amount_State',
+      'OTP_Amount_County',
+      'OTP_Amount_City',
+      'PrepaidTax_Amount',
+      [
+        Sequelize.literal(`
+          (OrderDetail.Price + OrderDetail.OTP_Amount_State + OrderDetail.OTP_Amount_County + OrderDetail.OTP_Amount_City)
+        `),
+        'TotalPrice',
+      ],
+    ],
+    include: [
+      {
+        model: Inventory,
+        as: 'inventory',
+        required: false,
+        attributes: [
+          'Item_Number',
+          'Description',
+          'CaseCount',
+          'CaseWeight',
+          'UOM',
+          'Section',
+          'Location',
+          'Pack',
+          [Sequelize.literal('0'), 'OnHand'],
+        ],  
+      },
+    ],
+  });
+  return orderDetails;
+}
+
+
 
 async getProductsByOrderNumber(body: {
   orderNumbers: number[];
@@ -12226,6 +13585,7 @@ async getProductsByOrderNumber(body: {
 }
 
 
+
 async getTradeShowItemForEdit(tradeShowId:number) {
   const tradeShowItem = await TradeShowItem.findAll({
     where: {
@@ -12276,6 +13636,452 @@ async getTradeShowRetailerForEdit(tradeShowId:number) {
     attributes: ['retailerId']
   });
   return {data:tradeShowRetailers,total:total};
+}
+
+  // CustomerAssignInvoiceTemplate CRUD service methods
+  async createCustomerAssignInvoiceTemplate(data: { customerNumber: number; templateId: number }) {
+    // Check if the assignment already exists
+    const existing = await CustomerAssignInvoiceTemplate.findOne({
+      where: {
+        customerNumber: data.customerNumber,
+        templateId: data.templateId,
+      },
+    });
+
+    if (existing) {
+      throw new AppError('This customer-template assignment already exists', 400);
+    }
+
+    const assignment = await CustomerAssignInvoiceTemplate.create({
+      customerNumber: data.customerNumber,
+      templateId: data.templateId,
+    });
+    return assignment;
+  }
+
+  async getCustomerAssignInvoiceTemplateById(id: number) {
+    const assignment = await CustomerAssignInvoiceTemplate.findByPk(id);
+    if (!assignment) {
+      throw new AppError('Customer invoice template assignment not found', 404);
+    }
+    return assignment;
+  }
+
+  async getAllCustomerAssignInvoiceTemplates(query: PaginationOptions & { 
+    search?: string; 
+    customerNumber?: number; 
+    templateId?: number 
+  }) {
+    const { page = 1, limit = 10, search = '', customerNumber, templateId } = query;
+    const offset = (page - 1) * limit;
+
+    const whereClause: any = {};
+
+    if (customerNumber) {
+      whereClause.customerNumber = customerNumber;
+    }
+
+    if (templateId) {
+      whereClause.templateId = templateId;
+    }
+
+    if (search) {
+      whereClause[Op.or] = [
+        { customerNumber: { [Op.eq]: isNaN(Number(search)) ? -1 : Number(search) } },
+        { templateId: { [Op.eq]: isNaN(Number(search)) ? -1 : Number(search) } },
+      ];
+    }
+
+    const { count, rows } = await CustomerAssignInvoiceTemplate.findAndCountAll({
+      where: whereClause,
+      limit: Number(limit),
+      offset: Number(offset),
+      order: [['createdAt', 'DESC']],
+    });
+
+    return {
+      data: rows,
+      pagination: {
+        total: count,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(count / Number(limit)),
+      },
+    };
+  }
+
+  async updateCustomerAssignInvoiceTemplate(
+    id: number,
+    data: { customerNumber?: number; templateId?: number }
+  ) {
+    const assignment = await CustomerAssignInvoiceTemplate.findByPk(id);
+    if (!assignment) {
+      throw new AppError('Customer invoice template assignment not found', 404);
+    }
+
+    // If updating customerNumber or templateId, check for duplicates
+    if (data.customerNumber !== undefined || data.templateId !== undefined) {
+      const newCustomerNumber = data.customerNumber ?? assignment.customerNumber;
+      const newTemplateId = data.templateId ?? assignment.templateId;
+
+      const existing = await CustomerAssignInvoiceTemplate.findOne({
+        where: {
+          customerNumber: newCustomerNumber,
+          templateId: newTemplateId,
+          id: { [Op.ne]: id },
+        },
+      });
+
+      if (existing) {
+        throw new AppError('This customer-template assignment already exists', 400);
+      }
+    }
+
+    await assignment.update(data);
+    return assignment;
+  }
+
+  async deleteCustomerAssignInvoiceTemplate(id: number) {
+    const assignment = await CustomerAssignInvoiceTemplate.findByPk(id);
+    if (!assignment) {
+      throw new AppError('Customer invoice template assignment not found', 404);
+    }
+
+    await assignment.destroy();
+    return { message: 'Customer invoice template assignment deleted successfully' };
+  }
+
+  // Bulk operations
+  async bulkAddCustomerAssignInvoiceTemplates(body: { assignments: { customerNumber: number; templateId: number }[] }) {
+    const { assignments } = body;
+    
+    if (!Array.isArray(assignments) || assignments.length === 0) {
+      throw new AppError('Assignments must be a non-empty array', 400);
+    }
+
+    // Validate all entries
+    for (const item of assignments) {
+      if (!item.customerNumber || !item.templateId) {
+        throw new AppError('Each item must have customerNumber and templateId', 400);
+      }
+    }
+
+    // Check for existing assignments
+    const existingAssignments = await CustomerAssignInvoiceTemplate.findAll({
+      where: {
+        [Op.or]: assignments.map((item) => ({
+          customerNumber: item.customerNumber,
+          templateId: item.templateId,
+        })),
+      },
+    });
+
+    if (existingAssignments.length > 0) {
+      const existingList = existingAssignments
+        .map((e) => `Customer ${e.customerNumber} - Template ${e.templateId}`)
+        .join(', ');
+      throw new AppError(`Some assignments already exist: ${existingList}`, 400);
+    }
+
+    // Bulk create
+    const created = await CustomerAssignInvoiceTemplate.bulkCreate(assignments, {
+      validate: true,
+      returning: true,
+    });
+
+    return {
+      message: `Successfully created ${created.length} customer invoice template assignment(s)`,
+      data: created,
+      count: created.length,
+    };
+  }
+
+  async bulkRemoveCustomerAssignInvoiceTemplates(body: { assignments: { customerNumber: number; templateId: number }[] }) {
+    const { assignments } = body;
+    
+    if (!Array.isArray(assignments) || assignments.length === 0) {
+      throw new AppError('Assignments must be a non-empty array', 400);
+    }
+
+    // Validate all entries
+    for (const item of assignments) {
+      if (!item.customerNumber || !item.templateId) {
+        throw new AppError('Each item must have customerNumber and templateId', 400);
+      }
+    }
+
+    // Find and delete matching assignments
+    const deleted = await CustomerAssignInvoiceTemplate.destroy({
+      where: {
+        [Op.or]: assignments.map((item) => ({
+          customerNumber: item.customerNumber,
+          templateId: item.templateId,
+        })),
+      },
+    });
+
+    return {
+      message: `Successfully removed ${deleted} customer invoice template assignment(s)`,
+      count: deleted,
+    };
+  }
+
+  // InvoiceTemplate CRUD service methods
+  async createInvoiceTemplate(data: Partial<IInvoiceTemplate> & { selectedCustomerIds?: number[] }) {
+    // Extract selectedCustomerIds from data (not part of IInvoiceTemplate)
+    const { selectedCustomerIds, ...templateData } = data;
+
+    // Check if a template with the same name already exists (case-insensitive)
+    if (templateData.name) {
+      const trimmedName = templateData.name.trim().toLowerCase();
+      const existingTemplate = await InvoiceTemplate.findOne({
+        where: { name: trimmedName },
+      });
+
+      if (existingTemplate) {
+        throw new AppError(`An invoice template with the name "${templateData.name}" already exists`, 400);
+      }
+      
+      // Store name in lowercase
+      templateData.name = trimmedName;
+    }
+
+    // Convert all string fields to lowercase (matching seeder pattern)
+    if (templateData.groupBy !== undefined) {
+      templateData.groupBy = String(templateData.groupBy).toLowerCase();
+    }
+    if (templateData.upcOption !== undefined) {
+      templateData.upcOption = String(templateData.upcOption).toLowerCase();
+    }
+    if (templateData.logoPosition !== undefined) {
+      templateData.logoPosition = String(templateData.logoPosition).toLowerCase();
+    }
+    if (templateData.headerOnPages !== undefined) {
+      templateData.headerOnPages = String(templateData.headerOnPages).toLowerCase();
+    }
+    if (templateData.headerMessageFirstPage !== undefined) {
+      templateData.headerMessageFirstPage = String(templateData.headerMessageFirstPage).toLowerCase();
+    }
+    if (templateData.footerLayout !== undefined) {
+      templateData.footerLayout = String(templateData.footerLayout).toLowerCase();
+    }
+    if (templateData.footerMessageLastPage !== undefined) {
+      templateData.footerMessageLastPage = String(templateData.footerMessageLastPage).toLowerCase();
+    }
+
+    // Create the invoice template
+    const template = await InvoiceTemplate.create(templateData as any);
+
+    // If selectedCustomerIds array has values, create customer assignments
+    if (selectedCustomerIds && Array.isArray(selectedCustomerIds) && selectedCustomerIds.length > 0) {
+      // Prepare assignments array
+      const assignments = selectedCustomerIds.map((customerNumber) => ({
+        customerNumber,
+        templateId: template.id,
+      }));
+
+      // Check for existing assignments to avoid duplicates
+      const existingAssignments = await CustomerAssignInvoiceTemplate.findAll({
+        where: {
+          [Op.or]: assignments.map((item) => ({
+            customerNumber: item.customerNumber,
+            templateId: item.templateId,
+          })),
+        },
+      });
+
+      // Filter out existing assignments
+      const existingSet = new Set(
+        existingAssignments.map((e) => `${e.customerNumber}-${e.templateId}`)
+      );
+      const newAssignments = assignments.filter(
+        (item) => !existingSet.has(`${item.customerNumber}-${item.templateId}`)
+      );
+
+      // Create only new assignments
+      if (newAssignments.length > 0) {
+        await CustomerAssignInvoiceTemplate.bulkCreate(newAssignments, {
+          validate: true,
+          ignoreDuplicates: true,
+        });
+      }
+    }
+
+    return template;
+  }
+
+  async getInvoiceTemplateById(id: number) {
+    const template = await InvoiceTemplate.findByPk(id);
+    if (!template) {
+      throw new AppError('Invoice template not found', 404);
+    }
+    return template;
+  }
+
+  async getAllInvoiceTemplates(query: PaginationOptions & { 
+    search?: string; 
+    mainTemplate?: boolean;
+  }) {
+    const { page = 1, limit = 10, search = '', mainTemplate } = query;
+    const offset = (page - 1) * limit;
+
+    const whereClause: any = {};
+
+    if (mainTemplate !== undefined) {
+      whereClause.mainTemplate = mainTemplate;
+    }
+
+    if (search) {
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    const { count, rows } = await InvoiceTemplate.findAndCountAll({
+      where: whereClause,
+      limit: Number(limit),
+      offset: Number(offset),
+      order: [['createdAt', 'DESC']],
+    });
+
+    return {
+      data: rows,
+      pagination: {
+        total: count,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(count / Number(limit)),
+      },
+    };
+  }
+
+  async updateInvoiceTemplate(
+    id: number,
+    data: Partial<IInvoiceTemplate>
+  ) {
+    const template = await InvoiceTemplate.findByPk(id);
+    if (!template) {
+      throw new AppError('Invoice template not found', 404);
+    }
+
+    // Check if updating name and if a template with the same name already exists (excluding current template)
+    if (data.name) {
+      const existingTemplate = await InvoiceTemplate.findOne({
+        where: {
+          name: data.name,
+          id: { [Op.ne]: id },
+        },
+      });
+
+      if (existingTemplate) {
+        throw new AppError(`An invoice template with the name "${data.name}" already exists`, 400);
+      }
+    }
+
+    await template.update(data);
+    return template;
+  }
+
+  async deleteInvoiceTemplate(id: number) {
+    const template = await InvoiceTemplate.findByPk(id);
+    if (!template) {
+      throw new AppError('Invoice template not found', 404);
+    }
+if(template.mainTemplate){
+  throw new AppError('Default template cannot be deleted', 400);
+}
+    await template.destroy();
+    return { message: 'Invoice template deleted successfully' };
+  }
+
+
+  async getCustomerInvoiceTemplate(customerNumber: number){
+    const template = await CustomerAssignInvoiceTemplate.findOne({
+      where: { customerNumber: customerNumber },
+    });
+    if (template) {
+
+
+      const invoiceTemplate = await InvoiceTemplate.findByPk(template.templateId);
+      return invoiceTemplate; 
+       }else{{
+        const template = await InvoiceTemplate.findOne({
+          where: { mainTemplate: true },
+        });
+        if (template) {
+          return template;
+        }else{
+          throw new AppError('Default template not found', 404);
+        }
+       }
+    
+  }
+}
+
+async getCustomerListForTradeShow(query: PaginationOptions & { search?: string, Inactive?:string, cot?:string[] }) {
+  const page = parseInt(query.page as any) || 1;
+  const limit = parseInt(query.limit as any) || 10;
+  const search = query.search || '';
+
+  
+  let whereCondition :any = search
+    ? {
+      [Op.or]: [
+        { C_Number: { [Op.like]: `%${search}%` } },
+        { C_Name: { [Op.like]: `%${search}%` } },
+        { C_PhoneMobile: { [Op.like]: `%${search}%` } },
+        { C_Address: { [Op.like]: `%${search}%` } },
+        { C_Email: { [Op.like]: `%${search}%` } },
+      ],
+    }
+    : {};
+
+    if(query?.cot && query?.cot?.length > 0){
+      whereCondition.C_ClassOfTrade = { [Op.in]: query?.cot as string[] || [] };
+    } 
+
+    if(query.Inactive =='true'){
+      whereCondition.C_Inactive = true;
+    }else if(query.Inactive =='false'){
+      whereCondition.C_Inactive = false;
+    }
+    console.log(whereCondition, 'whereCondition')
+
+  const { count: totalCount, rows: customerList } = await Customer.findAndCountAll({
+    attributes: [
+      'C_Number',
+      'C_Name',
+      'C_Email',
+      'C_Inactive',
+      'C_CoName',
+      'C_PhoneMobile',
+      'C_Address',
+      'C_City',
+      'C_State',
+      'C_Zip',
+      'C_DateCreated'
+    ],
+    where: whereCondition,
+    include: [
+      {
+        model: CustomerRoute,
+        as: 'Routes',
+        attributes: ['Route_Number', 'Stop_Number'],
+      },
+    ],
+    limit,
+    offset: (page - 1) * limit,
+    order: [['C_DateCreated', 'DESC']],
+  });
+
+  return {
+    data: customerList,
+    total: totalCount,
+    page,
+    limit,
+    totalPages: Math.ceil(totalCount / limit),
+  };
+
 }
 
 }

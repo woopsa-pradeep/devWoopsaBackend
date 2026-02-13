@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { bulkUpdateRetailers, updateRetailerOrderDate } from './retailer.cron';
 import {  getUpcomingNotifications } from './notificationSchedular.cron';
 import { processFuturePricingUpdates } from './futurePricing.cron';
+import { activateTradeShows, expireTradeShows } from './tradeShow.cron';
 
 // cron.ts
 export const startCronJobs = () => {
@@ -41,8 +42,34 @@ export const startCronJobs = () => {
         console.error('[Cron] Error during future pricing updates:', error);
       }
     });
+
+    // TradeShow status update cron job (runs daily at 1:00 AM)
+    cron.schedule('0 1 * * *', async () => {
+      try {
+        console.log('[Cron] Starting trade show status updates...');
+        await activateTradeShows();
+        await expireTradeShows();
+        console.log('[Cron] Trade show status updates completed.');
+      } catch (error) {
+        console.error('[Cron] Error during trade show status updates:', error);
+      }
+    }, {
+      timezone: 'UTC'
+    });
     
 
+    // cron.schedule('* * * * *', async () => {
+    //   try {
+    //     console.log('[Cron] Starting trade show status updates...');
+    //     await activateTradeShows();
+    //     await expireTradeShows();
+    //     console.log('[Cron] Trade show status updates completed.');
+    //   } catch (error) {
+    //     console.error('[Cron] Error during trade show status updates:', error);
+    //   }
+    // }, {
+    //   timezone: 'UTC'
+    // });
     
     
   };

@@ -12,6 +12,7 @@ import checkerRoutes from './checker.router';
 import appUpdateRoutes from './appUpdate.routes';
 import redisRoutes from './redis.routes';
 import driverRoute from './driver.routes';
+import adminRoutes from './admin.routes';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.use('/checker', checkerRoutes);
 router.use('/app', appUpdateRoutes);
 router.use('/redis', redisRoutes);
 router.use('/driver', driverRoute);
+router.use('/admin', adminRoutes);
 export default router; 
 
 

@@ -6,6 +6,7 @@ export interface PaginationOptions {
   costType?:string;
   Inactive?:string;
   invoiceGenerated?:boolean;
+  priceClass?:any;
   updated?:boolean;
   currentStatus?:string;
   isDeleted?:boolean;

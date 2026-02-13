@@ -704,4 +704,12 @@ export class ListService {
     return customers;
   }
 
+  async getClassOfTradeList() {
+    const classOfTrade = await ClassOfTrade.findAll({
+      attributes: ['Trade_Code', 'Trade_Desc'],
+      order: [['Trade_Desc','ASC']]
+    })
+    return classOfTrade;
+  }
+
 } 

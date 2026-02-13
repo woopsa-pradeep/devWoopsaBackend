@@ -5,6 +5,7 @@ export class OrderHeader extends Model {
   Order_Number: any;
   Order_Date: any;
   C_Number: any;
+  C_CoName: any;
 }
 
 OrderHeader.init(

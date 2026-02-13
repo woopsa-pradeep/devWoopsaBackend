@@ -127,4 +127,9 @@ export class ListController {
         const data = await this.listService.getListOfCustomersByOrderNumbers();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getClassOfTradeList(req: Request, res: Response) {
+        const data = await this.listService.getClassOfTradeList();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

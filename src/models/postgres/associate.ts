@@ -14,22 +14,20 @@ import { OrderPickBox } from './epickOrderBox.model';
 import { OrderPick } from './epickOrder.model';
 import { OrderPickScan } from './epickOrderScan.model';
 import { OverrideRequest } from './overrideRequest.model';
-import  CustomerCart  from '../postgres/retailerCart.model';
-import { Inventory } from '../mmsql/inventory.model';
-import  {ProductImage}  from '../postgres/product.model';
-import { SalesCategory } from '../mmsql/salesCategory.model';
-import { PriceClass } from '../mmsql/priceClass.model';
-import { InventoryUPC } from '../mmsql/inventoryUpc.model';
+
 import { OrderConfirmation } from './orderConfirmation.model';
 import { EpickUser } from './epickUser.model';
 import { EpickConfirmation } from './epickConfirmation.model';
-import { DriverRouteAssignment } from './driverRouteAssignment.model';
+
+import { DeliveryRouteStop } from './deliveryRouteStop.model';
+import { DeliveryRoute } from './deliveryRoute.model';
 import { Driver } from './driver.model';
 import { TradeShowItem } from './tradeShowItem.model';
 import { TradeShowRetailer } from './tradeShowRetailer.model';
 import { TradeShowVendor } from './tradeShowVendor';
 import { TradeShowDeliveryProduct } from './tradeShowDeliveryProduct.model';
 import { TradeShow } from './tradeShow.model';
+import { TradeShowOrderHistory } from './tradeShowOrderHistory.model';
 import { EmailModule } from './emailModules.model';
 import { EmailModuleConfig } from './emailModuleConfig.model';
 // import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
@@ -137,15 +135,17 @@ EpickUser.hasMany(EpickConfirmation, {
   as: 'confirmations',
 
 });
-// DriverRouteAssignment associations
-Driver.hasMany(DriverRouteAssignment, {
-  foreignKey: 'driverId',
-  as: 'routeAssignments',
+
+
+
+DeliveryRoute.hasMany(DeliveryRouteStop, {
+  foreignKey: 'routeId',
+  as: 'stops',
 });
 
-DriverRouteAssignment.belongsTo(Driver, {
-  foreignKey: 'driverId',
-  as: 'driver',
+DeliveryRouteStop.belongsTo(DeliveryRoute, {
+  foreignKey: 'routeId',
+  as: 'route',
 });
 
 // TradeShow associations
@@ -203,6 +203,17 @@ TradeShowItem.hasMany(TradeShowDeliveryProduct, {
   sourceKey: 'itemNumber',
   as: 'deliveryProducts',
   constraints: false, 
+});
+
+// TradeShowOrderHistory associations
+TradeShow.hasMany(TradeShowOrderHistory, {
+  foreignKey: 'tradeShowId',
+  as: 'orderHistories',
+});
+
+TradeShowOrderHistory.belongsTo(TradeShow, {
+  foreignKey: 'tradeShowId',
+  as: 'tradeShow',
 });
 
 // EmailModule associations

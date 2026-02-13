@@ -861,6 +861,86 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Email module config deleted successfully');
   }
 
+  // CustomerAssignInvoiceTemplate CRUD controller methods
+  async createCustomerAssignInvoiceTemplate(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createCustomerAssignInvoiceTemplate(req.body);
+    sendResponse(res, 201, true, data, 'Customer invoice template assignment created successfully');
+  }
+
+  async getCustomerAssignInvoiceTemplateById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerAssignInvoiceTemplateById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Customer invoice template assignment retrieved successfully');
+  }
+
+  async getAllCustomerAssignInvoiceTemplates(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllCustomerAssignInvoiceTemplates(req.query as PaginationOptions & { 
+      search?: string; 
+      customerNumber?: number; 
+      templateId?: number 
+    });
+    sendResponse(res, 200, true, data, 'Customer invoice template assignments list retrieved successfully');
+  }
+
+  async updateCustomerAssignInvoiceTemplate(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateCustomerAssignInvoiceTemplate(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Customer invoice template assignment updated successfully');
+  }
+
+  async deleteCustomerAssignInvoiceTemplate(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteCustomerAssignInvoiceTemplate(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Customer invoice template assignment deleted successfully');
+  }
+
+  async bulkAddCustomerAssignInvoiceTemplates(req: AuthRequest, res: Response) {
+    const data = await this.managerService.bulkAddCustomerAssignInvoiceTemplates(req.body);
+    sendResponse(res, 201, true, data, data.message);
+  }
+
+  async bulkRemoveCustomerAssignInvoiceTemplates(req: AuthRequest, res: Response) {
+    const data = await this.managerService.bulkRemoveCustomerAssignInvoiceTemplates(req.body);
+    sendResponse(res, 200, true, data, data.message);
+  }
+
+  // InvoiceTemplate CRUD controller methods
+  async createInvoiceTemplate(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createInvoiceTemplate(req.body);
+    sendResponse(res, 201, true, data, 'Invoice template created successfully');
+  }
+
+  async getInvoiceTemplateById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInvoiceTemplateById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Invoice template retrieved successfully');
+  }
+
+  async getAllInvoiceTemplates(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllInvoiceTemplates(req.query as PaginationOptions & { 
+      search?: string; 
+      mainTemplate?: boolean;
+    });
+    sendResponse(res, 200, true, data, 'Invoice templates list retrieved successfully');
+  }
+
+  async updateInvoiceTemplate(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateInvoiceTemplate(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Invoice template updated successfully');
+  }
+
+  async deleteInvoiceTemplate(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteInvoiceTemplate(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Invoice template deleted successfully');
+  }
+
+  async getCustomerInvoiceTemplate(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerInvoiceTemplate(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Customer invoice template retrieved successfully');
+  }
+
+
+  async getCustomerListForTradeShow(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerListForTradeShow(req.body as PaginationOptions & { search?: string, Inactive?:string, cot?:string[],routes?:string[] });
+    sendResponse(res, 200, true, data, 'Customer list for trade show retrieved successfully');
+  }
+
   // Email Management CRUD controller methods
   async createEmailConfig(req: AuthRequest, res: Response) {
     const data = await this.managerService.createEmailConfig(req.body);
@@ -1161,35 +1241,30 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Driver location updated successfully');
   }
 
-  // DriverRouteAssignment CRUD controller methods
-  async createDriverRouteAssignment(req: AuthRequest, res: Response) {
-    const data = await this.managerService.createDriverRouteAssignment(req.body);
-    sendResponse(res, 201, true, data, 'Driver route assignment created successfully');
+  // Vehicle CRUD controller methods
+  async createVehicle(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createVehicle(req.body);
+    sendResponse(res, 201, true, data, 'Vehicle created successfully');
   }
 
-  async getDriverRouteAssignmentById(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getDriverRouteAssignmentById(Number(req.params.id));
-    sendResponse(res, 200, true, data, 'Driver route assignment retrieved successfully');
+  async getVehicleById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getVehicleById(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Vehicle retrieved successfully');
   }
 
-  async getAllDriverRouteAssignments(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getAllDriverRouteAssignments(req.query as PaginationOptions & { search?: string; driverId?: number; deliveryDay?: string });
-    sendResponse(res, 200, true, data, 'Driver route assignments retrieved successfully');
+  async getAllVehicles(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllVehicles(req.query as PaginationOptions & { search?: string; isActive?: boolean });
+    sendResponse(res, 200, true, data, 'Vehicles retrieved successfully');
   }
 
-  async updateDriverRouteAssignment(req: AuthRequest, res: Response) {
-    const data = await this.managerService.updateDriverRouteAssignment(Number(req.params.id), req.body);
-    sendResponse(res, 200, true, data, 'Driver route assignment updated successfully');
+  async updateVehicle(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateVehicle(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, 'Vehicle updated successfully');
   }
 
-  async deleteDriverRouteAssignment(req: AuthRequest, res: Response) {
-    const data = await this.managerService.deleteDriverRouteAssignment(Number(req.params.id));
-    sendResponse(res, 200, true, data, 'Driver route assignment deleted successfully');
-  }
-
-  async getDriverRouteAssignmentsByDriver(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getDriverRouteAssignmentsByDriver(Number(req.params.driverId), req.query as PaginationOptions);
-    sendResponse(res, 200, true, data, 'Driver route assignments retrieved successfully');
+  async deleteVehicle(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteVehicle(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Vehicle deleted successfully');
   }
 
   async getAllOrderNumbers(req: AuthRequest, res: Response) {
@@ -1418,6 +1493,37 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Customer Velocity report fetched successfully');
   }
 
+  async setRetailerLocation(req: AuthRequest, res: Response) {
+    const data = await this.managerService.setRetailerLocation(req.body);
+    sendResponse(res, 201, true, data, 'Retailer location set successfully');
+  }
+
+  async getAllOrderForDriver(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllOrderForDriver(req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, 'All order for driver fetched successfully');
+  }
+
+  async getDeliverRouteByGoogleMap(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getDeliverRouteByGoogleMap(req.body);
+    sendResponse(res, 200, true, data, 'Deliver route by google map fetched successfully');
+  }
+
+  async createDeliveryRoute(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createDeliveryRoute(req.body);
+    sendResponse(res, 201, true, data, 'Delivery route created successfully');
+  }
+
+  async getDeliveryRoutes(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getDeliveryRoutes(req.body as PaginationOptions & { 
+      routeId?: number;
+      day?: string;
+      driverId?: number;
+      routeStatus?: string;
+      includeStops?: boolean;
+      includeChildren?: boolean;
+    });
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
   async getARreports(req: AuthRequest, res: Response) {
     const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
     const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
@@ -1508,6 +1614,13 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async deleteTradeShow(req: AuthRequest, res: Response) {
     const data = await this.managerService.deleteTradeShow(Number(req.params.id));
     sendResponse(res, 200, true, data, 'TradeShow deleted successfully');
+  }
+
+
+
+  async deActiveTradeShow(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deActiveTradeShow(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'TradeShow deactivated successfully');
   }
 
   // TradeShowItem CRUD controller methods
@@ -1644,7 +1757,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   }
 
   async getRemainItemInDelivery(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getRemainItemInDelivery(Number(req.params.id), req.query as PaginationOptions);
+    const data = await this.managerService.getRemainItemInDelivery(Number(req.params.id), req.body as PaginationOptions);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
@@ -1768,4 +1881,42 @@ async getProductsByOrderNumber(req: AuthRequest, res: Response) {
     const data = await this.managerService.getTradeShowRetailerForEdit(Number(req.params.id));
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
+
+async currentOrderStatusReport(req: AuthRequest, res: Response) {
+  const data = await this.managerService.currentOrderStatusReport(req.query);
+  sendResponse(res,200,true,data,'Current Order Status Report fetched successfully'); 
+
+}
+
+async currentOrderDetailStatus(req: AuthRequest, res: Response) {
+  const orderNumber = Number(req.params.orderNumber);
+  const data = await this.managerService.currentOrderDetailStatus(orderNumber);
+  sendResponse(res,200,true,data,'Current Order Detail Status fetched successfully'); 
+}
+
+async poReceivingHistoryReport(req: AuthRequest, res: Response) {
+  const data = await this.managerService.poReceivingHistoryReport(req.query);
+  sendResponse(res,200,true,data,'PO Receiving History Report fetched successfully');
+}
+
+
+async poTransferAdjustmentReport(req: AuthRequest, res: Response) {
+  const data = await this.managerService.poTransferAdjustmentReport(req.query);
+  sendResponse(res,200,true,data,'PO Transfer/Adjustment Report fetched successfully');
+}
+
+async poCigOtpReport(req: AuthRequest, res: Response) {
+  const data = await this.managerService.poCigOtpReport(req.query);
+  sendResponse(res,200,true,data,'PO Cig OTP Report fetched successfully');
+}
+
+async createInvoice(req: AuthRequest, res: Response) {
+  const orderNumber = Number(req.params.orderNumber);
+  const data = await this.managerService.createInvoice(orderNumber);
+  sendResponse(res, 200, true, data, 'Invoice created successfully');
+}
+async getInvoiceRegister(req: AuthRequest, res: Response) {
+  const data = await this.managerService.getInvoiceRegister(req.query);
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
 }

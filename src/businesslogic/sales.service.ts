@@ -46,11 +46,12 @@ import { RecordLock } from "../models/mmsql/recordLocks.model";
 import { QueryTypes } from "sequelize";
 import { OrderPick } from "../models/postgres/epickOrder.model";
 import { generateRandomBarCode } from "../utils/barCodeGenerate";
-import { DriverPickupOrder } from "../models/postgres/driverPickerOrder.model";
 import { ContactUs } from "../models/postgres/contactUs.model";
+import { DriverPickupOrder } from "../models/postgres/driverPickerOrder.model";
 import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
 import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
+import TradeShowOrderHistory from "../models/postgres/tradeShowOrderHistory.model";
 
 export class SalesService {
 
@@ -438,7 +439,16 @@ export class SalesService {
   }
 
   async placeTradeShowOrder(orderData: PlaceOrder, req: any, customerId: any) {
-    const { shippingDetails, hasDiscount, discountAmount, order_type } = orderData;
+    const { shippingDetails, hasDiscount, discountAmount, order_type, tradeShowId } = orderData;
+
+    const tradeShow = await TradeShow.findByPk(tradeShowId);
+    if (!tradeShow) {
+      throw new AppError("TradeShow not found", 404);
+    }
+    if (tradeShow.status === 'expire' || tradeShow.status === 'inactive') {
+      throw new AppError("TradeShow is expired", 400);
+    }
+
     const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
@@ -734,7 +744,15 @@ export class SalesService {
       console.log(error, 'error--> in sales discount')
     }
 
-
+try{
+  await TradeShowOrderHistory.create({
+    tradeShowId: tradeShowId || 0,
+    orderNumber: orderHeaderCreated.Order_Number,
+    orderDate: new Date(),
+  });
+}catch(error){
+  console.log(error, 'error--> in trade show order history')
+}
     return {
       orderHeader: orderHeaderCreated,
       orderDetails,
@@ -1954,6 +1972,7 @@ findProduct = findProduct?.dataValues || null;
       let price = discountMap[Number(e.itemNumber)] ?? await getFirstValidPrice(findProduct as any);
       const isDiscounted = await hasDiscountedItem(Number(e.itemNumber), findProduct?.Price_Subclass ?? 0);
       // price = Math.ceil(price * 100) / 100;
+      let priceWitoutTradeShow=  price || 0;
       price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
       const productLimit = await getProductLimit(Number(e.itemNumber));
       let taxRate = await getTaxRateV1(Number(findProduct?.OTP_Number), userJurisdiction as number, Number(e.itemNumber), price);
@@ -1980,7 +1999,7 @@ findProduct = findProduct?.dataValues || null;
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
         prepaidTaxRate: prepaidTaxRate,
         priceWithTax: price + taxRate,
-       
+        priceWitoutTradeShow:priceWitoutTradeShow + taxRate,
         hasProductLimit: productLimit ? true : false,
         productLimit,
        
@@ -2280,7 +2299,8 @@ findProduct = findProduct?.dataValues || null;
       where: {
         Customer_Number: cartData.Customer_Number,
         Item_Number: cartData.Item_Number,
-        isActive: true
+        isActive: true,
+        type:'order'
       }
     });
 

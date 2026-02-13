@@ -53,7 +53,6 @@ import SalesNote from "../models/postgres/salesNotes";
 import { SupportTicket } from "../models/postgres/supportTicket.model";
 import EpickSetting from "../models/postgres/epickSetting.model";
 import { Driver } from "../models/postgres/driver.model";
-import { DriverRouteAssignment } from "../models/postgres/driverRouteAssignment.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
 
@@ -1105,52 +1104,7 @@ export class AuthService {
     };
   }
 
-  async driverLogin(body: any){
-    // 1️⃣ Find user with role = "checker"
-    const isUserExist = await Driver.findOne({
-      where: {
-        email: body.email,
-      },
-    });
-
-    // 2️⃣ Fetch logo from settings
-
-    if (!isUserExist) {
-      throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
-    }
-
-    // 3️⃣ Compare password (bcrypt or your comparePassword function)
-    const checkPassword = await comparePassword(body.password, isUserExist.password);
-    if (!checkPassword) {
-      throw new AppError(AuthMessage.INVALID_PASS_EMAIL, 400);
-    }
-
-    // 4️⃣ Generate token
-    const token = generateToken({
-      id: isUserExist.id,
-      role: "driver",
-    });
-
-   
-    const finalUser = await Driver.findOne({
-      where: {
-        email: body.email,
-      },
-      attributes: ['id', 'email', 'firstName', 'lastName'],
-      include: [
-        {
-          model: DriverRouteAssignment,
-          as: 'routeAssignments'
-        }
-      ],
-    });
-
-    // 9️⃣ Final Response
-    return {
-      token: token,
-      user: finalUser,
-    };
-  }
+ 
 
   async logoutRetailer(req: AuthRequest) {
     const token = req.headers.authorization?.split(" ")[1];

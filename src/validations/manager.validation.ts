@@ -1662,32 +1662,59 @@ export const getEpickSettingsQuerySchema = Joi.object({
 
 // Driver CRUD validation schemas
 export const createDriverSchema = Joi.object({
+ 
   firstName: Joi.string().trim().required().messages({
     'string.base': 'First name must be a string',
     'string.empty': 'First name cannot be empty',
-    'any.required': 'First name is required'
+    'any.required': 'First name is required',
   }),
+
   lastName: Joi.string().trim().required().messages({
     'string.base': 'Last name must be a string',
     'string.empty': 'Last name cannot be empty',
-    'any.required': 'Last name is required'
+    'any.required': 'Last name is required',
   }),
+
   email: Joi.string().email().required().messages({
     'string.base': 'Email must be a string',
     'string.email': 'Email must be a valid email address',
     'string.empty': 'Email cannot be empty',
-    'any.required': 'Email is required'
+    'any.required': 'Email is required',
   }),
-  currentLatitude: Joi.number().min(-90).max(90).allow(null).optional().messages({
-    'number.base': 'Latitude must be a number',
-    'number.min': 'Latitude must be between -90 and 90',
-    'number.max': 'Latitude must be between -90 and 90'
+
+
+
+  driverLicenseNo: Joi.string().trim().allow(null).optional().messages({
+    'string.base': 'Driver license number must be a string',
   }),
-  currentLongitude: Joi.number().min(-180).max(180).allow(null).optional().messages({
-    'number.base': 'Longitude must be a number',
-    'number.min': 'Longitude must be between -180 and 180',
-    'number.max': 'Longitude must be between -180 and 180'
-  })
+
+  licenseExpirationDate: Joi.date().allow(null).optional().messages({
+    'date.base': 'License expiration date must be a valid date',
+  }),
+
+  licenseClass: Joi.string()
+    .valid('A', 'B', 'C', 'D')
+    .allow(null)
+    .optional()
+    .messages({
+      'any.only': 'License class must be one of A, B, C, or D',
+    }),
+
+  driverPicture: Joi.string().allow(null).optional().messages({
+    'string.base': 'Driver picture must be a string (file path or URL)',
+  }),
+
+  dotMedicalCertificate: Joi.string().allow(null).optional().messages({
+    'string.base': 'DOT medical certificate must be a string (file path or URL)',
+  }),
+
+  password: Joi.string().required().messages({
+    'string.base': 'Password must be a string',
+    'string.empty': 'Password cannot be empty',
+    'any.required': 'Password is required',
+  }),
+
+
 });
 
 export const updateDistributorSchema = Joi.object({
@@ -1842,6 +1869,145 @@ export const updateDriverRouteAssignmentSchema = Joi.object({
     'number.min': 'Delivery day number must be between 1 and 7',
     'number.max': 'Delivery day number must be between 1 and 7'
   })
+});
+
+// Vehicle CRUD validation schemas
+export const createVehicleSchema = Joi.object({
+  description: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Description must be a string',
+  }),
+  loadCapacityLbs: Joi.number().integer().positive().allow(null).optional().messages({
+    'number.base': 'Load capacity must be a number',
+    'number.integer': 'Load capacity must be an integer',
+    'number.positive': 'Load capacity must be a positive number',
+  }),
+  truckType: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Truck type must be a string',
+  }),
+  licenseRegistrationNumber: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'License registration number must be a string',
+  }),
+  vinNumber: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'VIN number must be a string',
+  }),
+  engineType: Joi.string().valid('gasoline', 'electric', 'diesel').allow(null).optional().messages({
+    'any.only': 'Engine type must be one of: gasoline, electric, diesel',
+  }),
+  lastServiceDate: Joi.date().iso().allow(null).optional().messages({
+    'date.base': 'Last service date must be a valid date',
+    'date.format': 'Last service date must be in ISO format (YYYY-MM-DD)',
+  }),
+  lastOilChangeDate: Joi.date().iso().allow(null).optional().messages({
+    'date.base': 'Last oil change date must be a valid date',
+    'date.format': 'Last oil change date must be in ISO format (YYYY-MM-DD)',
+  }),
+  nextOilChangeAfterMonths: Joi.number().integer().positive().allow(null).optional().messages({
+    'number.base': 'Next oil change after months must be a number',
+    'number.integer': 'Next oil change after months must be an integer',
+    'number.positive': 'Next oil change after months must be a positive number',
+  }),
+  mileageHours: Joi.number().positive().allow(null).optional().messages({
+    'number.base': 'Mileage/Hours must be a number',
+    'number.positive': 'Mileage/Hours must be a positive number',
+  }),
+  insurancePolicyNumber: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Insurance policy number must be a string',
+  }),
+  insuranceCarrier: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Insurance carrier must be a string',
+  }),
+  insuranceExpirationDate: Joi.date().iso().allow(null).optional().messages({
+    'date.base': 'Insurance expiration date must be a valid date',
+    'date.format': 'Insurance expiration date must be in ISO format (YYYY-MM-DD)',
+  }),
+  conditionStatus: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Condition status must be a string',
+  }),
+  physicalNotes: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Physical notes must be a string',
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
+});
+
+export const updateVehicleSchema = Joi.object({
+  description: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Description must be a string',
+  }),
+  loadCapacityLbs: Joi.number().integer().positive().allow(null).optional().messages({
+    'number.base': 'Load capacity must be a number',
+    'number.integer': 'Load capacity must be an integer',
+    'number.positive': 'Load capacity must be a positive number',
+  }),
+  truckType: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Truck type must be a string',
+  }),
+  licenseRegistrationNumber: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'License registration number must be a string',
+  }),
+  vinNumber: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'VIN number must be a string',
+  }),
+  engineType: Joi.string().valid('gasoline', 'electric', 'diesel').allow(null).optional().messages({
+    'any.only': 'Engine type must be one of: gasoline, electric, diesel',
+  }),
+  lastServiceDate: Joi.date().iso().allow(null).optional().messages({
+    'date.base': 'Last service date must be a valid date',
+    'date.format': 'Last service date must be in ISO format (YYYY-MM-DD)',
+  }),
+  lastOilChangeDate: Joi.date().iso().allow(null).optional().messages({
+    'date.base': 'Last oil change date must be a valid date',
+    'date.format': 'Last oil change date must be in ISO format (YYYY-MM-DD)',
+  }),
+  nextOilChangeAfterMonths: Joi.number().integer().positive().allow(null).optional().messages({
+    'number.base': 'Next oil change after months must be a number',
+    'number.integer': 'Next oil change after months must be an integer',
+    'number.positive': 'Next oil change after months must be a positive number',
+  }),
+  mileageHours: Joi.number().positive().allow(null).optional().messages({
+    'number.base': 'Mileage/Hours must be a number',
+    'number.positive': 'Mileage/Hours must be a positive number',
+  }),
+  insurancePolicyNumber: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Insurance policy number must be a string',
+  }),
+  insuranceCarrier: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Insurance carrier must be a string',
+  }),
+  insuranceExpirationDate: Joi.date().iso().allow(null).optional().messages({
+    'date.base': 'Insurance expiration date must be a valid date',
+    'date.format': 'Insurance expiration date must be in ISO format (YYYY-MM-DD)',
+  }),
+  conditionStatus: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Condition status must be a string',
+  }),
+  physicalNotes: Joi.string().trim().allow(null, '').optional().messages({
+    'string.base': 'Physical notes must be a string',
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
+});
+
+export const getVehiclesQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be at least 1',
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be at least 1',
+    'number.max': 'Limit cannot exceed 100',
+  }),
+  search: Joi.string().trim().optional().messages({
+    'string.base': 'Search must be a string',
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
 });
 
 export const getDriverRouteAssignmentsQuerySchema = Joi.object({
@@ -2259,6 +2425,124 @@ export const updatePriceClassSchema = Joi.object({
   })
 });
 
+// Delivery Route Schema
+export const createDeliveryRouteSchema = Joi.object({
+  routeNumber: Joi.string().trim().required().messages({
+    'any.required': 'routeNumber is required',
+    'string.empty': 'routeNumber cannot be empty',
+    'string.base': 'routeNumber must be a string',
+  }),
+
+  day: Joi.string()
+    .pattern(/^\d{4}-\d{2}-\d{2}$/)
+    .required()
+    .messages({
+      'any.required': 'day is required',
+      'string.empty': 'day cannot be empty',
+      'string.pattern.base': 'day must be in YYYY-MM-DD format',
+    }),
+
+  driverId: Joi.number().integer().positive().required().messages({
+    'any.required': 'driverId is required',
+    'number.base': 'driverId must be a number',
+    'number.integer': 'driverId must be an integer',
+    'number.positive': 'driverId must be a positive number',
+  }),
+
+  truckId: Joi.number().integer().positive().required().messages({
+    'any.required': 'truckId is required',
+    'number.base': 'truckId must be a number',
+    'number.integer': 'truckId must be an integer',
+    'number.positive': 'truckId must be a positive number',
+  }),
+
+  origin: Joi.object({
+    lat: Joi.number().min(-90).max(90).required().messages({
+      'any.required': 'origin.lat is required',
+      'number.base': 'origin.lat must be a number',
+      'number.min': 'origin.lat must be between -90 and 90',
+      'number.max': 'origin.lat must be between -90 and 90',
+    }),
+    lng: Joi.number().min(-180).max(180).required().messages({
+      'any.required': 'origin.lng is required',
+      'number.base': 'origin.lng must be a number',
+      'number.min': 'origin.lng must be between -180 and 180',
+      'number.max': 'origin.lng must be between -180 and 180',
+    }),
+  })
+    .required()
+    .messages({
+      'any.required': 'origin is required',
+      'object.base': 'origin must be an object',
+    }),
+
+  destination: Joi.object({
+    lat: Joi.number().min(-90).max(90).required().messages({
+      'any.required': 'destination.lat is required',
+      'number.base': 'destination.lat must be a number',
+      'number.min': 'destination.lat must be between -90 and 90',
+      'number.max': 'destination.lat must be between -90 and 90',
+    }),
+    lng: Joi.number().min(-180).max(180).required().messages({
+      'any.required': 'destination.lng is required',
+      'number.base': 'destination.lng must be a number',
+      'number.min': 'destination.lng must be between -180 and 180',
+      'number.max': 'destination.lng must be between -180 and 180',
+    }),
+  })
+    .required()
+    .messages({
+      'any.required': 'destination is required',
+      'object.base': 'destination must be an object',
+    }),
+
+  stops: Joi.array()
+    .items(
+      Joi.object({
+        stopSequence: Joi.number().integer().positive().required().messages({
+          'any.required': 'stopSequence is required',
+          'number.base': 'stopSequence must be a number',
+          'number.integer': 'stopSequence must be an integer',
+          'number.positive': 'stopSequence must be a positive number',
+        }),
+        C_Number: Joi.number().integer().positive().required().messages({
+          'any.required': 'C_Number is required',
+          'number.base': 'C_Number must be a number',
+          'number.integer': 'C_Number must be an integer',
+          'number.positive': 'C_Number must be a positive number',
+        }),
+        lat: Joi.number().min(-90).max(90).required().messages({
+          'any.required': 'lat is required',
+          'number.base': 'lat must be a number',
+          'number.min': 'lat must be between -90 and 90',
+          'number.max': 'lat must be between -90 and 90',
+        }),
+        lng: Joi.number().min(-180).max(180).required().messages({
+          'any.required': 'lng is required',
+          'number.base': 'lng must be a number',
+          'number.min': 'lng must be between -180 and 180',
+          'number.max': 'lng must be between -180 and 180',
+        }),
+        orderNumbers: Joi.alternatives()
+          .try(
+            Joi.number().integer().positive(),
+            Joi.array().items(Joi.number().integer().positive())
+          )
+          .required()
+          .messages({
+            'any.required': 'orderNumbers is required',
+            'alternatives.match': 'orderNumbers must be a number or an array of numbers',
+          }),
+      })
+    )
+    .min(1)
+    .required()
+    .messages({
+      'any.required': 'stops is required',
+      'array.base': 'stops must be an array',
+      'array.min': 'stops must contain at least one stop',
+    })
+  });
 // PreBook validation schemas
 export const createPreBookSchema = Joi.object({
   startDate: Joi.date().required().messages({
@@ -2998,4 +3282,234 @@ export const getTradeShowDeliveryProductsQuerySchema = Joi.object({
   itemNumber: Joi.string().optional(),
   weekNumber: Joi.number().integer().optional(),
   deliveryType: Joi.string().valid('pickup', 'delivery').optional(),
+});
+
+// CustomerAssignInvoiceTemplate validation schemas
+export const createCustomerAssignInvoiceTemplateSchema = Joi.object({
+  customerNumber: Joi.number().integer().positive().required().messages({
+    'number.base': 'Customer number must be a number',
+    'number.integer': 'Customer number must be an integer',
+    'number.positive': 'Customer number must be positive',
+    'any.required': 'Customer number is required',
+  }),
+  templateId: Joi.number().integer().positive().required().messages({
+    'number.base': 'Template ID must be a number',
+    'number.integer': 'Template ID must be an integer',
+    'number.positive': 'Template ID must be positive',
+    'any.required': 'Template ID is required',
+  }),
+});
+
+export const updateCustomerAssignInvoiceTemplateSchema = Joi.object({
+  customerNumber: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Customer number must be a number',
+    'number.integer': 'Customer number must be an integer',
+    'number.positive': 'Customer number must be positive',
+  }),
+  templateId: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Template ID must be a number',
+    'number.integer': 'Template ID must be an integer',
+    'number.positive': 'Template ID must be positive',
+  }),
+}).min(1);
+
+export const getCustomerAssignInvoiceTemplatesQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().default(1).messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be greater than 0',
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().default(10).messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be greater than 0',
+    'number.max': 'Limit must be greater than 0 and less than or equal to 100',
+  }),
+  search: Joi.string().optional().messages({
+    'string.base': 'Search must be a string',
+  }),
+  customerNumber: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Customer number must be a number',
+    'number.integer': 'Customer number must be an integer',
+    'number.positive': 'Customer number must be positive',
+  }),
+  templateId: Joi.number().integer().positive().optional().messages({
+    'number.base': 'Template ID must be a number',
+    'number.integer': 'Template ID must be an integer',
+    'number.positive': 'Template ID must be positive',
+  }),
+});
+
+export const bulkAddCustomerAssignInvoiceTemplatesSchema = Joi.object({
+  assignments: Joi.array()
+    .items(
+      Joi.object({
+        customerNumber: Joi.number().integer().positive().required().messages({
+          'number.base': 'Customer number must be a number',
+          'number.integer': 'Customer number must be an integer',
+          'number.positive': 'Customer number must be positive',
+          'any.required': 'Customer number is required',
+        }),
+        templateId: Joi.number().integer().positive().required().messages({
+          'number.base': 'Template ID must be a number',
+          'number.integer': 'Template ID must be an integer',
+          'number.positive': 'Template ID must be positive',
+          'any.required': 'Template ID is required',
+        }),
+      })
+    )
+    .min(1)
+    .required()
+    .messages({
+      'array.base': 'Assignments must be an array',
+      'array.min': 'At least one assignment is required',
+      'any.required': 'Assignments array is required',
+    }),
+});
+
+export const bulkRemoveCustomerAssignInvoiceTemplatesSchema = Joi.object({
+  assignments: Joi.array()
+    .items(
+      Joi.object({
+        customerNumber: Joi.number().integer().positive().required().messages({
+          'number.base': 'Customer number must be a number',
+          'number.integer': 'Customer number must be an integer',
+          'number.positive': 'Customer number must be positive',
+          'any.required': 'Customer number is required',
+        }),
+        templateId: Joi.number().integer().positive().required().messages({
+          'number.base': 'Template ID must be a number',
+          'number.integer': 'Template ID must be an integer',
+          'number.positive': 'Template ID must be positive',
+          'any.required': 'Template ID is required',
+        }),
+      })
+    )
+    .min(1)
+    .required()
+    .messages({
+      'array.base': 'Assignments must be an array',
+      'array.min': 'At least one assignment is required',
+      'any.required': 'Assignments array is required',
+    }),
+});
+
+// InvoiceTemplate validation schemas
+export const createInvoiceTemplateSchema = Joi.object({
+  name: Joi.string().required().messages({
+    'string.base': 'Name must be a string',
+    'any.required': 'Name is required',
+  }),
+  mainTemplate: Joi.boolean().optional().default(false),
+  groupBy: Joi.string().optional().allow('').default(''),
+  showGroupHeader: Joi.boolean().optional().default(true),
+  selectedColumns: Joi.object({
+    orderQty: Joi.boolean().optional(),
+    shippedQty: Joi.boolean().optional(),
+    description: Joi.boolean().optional(),
+    itemNumber: Joi.boolean().optional(),
+    sortNumber: Joi.boolean().optional(),
+    upc: Joi.boolean().optional(),
+    price: Joi.boolean().optional(),
+    tax: Joi.boolean().optional(),
+    priceWithTax: Joi.boolean().optional(),
+    totalPrice: Joi.boolean().optional(),
+    retail1: Joi.boolean().optional(),
+    ebt: Joi.boolean().optional(),
+  }).optional(),
+  upcOption: Joi.string().optional().default('barcode_primary'),
+  showDistributorDetails: Joi.boolean().optional().default(true),
+  showCustomerDetails: Joi.boolean().optional().default(true),
+  showDocNumber: Joi.boolean().optional().default(true),
+  showPageOf: Joi.boolean().optional().default(true),
+  showInvoiceDate: Joi.boolean().optional().default(true),
+  showInvoiceDateWithTime: Joi.boolean().optional().default(false),
+  showRoute: Joi.boolean().optional().default(true),
+  showStop: Joi.boolean().optional().default(true),
+  showLogo: Joi.boolean().optional().default(true),
+  logoPosition: Joi.string().optional().default('center'),
+  showTerms: Joi.boolean().optional().default(true),
+  headerOnPages: Joi.string().optional().default('all'),
+  showHeaderMessage: Joi.boolean().optional().default(false),
+  headerMessageFirstPage: Joi.string().optional().allow('').default(''),
+  footerLayout: Joi.string().optional().default('messageLeft'),
+  showFooterMessage: Joi.boolean().optional().default(true),
+  footerMessageLastPage: Joi.string().optional().allow('').default(''),
+  showSubTotal: Joi.boolean().optional().default(true),
+  showDeliveryCharge: Joi.boolean().optional().default(true),
+  showLastBalance: Joi.boolean().optional().default(true),
+  showTotalAmountDue: Joi.boolean().optional().default(true),
+  showReportGeneratedByWoopsa: Joi.boolean().optional().default(true),
+  selectedCustomerIds: Joi.array().items(Joi.number().integer().positive()).optional().messages({
+    'array.base': 'selectedCustomerIds must be an array',
+    'number.base': 'Each customer ID must be a number',
+    'number.integer': 'Each customer ID must be an integer',
+    'number.positive': 'Each customer ID must be positive',
+  }),
+});
+
+export const updateInvoiceTemplateSchema = Joi.object({
+  name: Joi.string().optional().messages({
+    'string.base': 'Name must be a string',
+  }),
+  mainTemplate: Joi.boolean().optional(),
+  groupBy: Joi.string().optional().allow(''),
+  showGroupHeader: Joi.boolean().optional(),
+  selectedColumns: Joi.object({
+    orderQty: Joi.boolean().optional(),
+    shippedQty: Joi.boolean().optional(),
+    description: Joi.boolean().optional(),
+    itemNumber: Joi.boolean().optional(),
+    sortNumber: Joi.boolean().optional(),
+    upc: Joi.boolean().optional(),
+    price: Joi.boolean().optional(),
+    tax: Joi.boolean().optional(),
+    priceWithTax: Joi.boolean().optional(),
+    totalPrice: Joi.boolean().optional(),
+    retail1: Joi.boolean().optional(),
+    ebt: Joi.boolean().optional(),
+  }).optional(),
+  upcOption: Joi.string().optional(),
+  showDistributorDetails: Joi.boolean().optional(),
+  showCustomerDetails: Joi.boolean().optional(),
+  showDocNumber: Joi.boolean().optional(),
+  showPageOf: Joi.boolean().optional(),
+  showInvoiceDate: Joi.boolean().optional(),
+  showInvoiceDateWithTime: Joi.boolean().optional(),
+  showRoute: Joi.boolean().optional(),
+  showStop: Joi.boolean().optional(),
+  showLogo: Joi.boolean().optional(),
+  logoPosition: Joi.string().optional(),
+  showTerms: Joi.boolean().optional(),
+  headerOnPages: Joi.string().optional(),
+  showHeaderMessage: Joi.boolean().optional(),
+  headerMessageFirstPage: Joi.string().optional().allow(''),
+  footerLayout: Joi.string().optional(),
+  showFooterMessage: Joi.boolean().optional(),
+  footerMessageLastPage: Joi.string().optional().allow(''),
+  showSubTotal: Joi.boolean().optional(),
+  showDeliveryCharge: Joi.boolean().optional(),
+  showLastBalance: Joi.boolean().optional(),
+  showTotalAmountDue: Joi.boolean().optional(),
+  showReportGeneratedByWoopsa: Joi.boolean().optional(),
+}).min(1);
+
+export const getInvoiceTemplatesQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().default(1).messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be greater than 0',
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().default(10).messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be greater than 0',
+    'number.max': 'Limit must be greater than 0 and less than or equal to 100',
+  }),
+  search: Joi.string().optional().messages({
+    'string.base': 'Search must be a string',
+  }),
+  mainTemplate: Joi.boolean().optional().messages({
+    'boolean.base': 'mainTemplate must be a boolean',
+  }),
 });
