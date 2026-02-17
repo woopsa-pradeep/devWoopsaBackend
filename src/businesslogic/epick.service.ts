@@ -98,6 +98,27 @@ export class EpickService {
         return [
           [{ model: Inventory, as: 'inventory' }, 'Description', 'ASC']
         ];
+      case 'alphabetically_section_location':
+        // Sort by Section ASC, then Location ASC, then Description ASC (alphabetically within each section/location)
+        return [
+          [
+            literal(`CASE 
+              WHEN [inventory].[Section] IS NULL OR [inventory].[Section] = '' 
+              THEN 'ZZZZZ' 
+              ELSE [inventory].[Section] 
+            END`),
+            'ASC'
+          ],
+          [
+            literal(`CASE 
+              WHEN [inventory].[Location] IS NULL OR [inventory].[Location] = 0 
+              THEN 999999 
+              ELSE [inventory].[Location] 
+            END`),
+            'ASC'
+          ],
+          [{ model: Inventory, as: 'inventory' }, 'Description', 'ASC']
+        ];
       case 'item_number':
         // Sort by Item_Number ASC
         return [['Item_Number', 'ASC']];

@@ -59,5 +59,30 @@ export class DashboardController {
         sendResponse(res, 200, true, data, General.SUCCESS);
       }
 
+      async getPickerPerformance(req: AuthRequest, res: Response) {
+        const data = await this.dashboardService.getPickerPerformance(req.body as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+      }
+
+      async getEpickOrderStatistics(req: AuthRequest, res: Response) {
+        const data = await this.dashboardService.getEpickOrderStatistics(req.body as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+      }
+
+      async getEpickTotalOrdersList(req: AuthRequest, res: Response) {
+        const data = await this.dashboardService.getEpickTotalOrdersList(req.body as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+      }
+
+      async getEpickPendingOrdersList(req: AuthRequest, res: Response) {
+        const data = await this.dashboardService.getEpickPendingOrdersList(req.body as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+      }
+
+      async getEpickCompletedOrdersList(req: AuthRequest, res: Response) {
+        const data = await this.dashboardService.getEpickCompletedOrdersList(req.body as PaginationOptions);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+      }
+
 
 }

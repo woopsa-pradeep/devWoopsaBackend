@@ -133,7 +133,7 @@ export const createEpickUserSchema = Joi.object({
 
   shortby: Joi.string().valid('Asc', 'Des').optional().default('Des'),
 
-  item_sort_by: Joi.string().valid('sales_location', 'section_location','sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
+  item_sort_by: Joi.string().valid('sales_location', 'section_location','sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
 
   status: Joi.boolean().optional().default(true),
 
@@ -160,13 +160,13 @@ export const updateEpickUserSchema = Joi.object({
     }),
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
-  item_sort_by: Joi.string().valid('sales_location', 'section_location','sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
+  item_sort_by: Joi.string().valid('sales_location', 'section_location','sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number').optional(),
 });
 
 export const updateEpickUserPreferencesSchema = Joi.object({
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
-  item_sort_by: Joi.string().valid('sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
+  item_sort_by: Joi.string().valid('sales_location', 'section_location', 'sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number').optional(),
 }).or('order_type', 'shortby', 'item_sort_by').messages({
   'object.missing': 'At least one of order_type, shortby, or item_sort_by must be provided'
 });
@@ -184,9 +184,9 @@ export const updateEpickUserCategoriesSchema = Joi.object({
 });
 
 export const updateEpickUserItemSortSchema = Joi.object({
-  item_sort_by: Joi.string().valid('sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').required().messages({
+  item_sort_by: Joi.string().valid('sales_location', 'section_location', 'sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number').required().messages({
     'any.required': 'item_sort_by is required',
-    'any.only': 'item_sort_by must be one of: sales_location, sales_section_location, alphabetically, item_number, short_number, line_number'
+    'any.only': 'item_sort_by must be one of: sales_location, section_location, sales_section_location, alphabetically, alphabetically_section_location, item_number, short_number, line_number'
   }),
 });
 

@@ -2921,4 +2921,590 @@ const results = await OrderHeader.findAll({
         };
     }
 
+    /**
+     * Get epick order statistics with details: order number + retailer name for total, pending, and completed orders.
+     */
+    async getEpickOrderStatistics(query: PaginationOptions & { fromDate?: string; toDate?: string }) {
+        const { fromDate, toDate } = query;
+
+        let startDate: Date, endDate: Date;
+
+        if (fromDate) {
+            const [year, month, day] = fromDate.split('-').map(Number);
+            startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+        } else {
+            startDate = new Date(new Date().getFullYear(), 0, 1);
+        }
+
+        if (toDate) {
+            const [year, month, day] = toDate.split('-').map(Number);
+            endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+        } else {
+            endDate = new Date();
+        }
+
+        const dateFilter = {
+            Order_Date: { [Op.between]: [startDate, endDate] },
+            Order_Deleted: false
+        };
+
+        const totalOrdersHeaders = await OrderHeader.findAll({
+            where: dateFilter,
+            attributes: ['Order_Number', 'C_Number'],
+            include: [
+                {
+                    model: Customer,
+                    as: 'customer',
+                    attributes: ['C_Number', 'C_Name', 'C_CoName'],
+                    required: false
+                }
+            ],
+            raw: true,
+            nest: true
+        });
+
+        const orderNumbers = totalOrdersHeaders.map((o: any) => o.Order_Number);
+        const totalOrdersDetail = totalOrdersHeaders.map((o: any) => ({
+            orderNumber: o.Order_Number,
+            retailerName: (o.customer?.C_CoName || o.customer?.C_Name || '') || '—'
+        }));
+
+        if (orderNumbers.length === 0) {
+            return {
+                totalOrders: 0,
+                totalOrdersDetail: [],
+                pendingFromEpick: 0,
+                pendingOrdersDetail: [],
+                completedByEpick: 0,
+                completedOrdersDetail: [],
+                dateRange: {
+                    fromDate: startDate.toISOString().split('T')[0],
+                    toDate: endDate.toISOString().split('T')[0]
+                }
+            };
+        }
+
+        const allOrderPicks = await OrderPick.findAll({
+            where: { orderNumber: { [Op.in]: orderNumbers } },
+            attributes: ['orderNumber', 'status', 'completedAt'],
+            raw: true
+        });
+
+        const pendingPicks = allOrderPicks.filter(
+            (p: any) => p.status === 'pending' || p.status === 'in_progress'
+        );
+        const pendingOrderNumbers = [...new Set(pendingPicks.map((p: any) => p.orderNumber))];
+        const orderToRetailerMap: { [key: number]: string } = {};
+        totalOrdersHeaders.forEach((o: any) => {
+            orderToRetailerMap[o.Order_Number] = (o.customer?.C_CoName || o.customer?.C_Name || '') || '—';
+        });
+        const pendingOrdersDetail = pendingOrderNumbers.map((orderNumber: number) => ({
+            orderNumber,
+            retailerName: orderToRetailerMap[orderNumber] ?? '—'
+        }));
+
+        const completedPicks = allOrderPicks.filter(
+            (p: any) => (p.status === 'completed' || p.status === 'ready_for_delivery') && p.completedAt
+        );
+        const completedOrderNumbers = completedPicks
+            .filter((p: any) => {
+                const d = new Date(p.completedAt);
+                return d >= startDate && d <= endDate;
+            })
+            .map((p: any) => p.orderNumber);
+        const uniqueCompleted = [...new Set(completedOrderNumbers)];
+
+        let validatedCompleted: number[] = [];
+        if (uniqueCompleted.length > 0) {
+            const validated = await OrderHeader.findAll({
+                where: {
+                    Order_Number: { [Op.in]: uniqueCompleted },
+                    Order_Deleted: false
+                },
+                attributes: ['Order_Number'],
+                raw: true
+            });
+            validatedCompleted = validated.map((o: any) => o.Order_Number);
+        }
+
+        const completedOrdersDetail = validatedCompleted.map((orderNumber: number) => ({
+            orderNumber,
+            retailerName: orderToRetailerMap[orderNumber] ?? '—'
+        }));
+
+        return {
+            totalOrders: totalOrdersHeaders.length,
+            totalOrdersDetail,
+            pendingFromEpick: pendingOrderNumbers.length,
+            pendingOrdersDetail,
+            completedByEpick: validatedCompleted.length,
+            completedOrdersDetail,
+            dateRange: {
+                fromDate: startDate.toISOString().split('T')[0],
+                toDate: endDate.toISOString().split('T')[0]
+            }
+        };
+    }
+
+    /** Parse date range from query; returns { startDate, endDate, dateFilter }. */
+    private parseEpickDateRange(query: { fromDate?: string; toDate?: string }) {
+        const { fromDate, toDate } = query;
+        let startDate: Date, endDate: Date;
+        if (fromDate) {
+            const [y, m, d] = fromDate.split('-').map(Number);
+            startDate = new Date(y, m - 1, d, 0, 0, 0, 0);
+        } else {
+            startDate = new Date(new Date().getFullYear(), 0, 1);
+        }
+        if (toDate) {
+            const [y, m, d] = toDate.split('-').map(Number);
+            endDate = new Date(y, m - 1, d, 23, 59, 59, 999);
+        } else {
+            endDate = new Date();
+        }
+        const dateFilter = {
+            Order_Date: { [Op.between]: [startDate, endDate] },
+            Order_Deleted: false
+        };
+        return { startDate, endDate, dateFilter };
+    }
+
+    /**
+     * Get total orders list (order number + retailer name) with pagination. Default 10 per page.
+     */
+    async getEpickTotalOrdersList(query: PaginationOptions & { fromDate?: string; toDate?: string; page?: number; limit?: number }) {
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(query.limit) || 10));
+        const offset = (page - 1) * limit;
+
+        const { startDate, endDate, dateFilter } = this.parseEpickDateRange(query);
+
+        const { count, rows } = await OrderHeader.findAndCountAll({
+            where: dateFilter,
+            attributes: ['Order_Number', 'C_Number'],
+            include: [
+                { model: Customer, as: 'customer', attributes: ['C_Number', 'C_Name', 'C_CoName'], required: false }
+            ],
+            order: [['Order_Number', 'DESC']],
+            limit,
+            offset,
+            raw: true,
+            nest: true
+        });
+
+        const data = (rows as any[]).map((o: any) => ({
+            orderNumber: o.Order_Number,
+            retailerName: (o.customer?.C_CoName || o.customer?.C_Name || '') || '—'
+        }));
+
+        const totalCount = count as number;
+        const totalPages = Math.ceil(totalCount / limit) || 1;
+
+        return {
+            data,
+            pagination: { page, limit, totalCount, totalPages },
+            dateRange: { fromDate: startDate.toISOString().split('T')[0], toDate: endDate.toISOString().split('T')[0] }
+        };
+    }
+
+    /**
+     * Get pending-from-epick orders list (order number + retailer name) with pagination. Default 10 per page.
+     */
+    async getEpickPendingOrdersList(query: PaginationOptions & { fromDate?: string; toDate?: string; page?: number; limit?: number }) {
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(query.limit) || 10));
+        const offset = (page - 1) * limit;
+
+        const { startDate, endDate, dateFilter } = this.parseEpickDateRange(query);
+
+        const ordersInDateRange = await OrderHeader.findAll({
+            where: dateFilter,
+            attributes: ['Order_Number', 'C_Number'],
+            include: [
+                { model: Customer, as: 'customer', attributes: ['C_Number', 'C_Name', 'C_CoName'], required: false }
+            ],
+            raw: true,
+            nest: true
+        });
+
+        const orderNumbers = (ordersInDateRange as any[]).map((o: any) => o.Order_Number);
+        const orderToRetailer: { [key: number]: string } = {};
+        (ordersInDateRange as any[]).forEach((o: any) => {
+            orderToRetailer[o.Order_Number] = (o.customer?.C_CoName || o.customer?.C_Name || '') || '—';
+        });
+
+        if (orderNumbers.length === 0) {
+            return {
+                data: [],
+                pagination: { page, limit, totalCount: 0, totalPages: 0 },
+                dateRange: { fromDate: startDate.toISOString().split('T')[0], toDate: endDate.toISOString().split('T')[0] }
+            };
+        }
+
+        const allOrderPicks = await OrderPick.findAll({
+            where: { orderNumber: { [Op.in]: orderNumbers } },
+            attributes: ['orderNumber', 'status'],
+            raw: true
+        });
+
+        const pendingOrderNumbers = [...new Set(
+            allOrderPicks
+                .filter((p: any) => p.status === 'pending' || p.status === 'in_progress')
+                .map((p: any) => p.orderNumber)
+        )];
+
+        const totalCount = pendingOrderNumbers.length;
+        const totalPages = Math.ceil(totalCount / limit) || 1;
+        const pagedOrderNumbers = pendingOrderNumbers
+            .sort((a, b) => b - a)
+            .slice(offset, offset + limit);
+
+        const data = pagedOrderNumbers.map((orderNumber: number) => ({
+            orderNumber,
+            retailerName: orderToRetailer[orderNumber] ?? '—'
+        }));
+
+        return {
+            data,
+            pagination: { page, limit, totalCount, totalPages },
+            dateRange: { fromDate: startDate.toISOString().split('T')[0], toDate: endDate.toISOString().split('T')[0] }
+        };
+    }
+
+    /**
+     * Get completed-by-epick orders list (order number + retailer name) with pagination. Default 10 per page.
+     */
+    async getEpickCompletedOrdersList(query: PaginationOptions & { fromDate?: string; toDate?: string; page?: number; limit?: number }) {
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(query.limit) || 10));
+        const offset = (page - 1) * limit;
+
+        const { startDate, endDate, dateFilter } = this.parseEpickDateRange(query);
+
+        const ordersInDateRange = await OrderHeader.findAll({
+            where: dateFilter,
+            attributes: ['Order_Number', 'C_Number'],
+            include: [
+                { model: Customer, as: 'customer', attributes: ['C_Number', 'C_Name', 'C_CoName'], required: false }
+            ],
+            raw: true,
+            nest: true
+        });
+
+        const orderNumbers = (ordersInDateRange as any[]).map((o: any) => o.Order_Number);
+        const orderToRetailer: { [key: number]: string } = {};
+        (ordersInDateRange as any[]).forEach((o: any) => {
+            orderToRetailer[o.Order_Number] = (o.customer?.C_CoName || o.customer?.C_Name || '') || '—';
+        });
+
+        if (orderNumbers.length === 0) {
+            return {
+                data: [],
+                pagination: { page, limit, totalCount: 0, totalPages: 0 },
+                dateRange: { fromDate: startDate.toISOString().split('T')[0], toDate: endDate.toISOString().split('T')[0] }
+            };
+        }
+
+        const allOrderPicks = await OrderPick.findAll({
+            where: { orderNumber: { [Op.in]: orderNumbers } },
+            attributes: ['orderNumber', 'status', 'completedAt'],
+            raw: true
+        });
+
+        const completedOrderNumbers = [...new Set(
+            allOrderPicks
+                .filter((p: any) => {
+                    if (p.status !== 'completed' && p.status !== 'ready_for_delivery' || !p.completedAt) return false;
+                    const d = new Date(p.completedAt);
+                    return d >= startDate && d <= endDate;
+                })
+                .map((p: any) => p.orderNumber)
+        )];
+
+        let validatedCompleted: number[] = [];
+        if (completedOrderNumbers.length > 0) {
+            const validated = await OrderHeader.findAll({
+                where: { Order_Number: { [Op.in]: completedOrderNumbers }, Order_Deleted: false },
+                attributes: ['Order_Number'],
+                raw: true
+            });
+            validatedCompleted = validated.map((o: any) => o.Order_Number);
+        }
+
+        const totalCount = validatedCompleted.length;
+        const totalPages = Math.ceil(totalCount / limit) || 1;
+        const pagedOrderNumbers = validatedCompleted
+            .sort((a, b) => b - a)
+            .slice(offset, offset + limit);
+
+        const data = pagedOrderNumbers.map((orderNumber: number) => ({
+            orderNumber,
+            retailerName: orderToRetailer[orderNumber] ?? '—'
+        }));
+
+        return {
+            data,
+            pagination: { page, limit, totalCount, totalPages },
+            dateRange: { fromDate: startDate.toISOString().split('T')[0], toDate: endDate.toISOString().split('T')[0] }
+        };
+    }
+
+    /**
+     * Get picker performance (picker-wise orders) for the epick manager module.
+     * Same data as pickerWiseOrders in getEpickDashboard, exposed as a dedicated API.
+     */
+    async getPickerPerformance(query: PaginationOptions & { fromDate?: string; toDate?: string }) {
+        const { fromDate, toDate } = query;
+
+        let startDate: Date, endDate: Date;
+
+        if (fromDate) {
+            const [year, month, day] = fromDate.split('-').map(Number);
+            startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+        } else {
+            startDate = new Date(new Date().getFullYear(), 0, 1);
+        }
+
+        if (toDate) {
+            const [year, month, day] = toDate.split('-').map(Number);
+            endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
+        } else {
+            endDate = new Date();
+        }
+
+        const dateFilter = {
+            Order_Date: { [Op.between]: [startDate, endDate] },
+            Order_Deleted: false
+        };
+
+        const ordersInDateRange = await OrderHeader.findAll({
+            where: dateFilter,
+            attributes: ['Order_Number'],
+            raw: true
+        });
+
+        const orderNumbers = ordersInDateRange.map((order: any) => order.Order_Number);
+
+        if (orderNumbers.length === 0) {
+            return {
+                pickerPerformance: [],
+                dateRange: {
+                    fromDate: startDate.toISOString().split('T')[0],
+                    toDate: endDate.toISOString().split('T')[0]
+                }
+            };
+        }
+
+        const allOrderPicks = await OrderPick.findAll({
+            where: { orderNumber: { [Op.in]: orderNumbers } },
+            attributes: ['orderNumber', 'status', 'pickerUserNumber', 'startedAt', 'completedAt', 'checkerCompletedAt'],
+            raw: true
+        });
+
+        const completedOrderPicks = allOrderPicks.filter(
+            (pick: any) => pick.status === 'completed' || pick.status === 'ready_for_delivery'
+        );
+        const completedOrderNumbersForQty = completedOrderPicks.map((pick: any) => pick.orderNumber);
+
+        const completedConfirmations = await EpickConfirmation.findAll({
+            where: {
+                orderNumber: { [Op.in]: orderNumbers },
+                status: 'completed'
+            },
+            attributes: ['orderNumber', 'pickerUserId', 'category', 'startedAt', 'completedAt'],
+            raw: true
+        });
+
+        let orderDetailsMap: { [key: number]: any[] } = {};
+        if (completedOrderNumbersForQty.length > 0) {
+            const allOrderDetails = await OrderDetail.findAll({
+                where: { Order_Number: { [Op.in]: completedOrderNumbersForQty } },
+                include: [
+                    {
+                        model: Inventory,
+                        as: 'inventory',
+                        attributes: ['Sales_Category'],
+                        required: false
+                    }
+                ],
+                raw: true,
+                nest: true
+            });
+            allOrderDetails.forEach((detail: any) => {
+                const orderNum = detail.Order_Number;
+                if (!orderDetailsMap[orderNum]) orderDetailsMap[orderNum] = [];
+                orderDetailsMap[orderNum].push(detail);
+            });
+        }
+
+        const pickerOrderCount: { [key: number]: number } = {};
+        const pickerTimeData: { [key: number]: { totalTime: number; orderCount: number; totalQuantity: number } } = {};
+        const pickerOrderSet: { [key: number]: Set<number> } = {};
+
+        completedConfirmations.forEach((confirmation: any) => {
+            const pickerId = confirmation.pickerUserId;
+            if (!pickerId) return;
+
+            if (!pickerOrderSet[pickerId]) pickerOrderSet[pickerId] = new Set();
+            if (!pickerTimeData[pickerId]) pickerTimeData[pickerId] = { totalTime: 0, orderCount: 0, totalQuantity: 0 };
+
+            pickerOrderSet[pickerId].add(confirmation.orderNumber);
+
+            let pickerQuantity = 0;
+            const orderDetails = orderDetailsMap[confirmation.orderNumber] || [];
+            const pickerCategories = confirmation.category || [];
+            orderDetails.forEach((detail: any) => {
+                const itemCategory = detail.inventory?.Sales_Category;
+                if (itemCategory && pickerCategories.includes(itemCategory)) {
+                    pickerQuantity += parseFloat(detail.Quantity_Ordered) || 0;
+                }
+            });
+
+            if (confirmation.startedAt && confirmation.completedAt) {
+                const startTime = new Date(confirmation.startedAt).getTime();
+                const endTime = new Date(confirmation.completedAt).getTime();
+                const timeDiff = (endTime - startTime) / 1000;
+                if (timeDiff > 0) {
+                    pickerTimeData[pickerId].totalTime += timeDiff;
+                    pickerTimeData[pickerId].totalQuantity += pickerQuantity;
+                }
+            }
+        });
+
+        Object.keys(pickerOrderSet).forEach((pickerIdStr: string) => {
+            const pickerId = Number(pickerIdStr);
+            pickerOrderCount[pickerId] = pickerOrderSet[pickerId].size;
+            pickerTimeData[pickerId].orderCount = pickerOrderSet[pickerId].size;
+        });
+
+        const pickerUserIds = Object.keys(pickerOrderCount).map(Number);
+        const pickerUsers = await EpickUser.findAll({
+            where: { id: { [Op.in]: pickerUserIds } },
+            attributes: ['id', 'firstName', 'lastName', 'userNumber'],
+            raw: true
+        });
+
+        const pickerScannedQty: { [key: number]: number } = {};
+        const pickerScannedLines: { [key: number]: Set<string> } = {};
+        if (completedOrderNumbersForQty.length > 0) {
+            const orderToPickersMap: { [key: number]: Array<{ pickerUserId: number; categories: number[] }> } = {};
+            completedConfirmations.forEach((conf: any) => {
+                if (!orderToPickersMap[conf.orderNumber]) orderToPickersMap[conf.orderNumber] = [];
+                if (conf.pickerUserId) {
+                    const existingPicker = orderToPickersMap[conf.orderNumber].find((p: any) => p.pickerUserId === conf.pickerUserId);
+                    if (!existingPicker) {
+                        orderToPickersMap[conf.orderNumber].push({ pickerUserId: conf.pickerUserId, categories: conf.category || [] });
+                    } else {
+                        const existingCategories = existingPicker.categories || [];
+                        const newCategories = conf.category || [];
+                        existingPicker.categories = [...new Set([...existingCategories, ...newCategories])];
+                    }
+                }
+            });
+
+            const allScans = await OrderPickScan.findAll({
+                where: { orderNumber: { [Op.in]: completedOrderNumbersForQty } },
+                attributes: ['orderNumber', 'itemNumber', 'qty'],
+                raw: true
+            });
+
+            allScans.forEach((scan: any) => {
+                const orderNum = scan.orderNumber;
+                const itemNum = scan.itemNumber;
+                const scanQty = parseFloat(scan.qty) || 0;
+                const orderDetails = orderDetailsMap[orderNum] || [];
+                const itemDetail = orderDetails.find((detail: any) => detail.Item_Number === itemNum);
+                if (itemDetail) {
+                    const itemCategory = itemDetail.inventory?.Sales_Category;
+                    if (itemCategory) {
+                        const pickersForOrder = orderToPickersMap[orderNum] || [];
+                        pickersForOrder.forEach((pickerInfo: any) => {
+                            if (pickerInfo.categories.includes(itemCategory)) {
+                                const pickerId = pickerInfo.pickerUserId;
+                                pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + scanQty;
+                                if (!pickerScannedLines[pickerId]) pickerScannedLines[pickerId] = new Set();
+                                pickerScannedLines[pickerId].add(`${orderNum}_${itemNum}`);
+                            }
+                        });
+                    }
+                }
+            });
+        }
+
+        const pickerOverrideCount: { [key: number]: number } = {};
+        const pickerAcceptedRequests: { [key: number]: number } = {};
+        const pickerRejectedRequests: { [key: number]: number } = {};
+        if (pickerUserIds.length > 0 && completedOrderNumbersForQty.length > 0) {
+            const overrideRequests = await OverrideRequest.findAll({
+                where: {
+                    orderNumber: { [Op.in]: completedOrderNumbersForQty },
+                    pickerUserId: { [Op.in]: pickerUserIds }
+                },
+                attributes: ['pickerUserId', 'status'],
+                raw: true
+            });
+            overrideRequests.forEach((req: any) => {
+                const pickerId = req.pickerUserId;
+                if (pickerId) {
+                    pickerOverrideCount[pickerId] = (pickerOverrideCount[pickerId] || 0) + 1;
+                    if (req.status === 'approved') pickerAcceptedRequests[pickerId] = (pickerAcceptedRequests[pickerId] || 0) + 1;
+                    if (req.status === 'rejected') pickerRejectedRequests[pickerId] = (pickerRejectedRequests[pickerId] || 0) + 1;
+                }
+            });
+        }
+
+        const formatTime = (seconds: number) => {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        };
+
+        const pickerPerformance = pickerUsers.map((user: any) => {
+            const fullName = `${user.firstName} ${user.lastName}`.trim();
+            const timeData = pickerTimeData[user.id];
+            const averageTimeSeconds = timeData && timeData.orderCount > 0
+                ? Math.round(timeData.totalTime / timeData.orderCount)
+                : 0;
+            const averageTimePerQty = timeData && timeData.totalQuantity > 0
+                ? parseFloat((timeData.totalTime / timeData.totalQuantity).toFixed(2))
+                : 0;
+            const totalTimeSeconds = timeData ? timeData.totalTime : 0;
+            const totalScannedLinesCount = pickerScannedLines[user.id] ? pickerScannedLines[user.id].size : 0;
+
+            return {
+                pickerId: user.id,
+                pickerName: fullName || user.userNumber || `User ${user.id}`,
+                totalCompletedOrders: pickerOrderCount[user.id] || 0,
+                averageOrderTime: {
+                    averageTimeSeconds,
+                    averageTimeFormatted: formatTime(averageTimeSeconds)
+                },
+                totalOrderTime: {
+                    totalTimeSeconds,
+                    totalTimeFormatted: formatTime(totalTimeSeconds)
+                },
+                averageTimePerQuantity: {
+                    secondsPerQty: averageTimePerQty,
+                    formatted: `${averageTimePerQty.toFixed(2)}s/qty`
+                },
+                totalScannedQuantity: Math.round(pickerScannedQty[user.id] || 0),
+                totalScannedLines: totalScannedLinesCount,
+                totalOverrideRequests: pickerOverrideCount[user.id] || 0,
+                totalRequests: pickerOverrideCount[user.id] || 0,
+                totalAcceptedRequests: pickerAcceptedRequests[user.id] || 0,
+                totalRejectedRequests: pickerRejectedRequests[user.id] || 0,
+                totalTimeFormatted: formatTime(totalTimeSeconds)
+            };
+        }).sort((a, b) => b.totalCompletedOrders - a.totalCompletedOrders);
+
+        return {
+            pickerPerformance,
+            dateRange: {
+                fromDate: startDate.toISOString().split('T')[0],
+                toDate: endDate.toISOString().split('T')[0]
+            }
+        };
+    }
+
 }

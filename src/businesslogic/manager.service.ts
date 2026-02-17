@@ -1946,7 +1946,7 @@ export class ManagerService {
     
     // Handle item_sort_by update
     if (body.item_sort_by !== undefined) {
-      const validSortOptions = ['sales_location', 'section_location','sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      const validSortOptions = ['sales_location', 'section_location','sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number'];
       if (!validSortOptions.includes(body.item_sort_by)) {
         throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
       }
@@ -1991,7 +1991,7 @@ export class ManagerService {
 
     // Validate item_sort_by if provided
     if (preferences.item_sort_by !== undefined) {
-      const validSortOptions = ['sales_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+      const validSortOptions = ['sales_location', 'section_location', 'sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number'];
       if (!validSortOptions.includes(preferences.item_sort_by)) {
         throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
       }
@@ -2036,7 +2036,7 @@ export class ManagerService {
     }
 
     // Validate item_sort_by
-    const validSortOptions = ['section_location', 'alphabetically', 'item_number', 'short_number', 'line_number'];
+    const validSortOptions = ['section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number'];
     if (!validSortOptions.includes(itemSortBy)) {
       throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
     }
