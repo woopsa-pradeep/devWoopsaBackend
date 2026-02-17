@@ -21,6 +21,9 @@ export async function seedInvoiceTemplates() {
       totalPrice: true,
       retail1: false,
       ebt: true,
+      pack: true,
+      size: true,
+      deposit: false,
     },
     upcOption: "barcode_primary",
     showDistributorDetails: true,
@@ -45,6 +48,9 @@ export async function seedInvoiceTemplates() {
     showLastBalance: true,
     showTotalAmountDue: true,
     showReportGeneratedByWoopsa: true,
+    showBillTo: true,
+    showShipTo: true,
+    showDeposit: true,
   };
 
   // Convert all string fields to lowercase

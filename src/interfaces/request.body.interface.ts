@@ -729,6 +729,15 @@ export interface ICreateNotificationScheduler {
   isActive?: boolean;
   stopNumber?: number;
   routeNumber?: number;
+  metadata?: {
+    type?: "image" | "video" | "link" | "screen";
+    imageUrl?: string;
+    videoUrl?: string;
+    linkUrl?: string;
+    redirectScreen?: string;
+    extraData?: any;
+    itemNumbers?: number[];
+  };
 }
 
 export interface IUpdateNotificationScheduler {

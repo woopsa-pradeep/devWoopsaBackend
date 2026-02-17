@@ -3513,3 +3513,36 @@ export const getInvoiceTemplatesQuerySchema = Joi.object({
     'boolean.base': 'mainTemplate must be a boolean',
   }),
 });
+
+// Bulk Upload Item Images validation schema
+export const bulkUploadItemImagesSchema = Joi.object({
+  items: Joi.array()
+    .items(
+      Joi.object({
+        itemNumber: Joi.alternatives()
+          .try(
+            Joi.string().trim().required(),
+            Joi.number().integer().positive().required()
+          )
+          .messages({
+            'alternatives.match': 'Item number must be a string or positive integer',
+            'any.required': 'Item number is required',
+          }),
+        img_url: Joi.string().uri().trim().required().messages({
+          'string.base': 'Image URL must be a string',
+          'string.empty': 'Image URL cannot be empty',
+          'string.uri': 'Image URL must be a valid URL',
+          'any.required': 'Image URL is required',
+        }),
+      })
+    )
+    .min(1)
+    .max(1000)
+    .required()
+    .messages({
+      'array.base': 'Items must be an array',
+      'array.min': 'Items array must contain at least one item',
+      'array.max': 'Cannot upload more than 1000 items at once',
+      'any.required': 'Items array is required',
+    }),
+});

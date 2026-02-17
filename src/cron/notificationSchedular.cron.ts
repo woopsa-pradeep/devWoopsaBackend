@@ -12,6 +12,9 @@ export const getUpcomingNotifications = async () => {
   const fiveMinutesLater = now.add(5, 'minutes').format('HH:mm:ss'); // current + 5 minutes
 
   console.log({ today, currentTime, fiveMinutesLater },'today, currentTime, fiveMinutesLater');
+  console.log('Server Local Time:', moment().format());
+  console.log('Server UTC Time:', moment.utc().format());
+
   try {
     const notifications = await NotificationScheduler.findAll({
       where: {
@@ -39,6 +42,10 @@ export const getUpcomingNotifications = async () => {
 
 async function sendNotification(notification: any) {
   try {  
+    if (notification.isExpire) {
+      console.log(` Notification ${notification.id} already expired. Skipping.`);
+      return;
+    }
     // Get device tokens for all users in the notification
     const deviceTokens = [];
     
@@ -51,6 +58,7 @@ async function sendNotification(notification: any) {
         },
         attributes: ['deviceToken']
       });
+      console.log(`User ${userId} has ${userTokens.length} active device tokens.`);
       
       await Notifications.create({
         userNumber: userId.toString(),
@@ -74,6 +82,7 @@ async function sendNotification(notification: any) {
       title: notification.title,
       body: notification.description,
     });
+      console.log(`Successfully sent notification to ${deviceTokens.length} devices`);
 
     let UserNumber = deviceTokens[0];
    

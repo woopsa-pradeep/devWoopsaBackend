@@ -1,4 +1,3 @@
-// models/invoiceTemplate.model.ts
 import { Model, DataTypes, Optional } from 'sequelize';
 import { postgresSequelize } from '../../db';
 
@@ -8,6 +7,7 @@ export interface IInvoiceTemplate {
   mainTemplate: boolean;
   groupBy: string;
   showGroupHeader: boolean;
+
   selectedColumns: {
     orderQty?: boolean;
     shippedQty?: boolean;
@@ -21,35 +21,54 @@ export interface IInvoiceTemplate {
     totalPrice?: boolean;
     retail1?: boolean;
     ebt?: boolean;
+    pack?: boolean;
+    size?: boolean;
+    deposit?: boolean;
   };
+
   upcOption: string;
+
   showDistributorDetails: boolean;
   showCustomerDetails: boolean;
+  showBillTo: boolean;
+  showShipTo: boolean;
+
   showDocNumber: boolean;
   showPageOf: boolean;
   showInvoiceDate: boolean;
   showInvoiceDateWithTime: boolean;
   showRoute: boolean;
   showStop: boolean;
+
   showLogo: boolean;
   logoPosition: string;
+
   showTerms: boolean;
+
   headerOnPages: string;
   showHeaderMessage: boolean;
   headerMessageFirstPage: string;
+
   footerLayout: string;
   showFooterMessage: boolean;
   footerMessageLastPage: string;
+
   showSubTotal: boolean;
   showDeliveryCharge: boolean;
+  showDeposit: boolean;
   showLastBalance: boolean;
   showTotalAmountDue: boolean;
+
   showReportGeneratedByWoopsa: boolean;
+
   readonly createdAt?: Date;
   readonly updatedAt?: Date;
 }
 
-type InvoiceTemplateCreationAttributes = Optional<IInvoiceTemplate, 'id' | 'createdAt' | 'updatedAt'>;
+type InvoiceTemplateCreationAttributes = Optional<
+  IInvoiceTemplate,
+  'id' | 'createdAt' | 'updatedAt'
+>;
 
 export class InvoiceTemplate
   extends Model<IInvoiceTemplate, InvoiceTemplateCreationAttributes>
@@ -60,6 +79,7 @@ export class InvoiceTemplate
   public mainTemplate!: boolean;
   public groupBy!: string;
   public showGroupHeader!: boolean;
+
   public selectedColumns!: {
     orderQty?: boolean;
     shippedQty?: boolean;
@@ -73,30 +93,46 @@ export class InvoiceTemplate
     totalPrice?: boolean;
     retail1?: boolean;
     ebt?: boolean;
+    pack?: boolean;
+    size?: boolean;
+    deposit?: boolean;
   };
+
   public upcOption!: string;
+
   public showDistributorDetails!: boolean;
   public showCustomerDetails!: boolean;
+  public showBillTo!: boolean;
+  public showShipTo!: boolean;
+
   public showDocNumber!: boolean;
   public showPageOf!: boolean;
   public showInvoiceDate!: boolean;
   public showInvoiceDateWithTime!: boolean;
   public showRoute!: boolean;
   public showStop!: boolean;
+
   public showLogo!: boolean;
   public logoPosition!: string;
+
   public showTerms!: boolean;
+
   public headerOnPages!: string;
   public showHeaderMessage!: boolean;
   public headerMessageFirstPage!: string;
+
   public footerLayout!: string;
   public showFooterMessage!: boolean;
   public footerMessageLastPage!: string;
+
   public showSubTotal!: boolean;
   public showDeliveryCharge!: boolean;
+  public showDeposit!: boolean;
   public showLastBalance!: boolean;
   public showTotalAmountDue!: boolean;
+
   public showReportGeneratedByWoopsa!: boolean;
+
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -108,25 +144,30 @@ InvoiceTemplate.init(
       autoIncrement: true,
       primaryKey: true,
     },
+
     name: {
       type: DataTypes.STRING,
       allowNull: false,
     },
+
     mainTemplate: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
     },
+
     groupBy: {
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: '',
     },
+
     showGroupHeader: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     selectedColumns: {
       type: DataTypes.JSONB,
       allowNull: false,
@@ -143,118 +184,162 @@ InvoiceTemplate.init(
         totalPrice: false,
         retail1: false,
         ebt: false,
+        pack: false,
+        size: false,
+        deposit: false,
       },
     },
+
     upcOption: {
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: 'barcode_primary',
     },
+
     showDistributorDetails: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showCustomerDetails: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
+    showBillTo: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+
+    showShipTo: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+
     showDocNumber: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showPageOf: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showInvoiceDate: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showInvoiceDateWithTime: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
     },
+
     showRoute: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showStop: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showLogo: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     logoPosition: {
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: 'center',
     },
+
     showTerms: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     headerOnPages: {
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: 'all',
     },
+
     showHeaderMessage: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
     },
+
     headerMessageFirstPage: {
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: '',
     },
+
     footerLayout: {
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: 'messageLeft',
     },
+
     showFooterMessage: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     footerMessageLastPage: {
       type: DataTypes.STRING,
       allowNull: false,
       defaultValue: '',
     },
+
     showSubTotal: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showDeliveryCharge: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
+    showDeposit: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+
     showLastBalance: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showTotalAmountDue: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
     },
+
     showReportGeneratedByWoopsa: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

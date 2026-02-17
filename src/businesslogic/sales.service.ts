@@ -5942,6 +5942,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
         isDiscounted,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
         prepaidTaxRate: prepaidTaxRate,
+        ...tradeShowItem,
         // Description: product.Description,
         Item_Number: e.Item_Number,
         CaseCount: product.CaseCount,

@@ -2914,68 +2914,356 @@ export class ManagerService {
   }
 
 
-  async getOrderForPickListConfirmation(query: PaginationOptions) {
+  // async getOrderForPickListConfirmation(query: PaginationOptions) {
+  //   console.log('query params --->', query);
+
+  //   const currentStatus = query.currentStatus || 'all';
+  //   const { startDate, endDate } = query;
+  //   if (query.updated && String(query.updated).toLowerCase() === 'true') {
+  //     return [];
+  //   }
+
+  //   const whereCondition: any = {
+  //   Order_Deleted: false,
+  //   Confirmed: false,
+  //   Invoice_Number: { [Op.lte]: 0 },
+  //   Picklist_Printed: false,
+  //   Order_Updated: false,
+  //   Order_Type: { [Op.ne]: 6 },
+  // };
+
+  // // ✅ Add Date Filter
+  // if (query.startDate && query.endDate) {
+  //   whereCondition.Order_Date = {
+  //     [Op.between]: [
+  //       new Date(query.startDate),
+  //       new Date(query.endDate)
+  //     ]
+  //   };
+  // }
+
+  //   // isDeleted=true
+  //  if (query.isDeleted && String(query.isDeleted).toLowerCase() === 'true') {
+  //   console.log('isDeleted is true, returning empty array');
+  //     return [];
+  //   } 
+
+  //  if(currentStatus === 'all'){
+  //     console.log('Final whereCondition --->', whereCondition);
+  //     const orderNumbers = await OrderHeader.findAll({
+  //       attributes: ['Order_Number'],
+  //       where: whereCondition,
+  //       order: [['Order_Number', 'DESC']]
+  //         });
+
+  //     return orderNumbers.map((order: any) => order.Order_Number);
+  //   };
+  
+
+  //   if(currentStatus === 'recordLocks'){
+  //     const recordLocks = await Record_Locks.findAll({
+  //       where: {
+  //         Lock_Type: 0
+  //       },
+  //       attributes: ['Lock_Number'],
+  //       raw: true
+  //     });
+  //     const recordLocksOrderNumbers = recordLocks.map((lock: any) => lock.Lock_Number);
+  //     const whereCondition: any = {
+  //       Invoice_Number: { [Op.gt]: 0 }
+  //     };
+  //     if(recordLocksOrderNumbers.length > 0){
+  //       whereCondition.Order_Number = {
+  //         [Op.in]: recordLocksOrderNumbers
+  //       };
+  //     }else {
+  //       return {
+  //         totalCount: 0,
+        
+  //         totalPages: 0,
+  //         orderList: [],
+  //       };
+  //     }
+  
+  //       whereCondition.Order_Deleted = false
+  //       whereCondition.Picklist_Printed = false;
+  //       whereCondition.Order_Updated = false;
+  //       whereCondition.Order_Type = { [Op.ne]: 6 };
+  //       whereCondition.Confirmed = false;
+  //       whereCondition.Order_Date = {
+  //         [Op.between]: [startDate, endDate]
+  //       };
     
+  //     // First, get the order headers with pagination
+  //     const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+  //       attributes: [
+  //         'Order_Number',
+  //         'C_Number'
+  //       ],
+  //       where: whereCondition,
+  //       include: [
+  //         {
+  //           model:OrderDetail,
+  //           as: 'orderDetails',
+  //           attributes: ['Order_Number', 'Quantity_Ordered'],
+  //           required: true
+           
+  //         },
+  //         {
+  //           model: Customer,
+  //           as: 'customer',
+  //           attributes: ['C_Name'],
+  //           required: false,
+  //           include: [
+  //             {
+  //               model: CustomerRoute,
+  //               as: 'Routes',
+  //               attributes: ['Route_Number', 'Stop_Number'],
+  //               required: false
+  //             }
+  //           ]
+            
+  //         }
+          
+  //       ],
+        
+  //       distinct: true,
+  //       col: 'Order_Number',
+  
+  //       order: [['Order_Number', 'DESC']],
+       
+  //     });
+  
+  //     // Get the order numbers to fetch quantities
+  
+  //     // Get total quantities for these orders
+    
+  
+  //     // Format the response
+     
+  
+  //     return {
+  //       totalCount,
+       
+  //       orderList: orderList,
+  //     };
+
+  //   }
+
+  //   else if(currentStatus === 'orderConfirmation') {
+
+  //     const whereCondition: any = {
+  //       Invoice_Number: { [Op.gt]: 0 }
+
+  //     };
+     
+  //     whereCondition.Order_Deleted = false
+  //     whereCondition.Picklist_Printed = false;
+  //     whereCondition.Order_Updated = false;
+  //     whereCondition.Order_Type = { [Op.ne]: 6 };
+  //     whereCondition.Confirmed = false;
+  //     whereCondition.Order_Date = {
+  //           [Op.between]: [startDate, endDate]
+  //         };
+    
+  //     // First, get the order headers with pagination
+  //     const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+  //       attributes: [
+  //         'Order_Number',
+  //         'C_Number',
+          
+  //       ],
+  //       where: {
+  //         ...whereCondition,
+        
+  //       },
+  //       include: [
+
+  //         {
+  //           model:OrderDetail,
+  //           as: 'orderDetails',
+  //           attributes: ['Order_Number', 'Quantity_Ordered'],
+  //           required: true
+           
+  //         },
+  //         {
+  //           model: Customer,
+  //           as: 'customer',
+  //           attributes: ['C_Name'],
+  //           required: false,
+  //           include: [
+  //             {
+  //               model: CustomerRoute,
+  //               as: 'Routes',
+  //               attributes: ['Route_Number', 'Stop_Number'],
+  //               required: false
+  //             }
+  //           ]
+  //         }
+  //       ],
+  //       distinct: true,
+  //       col: 'Order_Number',
+  //       order: [['Order_Number', 'DESC']],
+       
+  //     });
+    
+  //     return {
+  //       totalCount,
+       
+  //       orderList: orderList,
+  //     };
+
+  //   }
+    
+  //   else {
+  //   // Build where condition
+  //   const whereCondition: any = {
+  //     Invoice_Number: { [Op.gt]: 0 }
+
+  //   };
+  //   whereCondition.Order_Deleted = false
+  //   whereCondition.Picklist_Printed = false;
+  //   whereCondition.Order_Updated = false;
+  //   whereCondition.Order_Type = { [Op.ne]: 6 };
+  //   whereCondition.Confirmed = false;
+  //   whereCondition.Order_Date = {
+  //           [Op.between]: [startDate, endDate]
+  //         };
+
+ 
+  // if(currentStatus === 'non_invoices'){
+  //     whereCondition.Invoice_Number = {
+  //       [Op.eq]: 0
+  //     };
+  //   }else if(currentStatus === 'EpickStatusFromPicker'){
+  //     whereCondition.EpickStatusFromPicker ='completed'
+  //   }
+    
+    
+  //   console.log('Final whereCondition for order confirmation--->', whereCondition);
+  //   // First, get the order headers with pagination
+  //   const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
+  //     attributes: [
+  //       'Order_Number',
+  //       'C_Number'
+       
+  //     ],
+  //     where: whereCondition,
+  //     include: [
+  //       {
+  //         model: Customer,
+  //         as: 'customer',
+  //           attributes: ['C_Name'],
+  //         required: false,
+  //         include: [
+  //           {
+  //             model: CustomerRoute,
+  //             as: 'Routes',
+  //             attributes: ['Route_Number', 'Stop_Number'],
+  //             required: false
+  //           }
+  //         ]
+  //       },
+  //       {
+  //         model:OrderDetail,
+  //         as: 'orderDetails',
+  //         attributes: ['Order_Number', 'Quantity_Ordered'],
+  //         required: true
+         
+  //       }
+  //     ],
+  //     distinct: true,
+  //     col: 'Order_Number',
+
+  //     order: [['Order_Number', 'DESC']],
+     
+  //   });
+
+  //   // Get the order numbers to fetch quantities
+
+   
+
+  //   // Format the response
+    
+
+  //   return {
+  //     totalCount,
+     
+  //     orderList: orderList,
+  //   };
+  // }
+  // }
+  async getOrderForPickListConfirmation(query: PaginationOptions) {
+
+    console.log('query params --->', query);
+
     const currentStatus = query.currentStatus || 'all';
+    const { startDate, endDate } = query;
 
-   console.log(query, 'query--->');
+    if (query.updated?.toString().toLowerCase() === 'true') {
+      return [];
+    }
 
+    if (query.isDeleted?.toString().toLowerCase() === 'true') {
+      return [];
+    }
 
+    const whereCondition: any = {
+      Order_Deleted: false,
+      Confirmed: false,
+      Picklist_Printed: false,
+      Order_Updated: false,
+      Order_Type: { [Op.ne]: 6 },
+    };
 
-    // Handle query parameters with potential trailing spaces
-   
-   
+    if (startDate && endDate) {
+      whereCondition.Order_Date = {
+        [Op.between]: [new Date(startDate), new Date(endDate)]
+      };
+    }
 
-    if(currentStatus === 'recordLocks'){
+    if (currentStatus === 'all') {
+
+      whereCondition.Invoice_Number = { [Op.lte]: 0 };
+
+      const orderNumbers = await OrderHeader.findAll({
+        attributes: ['Order_Number'],
+        where: whereCondition,
+        order: [['Order_Number', 'DESC']]
+      });
+
+      return orderNumbers.map((order: any) => order.Order_Number);
+    }
+
+    if (currentStatus === 'recordLocks') {
+
       const recordLocks = await Record_Locks.findAll({
-        where: {
-          Lock_Type: 0
-        },
+        where: { Lock_Type: 0 },
         attributes: ['Lock_Number'],
         raw: true
       });
+
       const recordLocksOrderNumbers = recordLocks.map((lock: any) => lock.Lock_Number);
-      const whereCondition: any = {
-        Invoice_Number: { [Op.gt]: 0 }
-      };
-      if(recordLocksOrderNumbers.length > 0){
-        whereCondition.Order_Number = {
-          [Op.in]: recordLocksOrderNumbers
-        };
-      }else {
+
+      if (!recordLocksOrderNumbers.length) {
         return {
           totalCount: 0,
-        
-          totalPages: 0,
           orderList: [],
         };
       }
-  
-        whereCondition.Order_Deleted = false
-      whereCondition.Picklist_Printed = false;
-        whereCondition.Order_Updated = false;
-      
-  
-  
-    
-      
-    
-    
-  
-      // First, get the order headers with pagination
+
+      whereCondition.Invoice_Number = { [Op.gt]: 0 };
+      whereCondition.Order_Number = { [Op.in]: recordLocksOrderNumbers };
+
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
-        attributes: [
-          'Order_Number',
-          'C_Number'
-        ],
+        attributes: ['Order_Number', 'C_Number'],
         where: whereCondition,
         include: [
           {
-            model:OrderDetail,
+            model: OrderDetail,
             as: 'orderDetails',
             attributes: ['Order_Number', 'Quantity_Ordered'],
             required: true
-           
           },
           {
             model: Customer,
@@ -2994,61 +3282,25 @@ export class ManagerService {
         ],
         distinct: true,
         col: 'Order_Number',
-  
         order: [['Order_Number', 'DESC']],
-       
       });
-  
-      // Get the order numbers to fetch quantities
-  
-      // Get total quantities for these orders
-    
-  
-      // Format the response
-     
-  
-      return {
-        totalCount,
-       
-        orderList: orderList,
-      };
 
+      return { totalCount, orderList };
     }
 
-    else if(currentStatus === 'orderConfirmation') {
+    if (currentStatus === 'orderConfirmation') {
 
-      const whereCondition: any = {
-        Invoice_Number: { [Op.gt]: 0 }
+      whereCondition.Invoice_Number = { [Op.gt]: 0 };
 
-      };
-     
-      whereCondition.Order_Deleted = false
-      whereCondition.Picklist_Printed = false;
-        whereCondition.Order_Updated = false;
-  
-   
-  
-   
-     
-      // First, get the order headers with pagination
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
-        attributes: [
-          'Order_Number',
-          'C_Number',
-          
-        ],
-        where: {
-          ...whereCondition,
-        
-        },
+        attributes: ['Order_Number', 'C_Number'],
+        where: whereCondition,
         include: [
-
           {
-            model:OrderDetail,
+            model: OrderDetail,
             as: 'orderDetails',
             attributes: ['Order_Number', 'Quantity_Ordered'],
             required: true
-           
           },
           {
             model: Customer,
@@ -3068,55 +3320,30 @@ export class ManagerService {
         distinct: true,
         col: 'Order_Number',
         order: [['Order_Number', 'DESC']],
-       
       });
-      
-  
-  
-    
-  
-      return {
-        totalCount,
-       
-        orderList: orderList,
-      };
 
+      return { totalCount, orderList };
     }
-    
-    else {
-    // Build where condition
-    const whereCondition: any = {
-      Invoice_Number: { [Op.gt]: 0 }
 
-    };
-    whereCondition.Order_Deleted = false
-    whereCondition.Picklist_Printed = false;
-      whereCondition.Order_Updated = false;
 
- 
-  if(currentStatus === 'non_invoices'){
-      whereCondition.Invoice_Number = {
-        [Op.eq]: 0
-      };
-    }else if(currentStatus === 'EpickStatusFromPicker'){
-      whereCondition.EpickStatusFromPicker ='completed'
+    if (currentStatus === 'non_invoices') {
+      whereCondition.Invoice_Number = { [Op.eq]: 0 };
+    } else {
+      whereCondition.Invoice_Number = { [Op.gt]: 0 };
     }
-    
-    
 
-    // First, get the order headers with pagination
+    if (currentStatus === 'EpickStatusFromPicker') {
+      whereCondition.EpickStatusFromPicker = 'completed';
+    }
+
     const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
-      attributes: [
-        'Order_Number',
-        'C_Number'
-       
-      ],
+      attributes: ['Order_Number', 'C_Number'],
       where: whereCondition,
       include: [
         {
           model: Customer,
           as: 'customer',
-            attributes: ['C_Name'],
+          attributes: ['C_Name'],
           required: false,
           include: [
             {
@@ -3128,35 +3355,20 @@ export class ManagerService {
           ]
         },
         {
-          model:OrderDetail,
+          model: OrderDetail,
           as: 'orderDetails',
           attributes: ['Order_Number', 'Quantity_Ordered'],
           required: true
-         
         }
       ],
       distinct: true,
       col: 'Order_Number',
-
       order: [['Order_Number', 'DESC']],
-     
     });
 
-    // Get the order numbers to fetch quantities
-
-   
-
-    // Format the response
-    
-
-    return {
-      totalCount,
-     
-      orderList: orderList,
-    };
+    return { totalCount, orderList };
   }
-  }
- 
+
 
   
   async getOrderHistoryByOrderNumber(orderNumber: number, query: PaginationOptions) {
@@ -3883,6 +4095,7 @@ export class ManagerService {
       isActive: body.isActive ?? true,
       stopNumber: body.stopNumber ?? null,
       routeNumber: body.routeNumber ?? null,
+      metadata: body.metadata ?? null,
       isExpire: false
     });
 
@@ -7269,6 +7482,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   async getAllOrderNumbers (){
     const orderNumbers = await OrderHeader.findAll({
       attributes: ['Order_Number'],
+      where: { Picklist_Printed: false , Confirmed: false, Order_Deleted: false, Order_Updated: false, Order_Type: { [Op.ne]: 6 }, Invoice_Number: { [Op.lte]: 0 } }, 
       order: [['Order_Number', 'DESC']]
     });
     return orderNumbers;
@@ -10739,8 +10953,11 @@ async getAgingReport(filters: {
   
     if (query.search) {
       whereCondition[Op.or] = [
-        { retailerName: { [Op.like]: `%${query.search}%` } },
-        {retailerId: { [Op.like]: `%${query.search}%` } },
+        { retailerName: { [Op.iLike]: `%${query.search}%` } },
+        Sequelize.where(
+          Sequelize.cast(Sequelize.col('retailerId'), 'TEXT'),
+          { [Op.iLike]: `%${query.search}%` }
+        ),
       ];
     }
     if (query.tradeShowId) whereCondition.tradeShowId = query.tradeShowId;
@@ -11036,8 +11253,11 @@ async getAgingReport(filters: {
     const whereCondition: any = {};
     if (search) {
       whereCondition[Op.or] = [
-        { vendorName: { [Op.like]: `%${search}%` } },
-        { vendorId: { [Op.like]: `%${search}%` } },
+        { vendorName: { [Op.iLike]: `%${search}%` } },
+        Sequelize.where(
+          Sequelize.cast(Sequelize.col('vendorId'), 'TEXT'),
+          { [Op.iLike]: `%${search}%` }
+        ),
       ];
     }
   
@@ -11427,8 +11647,9 @@ let vendorId = tradeShowVendor?.dataValues.vendorId;
   
 
 
-  async getRemainItemInDelivery(tradeShowId:number,query:PaginationOptions){
-let {page = 1,limit = 10,salesCategory,priceClass} = query;
+  async getRemainItemInDelivery(query:PaginationOptions){
+let {page = 1,limit = 10,salesCategory,priceClass,tradeShowId} = query;
+tradeShowId = Number(tradeShowId);
 page = parseInt(page as any) || 1;
 limit = parseInt(limit as any) || 10;
 const offset = (page - 1) * limit;
@@ -13255,7 +13476,7 @@ async currentOrderStatusReport(query: any) {
     OrderHeader.findAll({
       ...commonQuery,
       where: {
-        ...baseWhere,
+        ...baseWhere,Order_Deleted: false, Order_Updated: false ,
         [Op.and]: [
           Sequelize.literal(`
             EXISTS (
@@ -13292,6 +13513,7 @@ async currentOrderStatusReport(query: any) {
     non_invoices,
     picklist,
     epickCompleted,
+    orderConfirmation, 
     lockedOrders,
   ] = results.map((r) =>
     r.status === 'fulfilled' ? r.value : []
@@ -13302,9 +13524,11 @@ async currentOrderStatusReport(query: any) {
     non_invoices,
     picklist,
     epickCompleted,
+    orderConfirmation, 
     recordLocks: lockedOrders,
   };
 }
+
 async getInvoiceRegister(query: any) {
   const { startDate, endDate } = query;
 
@@ -14082,6 +14306,105 @@ async getCustomerListForTradeShow(query: PaginationOptions & { search?: string, 
     totalPages: Math.ceil(totalCount / limit),
   };
 
+}
+
+
+async uploadItemImage(req: Request) {
+  const file = req.file;
+  const { itemNumber } = req.body;
+  
+  if (!file) {
+    throw new AppError('File not found', 404);
+  }
+
+  if (!itemNumber) {
+    throw new AppError('Item number is required', 400);
+  }
+
+  // Create filename with item number and original file extension
+  const fileExtension = file.originalname.split('.').pop() || 'jpg';
+  const fileName = `${itemNumber}.${fileExtension}`;
+
+  const result = await uploadFileToAzure(file.buffer, fileName, file.mimetype, 'item-images');
+  if (!result.success) {
+    throw new AppError(result.error || 'Failed to upload image', 500);
+  }
+  return result;
+}
+
+async bulkUploadItemImages(body: Array<{ itemNumber: string | number; img_url: string }>) {
+  if (!Array.isArray(body) || body.length === 0) {
+    throw new AppError('Invalid request body. Expected an array of items with itemNumber and img_url', 400);
+  }
+
+  const results = [];
+  const errors = [];
+
+  for (const item of body) {
+    try {
+      const { itemNumber, img_url } = item;
+
+      if (!itemNumber || !img_url) {
+        errors.push({
+          itemNumber: itemNumber || 'missing',
+          error: 'itemNumber and img_url are required'
+        });
+        continue;
+      }
+
+      // Convert itemNumber to string to match product_number field type
+      const productNumber = itemNumber.toString().trim();
+      const imageUrl = img_url.trim();
+
+      // Check if product_image exists with this product_number
+      const existingProductImage = await ProductImage.findOne({
+        where: { product_number: productNumber }
+      });
+
+      let productImage;
+      let action: 'created' | 'updated';
+
+      if (existingProductImage) {
+        // Update existing record
+        await existingProductImage.update({
+          img_url: imageUrl,
+          isAllow: true,
+          isActive: true,
+        });
+        productImage = existingProductImage;
+        action = 'updated';
+      } else {
+        // Create new record
+        productImage = await ProductImage.create({
+          product_number: productNumber,
+          img_url: imageUrl,
+          isAllow: true,
+          isActive: true,
+        });
+        action = 'created';
+      }
+
+      results.push({
+        itemNumber: productNumber,
+        img_url: imageUrl,
+        action,
+        id: productImage.id,
+      });
+    } catch (error: any) {
+      errors.push({
+        itemNumber: item.itemNumber || 'unknown',
+        error: error.message || 'Failed to process item',
+      });
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    processed: results.length,
+    failed: errors.length,
+    results,
+    errors: errors.length > 0 ? errors : undefined,
+  };
 }
 
 }

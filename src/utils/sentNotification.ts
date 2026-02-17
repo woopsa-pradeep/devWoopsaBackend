@@ -26,6 +26,50 @@ interface SendMultiNotificationOptions {
   data?: { [key: string]: string };
 }
 
+// export async function sendFCMNotification({
+//   token,
+//   title,
+//   body,
+//   data = {},
+// }: SendNotificationOptions): Promise<void> {
+//   try {
+//     const message: admin.messaging.Message = {
+//       token,
+//       notification: {
+//         title,
+//         body,
+//         // imageUrl: notification.metadata?.imageUrl || undefined,
+//   //     token: "ewI1JpJHRkQErgQPgsZxYo:APA91bEJ3EkAzdh2Q0JUW6jDbNh75BtQiYLra9Wpc9403BMciuYDThFkCXs1Bwmbo1Zz1JJR1OYVt9bk_5ulfbiERS072B9EtJE1xPxpnE0i6q93h_O5cAA",
+//   // notification: {
+//   //   title: "Test Title",
+//   //   body: "Test Body"
+//   //     },
+//   //     data: {
+//   //             redirectScreen: notification.metadata?.redirectScreen || "",
+//   //             linkUrl: notification.metadata?.linkUrl || "",
+//   //             type: notification.metadata?.type || "",
+//   //             extraData: JSON.stringify(notification.metadata?.extraData || {})
+//             },
+//       android: {
+//         priority: 'high',
+//       },
+//       apns: {
+//         payload: {
+//           aps: {
+//             sound: 'default',
+//           },
+//         },
+//       },
+//     };
+
+//     const response = await admin.messaging().send(message);
+//     console.log('✅ FCM Notification sent successfully:', response);
+//   } catch (error) {
+//     console.error('❌ FCM Notification Error:', error);
+//     throw error;
+//   }
+// }
+
 export async function sendFCMNotification({
   token,
   title,
@@ -33,32 +77,59 @@ export async function sendFCMNotification({
   data = {},
 }: SendNotificationOptions): Promise<void> {
   try {
+    // Extract known properties first
+    const imageUrl =
+      typeof data.imageUrl === "string" ? data.imageUrl : undefined;
+
+    // Convert all data values to string (FCM requirement)
+    const stringifiedData: { [key: string]: string } = {};
+
+    Object.keys(data).forEach((key) => {
+      if (data[key] !== undefined && data[key] !== null) {
+        stringifiedData[key] =
+          typeof data[key] === "string"
+            ? data[key]
+            : JSON.stringify(data[key]);
+      }
+    });
+
     const message: admin.messaging.Message = {
       token,
       notification: {
         title,
         body,
+        ...(imageUrl && { imageUrl }),
       },
-      data,
+      data: stringifiedData,
       android: {
-        priority: 'high',
+        priority: "high",
+        notification: {
+          ...(imageUrl && { imageUrl }),
+          sound: "default",
+        },
       },
       apns: {
         payload: {
           aps: {
-            sound: 'default',
+            sound: "default",
+            "mutable-content": 1,
           },
         },
+        ...(imageUrl && {
+          fcmOptions: { imageUrl },
+        }),
       },
     };
 
     const response = await admin.messaging().send(message);
-    console.log('✅ FCM Notification sent successfully:', response);
+    console.log("✅ FCM Notification sent successfully:", response);
   } catch (error) {
-    console.error('❌ FCM Notification Error:', error);
+    console.error("❌ FCM Notification Error:", error);
     throw error;
   }
 }
+
+
 
 export async function sendMultiFCMNotification({
   tokens,

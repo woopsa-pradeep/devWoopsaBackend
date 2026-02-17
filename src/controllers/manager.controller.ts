@@ -1757,7 +1757,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   }
 
   async getRemainItemInDelivery(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getRemainItemInDelivery(Number(req.params.id), req.body as PaginationOptions);
+    const data = await this.managerService.getRemainItemInDelivery(req.body as PaginationOptions);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
@@ -1918,5 +1918,15 @@ async createInvoice(req: AuthRequest, res: Response) {
 async getInvoiceRegister(req: AuthRequest, res: Response) {
   const data = await this.managerService.getInvoiceRegister(req.query);
   sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async uploadItemImage(req: AuthRequest, res: Response) {
+  const data = await this.managerService.uploadItemImage(req);
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async bulkUploadItemImages(req: AuthRequest, res: Response) {
+  const data = await this.managerService.bulkUploadItemImages(req.body.items);
+  sendResponse(res, 200, true, data, data.success ? 'Item images uploaded successfully' : 'Some items failed to upload');
 }
 }

@@ -1329,6 +1329,8 @@ if(tradeShowItem){
   price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
 }
 
+
+tradeShowItem = tradeShowItem?.dataValues || null;
       let product: any = await Inventory.findOne({
         where: {
           Item_Number: e.Item_Number
@@ -1397,6 +1399,7 @@ if (p1 !== p2) {
 
       return {
         isDiscounted,
+        ...tradeShowItem,
         isNewItem,
         Description: product.Description,
         // Description: product.Description,

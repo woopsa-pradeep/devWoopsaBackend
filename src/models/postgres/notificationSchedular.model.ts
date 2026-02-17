@@ -13,6 +13,7 @@ export class NotificationScheduler extends Model {
   public isExpire!: boolean;
   public stopNumber!: number | null;
   public routeNumber!: number | null;
+  public metadata!: object | null; // JSONB field
   public readonly created_at!: Date;
   public readonly updated_at!: Date;
 }
@@ -58,7 +59,10 @@ NotificationScheduler.init(
       allowNull: true,
       defaultValue: [],
     },
-    
+    metadata: {
+      type: DataTypes.JSONB,
+      allowNull: true
+    },
     isExpire: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
