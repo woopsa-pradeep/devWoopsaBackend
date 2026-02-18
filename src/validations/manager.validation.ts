@@ -82,7 +82,7 @@ export const createUserSchema = Joi.object({
     'string.empty': 'lastName cannot be empty',
   }),
 
-  role: Joi.string().required().valid('sales', 'driver', 'checker').messages({
+  role: Joi.string().required().valid('sales', 'driver', 'checker', 'epick', 'receivable').messages({
     'any.required': 'role is required',
     'string.empty': 'role cannot be empty',
   }),
@@ -91,6 +91,94 @@ export const createUserSchema = Joi.object({
     'string.email': 'email must be a valid email address',
     'any.required': 'email is required',
   }),
+});
+
+export const createReceivableUserSchema = Joi.object({
+  userNumber: Joi.number().required().messages({
+    'any.required': 'User is required',
+    'string.empty': 'User cannot be empty',
+  }),
+
+  // ✅ salesRepNumber is now ARRAY
+  salesRepNumber: Joi.array()
+    .items(
+      Joi.string().trim().allow(''), // e.g. "1234"
+      Joi.number(),                  // e.g. 1234
+    )
+    .default([]) // ✅ Default empty array
+    .messages({
+      'array.base': 'salesRepNumber must be an array',
+      'string.base': 'Each salesRepNumber must be a string',
+      'number.base': 'Each salesRepNumber must be a number',
+    }),
+
+  firstName: Joi.string().required().messages({
+    'any.required': 'firstName is required',
+    'string.empty': 'firstName cannot be empty',
+  }),
+
+  lastName: Joi.string().required().messages({
+    'any.required': 'lastName is required',
+    'string.empty': 'lastName cannot be empty',
+  }),
+
+  // Role is optional for receivable users since it's automatically set to 'receivable'
+  role: Joi.string().optional().valid('receivable').messages({
+    'any.only': 'Role must be receivable if provided',
+  }),
+
+  email: Joi.string().email().required().messages({
+    'string.email': 'email must be a valid email address',
+    'any.required': 'email is required',
+  }),
+
+  password: Joi.string().min(3).required().messages({
+    'any.required': 'password is required',
+    'string.min': 'password must be at least 3 characters',
+    'string.empty': 'password cannot be empty',
+  }),
+
+  item_sort_by: Joi.string().valid('sales_location', 'section_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
+});
+
+export const updateReceivableUserSchema = Joi.object({
+  userNumber: Joi.number().optional().messages({
+    'number.base': 'User number must be a number',
+  }),
+
+  salesRepNumber: Joi.array()
+    .items(
+      Joi.string().trim().allow(''),
+      Joi.number(),
+    )
+    .optional()
+    .messages({
+      'array.base': 'salesRepNumber must be an array',
+    }),
+
+  firstName: Joi.string().optional().messages({
+    'string.empty': 'firstName cannot be empty',
+  }),
+
+  lastName: Joi.string().optional().messages({
+    'string.empty': 'lastName cannot be empty',
+  }),
+
+  email: Joi.string().email().optional().messages({
+    'string.email': 'email must be a valid email address',
+  }),
+
+  password: Joi.string().min(3).optional().messages({
+    'string.min': 'password must be at least 3 characters',
+  }),
+
+  status: Joi.boolean().optional(),
+  isActive: Joi.boolean().optional(),
+  setUserDiscountLimit: Joi.number().optional(),
+  allowDiscount: Joi.boolean().optional(),
+  allowDeliveryCharge: Joi.boolean().optional(),
+}).min(1).messages({
+  'object.min': 'At least one field must be provided for update'
 });
 
 export const createEpickUserSchema = Joi.object({
@@ -133,7 +221,7 @@ export const createEpickUserSchema = Joi.object({
 
   shortby: Joi.string().valid('Asc', 'Des').optional().default('Des'),
 
-  item_sort_by: Joi.string().valid('sales_location', 'section_location','sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
+  item_sort_by: Joi.string().valid('sales_location', 'section_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional().default('line_number'),
 
   status: Joi.boolean().optional().default(true),
 
@@ -160,7 +248,7 @@ export const updateEpickUserSchema = Joi.object({
     }),
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),
-  item_sort_by: Joi.string().valid('sales_location', 'section_location','sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number').optional(),
+  item_sort_by: Joi.string().valid('sales_location', 'section_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number').optional(),
 });
 
 export const updateEpickUserPreferencesSchema = Joi.object({
@@ -257,7 +345,7 @@ export const rolePermissionRequestSchema = Joi.object({
 });
 
 export const roleUdatePermissionRequestSchema = Joi.object({
- userId: Joi.number().required().messages({
+  userId: Joi.number().required().messages({
     'any.required': 'userId is required',
     'number.base': 'userId must be a number',
   }),
@@ -272,7 +360,7 @@ export const roleUdatePermissionRequestSchema = Joi.object({
         delete: Joi.boolean().optional(),
         view: Joi.boolean().optional(),
         path: Joi.string().required(),
-        id: Joi.number().optional().allow(null,''),
+        id: Joi.number().optional().allow(null, ''),
       })
     )
     .min(1)
@@ -372,10 +460,10 @@ export const updateItemLimitSchema = Joi.object({
     'number.base': 'Quantity limit must be a number',
     'number.min': 'Quantity limit must be at least 1',
   }),
-  markAsBundle: Joi.boolean().optional().allow(null,'').messages({
+  markAsBundle: Joi.boolean().optional().allow(null, '').messages({
     'boolean.base': 'Mark as bundle must be a boolean',
   }),
- 
+
 });
 
 // NotificationScheduler validation schemas
@@ -491,7 +579,7 @@ export const createLinkSchema = Joi.object({
     'string.base': 'Description must be a string.',
   }),
 
- 
+
 
   url: Joi.string().uri().required().messages({
     'string.base': 'URL must be a string.',
@@ -552,7 +640,7 @@ export const createStorySchema = Joi.object({
     'any.only': 'Media type must be either "image" or "video".',
     'any.required': 'Media type is required.',
   }),
-  media: Joi.string().trim().optional().allow('',null).messages({
+  media: Joi.string().trim().optional().allow('', null).messages({
     'string.base': 'Media must be a string.',
     'string.empty': 'Media cannot be empty.',
   }),
@@ -659,7 +747,7 @@ export const createRetailerRequestSchema = Joi.object({
     'string.empty': 'Business name cannot be empty',
     'any.required': 'Business name is required'
   }),
-  special_delivery_instructions:Joi.string().trim().optional().allow('', null).messages({
+  special_delivery_instructions: Joi.string().trim().optional().allow('', null).messages({
     'string.base': 'Special delivery instructions must be a string'
   }),
   dba_name: Joi.string().trim().optional().allow('', null).messages({
@@ -773,7 +861,7 @@ export const createRetailerRequestSchema = Joi.object({
   references: Joi.string().optional().allow('', null).messages({
     'string.base': 'References must be a string'
   }),
- 
+
   preferred_delivery_days: Joi.string().trim().optional().allow('', null).messages({
     'string.base': 'Preferred delivery days must be a string'
   }),
@@ -1302,7 +1390,7 @@ export const createEmailMarketingSchema = Joi.object({
     'array.base': 'Attachments must be an array',
     'string.uri': 'Each attachment must be a valid URL'
   }),
-  status:Joi.string().optional().allow('', null)
+  status: Joi.string().optional().allow('', null)
 });
 
 export const getEmailMarketingQuerySchema = Joi.object({
@@ -1482,7 +1570,7 @@ export const createErpUserSchema = Joi.object({
     .messages({
       'number.base': 'UserGroup must be a number',
     }),
-  })
+})
 
 
 export const updateErpUserSchema = Joi.object({
@@ -1515,7 +1603,7 @@ export const updateErpUserSchema = Joi.object({
       'string.base': 'UserPassword must be a string',
       'string.max': 'UserPassword cannot exceed 5 characters',
     }),
-  })
+})
 
 export const updateInventoryUPCSchema = Joi.object({
   UPC_Number: Joi.string().optional().allow('', null).messages({
@@ -1590,7 +1678,7 @@ export const createInvoiceSettingSchema = Joi.object({
     'any.required': 'Address_line_1 is required'
   }),
   Full_address: Joi.required().messages({
-    'any.required': 'Full Address is required'  
+    'any.required': 'Full Address is required'
   }),
   header_line_1: Joi.string().allow('', null).optional().messages({ 'string.base': 'header_line_1 must be a string' }),
   invoice_Upc_Type: Joi.optional().allow(null).messages({ 'string.base': 'invoice_Upc_Type must be a required' }),
@@ -1602,13 +1690,13 @@ export const updateInvoiceSettingSchema = Joi.object({
     'string.base': 'Name must be a string',
     'any.required': 'Name is required'
   }),
-  
+
   Address_line_1: Joi.string().required().messages({
     'string.base': 'Address_line_1 must be a string',
     'any.required': 'Address_line_1 is required'
   }),
   Full_address: Joi.required().messages({
-    'any.required': 'Full Address is required'  
+    'any.required': 'Full Address is required'
   }),
   header_line_1: Joi.string().allow('', null).optional().messages({ 'string.base': 'header_line_1 must be a string' }),
   invoice_Upc_Type: Joi.optional().allow(null).messages({ 'string.base': 'invoice_Upc_Type must be a required' }),
@@ -2349,7 +2437,7 @@ export const updateInventoryItemGroupSchema = Joi.object({
   Item_GroupID: Joi.number().integer().optional().messages({
     'number.base': 'Item_GroupID must be a number',
     'number.integer': 'Item_GroupID must be an integer'
-  }), 
+  }),
   Item_GroupDescription: Joi.string().trim().optional().messages({
     'string.base': 'Item_GroupDescription must be a string',
   })
@@ -2392,13 +2480,13 @@ export const updateInventoryBrandSchema = Joi.object({
 });
 
 export const updatePriceClassSchema = Joi.object({
-  Class_Desc: Joi.string().trim().optional().messages({ 
+  Class_Desc: Joi.string().trim().optional().messages({
     'string.base': 'Class_Desc must be a string',
   }),
   MSA_Default: Joi.string().trim().optional().messages({
     'string.base': 'MSA_Default must be a string',
   }),
-   Price_Class: Joi.forbidden().messages({
+  Price_Class: Joi.forbidden().messages({
     'any.unknown': 'Price_Class cannot be updated',
     'any.forbidden': 'Price_Class cannot be updated',
   }),
@@ -2412,7 +2500,7 @@ export const updatePriceClassSchema = Joi.object({
   Allow_Price_Change: Joi.boolean().optional().messages({
     'boolean.base': 'Allow_Price_Change must be a boolean',
   }),
-  Allow_Price_Change_Remote : Joi.boolean().optional().messages({
+  Allow_Price_Change_Remote: Joi.boolean().optional().messages({
     'boolean.base': 'Allow_Price_Change_Remote must be a boolean',
   }),
   Sales_Category_Group: Joi.string().trim().optional().messages({
@@ -3416,6 +3504,9 @@ export const createInvoiceTemplateSchema = Joi.object({
     totalPrice: Joi.boolean().optional(),
     retail1: Joi.boolean().optional(),
     ebt: Joi.boolean().optional(),
+    pack: Joi.boolean().optional(),
+    size: Joi.boolean().optional(),
+    deposit: Joi.boolean().optional(),
   }).optional(),
   upcOption: Joi.string().optional().default('barcode_primary'),
   showDistributorDetails: Joi.boolean().optional().default(true),
@@ -3468,6 +3559,9 @@ export const updateInvoiceTemplateSchema = Joi.object({
     totalPrice: Joi.boolean().optional(),
     retail1: Joi.boolean().optional(),
     ebt: Joi.boolean().optional(),
+    pack: Joi.boolean().optional(),
+    size: Joi.boolean().optional(),
+    deposit: Joi.boolean().optional(),
   }).optional(),
   upcOption: Joi.string().optional(),
   showDistributorDetails: Joi.boolean().optional(),

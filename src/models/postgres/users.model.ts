@@ -5,12 +5,11 @@ import { UserAttributes } from "../../interfaces/users.interface";
 import { postgresSequelize } from "../../db";
 
 interface UserCreationAttributes
-  extends Optional<UserAttributes, "id" | "createdAt" | "updatedAt"> {}
+  extends Optional<UserAttributes, "id" | "createdAt" | "updatedAt"> { }
 
 export class WebUsers
   extends Model<UserAttributes, UserCreationAttributes>
-  implements UserAttributes
-{
+  implements UserAttributes {
   public id!: number;
   public email!: string;
   public firstName!: string;
@@ -27,12 +26,12 @@ export class WebUsers
   public allowDiscount!: boolean;
   public allowDeliveryCharge!: boolean;
   public readonly createdAt!: Date;
-  public readonly    updatedAt!: Date;
+  public readonly updatedAt!: Date;
 }
 
 WebUsers.init(
   {
-    
+
     id: {
       type: DataTypes.INTEGER,
       autoIncrement: true,
@@ -47,7 +46,7 @@ WebUsers.init(
       allowNull: false,
       defaultValue: true,
     },
-    allowDeliveryCharge:{
+    allowDeliveryCharge: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
@@ -65,7 +64,7 @@ WebUsers.init(
       allowNull: false,
       defaultValue: "user",
       validate: {
-        isIn: [["epick", "sales", "driver","checker"]],
+        isIn: [["sales", "driver", "checker"]],
       },
     },
     userNumber: {

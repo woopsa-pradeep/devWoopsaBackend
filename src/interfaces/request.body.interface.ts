@@ -6,6 +6,7 @@ export const ROLES = {
   EPIK: "epick",
   CHECKER: "checker",
   DRIVER: "driver",
+  RECEIVABLE: "receivable",
 }
 
 export interface IContactUs {
@@ -45,7 +46,7 @@ export interface IWarehouseSetting {
   enableMinOrderAmountControl: boolean;
   enableInventoryThresholdControl: boolean;
   showDepositCharges: boolean;
- warehouseImage?: string | null;// Add this to the interface
+  warehouseImage?: string | null;// Add this to the interface
 
 }
 
@@ -54,35 +55,35 @@ export interface ILogin {
   email_phone: string;
   isEmail: boolean;
   password: string;
-  deviceToken?:string;
+  deviceToken?: string;
 }
-export interface IUserLogin{
+export interface IUserLogin {
   email: string;
   password: string;
 }
 
-export interface IUploadProductImage{
+export interface IUploadProductImage {
   image_url?: string;
   product_number: number;
   isAllow?: boolean;
 }
-export interface IUpdateUploadProductImage{
+export interface IUpdateUploadProductImage {
   image_url?: string;
   product_number: number;
   isAllow?: boolean;
 }
-export interface ICreateBanner{
+export interface ICreateBanner {
   bannerTitle: string;
   bannerDescription: string;
   inventors: object[];
   expireAt: Date;
   image_url?: string;
 }
-export interface IUpdateBanner{
+export interface IUpdateBanner {
   bannerTitle: string;
   bannerDescription: string;
   inventors: object[];
-  status:boolean;
+  status: boolean;
   expireAt: Date;
   image_url?: string;
 }
@@ -682,13 +683,13 @@ export interface ProductPramotionRequest {
 }
 
 
-export interface OrderProduct{
+export interface OrderProduct {
   customerNumber: number;
   orderNumber: number;
   orderDate: string;
   orderStatus: string;
   orderTotal: number;
- 
+
 }
 
 export interface CustomerItemCreationAttributes {
@@ -714,9 +715,9 @@ export interface IHomeSettings {
 }
 
 export interface IGetProductInformation {
-  upcNumber:string;
-  isMultiple:boolean;
-  arrayOfUpc:string[];
+  upcNumber: string;
+  isMultiple: boolean;
+  arrayOfUpc: string[];
 }
 
 // NotificationScheduler interfaces

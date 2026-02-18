@@ -912,7 +912,7 @@ export class AuthService {
     }
     const token = generateToken({
       id: isUserExist.id,
-      role: 'epick',
+      role: isUserExist.role || 'epick', // Use role from database, fallback to 'epick' for backward compatibility
       userNumber: isUserExist.userNumber,
     });
     const getUserRolesPermissions = await RolePermission.findAll({ where: { userId: isUserExist.id } });
@@ -953,7 +953,7 @@ export class AuthService {
       rolesPermission: filtered,
       logo: logo?.warehouseImage || null,
       epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
-      role: 'epick',
+      role: isUserExist.role || 'epick', // Use role from database, fallback to 'epick' for backward compatibility
       profile: {
         id: isUserExist.id,
         email: isUserExist.email,
@@ -963,6 +963,7 @@ export class AuthService {
         category: isUserExist.category,
         order_type: isUserExist.order_type,
         shortby: isUserExist.shortby,
+        role: isUserExist.role || 'epick', // Include role in profile
         isSessionActive: isSessionActive,
         isUserExist:isUserExist
         // allowSingleScan: isUserExist.allowSingleScan

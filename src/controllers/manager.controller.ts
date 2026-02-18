@@ -109,12 +109,22 @@ export class ManagerController {
     const data = await this.managerService.createUser(req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
-  
+
   async createEpickUser(req: AuthRequest, res: Response) {
     const data = await this.managerService.createEpickUser(req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
-  
+
+  async createReceivableUser(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createReceivableUser(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async updateReceivableUser(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateReceivableUser(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async updateUser(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateUser(Number(req.params.id), req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -137,7 +147,7 @@ export class ManagerController {
     }
 
     const { order_type, shortby, item_sort_by } = req.body;
-    
+
     if (!order_type && !shortby && !item_sort_by) {
       return sendResponse(res, 400, false, null, "At least one preference (order_type, shortby, or item_sort_by) must be provided");
     }
@@ -153,7 +163,7 @@ export class ManagerController {
     }
 
     const { category } = req.body;
-    
+
     if (!category || !Array.isArray(category)) {
       return sendResponse(res, 400, false, null, "Category must be a non-empty array");
     }
@@ -211,23 +221,23 @@ export class ManagerController {
     const data = await this.managerService.getUserRolePermissions(userId);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
- 
-
-async updateSalesRepSetting(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateSalesRepSetting(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
-
-async updateRetailerSetting(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateRetailerSetting(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
 
 
-async updateItemGlobalSetting(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateItemGlobalSetting(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async updateSalesRepSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateSalesRepSetting(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async updateRetailerSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateRetailerSetting(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+
+  async updateItemGlobalSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateItemGlobalSetting(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
 
   async updateWarehouseProfileSetting(req: AuthRequest, res: Response) {
@@ -251,14 +261,15 @@ async updateItemGlobalSetting(req: AuthRequest, res: Response) {
   }
 
   async getWarehouseContactDetails(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getWarehouseContactDetails();
-  sendResponse(res, 200, true, data, Manager.WAREHOUSE_CONTACT_DETAILS_FETCHED);
-}
+    const data = await this.managerService.getWarehouseContactDetails();
+    sendResponse(res, 200, true, data, Manager.WAREHOUSE_CONTACT_DETAILS_FETCHED);
+  }
 
-async getOrderHistory(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getOrderHistory(req.query as PaginationOptions);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getOrderHistory(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getOrderHistory(req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
 
 async getOrderForPickListConfirmation(req: AuthRequest, res: Response) {
   const data = await this.managerService.getOrderForPickListConfirmation(req.query);
@@ -270,65 +281,65 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
   sendResponse(res, 200, true, data, General.SUCCESS);
 }
 
-async getOrderDetailByOrderNumberForInvoice(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getOrderDetailByOrderNumberForInvoice(Number(req.params.id));
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getOrderDetailByOrderNumberForInvoice(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getOrderDetailByOrderNumberForInvoice(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async getHomeSetting(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getHomeSetting();
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getHomeSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getHomeSetting();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async updateHomeSetting(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateHomeSetting(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async updateHomeSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateHomeSetting(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async getProductInformation(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getProductInformation(req.body as IGetProductInformation);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-} 
+  async getProductInformation(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getProductInformation(req.body as IGetProductInformation);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async getOrderDeliveryStatus(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getOrderDeliveryStatus(Number(req.params.id));
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getOrderDeliveryStatus(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getOrderDeliveryStatus(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async updateEmailNotification(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateEmailNotification(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
-// ItemLimit CRUD controller methods
-async createItemLimit(req: AuthRequest, res: Response) {
-  const data = await this.managerService.createItemLimit(req.body);
-  sendResponse(res, 201, true, data, Manager.ITEM_LIMIT_CREATED_SUCCESSFULLY);
-}
+  async updateEmailNotification(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateEmailNotification(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+  // ItemLimit CRUD controller methods
+  async createItemLimit(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createItemLimit(req.body);
+    sendResponse(res, 201, true, data, Manager.ITEM_LIMIT_CREATED_SUCCESSFULLY);
+  }
 
-async getItemLimitById(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getItemLimitById(Number(req.params.id));
-  sendResponse(res, 200, true, data, Manager.ITEM_LIMIT_FETCHED_SUCCESSFULLY);
-}
+  async getItemLimitById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getItemLimitById(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.ITEM_LIMIT_FETCHED_SUCCESSFULLY);
+  }
 
-async getItemLimitByItemNumber(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getItemLimitByItemNumber(req.params.itemNumber);
-  sendResponse(res, 200, true, data, Manager.ITEM_LIMIT_FETCHED_SUCCESSFULLY);
-}
+  async getItemLimitByItemNumber(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getItemLimitByItemNumber(req.params.itemNumber);
+    sendResponse(res, 200, true, data, Manager.ITEM_LIMIT_FETCHED_SUCCESSFULLY);
+  }
 
-async getAllItemLimits(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getAllItemLimits(req.query as PaginationOptions & { search?: string });
-  sendResponse(res, 200, true, data, Manager.ITEM_LIMIT_LIST_FETCHED_SUCCESSFULLY);
-}
+  async getAllItemLimits(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllItemLimits(req.query as PaginationOptions & { search?: string });
+    sendResponse(res, 200, true, data, Manager.ITEM_LIMIT_LIST_FETCHED_SUCCESSFULLY);
+  }
 
-async updateItemLimit(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateItemLimit(Number(req.params.id), req.body);
-  sendResponse(res, 200, true, data, Manager.ITEM_LIMIT_UPDATED_SUCCESSFULLY);
-}
+  async updateItemLimit(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateItemLimit(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, Manager.ITEM_LIMIT_UPDATED_SUCCESSFULLY);
+  }
 
-async deleteItemLimit(req: AuthRequest, res: Response) {
-  const data = await this.managerService.deleteItemLimit(Number(req.params.id));
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async deleteItemLimit(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteItemLimit(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
   // NotificationScheduler controller methods
   async createNotificationScheduler(req: AuthRequest, res: Response) {
@@ -367,7 +378,7 @@ async deleteItemLimit(req: AuthRequest, res: Response) {
   }
 
   async getSupportTicket(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getSupportTicket(req.query as PaginationOptions,req.params.status);
+    const data = await this.managerService.getSupportTicket(req.query as PaginationOptions, req.params.status);
     sendResponse(res, 200, true, data, 'Support ticket retrieved successfully');
   }
 
@@ -404,7 +415,7 @@ async deleteItemLimit(req: AuthRequest, res: Response) {
   }
 
   async updateLink(req: AuthRequest, res: Response) {
-    const data = await this.managerService.updateLink(Number(req.params.id), req.body as IUpdateLink,req);
+    const data = await this.managerService.updateLink(Number(req.params.id), req.body as IUpdateLink, req);
     sendResponse(res, 200, true, data, Manager.LINK_UPDATED_SUCCESSFULLY);
   }
 
@@ -434,7 +445,7 @@ async deleteItemLimit(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, Manager.STORY_LIST_FETCHED_SUCCESSFULLY);
   }
 
- 
+
 
 
   async updateStory(req: AuthRequest, res: Response) {
@@ -458,73 +469,73 @@ async deleteItemLimit(req: AuthRequest, res: Response) {
     sendResponse(res, 201, true, data, Manager.RETAILER_PRODUCT_CATALOG_CREATED_SUCCESSFULLY);
   }
 
-async getAllRetailerProductCatalogs(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getAllRetailerProductCatalogs(req.query as PaginationOptions & IGetRetailerProductCatalogs);
-  sendResponse(res, 200, true, data, Manager.RETAILER_PRODUCT_CATALOG_LIST_FETCHED_SUCCESSFULLY);
-}
+  async getAllRetailerProductCatalogs(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllRetailerProductCatalogs(req.query as PaginationOptions & IGetRetailerProductCatalogs);
+    sendResponse(res, 200, true, data, Manager.RETAILER_PRODUCT_CATALOG_LIST_FETCHED_SUCCESSFULLY);
+  }
 
-async updateRetailerProductCatalog(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateRetailerProductCatalog(Number(req.params.id), req.body as IUpdateRetailerProductCatalog, req);
-  sendResponse(res, 200, true, data, Manager.RETAILER_PRODUCT_CATALOG_UPDATED_SUCCESSFULLY);
-}
+  async updateRetailerProductCatalog(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateRetailerProductCatalog(Number(req.params.id), req.body as IUpdateRetailerProductCatalog, req);
+    sendResponse(res, 200, true, data, Manager.RETAILER_PRODUCT_CATALOG_UPDATED_SUCCESSFULLY);
+  }
 
-async deleteRetailerProductCatalog(req: AuthRequest, res: Response) {
-  const data = await this.managerService.deleteRetailerProductCatalog(Number(req.params.id));
-  sendResponse(res, 200, true, data, Manager.RETAILER_PRODUCT_CATALOG_DELETED_SUCCESSFULLY);
-}
+  async deleteRetailerProductCatalog(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteRetailerProductCatalog(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.RETAILER_PRODUCT_CATALOG_DELETED_SUCCESSFULLY);
+  }
 
-// WebView CRUD controller methods
-async createWebView(req: AuthRequest, res: Response) {
-  const data = await this.managerService.createWebView(req.body as ICreateWebView, req);
-  sendResponse(res, 201, true, data, Manager.WEBVIEW_CREATED_SUCCESSFULLY);
-}
+  // WebView CRUD controller methods
+  async createWebView(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createWebView(req.body as ICreateWebView, req);
+    sendResponse(res, 201, true, data, Manager.WEBVIEW_CREATED_SUCCESSFULLY);
+  }
 
-async getWebViewById(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getWebViewById(Number(req.params.id));
-  sendResponse(res, 200, true, data, Manager.WEBVIEW_FETCHED_SUCCESSFULLY);
-}
+  async getWebViewById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getWebViewById(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.WEBVIEW_FETCHED_SUCCESSFULLY);
+  }
 
-async getAllWebViews(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getAllWebViews(req.query as PaginationOptions & IGetWebViews);
-  sendResponse(res, 200, true, data, Manager.WEBVIEW_LIST_FETCHED_SUCCESSFULLY);
-}
+  async getAllWebViews(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllWebViews(req.query as PaginationOptions & IGetWebViews);
+    sendResponse(res, 200, true, data, Manager.WEBVIEW_LIST_FETCHED_SUCCESSFULLY);
+  }
 
-async updateWebView(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateWebView(Number(req.params.id), req.body as IUpdateWebView, req);
-  sendResponse(res, 200, true, data, Manager.WEBVIEW_UPDATED_SUCCESSFULLY);
-}
+  async updateWebView(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateWebView(Number(req.params.id), req.body as IUpdateWebView, req);
+    sendResponse(res, 200, true, data, Manager.WEBVIEW_UPDATED_SUCCESSFULLY);
+  }
 
-async deleteWebView(req: AuthRequest, res: Response) {
-  const data = await this.managerService.deleteWebView(Number(req.params.id));
-  sendResponse(res, 200, true, data, Manager.WEBVIEW_DELETED_SUCCESSFULLY);
-}
+  async deleteWebView(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteWebView(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.WEBVIEW_DELETED_SUCCESSFULLY);
+  }
 
-async getWebViewsBySection(req: AuthRequest, res: Response) {
-  const section = req.params.section as 'header' | 'middle' | 'bottom';
-  const data = await this.managerService.getWebViewsBySection(section);
-  sendResponse(res, 200, true, data, Manager.WEBVIEW_LIST_FETCHED_SUCCESSFULLY);
-}
+  async getWebViewsBySection(req: AuthRequest, res: Response) {
+    const section = req.params.section as 'header' | 'middle' | 'bottom';
+    const data = await this.managerService.getWebViewsBySection(section);
+    sendResponse(res, 200, true, data, Manager.WEBVIEW_LIST_FETCHED_SUCCESSFULLY);
+  }
 
-async updateWebViewProducts(req: AuthRequest, res: Response) {
-  const data = await this.managerService.updateWebViewProducts(Number(req.params.id), req.body);
-  sendResponse(res, 200, true, data, Manager.WEBVIEW_UPDATED_SUCCESSFULLY);
-}
+  async updateWebViewProducts(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateWebViewProducts(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, Manager.WEBVIEW_UPDATED_SUCCESSFULLY);
+  }
 
-async getWebViewsGroupedBySection(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getWebViewsGroupedBySection(req.query as PaginationOptions & IGetWebViews);
-  sendResponse(res, 200, true, data, Manager.WEBVIEW_GROUPED_FETCHED_SUCCESSFULLY);
-}
+  async getWebViewsGroupedBySection(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getWebViewsGroupedBySection(req.query as PaginationOptions & IGetWebViews);
+    sendResponse(res, 200, true, data, Manager.WEBVIEW_GROUPED_FETCHED_SUCCESSFULLY);
+  }
 
-async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getAllWebViewsGrouped();
-  sendResponse(res, 200, true, data, Manager.WEBVIEW_GROUPED_FETCHED_SUCCESSFULLY);
-}
+  async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllWebViewsGrouped();
+    sendResponse(res, 200, true, data, Manager.WEBVIEW_GROUPED_FETCHED_SUCCESSFULLY);
+  }
 
   // Retailer Request CRUD controller methods
   async createRetailerRequest(req: AuthRequest, res: Response) {
     // Handle uploaded files
     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-    
+
     // Process file URLs and add them to the request body
     if (files) {
       console.log(files, 'files -->')
@@ -597,7 +608,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   }
 
   async createPurchaseOrder(req: AuthRequest, res: Response) {
-    const data = await this.managerService.createPurchaseOrder(req.body , req.user.Id);
+    const data = await this.managerService.createPurchaseOrder(req.body, req.user.Id);
     sendResponse(res, 201, true, data, 'PO Header created successfully');
   }
 
@@ -624,7 +635,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
 
   // WebCategory CRUD controller methods
   async createWebCategory(req: AuthRequest, res: Response) {
-    const data = await this.managerService.createWebCategory(req.body,req);
+    const data = await this.managerService.createWebCategory(req.body, req);
     sendResponse(res, 201, true, data, 'Web category created successfully');
   }
 
@@ -641,7 +652,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
 
   async updateWebCategory(req: AuthRequest, res: Response) {
     const { id } = req.params;
-    const data = await this.managerService.updateWebCategory(parseInt(id), req.body,req);
+    const data = await this.managerService.updateWebCategory(parseInt(id), req.body, req);
     sendResponse(res, 200, true, data, 'Web category updated successfully');
   }
 
@@ -653,7 +664,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
 
   // WebPriceClass CRUD controller methods
   async createWebPriceClass(req: AuthRequest, res: Response) {
-    const data = await this.managerService.createWebPriceClass(req.body,req);
+    const data = await this.managerService.createWebPriceClass(req.body, req);
     sendResponse(res, 201, true, data, 'Web price class created successfully');
   }
 
@@ -670,7 +681,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
 
   async updateWebPriceClass(req: AuthRequest, res: Response) {
     const { id } = req.params;
-    const data = await this.managerService.updateWebPriceClass(parseInt(id), req.body,req);
+    const data = await this.managerService.updateWebPriceClass(parseInt(id), req.body, req);
     sendResponse(res, 200, true, data, 'Web price class updated successfully');
   }
 
@@ -769,7 +780,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   }
 
   async getCustomerOrderOfCurrentWeek(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getCustomerOrderOfCurrentWeek(req.query as PaginationOptions,Number(req.params.customerId));
+    const data = await this.managerService.getCustomerOrderOfCurrentWeek(req.query as PaginationOptions, Number(req.params.customerId));
     sendResponse(res, 200, true, data, 'Customer order of current week fetched successfully');
   }
 
@@ -1023,7 +1034,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const data = await this.managerService.sendEmailToCampaign(Number(req.params.id));
     sendResponse(res, 200, true, data, 'Email marketing campaign sent successfully');
   }
- 
+
   async getGenerateBarcodeAndUpload(req: AuthRequest, res: Response) {
     const data = await this.managerService.getGenerateBarcodeAndUpload(req.body.text);
     sendResponse(res, 200, true, data, 'Barcode generated and uploaded successfully');
@@ -1035,32 +1046,32 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 201, true, data, 'Inventory created successfully');
   }
 
- async createVendor(req: AuthRequest, res: Response) {
-    const data = await this.managerService.createVendor(req.body );
+  async createVendor(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createVendor(req.body);
     sendResponse(res, 201, true, data, 'Vendor created successfully');
   }
 
-  async createErpUser(req: AuthRequest, res: Response){
+  async createErpUser(req: AuthRequest, res: Response) {
     const data = await this.managerService.createErpUser(req.body);
-    sendResponse(res , 201 ,true, data, 'ERP User created successfully');
+    sendResponse(res, 201, true, data, 'ERP User created successfully');
   }
 
-  async updateErpUser(req: AuthRequest, res: Response){
+  async updateErpUser(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateErpUser(Number(req.params.id), req.body)
     sendResponse(res, 200, true, data, 'ERP User updated successfully')
   }
 
-  async getAllErpUsers(req: AuthRequest, res: Response){
+  async getAllErpUsers(req: AuthRequest, res: Response) {
     const data = await this.managerService.getAllErpUsers();
     sendResponse(res, 200, true, data, "ERP Users fetched successfully");
   }
 
-  async getAllCheckerUsers(req: AuthRequest, res: Response){
+  async getAllCheckerUsers(req: AuthRequest, res: Response) {
     const data = await this.managerService.getAllCheckerUsers();
     sendResponse(res, 200, true, data, "Checker users fetched successfully");
   }
 
-   async getErpUserById(req: AuthRequest, res: Response){
+  async getErpUserById(req: AuthRequest, res: Response) {
     const data = await this.managerService.getErpUserById(Number(req.params.id))
     sendResponse(res, 200, true, data, "ERP User fetched successfully");
   }
@@ -1103,7 +1114,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Customer details retrieved successfully');
   }
 
-  
+
   async updateInventoryUPC(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateInventoryUPC(Number(req.params.id), req.body);
     sendResponse(res, 200, true, data, 'InventoryUPC updated successfully');
@@ -1122,7 +1133,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   async getInventoryUPCByJurisdiction(req: AuthRequest, res: Response) {
     const { jurisdictionState, jurisdictionCounty, jurisdictionCity } = req.query;
     const data = await this.managerService.getInventoryUPCByJurisdiction(
-      Number(jurisdictionState), 
+      Number(jurisdictionState),
       jurisdictionCounty ? Number(jurisdictionCounty) : undefined,
       jurisdictionCity ? Number(jurisdictionCity) : undefined
     );
@@ -1130,7 +1141,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   }
 
   async checkUPCExists(req: AuthRequest, res: Response) {
-    const {  upc } = req.params;
+    const { upc } = req.params;
     const data = await this.managerService.checkUPCExists(upc);
     sendResponse(res, 200, true, data, data ? "UPC exists " : "UPC not found");
   }
@@ -1181,32 +1192,32 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateUserAllowDiscount(req.body, Number(req.params.id));
     sendResponse(res, 200, true, data, 'User allow discount updated successfully');
   }
- 
+
   async updateCustomer(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateCustomer(req.body, Number(req.params.id));
     sendResponse(res, 200, true, data, 'Customer updated successfully');
-}
-  async updateVendor(req: AuthRequest, res: Response){
+  }
+  async updateVendor(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateVendor(req.body, Number(req.params.id))
     sendResponse(res, 200, true, data, 'Vendor updated successfully')
   }
 
-  async getVendorById(req: AuthRequest, res: Response){
+  async getVendorById(req: AuthRequest, res: Response) {
     const data = await this.managerService.getVendorById(Number(req.params.id))
     sendResponse(res, 200, true, data, 'Vendor retrieved successfully')
   }
-  async getCustomerDetailsById(req: AuthRequest, res: Response){
+  async getCustomerDetailsById(req: AuthRequest, res: Response) {
     const data = await this.managerService.getCustomerDetailsById(Number(req.params.id))
     sendResponse(res, 200, true, data, 'Customer details retrieved successfully')
   }
 
-  async getInventoryItemsForUpdate(req: AuthRequest, res: Response){
+  async getInventoryItemsForUpdate(req: AuthRequest, res: Response) {
     const data = await this.managerService.getInventoryItemsForUpdate(req.body)
     sendResponse(res, 200, true, data, 'Inventory items for update retrieved successfully')
   }
 
-  async bulkUpdateInventory(req: AuthRequest, res: Response){
-    const data = await this.managerService.bulkUpdateInventory(req.body,req?.user?.id)
+  async bulkUpdateInventory(req: AuthRequest, res: Response) {
+    const data = await this.managerService.bulkUpdateInventory(req.body, req?.user?.id)
     sendResponse(res, 200, true, data, 'Inventory updated successfully')
   }
 
@@ -1278,7 +1289,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   }
 
   async distributorUpdate(req: AuthRequest, res: Response) {
-    const pmId = req.user.id; 
+    const pmId = req.user.id;
     const data = await this.managerService.distributorUpdate(Number(pmId), req.body);
     sendResponse(res, 200, true, data, 'Distributor updated successfully');
   }
@@ -1364,7 +1375,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     sendResponse(res, 201, true, data, 'Inventory item group created successfully');
   }
 
-  
+
   async updateInventoryItemGroup(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateInventoryItemGroup(Number(req.params.id), req.body);
     sendResponse(res, 200, true, data, 'Inventory item group updated successfully');
@@ -1377,14 +1388,14 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
 
   async createInventoryBrand(req: AuthRequest, res: Response) {
     const data = await this.managerService.createInventoryBrand(req.body);
-    sendResponse(res, 201, true, data, 'Inventory brand created successfully'); 
+    sendResponse(res, 201, true, data, 'Inventory brand created successfully');
   }
 
   async updateInventoryBrand(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateInventoryBrand(Number(req.params.id), req.body);
     sendResponse(res, 200, true, data, 'Inventory brand updated successfully');
   }
-  
+
   async getPriceClass(req: AuthRequest, res: Response) {
     const data = await this.managerService.getPriceClass();
     sendResponse(res, 201, true, data, 'Price Class get successfully');
@@ -1481,15 +1492,15 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
     const fromDate = typeof req.query.fromDate === 'string' ? req.query.fromDate : undefined;
     const toDate = typeof req.query.toDate === 'string' ? req.query.toDate : undefined;
     const data = await this.managerService.getShortShipmentReport({ fromDate, toDate });
-    sendResponse(res,200,true,data,'Short shipment report fetched successfully');
+    sendResponse(res, 200, true, data, 'Short shipment report fetched successfully');
   }
 
   async getVelocityReportCustomer(req: AuthRequest, res: Response) {
     const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
     const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
     const page = typeof req.query.page === 'string' ? Math.max(parseInt(req.query.page, 10), 1) : 1;
-    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10), 500) : 50000; // hard cap for safety
-    const data = await this.managerService.getVelocityReportCustomer({ startDate,endDate,page,limit,});
+    const limit = typeof req.query.limit === 'string' ? Math.min(parseInt(req.query.limit, 10), 500) : 50000; // hard cap for safety
+    const data = await this.managerService.getVelocityReportCustomer({ startDate, endDate, page, limit, });
     sendResponse(res, 200, true, data, 'Customer Velocity report fetched successfully');
   }
 
@@ -1534,7 +1545,7 @@ async getAllWebViewsGrouped(req: AuthRequest, res: Response) {
   }
 
   async getARreportsHistory(req: AuthRequest, res: Response) {
-      const data = await this.managerService.getARreportsHistory();
+      const data = await this.managerService.getARreportsHistory(req.query);
       sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
@@ -1929,4 +1940,10 @@ async bulkUploadItemImages(req: AuthRequest, res: Response) {
   const data = await this.managerService.bulkUploadItemImages(req.body.items);
   sendResponse(res, 200, true, data, data.success ? 'Item images uploaded successfully' : 'Some items failed to upload');
 }
+
+async getCustomerListForEmailModules(req: AuthRequest, res: Response) {
+  const data = await this.managerService.getCustomerListForEmailModules();
+  sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
 }

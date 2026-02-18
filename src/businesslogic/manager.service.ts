@@ -91,14 +91,14 @@ import { TaxRates_City } from "../models/mmsql/taxRateCity.model";
 import { TaxRates_County } from "../models/mmsql/taxRateCounty.model";
 import { PurchaseOrderRequest } from "../interfaces/request.body.interface";
 import { getDefaultPOHeaderValues, getNextPONumber } from "../utils/purchaseOrder";
-import {  PODetail } from "../models/mmsql/poDetail.model";
+import { PODetail } from "../models/mmsql/poDetail.model";
 import { now } from "moment";
 import { Driver } from "../models/postgres/driver.model";
 import { Picklist } from "../models/postgres/picklist.model";
 import { FuturePricing } from "../models/postgres/futurePricing.model";
 import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 import { Inventory_ItemGroups } from "../models/mmsql/inventoryItemGroup.model";
-import { InventoryBrands,getNextInventoryBrand } from "../models/mmsql/inventoryBrand.model";
+import { InventoryBrands, getNextInventoryBrand } from "../models/mmsql/inventoryBrand.model";
 import { RetailerLocation } from "../models/postgres/retailerLocation.model";
 import Vehicle from "../models/postgres/vehicle.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
@@ -109,6 +109,7 @@ import { DeliveryRouteStop } from "../models/postgres/deliveryRouteStop.model";
 import { CustBillTo } from "../models/mmsql/custBillTo.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
 import { Record_Locks } from "../models/mmsql/recordLock.model";
+import { ReceivableUser } from "../models/postgres/receivableUser.model";
 import { PreBook } from "../models/postgres/preBook.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
@@ -119,6 +120,7 @@ import { CustomerAssignInvoiceTemplate } from "../models/postgres/customerAssing
 import { CustFinanceCharges } from "../models/mmsql/custFinanceCharges.model"
 import { ARDeletes } from "../models/mmsql/arDeletes.mode";
 import { InventorySavedDetail } from "../models/mmsql/inventorySavedDetail.model"
+import { DeliveryTypes } from "../models/mmsql/deliveryType.model";
 type DisType = "PERCENT" | "FLAT";
 
 type BulkItemInput = {
@@ -348,13 +350,13 @@ export class ManagerService {
   }
 
 
-  async getCustomerList(query: PaginationOptions & { search?: string, Inactive?:string }) {
+  async getCustomerList(query: PaginationOptions & { search?: string, Inactive?: string }) {
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
     const search = query.search || '';
 
-    
-    let whereCondition :any = search
+
+    let whereCondition: any = search
       ? {
         [Op.or]: [
           { C_Number: { [Op.like]: `%${search}%` } },
@@ -366,12 +368,12 @@ export class ManagerService {
       }
       : {};
 
-      if(query.Inactive =='true'){
-        whereCondition.C_Inactive = true;
-      }else if(query.Inactive =='false'){
-        whereCondition.C_Inactive = false;
-      }
-      console.log(whereCondition, 'whereCondition')
+    if (query.Inactive == 'true') {
+      whereCondition.C_Inactive = true;
+    } else if (query.Inactive == 'false') {
+      whereCondition.C_Inactive = false;
+    }
+    console.log(whereCondition, 'whereCondition')
 
     const { count: totalCount, rows: customerList } = await Customer.findAndCountAll({
       attributes: [
@@ -458,7 +460,7 @@ export class ManagerService {
 
     const retailerDocuments = await RetailerDocuments.findAll({
       where: { customerNumber: { [Op.in]: customerNumbers } },
-      attributes: ['customerNumber', 'feinDocument', 'attachments', 'id','salesTaxDoc', 'CigTaxDoc', 'licenseAttachments'],
+      attributes: ['customerNumber', 'feinDocument', 'attachments', 'id', 'salesTaxDoc', 'CigTaxDoc', 'licenseAttachments'],
       raw: true,
     });
 
@@ -626,74 +628,74 @@ export class ManagerService {
     let searchInUPC = false;
     let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
-   
- 
 
-      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
-        // Both filters exist → use OR condition
-        whereClause[Op.or] = [
-          { Sales_Category: { [Op.in]: salesCategoryId } },
-          { Price_Class: { [Op.in]: priceClassId } }
-        ];
-      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
-        // Only Sales_Category filter
-        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
-        // Only Price_Class filter
-        whereClause.Price_Class = { [Op.in]: priceClassId };
+
+
+    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+      // Both filters exist → use OR condition
+      whereClause[Op.or] = [
+        { Sales_Category: { [Op.in]: salesCategoryId } },
+        { Price_Class: { [Op.in]: priceClassId } }
+      ];
+    } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+      // Only Sales_Category filter
+      whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+    } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      // Only Price_Class filter
+      whereClause.Price_Class = { [Op.in]: priceClassId };
+    }
+
+
+    if (search) {
+      if (/^\d{8,}$/.test(search)) {
+        searchInUPC = true;
       }
+      else {
+
+        const term = search.toLowerCase();
+        const anywhere = `%${term}%`;
+        const starts = `${term}%`
 
 
-      if (search) {
-        if (/^\d{8,}$/.test(search)) {
-          searchInUPC = true;
-        } 
-        else {
-        
-          const term = search.toLowerCase();
-          const anywhere = `%${term}%`;
-          const starts = `${term}%`
+        whereClause[Op.or] = [
+          Sequelize.where(
+            Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+            { [Op.like]: anywhere }
+          ),
+          Sequelize.where(
+            Sequelize.fn("LOWER", Sequelize.col("Description")),
+            { [Op.like]: anywhere }
+          ),
+          Sequelize.where(
+            Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+            { [Op.like]: anywhere }
+          )
+        ];
 
-          
-  whereClause[Op.or] = [
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Description")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
-      { [Op.like]: anywhere }
-    )
-  ];
-
-  // ORDER RULE:
-  // 1. Items starting with search term first
-  // 2. Then items containing it anywhere
-  // 3. Finally alphabetical
-  orderClause = [
-    [
-      Sequelize.literal(`
+        // ORDER RULE:
+        // 1. Items starting with search term first
+        // 2. Then items containing it anywhere
+        // 3. Finally alphabetical
+        orderClause = [
+          [
+            Sequelize.literal(`
         CASE 
           WHEN LOWER("Description") LIKE '${starts}' THEN 0
           WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
           ELSE 2
         END
       `),
-      'ASC'
-    ],
-    ['Description', 'ASC']
-  ];
-}
-
-
-        
+            'ASC'
+          ],
+          ['Description', 'ASC']
+        ];
       }
 
-    
+
+
+    }
+
+
 
     // === UPC JOIN logic ===
     const includeUPC = {
@@ -710,7 +712,7 @@ export class ManagerService {
 
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
-    
+
 
     let totalCount = 0;
 
@@ -737,20 +739,20 @@ export class ManagerService {
       });
     }
 
-    
+
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT'
       ],
       where: whereClause,
       include: [
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc','Sales_Category'],
+          attributes: ['Category_Desc', 'Sales_Category'],
           required: false
         },
         {
@@ -796,11 +798,11 @@ export class ManagerService {
 
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
 
-     
 
 
-    
-    
+
+
+
 
 
       return {
@@ -1693,6 +1695,104 @@ export class ManagerService {
     return user;
   }
 
+  async createReceivableUser(body: any) {
+    // Ensure role is set to receivable
+
+
+    body.firstName = body.firstName.trim();
+    body.lastName = body.lastName.trim();
+    const existingUser = await ReceivableUser.findOne({
+      where: {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        isActive: true,
+      },
+    });
+    if (existingUser) {
+      throw new AppError(Manager.USER_ALREADY_EXISTS, 400);
+    }
+    const checkEmail = await ReceivableUser.findOne({
+      where: { email: body.email.toLowerCase() }
+    });
+    if (checkEmail) {
+      throw new AppError(Manager.EMAIL_ALREADY_EXISTS, 400);
+    }
+
+    // Validate password is provided
+    if (!body.password) {
+      throw new AppError('Password is required', 400);
+    }
+
+    // Hash the user-provided password
+    const hashedPassword = await hashPassword(body.password);
+    body.password = hashedPassword;
+    body.email = body.email.toLowerCase();
+
+    // Set default item_sort_by if not provided
+    if (!body.item_sort_by) {
+      body.item_sort_by = 'line_number';
+    }
+
+    const user = await ReceivableUser.create(body);
+
+    // Return user without password
+    const { password: _, ...userWithoutPassword } = user.toJSON();
+    return userWithoutPassword;
+  }
+
+  async updateReceivableUser(id: number, body: any) {
+    // Check if user exists and has receivable role
+    const existingUser = await ReceivableUser.findByPk(id);
+    if (!existingUser) {
+      throw new AppError('User not found', 404);
+    }
+
+
+    // If email is being updated, check if new email already exists
+    if (body.email) {
+      body.email = body.email.toLowerCase();
+      const checkEmail = await WebUsers.findOne({
+        where: {
+          email: body.email,
+          id: { [Op.ne]: id } // Exclude current user
+        }
+      });
+      if (checkEmail) {
+        throw new AppError(Manager.EMAIL_ALREADY_EXISTS, 400);
+      }
+    }
+
+    // If password is being updated, hash it
+    if (body.password) {
+      body.password = await hashPassword(body.password);
+    }
+
+    // Trim name fields if provided
+    if (body.firstName) {
+      body.firstName = body.firstName.trim();
+    }
+    if (body.lastName) {
+      body.lastName = body.lastName.trim();
+    }
+
+    // Ensure role cannot be changed
+    delete body.role;
+
+    await ReceivableUser.update(body, {
+      where: { id: id }
+    });
+
+    // Return updated user
+    const updatedUser = await ReceivableUser.findByPk(id);
+    if (!updatedUser) {
+      throw new AppError('User not found after update', 404);
+    }
+
+    // Return user without password
+    const { password: _, ...userWithoutPassword } = updatedUser.toJSON();
+    return userWithoutPassword;
+  }
+
   /**
    * Get all assigned categories from all epick users
    * Returns a map: categoryNumber -> array of user IDs who have it
@@ -1701,18 +1801,18 @@ export class ManagerService {
     const whereCondition: any = {
       isActive: true // Only check active users, exclude deleted users
     };
-    
+
     if (excludeUserId) {
       whereCondition.id = { [Op.ne]: excludeUserId };
     }
-    
+
     const allUsers = await EpickUser.findAll({
       where: whereCondition,
       attributes: ['id', 'category']
     });
 
     const assignedMap: { [key: number]: number[] } = {};
-    
+
     allUsers.forEach((user: any) => {
       const categories = user.category || [];
       categories.forEach((cat: number) => {
@@ -1823,7 +1923,7 @@ export class ManagerService {
     // Hash the password (user chosen password)
     const hashedPassword = await hashPassword(body.password);
 
-    // Create epick user
+    // Create epick user - role is automatically set to 'epick' in backend
     const epickUser = await EpickUser.create({
       email: body.email,
       firstName: body.firstName,
@@ -1831,6 +1931,7 @@ export class ManagerService {
       password: hashedPassword,
       userNumber: String(body.userNumber), // Convert to string to match table type
       category: body.category,
+      role: 'epick', // Automatically set to 'epick' - not from payload
       order_type: body.order_type || 'order_number',
       shortby: body.shortby || 'Des',
       item_sort_by: body.item_sort_by || 'line_number',
@@ -1844,7 +1945,7 @@ export class ManagerService {
   }
 
   async updateUser(id: number, body: any) {
-    if(body.email){
+    if (body.email) {
       body.email = body.email.toLowerCase()
     }
     const updateUser = await WebUsers.update(body, {
@@ -1862,7 +1963,7 @@ export class ManagerService {
 
     // Prepare update data (only allow specific fields)
     const updateData: any = {};
-    
+
     if (body.firstName !== undefined) {
       updateData.firstName = body.firstName.trim();
     }
@@ -1891,7 +1992,7 @@ export class ManagerService {
     if (body.isActive !== undefined) {
       updateData.isActive = body.isActive;
     }
-    
+
     // Handle password update
     if (body.password !== undefined) {
       if (!body.password || body.password.trim().length < 3) {
@@ -1901,12 +2002,12 @@ export class ManagerService {
       const hashedPassword = await hashPassword(body.password);
       updateData.password = hashedPassword;
     }
-    
+
     // Handle category update
     if (body.category !== undefined) {
       // Validate category assignment rules (exclude current user)
       await this.validateCategoryAssignment(body.category, id);
-      
+
       // Check if user has any active orders (in_progress)
       const activeConfirmations = await EpickConfirmation.findAll({
         where: {
@@ -1914,17 +2015,17 @@ export class ManagerService {
           status: 'in_progress'
         }
       });
-      
+
       if (activeConfirmations.length > 0) {
         throw new AppError(
           'Cannot update categories while user has active orders. Please complete all active orders first.',
           400
         );
       }
-      
+
       updateData.category = body.category;
     }
-    
+
     // Handle order_type update
     if (body.order_type !== undefined) {
       const validOrderTypes = ['order_number', 'qty_number'];
@@ -1933,7 +2034,7 @@ export class ManagerService {
       }
       updateData.order_type = body.order_type;
     }
-    
+
     // Handle shortby update
     if (body.shortby !== undefined) {
       const normalizedShortby = body.shortby.toLowerCase();
@@ -1943,7 +2044,7 @@ export class ManagerService {
       // Normalize to 'Asc' or 'Des' for consistency
       updateData.shortby = normalizedShortby === 'asc' ? 'Asc' : 'Des';
     }
-    
+
     // Handle item_sort_by update
     if (body.item_sort_by !== undefined) {
       const validSortOptions = ['sales_location', 'section_location','sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number'];
@@ -2118,7 +2219,7 @@ export class ManagerService {
       where: {
         isActive: true, // Only return active users
       },
-      attributes: ['id', 'email', 'firstName', 'lastName', 'category', 'order_type', 'shortby', 'item_sort_by', 'userNumber', 'isActive', 'status'],
+      attributes: ['id', 'email', 'firstName', 'lastName', 'category', 'order_type', 'shortby', 'item_sort_by', 'userNumber', 'role', 'isActive', 'status'],
       order: [['firstName', 'ASC'], ['lastName', 'ASC']],
     });
 
@@ -2364,15 +2465,15 @@ export class ManagerService {
   };
 
   async updateRolePermissions(body: any) {
-    const { permissions,userId } = body;
+    const { permissions, userId } = body;
 
     const updates = await Promise.all(
       permissions.map(async (perm: any) => {
         console.log(perm, "perm")
-        if(!perm.id){
-          const created = await RolePermission.create({...perm, userId});
+        if (!perm.id) {
+          const created = await RolePermission.create({ ...perm, userId });
           return created;
-        }else {
+        } else {
           const updated = await RolePermission.update(perm, {
             where: {
               id: Number(perm.id),
@@ -2380,7 +2481,7 @@ export class ManagerService {
           });
           return updated;
         }
-       
+
       })
     );
 
@@ -2435,23 +2536,23 @@ export class ManagerService {
   }
 
 
-  async getOrderHistory(query: PaginationOptions) {
-    
+ async getOrderHistory(query: PaginationOptions) {
+   
     const currentStatus = query.currentStatus || 'all';
-
+ 
    console.log(query, 'query--->');
-
-
-
+ 
+ 
+ 
     // Handle query parameters with potential trailing spaces
     const page = Number(query.page || (query as any)['page ']) || 1;
     const limit = Number(query.limit || (query as any)['limit ']) || 10;
     const customerNumber = query.customerNumber || (query as any)['customerNumber '];
     const startDate = query.startDate || (query as any)['startDate '];
     const endDate = query.endDate || (query as any)['endDate '];
-
+ 
     const offset = (page - 1) * limit;
-
+ 
     if(currentStatus === 'recordLocks'){
       const recordLocks = await Record_Locks.findAll({
         where: {
@@ -2482,20 +2583,20 @@ export class ManagerService {
       if(query.updated){
         whereCondition.Order_Updated = query.updated;
       }
-  
-  
-    
-      
+ 
+ 
+   
+     
       if (customerNumber) {
         whereCondition.C_Number = Number(customerNumber);
       }
-  
+ 
       if (startDate && endDate) {
         whereCondition.Order_Date = {
           [Op.between]: [startDate, endDate]
         };
       }
-  
+ 
       // First, get the order headers with pagination
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
         attributes: [
@@ -2526,15 +2627,15 @@ export class ManagerService {
         ],
         distinct: true,
         col: 'Order_Number',
-  
+ 
         order: [['Order_Number', 'DESC']],
         limit,
         offset,
       });
-  
+ 
       // Get the order numbers to fetch quantities
       const orderNumbers = orderList.map((order: any) => order.Order_Number);
-  
+ 
       // Get total quantities for these orders
       let quantityMap = new Map();
       if (orderNumbers.length > 0) {
@@ -2549,13 +2650,13 @@ export class ManagerService {
           group: ['Order_Number'],
           raw: true
         });
-  
+ 
         // Create a map for quick lookup
         quantityResults.forEach((result: any) => {
           quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
         });
       }
-  
+ 
       // Format the response
       const formattedOrderList = orderList.map((order: any) => {
         // Map Order_Source to readable names
@@ -2586,7 +2687,7 @@ export class ManagerService {
           totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0
         };
       });
-  
+ 
       return {
         totalCount,
         page,
@@ -2594,11 +2695,11 @@ export class ManagerService {
         totalPages: Math.ceil(Number(totalCount) / Number(limit)),
         orderList: formattedOrderList,
       };
-
+ 
     }
-
+ 
     else if(currentStatus === 'orderConfirmation') {
-
+ 
       const whereCondition: any = {
       };
       if(query.isDeleted){
@@ -2607,20 +2708,20 @@ export class ManagerService {
       if(query.updated){
         whereCondition.Order_Updated = query.updated;
       }
-  
+ 
    
-  
+ 
    
       if (customerNumber) {
         whereCondition.C_Number = Number(customerNumber);
       }
-  
+ 
       if (startDate && endDate) {
         whereCondition.Order_Date = {
           [Op.between]: [startDate, endDate]
         };
       }
-  
+ 
       // First, get the order headers with pagination
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
         attributes: [
@@ -2673,11 +2774,11 @@ export class ManagerService {
         limit,
         offset,
       });
-      
-  
+     
+ 
       // Get the order numbers to fetch quantities
       const orderNumbers = orderList.map((order: any) => order.Order_Number);
-  
+ 
       // Get total quantities for these orders
       let quantityMap = new Map();
       if (orderNumbers.length > 0) {
@@ -2692,13 +2793,13 @@ export class ManagerService {
           group: ['Order_Number'],
           raw: true
         });
-  
+ 
         // Create a map for quick lookup
         quantityResults.forEach((result: any) => {
           quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
         });
       }
-  
+ 
       // Format the response
       const formattedOrderList = orderList.map((order: any) => {
         // Map Order_Source to readable names
@@ -2729,7 +2830,7 @@ export class ManagerService {
           totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0
         };
       });
-  
+ 
       return {
         totalCount,
         page,
@@ -2737,9 +2838,9 @@ export class ManagerService {
         totalPages: Math.ceil(Number(totalCount) / Number(limit)),
         orderList: formattedOrderList,
       };
-
+ 
     }
-    
+   
     else {
     // Build where condition
     const whereCondition: any = {
@@ -2750,9 +2851,9 @@ export class ManagerService {
     if(query.updated){
       whereCondition.Order_Updated = query.updated;
     }
-
  
-
+ 
+ 
     if(currentStatus === 'invoices'){
       whereCondition.Invoice_Number = {
         [Op.gt]: 0
@@ -2766,17 +2867,17 @@ export class ManagerService {
     }else if(currentStatus === 'EpickStatusFromPicker'){
       whereCondition.EpickStatusFromPicker ='completed'
     }
-    
+   
     if (customerNumber) {
       whereCondition.C_Number = Number(customerNumber);
     }
-
+ 
     if (startDate && endDate) {
       whereCondition.Order_Date = {
         [Op.between]: [startDate, endDate]
       };
     }
-
+ 
     // First, get the order headers with pagination
     const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
       attributes: [
@@ -2814,15 +2915,15 @@ export class ManagerService {
       ],
       distinct: true,
       col: 'Order_Number',
-
+ 
       order: [['Order_Number', 'DESC']],
       limit,
       offset,
     });
-
+ 
     // Get the order numbers to fetch quantities
     const orderNumbers = orderList.map((order: any) => order.Order_Number);
-
+ 
     // Get total quantities for these orders
     let quantityMap = new Map();
     let isConfirmed = new Map();
@@ -2839,12 +2940,12 @@ export class ManagerService {
         group: ['Order_Number'],
         raw: true
       });
-
+ 
       // Create a map for quick lookup of quantities
       quantityResults.forEach((result: any) => {
         quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
       });
-
+ 
       // Get all OrderDetails to check Confirmed status
       const allOrderDetails = await OrderDetail.findAll({
         attributes: ['Order_Number', 'Confirmed'],
@@ -2853,7 +2954,7 @@ export class ManagerService {
         },
         raw: true
       });
-
+ 
       // Group OrderDetails by Order_Number and check if all are confirmed
       const orderDetailsByOrder = new Map<number, any[]>();
       allOrderDetails.forEach((detail: any) => {
@@ -2863,14 +2964,14 @@ export class ManagerService {
         }
         orderDetailsByOrder.get(orderNum)!.push(detail);
       });
-
+ 
       // For each order, check if ALL OrderDetails have Confirmed=true
       orderDetailsByOrder.forEach((details: any[], orderNum: number) => {
         const allConfirmed = details.every((detail: any) => detail.Confirmed === true);
         isConfirmed.set(orderNum, allConfirmed);
       });
     }
-
+ 
     // Format the response
     const formattedOrderList = orderList.map((order: any) => {
       // Map Order_Source to readable names
@@ -2902,7 +3003,7 @@ export class ManagerService {
         isConfirmed: isConfirmed.get(order.Order_Number) || false
       };
     });
-
+ 
     return {
       totalCount,
       page,
@@ -3226,14 +3327,25 @@ export class ManagerService {
 
       whereCondition.Invoice_Number = { [Op.lte]: 0 };
 
-      const orderNumbers = await OrderHeader.findAll({
-        attributes: ['Order_Number'],
+      const orderList  = await OrderHeader.findAll({
+        attributes: ['Order_Number', 'C_Number'],
         where: whereCondition,
-        order: [['Order_Number', 'DESC']]
+        include: [
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: ['C_Name'],
+            required: false,
+          }
+        ],
+        order: [['Order_Number', 'DESC']],
       });
 
-      return orderNumbers.map((order: any) => order.Order_Number);
-    }
+      return { 
+        totalCount: orderList.length, 
+        orderList: orderList };
+      }
+    
 
     if (currentStatus === 'recordLocks') {
 
@@ -3464,7 +3576,7 @@ export class ManagerService {
         'Price',
         'OTP_Amount_State',
         'Quantity_Ordered',
-      'OffInvoice_Amount',
+        'OffInvoice_Amount',
         'Quantity_Shipped',
         'DepositAmount',
         'PrepaidTax_Amount'
@@ -3484,21 +3596,21 @@ export class ManagerService {
 
     for (const details of allOrderDetails) {
       const d = details.dataValues;
-    
+
       const basePrice = toNum(d.Price);
-      const otpState  = toNum(d.OTP_Amount_State);
-      const prepaid   = toNum(d.PrepaidTax_Amount);
-      const qty       = toNum(d.Quantity_Shipped); // or fallback below
-    
+      const otpState = toNum(d.OTP_Amount_State);
+      const prepaid = toNum(d.PrepaidTax_Amount);
+      const qty = toNum(d.Quantity_Shipped); // or fallback below
+
       const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
-    
+
       const unitPrice = basePrice + otpState + prepaid;
-    
+
       totalPrice += unitPrice * quantity;
       totalPrepaidTax += prepaid * quantity;
-    
+
       totalDiscount += toNum(d.OffInvoice_Amount);   // multiply by qty only if this is per-unit
-      totalDeposit  += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
+      totalDeposit += toNum(d.DepositAmount);       // multiply by qty only if this is per-unit
     }
 
     // Get product images for each item
@@ -3650,7 +3762,7 @@ export class ManagerService {
             'Location2',
             'Sequence',
             'Vendor_ItemNumberAlpha'
-            
+
           ],
           include: [
             {
@@ -3664,7 +3776,7 @@ export class ManagerService {
               attributes: ['Price_Class', 'Class_Desc'],
             },
             {
-              model:InventoryUPC,
+              model: InventoryUPC,
               as: 'UPCList',
               attributes: ['UPC_Number'],
               where: {
@@ -5014,72 +5126,72 @@ export class ManagerService {
 
   // PO Header
   async createPurchaseOrder(poData: any, req: any) {
-      const { poHeaderPayload, poItems } = poData;
+    const { poHeaderPayload, poItems } = poData;
 
-      const nextPONumber = await getNextPONumber();
-      function formatDateForSQL(date: string | Date | null) {
-        if (!date) return null;
-        if (date instanceof Date) return date;
-        return new Date(date); // converts 'YYYY-MM-DD' to Date object
-      }
+    const nextPONumber = await getNextPONumber();
+    function formatDateForSQL(date: string | Date | null) {
+      if (!date) return null;
+      if (date instanceof Date) return date;
+      return new Date(date); // converts 'YYYY-MM-DD' to Date object
+    }
 
-      const poHeaderObj = {
-        PO_Number: nextPONumber,
-        PO_Date: formatDateForSQL(poHeaderPayload.PO_Date) || new Date(),
-        PO_Source: 1,
-        PO_Posted: 0,
-        PO_Type: poHeaderPayload.PO_Type || 0,
-        Confirmed: 0,
-        Date_Received: formatDateForSQL(poHeaderPayload.Date_Received) || new Date(),
-        Receiving_Code: poHeaderPayload.Receiving_Code || 'P',
-        Orig_PO_Number: 0,
-        Primary_Vendor: poHeaderPayload.Primary_Vendor,
-        Invoice_Number: poHeaderPayload.Invoice_Number || '',
-        Invoice_Date: formatDateForSQL(poHeaderPayload.Invoice_Date) || new Date(),
-        PO_Message: poHeaderPayload.PO_Message || '',
-        PO_Status: 0,
-        Ship_Date: formatDateForSQL(poHeaderPayload.Ship_Date) || new Date(),
-        BillTo_Vendor: poHeaderPayload.Primary_Vendor,
-        Promo_Code: '',
-        Terms: poHeaderPayload.Terms || 0,
-        FTP_Sent: 0,
-        FTP_Date: formatDateForSQL(poHeaderPayload.FTP_Date) || new Date(),
-        FTP_REQ_Date: formatDateForSQL(poHeaderPayload.FTP_REQ_Date) || new Date(),
-        ReceivingMode: 0,
-        Delivery_ID: 0,
-        Tracking_Number: '',
-        PO_DeliveryCharge: Number(poHeaderPayload.PO_DeliveryCharge || 0),
-        PO_MiscCharge: Number(poHeaderPayload.PO_MiscCharge || 0),
-        PO_MiscCharge2: 0,
-        PO_Discounts: 0,
-        PO_Total: 0,
-        Jurisdiction_State: '',
-        Jurisdiction_County: '',
-        Jurisdiction_City: '',
-        Inventory_CIG: 0,
-        Inventory_OTP: 0,
-        PrepaidTax_Calculation_Select: 0,
-        epoCreated: poHeaderPayload.epoCreated || 0,
-        epoApplied: 0,
-        epoUser: '',
-        Control_Date: new Date(),
-        // Control_Time: new Date(),
-        Date_Received_Control: null,
-        Invoice_Deposit: 0,
-        Total_Weight: 0,
-        Requested_Delivery_Date: poHeaderPayload.Requested_Delivery_Date || new Date(),
-        Delete_Date: formatDateForSQL(poHeaderPayload.Delete_Date) || new Date(),
-        Delete_User_Number: 0
-      };
+    const poHeaderObj = {
+      PO_Number: nextPONumber,
+      PO_Date: formatDateForSQL(poHeaderPayload.PO_Date) || new Date(),
+      PO_Source: 1,
+      PO_Posted: 0,
+      PO_Type: poHeaderPayload.PO_Type || 0,
+      Confirmed: 0,
+      Date_Received: formatDateForSQL(poHeaderPayload.Date_Received) || new Date(),
+      Receiving_Code: poHeaderPayload.Receiving_Code || 'P',
+      Orig_PO_Number: 0,
+      Primary_Vendor: poHeaderPayload.Primary_Vendor,
+      Invoice_Number: poHeaderPayload.Invoice_Number || '',
+      Invoice_Date: formatDateForSQL(poHeaderPayload.Invoice_Date) || new Date(),
+      PO_Message: poHeaderPayload.PO_Message || '',
+      PO_Status: 0,
+      Ship_Date: formatDateForSQL(poHeaderPayload.Ship_Date) || new Date(),
+      BillTo_Vendor: poHeaderPayload.Primary_Vendor,
+      Promo_Code: '',
+      Terms: poHeaderPayload.Terms || 0,
+      FTP_Sent: 0,
+      FTP_Date: formatDateForSQL(poHeaderPayload.FTP_Date) || new Date(),
+      FTP_REQ_Date: formatDateForSQL(poHeaderPayload.FTP_REQ_Date) || new Date(),
+      ReceivingMode: 0,
+      Delivery_ID: 0,
+      Tracking_Number: '',
+      PO_DeliveryCharge: Number(poHeaderPayload.PO_DeliveryCharge || 0),
+      PO_MiscCharge: Number(poHeaderPayload.PO_MiscCharge || 0),
+      PO_MiscCharge2: 0,
+      PO_Discounts: 0,
+      PO_Total: 0,
+      Jurisdiction_State: '',
+      Jurisdiction_County: '',
+      Jurisdiction_City: '',
+      Inventory_CIG: 0,
+      Inventory_OTP: 0,
+      PrepaidTax_Calculation_Select: 0,
+      epoCreated: poHeaderPayload.epoCreated || 0,
+      epoApplied: 0,
+      epoUser: '',
+      Control_Date: new Date(),
+      // Control_Time: new Date(),
+      Date_Received_Control: null,
+      Invoice_Deposit: 0,
+      Total_Weight: 0,
+      Requested_Delivery_Date: poHeaderPayload.Requested_Delivery_Date || new Date(),
+      Delete_Date: formatDateForSQL(poHeaderPayload.Delete_Date) || new Date(),
+      Delete_User_Number: 0
+    };
 
-      const { ...defaultValues } = getDefaultPOHeaderValues();
-      const finalPoHeaderObj: any = {
+    const { ...defaultValues } = getDefaultPOHeaderValues();
+    const finalPoHeaderObj: any = {
       ...defaultValues,
       ...poHeaderObj,
     };
 
 
-     Object.keys(finalPoHeaderObj).forEach(key => {
+    Object.keys(finalPoHeaderObj).forEach(key => {
       if (finalPoHeaderObj[key] === null || finalPoHeaderObj[key] === undefined) {
         if (typeof finalPoHeaderObj[key] === 'number') {
           finalPoHeaderObj[key] = 0;
@@ -5091,31 +5203,31 @@ export class ManagerService {
       }
     });
 
-      let createdHeader;
-      try {
-        createdHeader = await POHeader.create(poHeaderObj);
-      } catch (error) {
-        console.log(error);
-        throw new AppError("Failed to create PO Header", 500);
-      }
+    let createdHeader;
+    try {
+      createdHeader = await POHeader.create(poHeaderObj);
+    } catch (error) {
+      console.log(error);
+      throw new AppError("Failed to create PO Header", 500);
+    }
 
-      const itemNumbers = poItems.map((i: { Item_Number: number }) => i.Item_Number);
+    const itemNumbers = poItems.map((i: { Item_Number: number }) => i.Item_Number);
 
-      const inventoryItems = await Inventory.findAll({
-        where: { Item_Number: itemNumbers },
-        raw: true
-      });
+    const inventoryItems = await Inventory.findAll({
+      where: { Item_Number: itemNumbers },
+      raw: true
+    });
 
-      const invMap = new Map<number, Inventory>(
-        inventoryItems.map((p: Inventory) => [p.Item_Number, p])
-      );
+    const invMap = new Map<number, Inventory>(
+      inventoryItems.map((p: Inventory) => [p.Item_Number, p])
+    );
 
-      const poDetailRows = poItems.map((item: any, index: number) => {
-  const product = invMap.get(item.Item_Number);
+    const poDetailRows = poItems.map((item: any, index: number) => {
+      const product = invMap.get(item.Item_Number);
 
-  if (!product) throw new AppError(`Item ${item.Item_Number} not found`, 404);
+      if (!product) throw new AppError(`Item ${item.Item_Number} not found`, 404);
 
-  return {
+      return {
         PO_Number: createdHeader.PO_Number,
         Line_Number: index + 1,
         Item_Number: item.Item_Number,
@@ -5125,8 +5237,8 @@ export class ManagerService {
         Quantity_Recd: 0,
         Quantity_RecdDamaged: 0,
         Unit_Code: 0,
-        Pack: Number(product.Pack || product.Pack), 
-        Cost: Number(product.AvgCost) || 0, 
+        Pack: Number(product.Pack || product.Pack),
+        Cost: Number(product.AvgCost) || 0,
         BaseCost: Number(product.BaseCost) || 0,
         NetCost: Number(product.NetCost) || 0,
         Invoice_Cost: Number(product.Invoice_Cost) || 0,
@@ -5176,23 +5288,23 @@ export class ManagerService {
     });
 
 
-      // ===============================
-      // INSERT INTO PO_DETAIL
-      // ===============================
-      try {
-        await PODetail.bulkCreate(poDetailRows);
-      } catch (error) {
-        console.log(error);
-        throw new AppError("Failed to insert PO Details", 500);
-      }
-
-      return {
-        success: true,
-        message: "Purchase Order Created Successfully",
-        header: createdHeader,
-        items: poDetailRows
-      };
+    // ===============================
+    // INSERT INTO PO_DETAIL
+    // ===============================
+    try {
+      await PODetail.bulkCreate(poDetailRows);
+    } catch (error) {
+      console.log(error);
+      throw new AppError("Failed to insert PO Details", 500);
     }
+
+    return {
+      success: true,
+      message: "Purchase Order Created Successfully",
+      header: createdHeader,
+      items: poDetailRows
+    };
+  }
 
 
   async getPolicies() {
@@ -6369,7 +6481,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
         throw new AppError('subject and html are required', 400);
       }
 
-        // Set status to 'queued' when emails are being queued
+      // Set status to 'queued' when emails are being queued
       const emailMarketing = await EmailMarketing.create({
         ...data,
         status: 'sent',
@@ -6956,7 +7068,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   async createCustomer(data: any) {
 
     console.log(data, 'data----->');
-    const {documents ,address} = data
+    const { documents, address } = data
     const nextCustomerNumber = await getNextCustomerNumber();
 
     const finalData = {
@@ -6967,13 +7079,13 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     const customer = await Customer.create(finalData);
 
     console.log(documents, 'documents');
-    if(documents){
+    if (documents) {
       await RetailerDocuments.create({
         customerNumber: nextCustomerNumber,
         ...documents
       });
     }
-    if(address){
+    if (address) {
       await RetailerLocation.create({
         C_Number: nextCustomerNumber,
         ...address
@@ -6998,34 +7110,34 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
       ...data
     }
     const customer = await Customer.update(finalData, { where: { C_Number: id } });
-    if(data.documents){
+    if (data.documents) {
       const retailerDocuments = await RetailerDocuments.findOne({ where: { customerNumber: id } });
-      if(retailerDocuments){
-      await RetailerDocuments.update({
-        ...data.documents
-      }, { where: { customerNumber: id } });
-      }else{
+      if (retailerDocuments) {
+        await RetailerDocuments.update({
+          ...data.documents
+        }, { where: { customerNumber: id } });
+      } else {
         await RetailerDocuments.create({
           customerNumber: id,
           ...data.documents
         });
       }
-    
-  }
 
-  if(data.address){
-    const retailerLocation = await RetailerLocation.findOne({ where: { C_Number: id } });
-    if(retailerLocation){
-      await RetailerLocation.update({
-        ...data.address
-      }, { where: { C_Number: id } });
-    }else{
-      await RetailerLocation.create({
-        C_Number: id,
-        ...data.address
-      });
     }
-  }
+
+    if (data.address) {
+      const retailerLocation = await RetailerLocation.findOne({ where: { C_Number: id } });
+      if (retailerLocation) {
+        await RetailerLocation.update({
+          ...data.address
+        }, { where: { C_Number: id } });
+      } else {
+        await RetailerLocation.create({
+          C_Number: id,
+          ...data.address
+        });
+      }
+    }
     return customer;
   }
 
@@ -7048,7 +7160,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   }
 
   async getCustomerDetailsById(id: number) {
-    const customer :any = await Customer.findOne({ where: { C_Number: id } });
+    const customer: any = await Customer.findOne({ where: { C_Number: id } });
     if (!customer) {
       throw new AppError('Customer not found', 404);
     }
@@ -7070,39 +7182,39 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     console.log(userId, 'userId');
 
     let userIdValue = 0;
-    if(userId){
+    if (userId) {
 
-      const user = await WebUsers.findOne({where: {id: userId},attributes: ['userNumber']});
-      if(user){
+      const user = await WebUsers.findOne({ where: { id: userId }, attributes: ['userNumber'] });
+      if (user) {
         userIdValue = user.userNumber ? parseInt(user.userNumber) : 0;
       }
     }
 
     const { field, data, excludeItem, hasBulkUpdate, singleUpdateData } = updateData;
     console.log(hasBulkUpdate, 'hasBulkUpdate');
-  
-    if (hasBulkUpdate ) {
+
+    if (hasBulkUpdate) {
       // -------- BULK UPDATE BRANCH (one big UPDATE with common where) ---------
-      
+
       console.log(field, data, 'field and data bulk update');
       if (!field || !data) {
         throw new AppError("field (conditions) and data are required", 400);
       }
-  
+
       if (Object.keys(field).length === 0) {
         throw new AppError("field object cannot be empty", 400);
       }
-  
+
       if (Object.keys(data).length === 0) {
         throw new AppError("data object cannot be empty", 400);
       }
-  
+
       const whereClause: any = { ...field };
 
       whereClause.Date_LastChangeUser = userIdValue;
       whereClause.Date_LastChange = new Date();
 
-      if(hasPriceChange(data)){
+      if (hasPriceChange(data)) {
         whereClause.PriceCostModifiedUser = userIdValue;
         whereClause.PriceCostModifiedDate = new Date();
       }
@@ -7110,50 +7222,50 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
       if (Array.isArray(excludeItem) && excludeItem.length > 0) {
         whereClause.Item_Number = { [Op.notIn]: excludeItem };
       }
-  
+
       const [affectedRows] = await Inventory.update(data, { where: whereClause });
-  
+
       return {
         updatedCount: affectedRows,
       };
     }
-     else {
+    else {
       // -------- PER-ITEM UPDATE BRANCH (loop over singleUpdateData) ---------
-  
+
       console.log(singleUpdateData, 'singleUpdateData');
       if (!Array.isArray(singleUpdateData) || singleUpdateData.length === 0) {
         throw new AppError("singleUpdateData must be a non-empty array when hasBulkUpdate is false", 400);
       }
-  
+
       let updatedCount = 0;
-  
+
       for (const item of singleUpdateData) {
         if (!item || typeof item !== "object") {
           throw new AppError("Each entry in singleUpdateData must be an object", 400);
         }
-  
+
         const { Item_Number, ...updateFields } = item;
-  
+
         if (!Item_Number) {
           throw new AppError("Item_Number is required for individual update", 400);
         }
-  
+
         if (Object.keys(updateFields).length === 0) {
           throw new AppError(`No fields to update for Item_Number ${Item_Number}`, 400);
         }
-  
+
         const [count] = await Inventory.update(
           updateFields,                // data to set
           { where: { Item_Number } }   // condition
         );
-  
+
         // Count each item as 1 if it was successfully updated (count > 0)
         // This ensures we return the number of unique items updated, not total rows affected
         if (count > 0) {
           updatedCount += 1;
         }
       }
-  
+
       return {
         updatedCount,
       };
@@ -7161,14 +7273,14 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   }
 
   async getInventoryItemsForUpdate(query: any) {
-    let { salesCategoryId, priceClassId, filter,search } = query;
+    let { salesCategoryId, priceClassId, filter, search } = query;
 
     let whereClause: any = {
     };
     if (search) {
       const term = search.toLowerCase();
       const startsWith = `${term}%`;
-      
+
       whereClause[Op.or] = [
         Sequelize.where(
           Sequelize.fn("LOWER", Sequelize.col("Description")),
@@ -7183,10 +7295,10 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
           { [Op.like]: startsWith }
         )
       ];
-   
-   
 
-}
+
+
+    }
 
     if (filter == 'ShortOrderForm') {
       whereClause.ShortOrderForm = true;
@@ -7220,7 +7332,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
 
 
     const productList = await Inventory.findAll({
-      
+
       where: whereClause,
       include: [
         {
@@ -7431,6 +7543,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     };
   }
 
+  
   async updateVehicle(id: number, body: any) {
     const vehicle = await Vehicle.findByPk(id);
     if (!vehicle) {
@@ -7608,8 +7721,8 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     const now = new Date();
 
     const formatted =
-    now.toISOString().slice(0, 19).replace("T", " "); // 
-    await OrderHeader.update({ Picklist_Printed: true, Picklist_Time: formatted}, { where: { Order_Number: orderNumber } });
+      now.toISOString().slice(0, 19).replace("T", " "); // 
+    await OrderHeader.update({ Picklist_Printed: true, Picklist_Time: formatted }, { where: { Order_Number: orderNumber } });
     return { message: "Picklist printed successfully" };
   }
 
@@ -7633,11 +7746,11 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     }>;
   }) {
     const results = [];
-    
+
     for (const futurePricingData of body.futurePricings) {
       // Check if a future pricing already exists for this itemNumber
       const existingFuturePricing = await FuturePricing.findOne({
-        where: { itemNumber: futurePricingData.itemNumber,isApplied:false }
+        where: { itemNumber: futurePricingData.itemNumber, isApplied: false }
       });
 
       if (existingFuturePricing) {
@@ -7761,7 +7874,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   }
 
   // RetailerDocuments CRUD methods
-  
+
 
   async getRetailerDocumentsById(id: number) {
     const retailerDocuments = await RetailerDocuments.findByPk(id);
@@ -7947,10 +8060,10 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return { success: true, message: 'Retailer location deleted successfully' };
   }
 
-  async getInventoryItemGroups(){
+  async getInventoryItemGroups() {
     const inventoryItemGroup = Inventory_ItemGroups.findAll({
       attributes: [
-        'Item_GroupID','Item_GroupDescription'
+        'Item_GroupID', 'Item_GroupDescription'
       ]
     })
 
@@ -7995,11 +8108,11 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return inventoryItemGroup;
   }
 
-  
-  async getinventorybrands(){
+
+  async getinventorybrands() {
     const inventoryBrand = InventoryBrands.findAll({
       attributes: [
-        'Brand_ID','Brand_Family','Brand_ReceivedStamped','Brand_PM_Status'
+        'Brand_ID', 'Brand_Family', 'Brand_ReceivedStamped', 'Brand_PM_Status'
       ]
     })
 
@@ -8024,10 +8137,10 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return inventoryBrand;
   }
 
-  async getPriceClass(){
+  async getPriceClass() {
     const priceClass = PriceClass.findAll({
       attributes: [
-        'Price_Class','Class_Desc','MSA_Default','Rebate_Amount','SelectionVisible','Allow_Price_Change','Allow_Price_Change_Remote','Sales_Category_Group','Product_ExpDays'
+        'Price_Class', 'Class_Desc', 'MSA_Default', 'Rebate_Amount', 'SelectionVisible', 'Allow_Price_Change', 'Allow_Price_Change_Remote', 'Sales_Category_Group', 'Product_ExpDays'
       ]
     })
     return priceClass
@@ -8040,7 +8153,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     }
     await priceClass.update(body);
     return priceClass;
-  } 
+  }
 
   // async getLossQuantityReport(
   //     filters: CommonReportFilters & {
@@ -8193,7 +8306,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   //   }
 
 
-  
+
   // async getVelocityReportCustomerGroup(
   //     filters: CommonReportFilters ) {
   //     /**
@@ -8347,44 +8460,24 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   //   }
 
   // service
-async getShortShipmentReport(
-      filters: { fromDate?: string; toDate?: string }
-    ) {
-      const orderHeaderWhere: any = {
-        Order_Updated: true,
-        Order_Deleted: false,
+  async getShortShipmentReport(
+    filters: { fromDate?: string; toDate?: string }
+  ) {
+    const orderHeaderWhere: any = {
+      Order_Updated: true,
+      Order_Deleted: false,
+    };
+
+    if (filters.fromDate && filters.toDate) {
+      orderHeaderWhere.Invoice_Date = {
+        [Op.between]: [filters.fromDate, filters.toDate],
       };
+    }
 
-      let start: Date | undefined;
-      let end: Date | undefined;
-
-      if (filters.fromDate) {
-        start = new Date(filters.fromDate);
-        start.setHours(0, 0, 0, 0);
-      }
-
-      if (filters.toDate) {
-        end = new Date(filters.toDate);
-        end.setHours(23, 59, 59, 999);
-      }
-
-      if (start && end) {
-        orderHeaderWhere.Invoice_Date = {
-          [Op.gte]: start,
-          [Op.lte]: end, // ✅ IMPORTANT FIX
-        };
-      }
-
-      // if (filters.fromDate && filters.toDate) {
-      //   orderHeaderWhere.Invoice_Date = {
-      //     [Op.between]: [filters.fromDate, filters.toDate],
-      //   };
-      // }
-
-      /** BASE ATTRIBUTES */
-      const attributes: any[] = [
-        [
-          literal(`
+    /** BASE ATTRIBUTES */
+    const attributes: any[] = [
+      [
+        literal(`
             IIF(
               orderHeader.Invoice_Number_Legacy <> 0,
               CONVERT(varchar(10), orderHeader.Invoice_Number_Legacy),
@@ -8395,71 +8488,71 @@ async getShortShipmentReport(
               )
             )
           `),
-          'Document_Number',
-        ],
+        'Document_Number',
+      ],
 
-        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
-        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
-        [col('orderHeader.C_Number'), 'C_Number'],
-        [col('orderHeader.S_Number'), 'S_Number'],
-        [col('orderHeader.Route_Number'), 'Route_Number'],
-        [col('orderHeader.Jurisdiction_County'), 'Jurisdiction_County'],
+      [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+      [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+      [col('orderHeader.C_Number'), 'C_Number'],
+      [col('orderHeader.S_Number'), 'S_Number'],
+      [col('orderHeader.Route_Number'), 'Route_Number'],
+      [col('orderHeader.Jurisdiction_County'), 'Jurisdiction_County'],
 
 
-        'Order_Number',
-        'Promo_Number',
-        'Item_Number',
-        'Quantity_Ordered',
-        'Quantity_Shipped',
+      'Order_Number',
+      'Promo_Number',
+      'Item_Number',
+      'Quantity_Ordered',
+      'Quantity_Shipped',
 
-        // ✅ Loss Quantity
-        [
-          literal('(OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)'),
-          'Loss_Qty',
-        ],
+      // ✅ Loss Quantity
+      [
+        literal('(OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)'),
+        'Loss_Qty',
+      ],
 
-        'Unit_Code',
-        'OrderDetail_Code',
-        'Delivered',
-        'Credit_ReturnToStock',
-        'Price',
-        'NetCost',
-        'BaseCost',
-        'AvgCost',
-        'Invoice_Cost',
-        'OTP_Amount_State',
-        'OTP_Amount_County',
-        'OTP_Amount_City',
-        'Sales_Category',
-        'OTP_Number',
+      'Unit_Code',
+      'OrderDetail_Code',
+      'Delivered',
+      'Credit_ReturnToStock',
+      'Price',
+      'NetCost',
+      'BaseCost',
+      'AvgCost',
+      'Invoice_Cost',
+      'OTP_Amount_State',
+      'OTP_Amount_County',
+      'OTP_Amount_City',
+      'Sales_Category',
+      'OTP_Number',
 
-        // ✅ Extended Price (Price + OTP)
-        [
-          literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State)'),
-          'Ext_Price',
-        ],
+      // ✅ Extended Price (Price + OTP)
+      [
+        literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State)'),
+        'Ext_Price',
+      ],
 
-        // ✅ Extended Loss = LossQty * (Price + OTP)
-        [
-          literal(`
+      // ✅ Extended Loss = LossQty * (Price + OTP)
+      [
+        literal(`
             (OrderDetail.Quantity_Ordered - OrderDetail.Quantity_Shipped)
             * (OrderDetail.Price + OrderDetail.OTP_Amount_State)
           `),
-          'Ext_Loss',
-        ],
+        'Ext_Loss',
+      ],
 
-        [col('inventory.Description'), 'Description'],
-        [col('inventory.UOM'), 'UOM'],
-        [col('inventory.Pack'), 'Pack'],
-        [col('inventory.UnitOunces'), 'UnitOunces'],
-        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
-        [col('inventory.Cig_Pack'), 'Cig_Pack'],
-        [col('inventory.OTP_Number'), 'OTP_Number'],
-        [col('inventory.Price_Class'), 'Price_Class'],
+      [col('inventory.Description'), 'Description'],
+      [col('inventory.UOM'), 'UOM'],
+      [col('inventory.Pack'), 'Pack'],
+      [col('inventory.UnitOunces'), 'UnitOunces'],
+      [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+      [col('inventory.Cig_Pack'), 'Cig_Pack'],
+      [col('inventory.OTP_Number'), 'OTP_Number'],
+      [col('inventory.Price_Class'), 'Price_Class'],
 
 
-        [
-          literal(`
+      [
+        literal(`
             ISNULL(
               (
                 SELECT SUM(Inventory_OnHand)
@@ -8470,91 +8563,91 @@ async getShortShipmentReport(
               0
             )
           `),
-          'OnHand',
-        ],
+        'OnHand',
+      ],
 
-        [col('orderHeader.customer.C_Name'), 'C_Name'],
-        [col('orderHeader.customer.c_address'), 'c_address'],
-        [col('orderHeader.customer.c_city'), 'c_city'],
-        [col('orderHeader.customer.c_state'), 'c_state'],
-        [col('orderHeader.customer.C_Country'), 'C_Country'],
-        [col('orderHeader.customer.c_zip'), 'c_zip'],
-        [col('orderHeader.customer.c_phone'), 'c_phone'],
-        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
-        [col('orderHeader.customer.C_ClassOfTrade'), 'C_ClassOfTrade'],
-      ];
+      [col('orderHeader.customer.C_Name'), 'C_Name'],
+      [col('orderHeader.customer.c_address'), 'c_address'],
+      [col('orderHeader.customer.c_city'), 'c_city'],
+      [col('orderHeader.customer.c_state'), 'c_state'],
+      [col('orderHeader.customer.C_Country'), 'C_Country'],
+      [col('orderHeader.customer.c_zip'), 'c_zip'],
+      [col('orderHeader.customer.c_phone'), 'c_phone'],
+      [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+      [col('orderHeader.customer.C_ClassOfTrade'), 'C_ClassOfTrade'],
+    ];
 
 
-      const result = await OrderDetail.findAll({
-        attributes,
+    const result = await OrderDetail.findAll({
+      attributes,
 
-        where: {
-          Quantity_Shipped: {
-            [Op.gte]: 0,
-            [Op.lt]: col('Quantity_Ordered'),
-          },
-          [Op.and]: literal('(Quantity_Ordered - Quantity_Shipped) > 0'),
+      where: {
+        Quantity_Shipped: {
+          [Op.gte]: 0,
+          [Op.lt]: col('Quantity_Ordered'),
         },
+        [Op.and]: literal('(Quantity_Ordered - Quantity_Shipped) > 0'),
+      },
 
-        include: [
-          {
-            model: OrderHeader,
-            as: 'orderHeader',
-            attributes: [],
-            where: orderHeaderWhere,
-            include: [
-              {
-                model: Customer,
-                as: 'customer',
-                attributes: [],
-                required: true,
-              },
-            ],
-          },
-          {
-            model: Inventory,
-            as: 'inventory',
-            attributes: [],
-            required: true,
-          },
-        ],
-
-        order: [
-          [col('orderHeader.Invoice_Date'), 'ASC'],
-          [col('orderHeader.Order_Number'), 'ASC'],
-        ],
-
-        subQuery: false,
-      });
-
-      const rows = result.map(r => r.get({ plain: true }));
-
-      const grandTotals = rows.reduce(
-        (acc, row) => {
-          acc.Grand_Loss_Qty += Number(row.Loss_Qty || 0);
-          acc.Grand_Ext_Loss += Number(row.Ext_Loss || 0);
-          return acc;
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          where: orderHeaderWhere,
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+              required: true,
+            },
+          ],
         },
         {
-          Grand_Loss_Qty: 0,
-          Grand_Ext_Loss: 0,
-        }
-      );
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          required: true,
+        },
+      ],
 
-      return {
-        rows,
-        ...grandTotals,
-      };
-    }
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
 
-async getVelocityReportCustomer(filters: {
-  startDate?: string;
-  endDate?: string;
-  page?: number;
-  limit?: number;
-}) {
-  const { startDate, endDate, page = 1, limit = 10 } = filters;
-  const offset = (page - 1) * limit;
+      subQuery: false,
+    });
+
+    const rows = result.map(r => r.get({ plain: true }));
+
+    const grandTotals = rows.reduce(
+      (acc, row) => {
+        acc.Grand_Loss_Qty += Number(row.Loss_Qty || 0);
+        acc.Grand_Ext_Loss += Number(row.Ext_Loss || 0);
+        return acc;
+      },
+      {
+        Grand_Loss_Qty: 0,
+        Grand_Ext_Loss: 0,
+      }
+    );
+
+    return {
+      rows,
+      ...grandTotals,
+    };
+  }
+
+  async getVelocityReportCustomer(filters: {
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { startDate, endDate, page = 1, limit = 10, } = filters;
+    const offset = (page - 1) * limit;
 
   let start: Date | undefined;
   let end: Date | undefined;
@@ -8626,67 +8719,67 @@ async getVelocityReportCustomer(filters: {
       'OTP_Amount_County',
       'OTP_Amount_City',
       [
-          literal('(OrderDetail.Price * OrderDetail.Quantity_Ordered ) '),
-          'Price_Class_Price',
+        literal('(OrderDetail.Price * OrderDetail.Quantity_Ordered ) '),
+        'Price_Class_Price',
       ],
       [
-          literal('(OrderDetail.Quantity_Shipped * inventory.Points ) '),
-          'Ext_Points',
+        literal('(OrderDetail.Quantity_Shipped * inventory.Points ) '),
+        'Ext_Points',
       ],
       [
-          literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) '),
-          'EXT_Price',
+        literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) '),
+        'EXT_Price',
       ],
       [
-          literal('(OrderDetail.AvgCost + OrderDetail.OTP_Amount_State ) '),
-          'Ext_AvgCost',
+        literal('(OrderDetail.AvgCost + OrderDetail.OTP_Amount_State ) '),
+        'Ext_AvgCost',
       ],
       [
-          literal('(OrderDetail.AvgCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
-          'Ext_Total_AvgCost',
+        literal('(OrderDetail.AvgCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+        'Ext_Total_AvgCost',
       ],
       [
-          literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) '),
-          'Ext_BaseCost',
+        literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) '),
+        'Ext_BaseCost',
       ],
       [
-          literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
-          'Ext_Total_BaseCost',
+        literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+        'Ext_Total_BaseCost',
       ],
       [
-          literal('(OrderDetail.NetCost + OrderDetail.OTP_Amount_State ) '),
-          'Ext_NetCost',
+        literal('(OrderDetail.NetCost + OrderDetail.OTP_Amount_State ) '),
+        'Ext_NetCost',
       ],
       [
-          literal('(OrderDetail.NetCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
-          'Ext_Total_NetCost',
+        literal('(OrderDetail.NetCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+        'Ext_Total_NetCost',
       ],
       [
-          literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
-          'Ext_Total_BaseCost',
+        literal('(OrderDetail.BaseCost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+        'Ext_Total_BaseCost',
       ],
       [
-          literal('(OrderDetail.Invoice_Cost + OrderDetail.OTP_Amount_State ) '),
-          'Ext_Invoice_Cost',
+        literal('(OrderDetail.Invoice_Cost + OrderDetail.OTP_Amount_State ) '),
+        'Ext_Invoice_Cost',
       ],
       [
-          literal('(OrderDetail.Invoice_Cost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
-          'Ext_Total_Invoice_Cost',
+        literal('(OrderDetail.Invoice_Cost + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+        'Ext_Total_Invoice_Cost',
       ],
       [
-          literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped'),
-          'EXT_Total_Price',
+        literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped'),
+        'EXT_Total_Price',
       ],
       [
-          literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
-          'Ext_Price',
+        literal('(OrderDetail.Price + OrderDetail.OTP_Amount_State ) * OrderDetail.Quantity_Shipped '),
+        'Ext_Price',
       ],
       [
-          literal('((OrderDetail.Price+ OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped) - ((OrderDetail.AvgCost + OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped)'),
-          'Profit',
+        literal('((OrderDetail.Price+ OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped) - ((OrderDetail.AvgCost + OrderDetail.OTP_Amount_State) * OrderDetail.Quantity_Shipped)'),
+        'Profit',
       ],
       [
-          literal(`
+        literal(`
             (
               (
                 (OrderDetail.Price + OrderDetail.OTP_Amount_State)
@@ -8695,10 +8788,10 @@ async getVelocityReportCustomer(filters: {
               / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
             ) * 100
           `),
-          'Profit_Percent',
-        ],
+        'Profit_Percent',
+      ],
       [
-          literal(`
+        literal(`
             (
               (
                 (OrderDetail.Price + OrderDetail.OTP_Amount_State )- (OrderDetail.AvgCost + OrderDetail.OTP_Amount_State )
@@ -8706,10 +8799,10 @@ async getVelocityReportCustomer(filters: {
               / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
             ) * 100
           `),
-          'AvgCost_Profit_Percent',
-        ], 
+        'AvgCost_Profit_Percent',
+      ],
       [
-          literal(`
+        literal(`
             (
               (
                 (OrderDetail.Price + OrderDetail.OTP_Amount_State )- (OrderDetail.BaseCost + OrderDetail.OTP_Amount_State )
@@ -8717,10 +8810,10 @@ async getVelocityReportCustomer(filters: {
               / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
             ) * 100
           `),
-          'BaseCost_Profit_Percent',
-        ], 
+        'BaseCost_Profit_Percent',
+      ],
       [
-          literal(`
+        literal(`
             (
               (
                 (OrderDetail.Price + OrderDetail.OTP_Amount_State )- (OrderDetail.NetCost + OrderDetail.OTP_Amount_State )
@@ -8728,10 +8821,10 @@ async getVelocityReportCustomer(filters: {
               / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
             ) * 100
           `),
-          'NetCost_Profit_Percent',
-        ], 
+        'NetCost_Profit_Percent',
+      ],
       [
-          literal(`
+        literal(`
             (
               (
                 (OrderDetail.Price + OrderDetail.OTP_Amount_State )- (OrderDetail.Invoice_Cost + OrderDetail.OTP_Amount_State )
@@ -8739,8 +8832,8 @@ async getVelocityReportCustomer(filters: {
               / NULLIF((OrderDetail.Price + OrderDetail.OTP_Amount_State), 0)
             ) * 100
           `),
-          'Invoice_Cost_Profit_Percent',
-        ], 
+        'Invoice_Cost_Profit_Percent',
+      ],
 
       [col('inventory.Description'), 'Description'],
       [col('inventory.UOM'), 'UOM'],
@@ -8802,13 +8895,13 @@ async getVelocityReportCustomer(filters: {
           as: 'inventory',
           required: true,
           attributes: [],
-          include:[
-                    {
-                      model: PriceClass,
-                      as: 'PriceClass',
-                      attributes: [],
-                    },
-                  ]
+          include: [
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: [],
+            },
+          ]
         },
       ],
 
@@ -9284,7 +9377,7 @@ async getVelocityReportCustomer(filters: {
           as: 'custReceivables',
           required: false, 
           include: [
-            
+
             {
               model: Customer,
               as: 'customer',
@@ -9320,7 +9413,7 @@ async getVelocityReportCustomer(filters: {
       ],
     });
 
-    return {total,page,limit,data,};
+    return { total, page, limit, data, };
   }
 
  async getARUndepositeFund(startDate: string, endDate: string) {
@@ -9740,11 +9833,17 @@ async getAgingReport(filters: {
 }
 
 
-  async getARreportsHistory(){
+  async getARreportsHistory(query: any){
     const arReportHistort = await ARDeposits.findAll({
           attributes: ['Deposit_ID','Deposit_Date','Deposit_Reference','Deposit_Batch','QB_Transfer','QB_TransferDate','Deposit_Deleted','Deposit_DeleteDate','Deposit_DeleteUser',
             'Payment_Total','Adjustment_Total','ReturnCheck_Total'
-          ]
+          ],
+          where: {
+            Deposit_Date: {
+              [Op.gte]: query.startDate,
+              [Op.lte]: query.endDate
+            }
+          }
         })
       
     return arReportHistort
@@ -13118,14 +13217,30 @@ async createInvoice(orderNumber: number) {
           'C_Zip',
           'C_Country',
           'C_Email','C_Phone','TermsCode','C_Fax','C_SalesTaxNumber','C_CigtLicenseNumber','Credit_Limit','EDI_Format','C_FEIN','C_PhoneMobile',
-          'LastBalance','LastInvoiceNumber','LastInvoiceAmount','LastPaymentAmount','LastPaymentDate',
+          'LastBalance','LastInvoiceNumber','LastInvoiceAmount','LastPaymentAmount','LastPaymentDate','TermsCode',
+        ],
+        include: [
+          {
+            model:Terms,
+            as:'terms',
+            attributes:['TermsCode','Terms'],
+            required:false,
+          }
         ]
       },
       {
         model: SalesRep,
         as: "salesRep",
-        attributes: ['S_Number', 'S_Desc']
+        attributes: ['S_Number', 'S_Desc'],
+        required:false,
+      },
+      {
+        model: DeliveryTypes,
+        as: 'DeliveryType',
+        attributes: ['Delivery_ID', 'Delivery_Description'],
+        required: false,
       }
+      
     ]
   });
 
@@ -13161,9 +13276,22 @@ async createInvoice(orderNumber: number) {
             attributes: ['UPC_Number'],
             where: { Status: 0 },
             required: false
-          }
+          },
+          {
+            model: SalesCategory,
+            as: 'SalesCategory',
+            attributes: ['Sales_Category', 'Category_Desc'],
+            required: false
+          },
+          {
+            model:PriceClass,
+            as:'PriceClass',
+            attributes:['Price_Class','Class_Desc'],
+            required:false,
+            }
         ]
-      }
+      },
+      
     ]
   });
 
@@ -14405,6 +14533,40 @@ async bulkUploadItemImages(body: Array<{ itemNumber: string | number; img_url: s
     results,
     errors: errors.length > 0 ? errors : undefined,
   };
+}
+
+async getCustomerListForEmailModules(){
+  // Get all customer numbers that are already assigned to invoice templates
+  const assignedCustomers = await CustomerAssignInvoiceTemplate.findAll({
+    attributes: ['customerNumber'],
+    raw: true,
+  });
+
+  const assignedCustomerNumbers = assignedCustomers.map((c: any) => c.customerNumber);
+
+  // Get all active customers from MSSQL Customer table that are not in the assigned list
+  const whereCondition: any = {
+    C_Inactive: { [Op.or]: [false] }, // Active customers (C_Inactive is false or null)
+  };
+
+  // Exclude customers that are already assigned
+  if (assignedCustomerNumbers.length > 0) {
+    whereCondition.C_Number = {
+      [Op.notIn]: assignedCustomerNumbers,
+    };
+  }
+
+  const customers = await Customer.findAll({
+    attributes: [
+      'C_Number',
+      'C_Name'
+      
+    ],
+    where: whereCondition,
+    order: [['C_Name', 'ASC']],
+  });
+
+  return customers;
 }
 
 }

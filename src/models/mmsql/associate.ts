@@ -13,6 +13,8 @@ import { ARDeposits } from './arDeposits.model';
 import { ARDetails } from './arDetails.model';
 import { OrderDetail } from './orderDetail.model';
 import { OrderHeader } from "./orderHeader.model";
+import { PODetail } from './poDetail.model';
+import { POHeader } from './poHeader.model';
 import InventorySpecials from "./inventorySpecail.model";
 import { TaxRatesOTP } from "./taxRatesOtp.model";
 import { TaxRates_City } from "./taxRateCity.model";
@@ -30,8 +32,8 @@ import { CustBillTo } from "./custBillTo.model";
 import { CustFinanceCharges } from "./custFinanceCharges.model";
 import { ARDeletes } from "./arDeletes.mode";
 import { InventorySavedDetail } from "./inventorySavedDetail.model";
-import { PODetail } from "./poDetail.model";
-import { POHeader } from "./poHeader.model";
+
+import { DeliveryTypes } from "./deliveryType.model";
 
 
 
@@ -91,27 +93,27 @@ export function applyAssociations(): void {
     foreignKey: "Sales_Category_Group",
     as: "priceClasses"
   });
-  
+
   PriceClass.belongsTo(SalesCategory, {
     foreignKey: "Sales_Category_Group",
     as: "salesCategory"
   });
-  
+
   Inventory.belongsTo(PriceClass, {
     foreignKey: 'Price_Class',
-    as: 'PriceClass', 
+    as: 'PriceClass',
   });
 
   Inventory.belongsTo(PriceSubclass_Defs, {
-  foreignKey: 'Price_Subclass',   // make sure this matches your DB column
-  as: 'PriceSubclass'
-});
+    foreignKey: 'Price_Subclass',   // make sure this matches your DB column
+    as: 'PriceSubclass'
+  });
 
   PriceClass.hasMany(Inventory, {
     foreignKey: 'Price_Class',
     as: 'Inventories', // 👈 not used in query, just required
   });
-  CustReceivables.belongsTo(Customer, { foreignKey: 'C_Number',targetKey: 'C_Number', as: 'customer' });
+  CustReceivables.belongsTo(Customer, { foreignKey: 'C_Number', targetKey: 'C_Number', as: 'customer' });
 
   CustReceivables.belongsTo(CustBillTo, {
     foreignKey: 'C_Number',
@@ -154,27 +156,27 @@ export function applyAssociations(): void {
     constraints: false,
   });
 
-// Inventory → Vendor (two separate foreign keys on Inventory)
-Inventory.belongsTo(Vendor, {
-  foreignKey: 'Primary_Vendor',
-  as: 'primaryVendor',
-});
+  // Inventory → Vendor (two separate foreign keys on Inventory)
+  Inventory.belongsTo(Vendor, {
+    foreignKey: 'Primary_Vendor',
+    as: 'primaryVendor',
+  });
 
-Inventory.belongsTo(Vendor, {
-  foreignKey: 'Manufacturer',
-  as: 'manufacturerVendor',
-});
+  Inventory.belongsTo(Vendor, {
+    foreignKey: 'Manufacturer',
+    as: 'manufacturerVendor',
+  });
 
-// Vendor → Inventory (inverse, two separate collections)
-Vendor.hasMany(Inventory, {
-  foreignKey: 'Primary_Vendor',
-  as: 'primaryInventories',      // items where this vendor is Primary_Vendor
-});
+  // Vendor → Inventory (inverse, two separate collections)
+  Vendor.hasMany(Inventory, {
+    foreignKey: 'Primary_Vendor',
+    as: 'primaryInventories',      // items where this vendor is Primary_Vendor
+  });
 
-Vendor.hasMany(Inventory, {
-  foreignKey: 'Manufacturer',
-  as: 'manufacturedInventories', // items where this vendor is Manufacturer
-});
+  Vendor.hasMany(Inventory, {
+    foreignKey: 'Manufacturer',
+    as: 'manufacturedInventories', // items where this vendor is Manufacturer
+  });
 
 
 
@@ -191,12 +193,12 @@ Vendor.hasMany(Inventory, {
     sourceKey: "Order_Number",
     as: 'Order_Header_Costs',
   });
-  
+
   Order_Header_Costs.belongsTo(OrderHeader, {
     foreignKey: "Order_Number",
     targetKey: "Order_Number",
   });
-  
+
 
   OrderHeader.belongsTo(SalesRep, {
     foreignKey: "S_Number",
@@ -209,7 +211,7 @@ Vendor.hasMany(Inventory, {
     sourceKey: "S_Number",
     as: "orders",
   });
- 
+
 
   // --- FIX APPLIED HERE ---
   // Changed sourceKey and targetKey to 'P_Number' which is likely the primary key
@@ -237,6 +239,26 @@ Vendor.hasMany(Inventory, {
 
   Inventory.hasMany(OrderDetail, { as: 'orderDetails', foreignKey: 'Item_Number' });
 
+  // PODetail belongs to Inventory
+  PODetail.belongsTo(Inventory, {
+    foreignKey: 'Item_Number',
+    as: 'inventory',
+  });
+
+  Inventory.hasMany(PODetail, { as: 'poDetails', foreignKey: 'Item_Number' });
+
+  // POHeader belongs to Vendor
+  POHeader.belongsTo(Vendor, {
+    foreignKey: 'Primary_Vendor',
+    targetKey: 'Primary_Vendor',
+    as: 'vendor',
+  });
+
+  Vendor.hasMany(POHeader, {
+    foreignKey: 'Primary_Vendor',
+    sourceKey: 'Primary_Vendor',
+    as: 'purchaseOrders',
+  });
 
   Customer.belongsTo(Terms, {
     foreignKey: 'TermsCode',
@@ -256,8 +278,8 @@ Vendor.hasMany(Inventory, {
   });
 
   // Inventory has many OrderDetails
-  
-  
+
+
 
   OrderHeader.belongsTo(Customer, {
     foreignKey: 'C_Number',
@@ -265,14 +287,24 @@ Vendor.hasMany(Inventory, {
   });
 
   Customer.hasOne(CustomerRoute, {
-  foreignKey: 'C_Number',
-  as: 'customerRoute'
+    foreignKey: 'C_Number',
+    as: 'customerRoute'
   });
-  
+
   Customer.hasMany(OrderHeader, {
     foreignKey: 'C_Number',
     as: 'orderHeaders',
-  }); 
+  });
+
+  DeliveryTypes.hasMany(OrderHeader, {
+    foreignKey: 'Delivery_ID',
+    as: 'DeliveryTypeOrders',
+  });
+
+  OrderHeader.belongsTo(DeliveryTypes, {
+    foreignKey: 'Delivery_ID',
+    as: 'DeliveryType',
+  });
 
   // OrderDetail belongs to OrderHeader (one-to-many relationship)
   OrderDetail.belongsTo(OrderHeader, {
@@ -280,7 +312,7 @@ Vendor.hasMany(Inventory, {
     targetKey: 'Order_Number',
     as: 'orderHeader',
   });
-  
+
   // OrderHeader has many OrderDetails
   OrderHeader.hasMany(OrderDetail, {
     foreignKey: 'Order_Number',
@@ -298,59 +330,59 @@ Vendor.hasMany(Inventory, {
     as: 'inventorySpecials',
   });
 
- // In TaxRatesOTP model (many side)
-// TaxRatesOTP.belongsTo(Inventory, {
-//   foreignKey: 'OTP_Number', // this field must exist in TaxRatesOTP
-//   targetKey: 'OTP_Number',  // ensure this matches the field in Inventory
-//   as: 'inventory',
-// });
+  // In TaxRatesOTP model (many side)
+  // TaxRatesOTP.belongsTo(Inventory, {
+  //   foreignKey: 'OTP_Number', // this field must exist in TaxRatesOTP
+  //   targetKey: 'OTP_Number',  // ensure this matches the field in Inventory
+  //   as: 'inventory',
+  // });
 
-// In Inventory model (one side)
-Inventory.hasMany(TaxRatesOTP, {
-  foreignKey: 'OTP_Number',
-  sourceKey: 'OTP_Number',  // this field must exist in Inventory
-  as: 'taxRatesOTP',
-});
+  // In Inventory model (one side)
+  Inventory.hasMany(TaxRatesOTP, {
+    foreignKey: 'OTP_Number',
+    sourceKey: 'OTP_Number',  // this field must exist in Inventory
+    as: 'taxRatesOTP',
+  });
 
-InventoryStatus.belongsTo(Inventory, {
-  foreignKey: 'Item_Number',
-  as: 'inventory',
-});
-Inventory.hasMany(InventoryStatus, {
-  foreignKey: 'Item_Number',
-  as: 'inventoryStatus',
-});
+  InventoryStatus.belongsTo(Inventory, {
+    foreignKey: 'Item_Number',
+    as: 'inventory',
+  });
+  Inventory.hasMany(InventoryStatus, {
+    foreignKey: 'Item_Number',
+    as: 'inventoryStatus',
+  });
 
-// InventoryHistory association
-Inventory.hasMany(InventoryHistory, {
-  foreignKey: 'Item_Number',
-  as: 'InventoryHistory',
-});
+  // InventoryHistory association
+  Inventory.hasMany(InventoryHistory, {
+    foreignKey: 'Item_Number',
+    as: 'InventoryHistory',
+  });
 
-InventoryHistory.belongsTo(Inventory, {
-  foreignKey: 'Item_Number',
-  as: 'Inventory',
-});
+  InventoryHistory.belongsTo(Inventory, {
+    foreignKey: 'Item_Number',
+    as: 'Inventory',
+  });
 
 
-Inventory.hasMany(InventoryQtyDiscount, {
-  foreignKey: "Item_Number",
-  as: "QtyDiscounts",
-});
+  Inventory.hasMany(InventoryQtyDiscount, {
+    foreignKey: "Item_Number",
+    as: "QtyDiscounts",
+  });
 
-InventoryQtyDiscount.belongsTo(Inventory, {
-  foreignKey: "Item_Number",
-  as: "InventoryItem",
-});
+  InventoryQtyDiscount.belongsTo(Inventory, {
+    foreignKey: "Item_Number",
+    as: "InventoryItem",
+  });
 
-ARDeposits.hasMany(CustReceivables, {
-  as: 'custReceivables',
-  foreignKey: 'Deposit_ID',
-});
+  ARDeposits.hasMany(CustReceivables, {
+    as: 'custReceivables',
+    foreignKey: 'Deposit_ID',
+  });
 
-CustReceivables.belongsTo(ARDeposits, {
-  foreignKey: 'Deposit_ID',
-});
+  CustReceivables.belongsTo(ARDeposits, {
+    foreignKey: 'Deposit_ID',
+  });
 
 CustReceivables.belongsTo(ARDefinitions, {
   foreignKey: 'AR_Type',
@@ -359,21 +391,21 @@ CustReceivables.belongsTo(ARDefinitions, {
   constraints: false,
 });
 
-// Record_Locks -> Order_Header
-Record_Locks.belongsTo(OrderHeader, {
-  foreignKey: 'Lock_Number',     // Record_Locks column
-  targetKey: 'Order_Number',     // Order_Header column
-  as: 'orderHeader',
-  constraints: false,            // IMPORTANT for MSSQL legacy tables
-});
+  // Record_Locks -> Order_Header
+  Record_Locks.belongsTo(OrderHeader, {
+    foreignKey: 'Lock_Number',     // Record_Locks column
+    targetKey: 'Order_Number',     // Order_Header column
+    as: 'orderHeader',
+    constraints: false,            // IMPORTANT for MSSQL legacy tables
+  });
 
-// Order_Header -> Record_Locks
-OrderHeader.hasMany(Record_Locks, {
-  foreignKey: 'Lock_Number',
-  sourceKey: 'Order_Number',
-  as: 'recordLocks',
-  constraints: false,
-});
+  // Order_Header -> Record_Locks
+  OrderHeader.hasMany(Record_Locks, {
+    foreignKey: 'Lock_Number',
+    sourceKey: 'Order_Number',
+    as: 'recordLocks',
+    constraints: false,
+  });
 
 OrderHeader.belongsTo(Users, {
   foreignKey: 'User_ID',     // column in Order_Header

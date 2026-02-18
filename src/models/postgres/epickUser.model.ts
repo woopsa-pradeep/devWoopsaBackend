@@ -11,6 +11,7 @@ export interface EpickUserAttributes {
   category: number[]; // Array of category IDs: [12, 10, 20]
   order_type: string | null; // 'order_number' | 'qty_number'
   shortby: string | null; // 'Asc' | 'Des'
+  role: string; // 'epick' | 'receivable'
   item_sort_by: string | null; // 'sales_location' | 'section_location' | 'sales_section_location' | 'alphabetically' | 'alphabetically_section_location' | 'item_number' | 'short_number' | 'line_number'
   status: boolean;
   isActive: boolean;
@@ -19,12 +20,11 @@ export interface EpickUserAttributes {
 }
 
 interface EpickUserCreationAttributes
-  extends Optional<EpickUserAttributes, "id" | "createdAt" | "updatedAt"> {}
+  extends Optional<EpickUserAttributes, "id" | "createdAt" | "updatedAt"> { }
 
 export class EpickUser
   extends Model<EpickUserAttributes, EpickUserCreationAttributes>
-  implements EpickUserAttributes
-{
+  implements EpickUserAttributes {
   public id!: number;
   public email!: string;
   public firstName!: string;
@@ -35,6 +35,7 @@ export class EpickUser
   public order_type!: string | null;
   public shortby!: string | null;
   public item_sort_by!: string | null;
+  public role!: string;
   public status!: boolean;
   public isActive!: boolean;
   public readonly createdAt!: CreationOptional<Date>;
@@ -95,7 +96,15 @@ EpickUser.init(
       allowNull: true,
       defaultValue: 'line_number',
       validate: {
-        isIn: [['sales_location','section_location', 'sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number']],
+        isIn: [['sales_location', 'section_location', 'sales_section_location', 'alphabetically', 'item_number', 'short_number', 'line_number']],
+      },
+    },
+    role: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'epick',
+      validate: {
+        isIn: [['epick', 'receivable']],
       },
     },
     status: {

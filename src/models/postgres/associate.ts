@@ -22,6 +22,7 @@ import { EpickConfirmation } from './epickConfirmation.model';
 import { DeliveryRouteStop } from './deliveryRouteStop.model';
 import { DeliveryRoute } from './deliveryRoute.model';
 import { Driver } from './driver.model';
+import { ReceivableUser } from './receivableUser.model';
 import { TradeShowItem } from './tradeShowItem.model';
 import { TradeShowRetailer } from './tradeShowRetailer.model';
 import { TradeShowVendor } from './tradeShowVendor';
