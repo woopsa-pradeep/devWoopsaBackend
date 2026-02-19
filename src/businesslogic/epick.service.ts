@@ -1703,114 +1703,115 @@ export class EpickService {
   }
 
   async addProductInBox(data: any) {
+    const orderNumber = data.orderNumber;
+    const qty = Number(data.qty) || 0;
+    const boxId = data.boxId;
+    const lineNumber = data.line_number ?? data.Line_number ?? null;
 
-    const product = await InventoryUPC.findOne({
-      where: {
-        UPC_Number: data.UPC_Number
+    let itemNumber: number;
+    let orderDetailWhere: { Order_Number: number; Item_Number?: number; Line_Number?: number; Confirmed: number };
+
+    if (lineNumber != null && orderNumber != null) {
+      // Resolve by line_number: get the order line and its Item_Number
+      const orderLine = await OrderDetail.findOne({
+        where: {
+          Order_Number: orderNumber,
+          Line_Number: Number(lineNumber)
+        },
+        attributes: ['Item_Number', 'Line_Number', 'Quantity_Shipped', 'Quantity_Ordered', 'Confirmed'],
+        raw: true
+      });
+      if (!orderLine) {
+        throw new AppError("Order line not found for this order and line number", 404);
       }
-    })
-    if (!product) {
-      throw new AppError("Product not found", 404);
+      if ((orderLine as any).Confirmed === 1) {
+        throw new AppError("This line is already confirmed", 400);
+      }
+      itemNumber = (orderLine as any).Item_Number;
+      orderDetailWhere = {
+        Order_Number: orderNumber,
+        Line_Number: Number(lineNumber),
+        Confirmed: 0
+      };
+    } else if (data.UPC_Number) {
+      // Resolve by UPC (existing flow)
+      const product = await InventoryUPC.findOne({
+        where: { UPC_Number: data.UPC_Number },
+        raw: true
+      });
+      if (!product) {
+        throw new AppError("Product not found", 404);
+      }
+      itemNumber = (product as any).Item_Number;
+      const isProductInOrder = await OrderDetail.findOne({
+        where: {
+          Order_Number: orderNumber,
+          Item_Number: itemNumber
+        }
+      });
+      if (!isProductInOrder) {
+        throw new AppError("Product not found in order", 404);
+      }
+      orderDetailWhere = {
+        Order_Number: orderNumber,
+        Item_Number: itemNumber,
+        Confirmed: 0
+      };
+    } else {
+      throw new AppError("Either line_number or UPC_Number is required", 400);
     }
 
-    const isProductInOrder = await OrderDetail.findOne({
-      where: {
-        Order_Number: data.orderNumber,
-        Item_Number: product.Item_Number
-      }
-    })
-    if (!isProductInOrder) {
-      throw new AppError("Product not found in order", 404);
-    }
     const findProductInBox = await OrderPickScan.findOne({
       where: {
-        orderNumber: data.orderNumber,
-        itemNumber: product.Item_Number,
-        boxId: data.boxId
+        orderNumber,
+        itemNumber,
+        boxId
       }
-    })
-
-    console.log(findProductInBox, 'findProductInBox');
+    });
 
     if (findProductInBox) {
       await findProductInBox.update({
-        qty: Number(findProductInBox.qty) + Number(data.qty)
-      })
+        qty: Number(findProductInBox.qty) + qty
+      });
 
       await OrderPick.update(
-        {
-          scannedQty: literal(`"scannedQty" + ${Number(data.qty)}`)
-        },
-        {
-          where: {
-            orderNumber: data.orderNumber
-          }
-        }
+        { scannedQty: literal(`"scannedQty" + ${qty}`) },
+        { where: { orderNumber } }
       );
 
-      // Update Quantity_Shipped - ensure item is not confirmed
-      // Use MSSQL syntax [column] instead of PostgreSQL "column"
       const updateResult1 = await OrderDetail.update(
-        {
-          Quantity_Shipped: literal(`[Quantity_Shipped] + ${Number(data.qty)}`)
-        },
-        {
-          where: {
-            Order_Number: data.orderNumber,
-            Item_Number: product.Item_Number,
-            Confirmed: 0
-          }
-        }
+        { Quantity_Shipped: literal(`[Quantity_Shipped] + ${qty}`) },
+        { where: orderDetailWhere }
       );
 
       if (updateResult1[0] === 0) {
-        console.warn(`Warning: Quantity_Shipped update affected 0 rows for Order ${data.orderNumber}, Item ${product.Item_Number}. Item may be confirmed.`);
+        console.warn(`Warning: Quantity_Shipped update affected 0 rows for Order ${orderNumber}, Item ${itemNumber}. Item may be confirmed.`);
       }
-
     } else {
-
-      console.log(data, 'data--->');
       await OrderPickScan.create({
-        orderNumber: Number(data.orderNumber),
-        itemNumber: Number(product.Item_Number),
-        qty: Number(data.qty),
-        boxId: data.boxId,
+        orderNumber: Number(orderNumber),
+        itemNumber: Number(itemNumber),
+        qty,
+        boxId,
         isSubsitute: data.isSubsitute || false
-      })
+      });
 
-      // Update Quantity_Shipped - ensure item is not confirmed
-      // Use MSSQL syntax [column] instead of PostgreSQL "column"
       const updateResult2 = await OrderDetail.update(
-        {
-          Quantity_Shipped: literal(`[Quantity_Shipped] + ${Number(data.qty)}`)
-        },
-        {
-          where: {
-            Order_Number: data.orderNumber,
-            Item_Number: product.Item_Number,
-            Confirmed: 0
-          }
-        }
+        { Quantity_Shipped: literal(`[Quantity_Shipped] + ${qty}`) },
+        { where: orderDetailWhere }
       );
 
       if (updateResult2[0] === 0) {
-        console.warn(`Warning: Quantity_Shipped update affected 0 rows for Order ${data.orderNumber}, Item ${product.Item_Number}. Item may be confirmed.`);
+        console.warn(`Warning: Quantity_Shipped update affected 0 rows for Order ${orderNumber}, Item ${itemNumber}. Item may be confirmed.`);
       }
       await OrderPick.update(
         {
           scannedLines: literal(`"scannedLines" + 1`),
-          scannedQty: literal(`"scannedQty" + ${Number(data.qty)}`)
+          scannedQty: literal(`"scannedQty" + ${qty}`)
         },
-        {
-          where: {
-            orderNumber: data.orderNumber
-          }
-        }
+        { where: { orderNumber } }
       );
     }
-
-
-
 
 
 
@@ -1819,7 +1820,7 @@ export class EpickService {
   }
 
   async addProductsInBoxBatch(data: {
-    products: Array<{ UPC_Number: string; qty: number; boxId: number; isSubsitute?: boolean }>,
+    products: Array<{ UPC_Number: string; qty: number; boxId: number; isSubsitute?: boolean; line_number?: number; Line_number?: number }>,
     orderNumber: number,
     passItems?: Array<{ itemNumber: number; note?: string }> // Items to pass (skip) with optional manager note
   }, userId: number) {
@@ -1940,26 +1941,29 @@ export class EpickService {
     }
 
     // Step 3: Group products by (orderNumber, itemNumber, boxId) to handle duplicates
-    // For substitutes: use the substitute item number (not the original scanned item)
+    // Also build lineQtyMap when Line_number is present so we update Order_Detail by line (not by item)
     const scanMap = new Map<string, { itemNumber: number; qty: number; isSubsitute: boolean }>();
-    // Key format: `${itemNumber}_${boxId}`
+    const lineQtyMap = new Map<number, number>(); // Line_Number -> qty to add (for per-line Order_Detail update)
 
     if (products && products.length > 0) {
       for (const product of products) {
         const scannedItemNumber = upcToItemMap.get(product.UPC_Number);
         if (!scannedItemNumber) continue;
 
-        // If this is a substitute, use the substitute item number from the map
-        // Otherwise, use the scanned item number
         let itemNumberToUse = scannedItemNumber;
         if (product.isSubsitute) {
           const substituteItem = originalToSubstituteMap.get(scannedItemNumber);
           if (substituteItem) {
             itemNumberToUse = substituteItem;
           } else {
-            // This shouldn't happen if validation passed, but handle it gracefully
             throw new AppError(`No substitute found for original item ${scannedItemNumber}`, 404);
           }
+        }
+
+        const lineNum = product.line_number ?? product.Line_number;
+        if (lineNum != null) {
+          const ln = Number(lineNum);
+          lineQtyMap.set(ln, (lineQtyMap.get(ln) || 0) + Number(product.qty));
         }
 
         const key = `${itemNumberToUse}_${product.boxId}`;
@@ -1995,20 +1999,33 @@ export class EpickService {
 
       const scansToCreate: Array<{ orderNumber: number; itemNumber: number; qty: number; boxId: number; isSubsitute: boolean }> = [];
       const scansToUpdate: Array<{ scan: OrderPickScan; qty: number }> = [];
-      const itemQtyMap = new Map<number, number>(); // Track total qty per item for OrderDetail update
+      // itemQtyMap: only for products WITHOUT line_number (per-line updates use lineQtyMap)
+      const itemQtyMap = new Map<number, number>();
+
+      for (const product of products!) {
+        const lineNum = product.line_number ?? product.Line_number;
+        if (lineNum != null) continue; // skip for itemQtyMap when line is specified
+        const scannedItemNumber = upcToItemMap.get(product.UPC_Number);
+        if (!scannedItemNumber) continue;
+        let itemNumberToUse = scannedItemNumber;
+        if (product.isSubsitute) {
+          const sub = originalToSubstituteMap.get(scannedItemNumber);
+          if (sub) itemNumberToUse = sub;
+        }
+        const q = Number(product.qty);
+        itemQtyMap.set(itemNumberToUse, (itemQtyMap.get(itemNumberToUse) || 0) + q);
+      }
 
       for (const [key, scanData] of scanMap.entries()) {
         const boxId = Number(key.split('_')[1]);
         const existingScan = existingScanMap.get(key);
 
         if (existingScan) {
-          // Update existing scan
           scansToUpdate.push({
             scan: existingScan,
             qty: scanData.qty
           });
         } else {
-          // Create new scan
           scansToCreate.push({
             orderNumber: Number(orderNumber),
             itemNumber: scanData.itemNumber,
@@ -2017,10 +2034,6 @@ export class EpickService {
             isSubsitute: scanData.isSubsitute
           });
         }
-
-        // Accumulate qty per item
-        const currentQty = itemQtyMap.get(scanData.itemNumber) || 0;
-        itemQtyMap.set(scanData.itemNumber, currentQty + scanData.qty);
       }
 
       // Step 5: Handle PassScanItem for substitute items and passed items (before processing scans)
@@ -2320,9 +2333,20 @@ export class EpickService {
           ...substituteOrderDetailsToUpdate.map(({ orderDetail, data }) =>
             orderDetail.update(data)
           ),
-          // Update OrderDetail for each item (skip substitute items - they already have OrderDetail records created above)
-          // Only update items that are not confirmed
-          // Use MSSQL syntax [column] instead of PostgreSQL "column"
+          // Update OrderDetail by Line_Number when line_number was provided (so each line gets its own qty)
+          ...Array.from(lineQtyMap.entries()).map(([lineNumber, qty]) =>
+            OrderDetail.update(
+              { Quantity_Shipped: literal(`[Quantity_Shipped] + ${qty}`) },
+              {
+                where: {
+                  Order_Number: orderNumber,
+                  Line_Number: lineNumber,
+                  Confirmed: 0
+                }
+              }
+            )
+          ),
+          // Update OrderDetail by Item_Number for products without line_number (skip substitute items)
           ...Array.from(itemQtyMap.entries())
             .filter(([itemNumber]) => !substituteItemNumbersSet.has(itemNumber))
             .map(([itemNumber, qty]) =>
@@ -2339,11 +2363,11 @@ export class EpickService {
                 }
               )
             ),
-          // Update OrderPick
+          // Update OrderPick (scannedQty = sum of line qty + item qty)
           OrderPick.update(
             {
               scannedLines: literal(`"scannedLines" + ${scansToCreate.length + substituteOrderDetailsToCreate.length}`),
-              scannedQty: literal(`"scannedQty" + ${Array.from(itemQtyMap.values()).reduce((sum, qty) => sum + qty, 0)}`)
+              scannedQty: literal(`"scannedQty" + ${Array.from(lineQtyMap.values()).reduce((s, q) => s + q, 0) + Array.from(itemQtyMap.values()).reduce((s, q) => s + q, 0)}`)
             },
             {
               where: {
