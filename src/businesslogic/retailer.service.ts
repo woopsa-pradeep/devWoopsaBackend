@@ -2003,17 +2003,21 @@ if (p1 !== p2) {
 
     let settings: any = await Setting.findOne({});
     settings = settings?.dataValues || null;
-    const isTimeOut = settings?.warehouseProfile?.cutOffTime || 0;
+    // const isTimeOut = settings?.warehouseProfile?.cutOffTime || 0;
+    // const allowFullTime = settings?.warehouseProfile?.allowFullTime || false;
 
-    console.log(isTimeOut, 'isTimeOut-->')
-    const checkTime = checkTimeOut(isTimeOut);
+    const allowFullTime = settings?.warehouseProfile?.allowFullTime === true;
 
-    if (!checkTime) {
-      throw new AppError("Time out: Order time out.", 400);
+    if (!allowFullTime) {
+      const cutOffTime = settings?.warehouseProfile?.cutOffTime || '00:00:00';
+
+      if (!checkTimeOut(cutOffTime)) {
+        throw new AppError("Time out: Order time out.", 400);
+      }
     }
 
 
-    const { orderPlayload, Delivery_Charge } = orderData;
+   const { orderPlayload, Delivery_Charge } = orderData;
 
 
     // Get customer and route info

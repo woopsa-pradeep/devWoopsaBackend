@@ -33,6 +33,7 @@ export const warehouseProfileSchema = Joi.object({
         cutOffTime: Joi.string(),
         storePickup: Joi.boolean(),
         allowShipping: Joi.boolean(),
+        allowFullTime: Joi.boolean(),
         timeSlots: Joi.array().items(
             Joi.object({
               day: Joi.string()

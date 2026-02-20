@@ -529,4 +529,6 @@ router.get('/trade-show-retailer-for-edit/:id', verifyRole(ROLES.MANAGER,ROLES.S
 router.post('/uploadItemImage', verifyRole(ROLES.MANAGER,ROLES.SALES), multerUpload.single('image'), catchAsync(managerController.uploadItemImage.bind(managerController)));
 router.post('/bulkUploadItemImages', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(bulkUploadItemImagesSchema), catchAsync(managerController.bulkUploadItemImages.bind(managerController)));
 router.get('/getCustomerListForEmailModules', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getCustomerListForEmailModules.bind(managerController)));
+
+router.get('/getTodayCount', catchAsync(managerController.getTodayCount.bind(managerController)));
 export default router;  

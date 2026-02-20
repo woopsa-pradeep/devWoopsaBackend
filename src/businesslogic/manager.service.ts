@@ -121,6 +121,7 @@ import { CustFinanceCharges } from "../models/mmsql/custFinanceCharges.model"
 import { ARDeletes } from "../models/mmsql/arDeletes.mode";
 import { InventorySavedDetail } from "../models/mmsql/inventorySavedDetail.model"
 import { DeliveryTypes } from "../models/mmsql/deliveryType.model";
+import ApiLog from "../models/postgres/apilogs.model";
 type DisType = "PERCENT" | "FLAT";
 
 type BulkItemInput = {
@@ -14567,6 +14568,36 @@ async getCustomerListForEmailModules(){
   });
 
   return customers;
+}
+
+async getTodayCount(query: any) {
+  const { startDate, endDate } = query;
+
+    let dateFilter: any;
+
+    if (startDate && endDate) {
+      dateFilter = {
+        [Op.between]: [startDate, endDate],
+      };
+    }
+
+    else if (startDate) {
+      dateFilter = startDate;
+    }
+
+    else {
+      const today = new Date().toISOString().slice(0, 10);
+      dateFilter = today;
+    }
+
+    const count = await ApiLog.count({
+      where: where(
+        fn('DATE', col('createdAt')),
+        dateFilter
+      ),
+    });
+
+    return count;
 }
 
 }

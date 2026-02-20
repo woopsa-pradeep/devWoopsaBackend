@@ -1946,4 +1946,9 @@ async getCustomerListForEmailModules(req: AuthRequest, res: Response) {
   sendResponse(res, 200, true, data, General.SUCCESS);
 }
 
+async getTodayCount(req:AuthRequest, res: Response){
+  const data = await this.managerService.getTodayCount(req.query);
+  sendResponse(res, 200, true, data, General.SUCCESS)
+}
+
 }

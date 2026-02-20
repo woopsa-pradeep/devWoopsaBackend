@@ -103,6 +103,7 @@ Setting.init(
 
       defaultValue: {
         cutOffTime: '17:00:00',
+        allowFullTime: false,
         storePickup: false,
         allowShipping:true,
         timeSlots: [
