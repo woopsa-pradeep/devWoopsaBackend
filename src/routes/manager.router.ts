@@ -225,7 +225,7 @@ router.put('/customer-assign-invoice-templates/:id', verifyRole(ROLES.MANAGER, R
 router.delete('/customer-assign-invoice-templates/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.deleteCustomerAssignInvoiceTemplate.bind(managerController)));
 router.post('/customer-assign-invoice-templates/bulk-add', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(bulkAddCustomerAssignInvoiceTemplatesSchema), catchAsync(managerController.bulkAddCustomerAssignInvoiceTemplates.bind(managerController)));
 router.post('/customer-assign-invoice-templates/bulk-remove', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(bulkRemoveCustomerAssignInvoiceTemplatesSchema), catchAsync(managerController.bulkRemoveCustomerAssignInvoiceTemplates.bind(managerController)));
-
+router.delete('/customer-assign-delete/:customerNumber', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.deleteCustomerAssignInvoiceTemplateByCustomerNumber.bind(managerController)));
 // InvoiceTemplate CRUD routes
 router.post('/invoice-templates', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(createInvoiceTemplateSchema), catchAsync(managerController.createInvoiceTemplate.bind(managerController)));
 router.get('/invoice-templates', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(getInvoiceTemplatesQuerySchema), catchAsync(managerController.getAllInvoiceTemplates.bind(managerController)));
