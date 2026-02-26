@@ -280,9 +280,13 @@ export class RetailerService {
       salesCategoryId = salesCategoryId.map(id => Number(id));
     }
 
+    console.log(salesCategory, 'salesCategory--->')
+
     if (Array.isArray(priceClassId) && priceClassId.length > 0) {
       priceClassId = priceClassId.map(id => Number(id));
     }
+
+
 
     const userJurisdiction = await getJurisdiction(user.id);
 
@@ -322,8 +326,12 @@ export class RetailerService {
 
       if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
         // Both filters exist → use OR condition
+
+        // if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        //   whereClause.Sales_Category = { [Op.in]: salesCategory };
+        // }
         whereClause = {
-          Sales_Category: { [Op.in]: salesCategoryId },
+          Sales_Category: { [Op.in]: salesCategoryId},
           Price_Class: { [Op.in]: priceClassId }
         };
 
@@ -348,7 +356,7 @@ export class RetailerService {
           const starts = `${term}%`;
       
            if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
-        whereClause.Sales_Category = { [Op.in]: salesCategory };
+        whereClause.Sales_Category = { [Op.in]: [salesCategoryId,...salesCategory] };
       }
       
           // WHERE stays same (your "global" WHERE is already global across these fields)
@@ -495,6 +503,13 @@ orderClause = [
   }
 
 
+  if(!salesCategoryId.length ) {
+    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    }
+  }
+
+  console.log(whereClause, 'whereClause--->')
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
     // if (shortBy && Number(shortBy) === 1) {
@@ -650,7 +665,7 @@ orderClause = [
         UnitOunces: e.UnitOunces,
         allowToOrder,
         salesCategory: e.SalesCategory || null,
-        hasQtyDiscount: hasQtyDiscount.allowToDiscount,
+        hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
         qtyDiscount: hasQtyDiscount,
         showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
         showLowStock: wareHouseSetting?.retailer?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
@@ -858,6 +873,9 @@ orderClause = [
       }
     }
 
+    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+      whereClause.salesCategory = { [Op.in]: salesCategory };
+    }
 
     // === UPC JOIN logic ===
     // const includeUPC = {
@@ -1789,6 +1807,7 @@ if (p1 !== p2) {
   priceChange = true;
 }
 
+const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
 
       return {
         isDiscounted,
@@ -1806,6 +1825,7 @@ if (p1 !== p2) {
         priceClassId: product.PriceClass?.Price_Class,
         upc: product?.UPCList,
         unitOunces: product.UnitOunces,
+        productDiscount: discount || null,
         pack: product.Pack,
         size: product.Size,
         hasProductLimit: productLimit ? true : false,
@@ -1833,7 +1853,7 @@ if (p1 !== p2) {
         distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
         Product: e,
-        hasQtyDiscount: hasQtyDiscount.allowToDiscount,
+        hasQtyDiscount:discount? false : hasQtyDiscount.allowToDiscount,
         qtyDiscount: hasQtyDiscount,
       }
     }))

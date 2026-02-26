@@ -1293,7 +1293,7 @@ try{
           const starts = `${term}%`;
       
            if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
-        whereClause.Sales_Category = { [Op.in]: salesCategory };
+        whereClause.Sales_Category = { [Op.in]: [salesCategoryId,...salesCategory] };
       }
       
           // WHERE stays same (your "global" WHERE is already global across these fields)
@@ -1428,6 +1428,13 @@ orderClause = [
       }
 
     }
+
+    if(!salesCategoryId.length ) {
+      if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
+    }
+   
     // orderClause = [['Date_Created', 'DESC']] as Order;
 
     // if (search && !searchInUPC && !masterSearch) {
@@ -1816,6 +1823,12 @@ orderClause = [
 
     if (searchInUPC) {
       if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        whereClause.salesCategory = { [Op.in]: salesCategory };
+      }
+    }
+
+    if(!salesCategoryId.length ) {
+    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
         whereClause.salesCategory = { [Op.in]: salesCategory };
       }
     }
@@ -2676,6 +2689,11 @@ console.log(findTheLimit, 'findTheLimit-->22')
   async setSalesSession(userId: number, customerId: number) {
     const isSessionActive = await SalesSession.findOne({ where: { userId: userId } });
     let storeDetail: any = null;
+    let userData = await WebUsers.findOne({
+      where: { id: userId },
+      attributes: ['setUserDiscountLimit', 'allowDiscount']
+    });
+  
     if (isSessionActive) {
       storeDetail = await SalesSession.update({ currentCustomerId: customerId }, { where: { userId: userId } });
     }
@@ -2702,6 +2720,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
     if (isTradeShow) {
       showTradeShow = true;
     }
+    store.dataValues.userData = userData?.dataValues || null;
     store.dataValues.showTradeShow = showTradeShow;
     console.log(store, 'strore -->')
     return store
