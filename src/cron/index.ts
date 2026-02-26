@@ -3,6 +3,7 @@ import { bulkUpdateRetailers, updateRetailerOrderDate } from './retailer.cron';
 import {  getUpcomingNotifications } from './notificationSchedular.cron';
 import { processFuturePricingUpdates } from './futurePricing.cron';
 import { activateTradeShows, expireTradeShows } from './tradeShow.cron';
+import { syncProductDiscountsToRedis } from './productDiscount.cron';
 
 // cron.ts
 export const startCronJobs = () => {
@@ -56,7 +57,32 @@ export const startCronJobs = () => {
     }, {
       timezone: 'UTC'
     });
+
+    // ProductDiscount sync to Redis cron job (runs daily at 1:00 AM)
+    cron.schedule('0 1 * * *', async () => {
+      try {
+        console.log('[Cron] Starting product discount sync to Redis...');
+        await syncProductDiscountsToRedis();
+        console.log('[Cron] Product discount sync to Redis completed.');
+      } catch (error) {
+        console.error('[Cron] Error during product discount sync to Redis:', error);
+      }
+    }, {
+      timezone: 'UTC'
+    });
     
+
+    // cron.schedule('*/2 * * * *', async () => {
+    //   try {
+    //     console.log('[Cron] Starting product discount sync to Redis...');
+    //     await syncProductDiscountsToRedis();
+    //     console.log('[Cron] Product discount sync to Redis completed.');
+    //   } catch (error) {
+    //     console.error('[Cron] Error during product discount sync to Redis:', error);
+    //   }
+    // }, {
+    //   timezone: 'UTC'
+    // });
 
     // cron.schedule('* * * * *', async () => {
     //   try {

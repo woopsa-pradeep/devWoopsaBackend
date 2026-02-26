@@ -1487,7 +1487,9 @@ orderClause = [
         'CasesPerPallet',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'Unit_Price',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category', 'EBT'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category', 'EBT',
+        'Cig_Pack',
+        'Cig_Sticks',
       ],
       where: whereClause,
       include: [
@@ -1557,7 +1559,7 @@ orderClause = [
         price = await getFirstValidPrice(e);
       }
       // price = Math.ceil(price * 100) / 100;
-      const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
+      const isDiscounted = false;
       const productLimit = await getProductLimit(e.Item_Number);
       let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
       taxRate = Math.ceil(taxRate * 100) / 100;
@@ -1573,7 +1575,7 @@ orderClause = [
       console.log(e.SalesCategory?.Sales_Category, 'e.Sales_Category', userJurisdiction, 'userJurisdiction')
       let prepaidTaxRate = 0
       if (userJurisdiction != null && e.SalesCategory?.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number,e,price + taxRate);
       }
 
      
@@ -1935,6 +1937,8 @@ orderClause = [
           'OTP_Number',
           'Price_Subclass',
           'Sales_Category',
+          'Cig_Pack',
+          'Cig_Sticks',
         ],
         include: [
           {
@@ -1970,7 +1974,7 @@ findProduct = findProduct?.dataValues || null;
       const inventoryOnHand = await getInventoryOnHand(Number(e.itemNumber)) || 0;
 
       let price = discountMap[Number(e.itemNumber)] ?? await getFirstValidPrice(findProduct as any);
-      const isDiscounted = await hasDiscountedItem(Number(e.itemNumber), findProduct?.Price_Subclass ?? 0);
+      const isDiscounted = false;
       // price = Math.ceil(price * 100) / 100;
       let priceWitoutTradeShow=  price || 0;
       price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
@@ -1982,7 +1986,7 @@ findProduct = findProduct?.dataValues || null;
       if (userJurisdiction != null && findProduct?.Sales_Category) {
 
         console.log(findProduct?.Sales_Category, 'findProduct?.Sales_Category')
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category));
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category),findProduct,price + taxRate);
       }
 
 
@@ -2171,6 +2175,8 @@ findProduct = findProduct?.dataValues || null;
         "Price_Subclass",
         "UnitOunces",
         "EBT",
+        'Cig_Pack',
+        'Cig_Sticks',
       ],
       where: whereClause,
       include: [
@@ -2232,7 +2238,7 @@ findProduct = findProduct?.dataValues || null;
         let prepaidTaxRate = 0
         console.log(e.SalesCategory?.Sales_Category, 'e.SalesCategory?.Sales_Category----->SALES', userJurisdiction, 'userJurisdiction')
         if (userJurisdiction != null && e.SalesCategory) {
-          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number);
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number,e,price + taxRate);
         }
 
         return {
@@ -2434,7 +2440,7 @@ findProduct = findProduct?.dataValues || null;
 
       const productLimit = await getProductLimit(e.Item_Number);
       const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
-      const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
+      const isDiscounted = false;
 
       let prepaidTaxRate = 0
       const userJurisdiction = await getJurisdiction(customerNumber);
@@ -2442,7 +2448,14 @@ findProduct = findProduct?.dataValues || null;
 
       console.log(product, 'product.salesCategory')
       if (userJurisdiction != null && product.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
+
+        console.log(product?.OTP_Number, 'product?.OTP_Number')
+        console.log(userJurisdiction, 'userJurisdiction')
+        console.log(e, 'e.itemNumber')
+        let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
+     
+      taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category,product,price + taxRate);
       }
       let priceChange = false;
 
@@ -3388,7 +3401,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       const taxRate = await getTaxRateV1(detail.inventory.OTP_Number, userJurisdiction as number, detail.Item_Number, price);
 
 
-      const isDiscounted = await hasDiscountedItem(detail.Item_Number, detail.inventory.Price_Subclass);
+      const isDiscounted = false;
       let allowToOrder = true;
       if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
@@ -3402,7 +3415,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
 
       let prepaidTaxRate = 0
       if (userJurisdiction != null && detail.inventory.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category,detail.inventory,price + taxRate);
       }
 
 
@@ -3730,7 +3743,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       const taxRate = await getTaxRateV1(detail.inventory.OTP_Number, userJurisdiction as number, detail.Item_Number, price);
 
 
-      const isDiscounted = await hasDiscountedItem(detail.Item_Number, detail.inventory.Price_Subclass);
+      const isDiscounted = false;
       let allowToOrder = true;
       if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
@@ -3744,7 +3757,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
 
       let prepaidTaxRate = 0
       if (userJurisdiction != null && detail.inventory.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category,detail.inventory,price + taxRate);
       }
 
 
@@ -4526,7 +4539,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       attributes: [
         "Pack", "Description", "Item_Number", "CaseCount", "UOM",
         "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
-        "NetCost", "OTP_Number", "Price_Subclass"
+        "NetCost", "OTP_Number", "Price_Subclass","Cig_Pack","Cig_Sticks"
       ],
       include: [
         { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc", "Sales_Category"], required: false },
@@ -4543,7 +4556,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
     // Step 3: Pricing & Tax
     let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
     const userJurisdiction = await getJurisdiction(userId);
-    const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
+    const isDiscounted = false;
     // price = Math.ceil(price * 100) / 100;
 
     let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
@@ -4559,7 +4572,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
     const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
     let prepaidTaxRate = 0
     if (userJurisdiction != null && item.SalesCategory) {
-      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category,item,price + taxRate);
     }
     const formattedItem = {
       Pack: item.Pack,
@@ -4722,7 +4735,9 @@ console.log(findTheLimit, 'findTheLimit-->22')
         attributes: [
           'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
           'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
-          'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created', 'OTP_Number'
+          'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created', 'OTP_Number',
+          'Cig_Pack',
+          'Cig_Sticks',
         ],
         include: [
           { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc', 'Sales_Category'], required: false },
@@ -4755,7 +4770,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
         const userJurisdiction = await getJurisdiction(userId);
         taxRate = await getTaxRateV1(findItem.OTP_Number, userJurisdiction as number, findItem.Item_Number, price);
         if (userJurisdiction != null && findItem?.SalesCategory) {
-          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category);
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category,findItem,price + taxRate);
         }
       }
 
@@ -5756,12 +5771,14 @@ console.log(findTheLimit, 'findTheLimit-->22')
 
       const productLimit = await getProductLimit(e.Item_Number);
       const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
-      const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
+      const isDiscounted = false;
 
       let prepaidTaxRate = 0
       console.log(product.Sales_Category, 'product.Sales_Category')
       if (userJurisdiction != null && product.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
+        let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
+        taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category,product,price + taxRate);
       }
 
       return {
@@ -5927,12 +5944,14 @@ console.log(findTheLimit, 'findTheLimit-->22')
 
       const productLimit = await getProductLimit(e.Item_Number);
       const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
-      const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
+      const isDiscounted = false;
 
       let prepaidTaxRate = 0
       console.log(product.Sales_Category, 'product.Sales_Category')
       if (userJurisdiction != null && product.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
+        let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
+        taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category,product,price + taxRate);
       }
 
       return {
@@ -6166,12 +6185,14 @@ console.log(findTheLimit, 'findTheLimit-->22')
 
       const productLimit = await getProductLimit(e.Item_Number);
       const hasQtyDiscount = await checkQtyDiscount(product.Item_Number, customerNumber, Number(price) + Number(e.Tax_Rate));
-      const isDiscounted = await hasDiscountedItem(product.Item_Number, product.Price_Subclass);
+      const isDiscounted = false;
 
       let prepaidTaxRate = 0
       console.log(product.Sales_Category, 'product.Sales_Category')
       if (userJurisdiction != null && product.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category);
+        let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
+        taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category,product,price + taxRate);
       }
 
       return {
@@ -7415,7 +7436,9 @@ console.log(findTheLimit, 'findTheLimit-->22')
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT',
+        'Cig_Pack',
+        'Cig_Sticks',
       ],
       where: whereClause,
       include: [
@@ -7464,7 +7487,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
 
       let price = discountMap[e.Item_Number] ?? await getFirstValidPrice(e);
-      const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
+      const isDiscounted = false;
       // price = Math.ceil(price * 100) / 100;
       const productLimit = await getProductLimit(e.Item_Number);
       let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
@@ -7482,7 +7505,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       if (userJurisdiction != null && e.SalesCategory) {
 
         console.log(e?.SalesCategory, 'e.Sales_Category')
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category,e,price + taxRate);
       }
 
 

@@ -1284,7 +1284,9 @@ export class EpickService {
               'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
               'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
               'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-              'OTP_Number', 'Price_Subclass', 'UnitOunces'
+              'OTP_Number', 'Price_Subclass', 'UnitOunces',
+              'Cig_Pack',
+              'Cig_Sticks'
             ],
             where: {
               I_Inactive: false,
@@ -1345,7 +1347,7 @@ export class EpickService {
 
             const productImage = productImages?.[0] ?? null;
 
-            const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
+            const isDiscounted = false;
             const productLimit = await getProductLimit(e.Item_Number);
 
             let allowToOrder = true;
@@ -1354,7 +1356,7 @@ export class EpickService {
             }
             let prepaidTaxRate = 0
             if (userJurisdiction != null && e.salesCategory) {
-              prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+              prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category,e,price + taxRate);
             }
             substituteProduct = {
               Pack: e.Pack,
@@ -1570,7 +1572,9 @@ export class EpickService {
               'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
               'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
               'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-              'OTP_Number', 'Price_Subclass', 'UnitOunces'
+              'OTP_Number', 'Price_Subclass', 'UnitOunces',
+              'Cig_Pack',
+              'Cig_Sticks'
             ],
             where: {
               I_Inactive: false,
@@ -1631,7 +1635,7 @@ export class EpickService {
 
             const productImage = productImages?.[0] ?? null;
 
-            const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
+            const isDiscounted = false;
             const productLimit = await getProductLimit(e.Item_Number);
 
             let allowToOrder = true;
@@ -1640,7 +1644,7 @@ export class EpickService {
             }
             let prepaidTaxRate = 0
             if (userJurisdiction != null && e.salesCategory) {
-              prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+              prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category,e,price + taxRate);
             }
             substituteProduct = {
               Pack: e.Pack,
@@ -3805,7 +3809,9 @@ export class EpickService {
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces',
+        'Cig_Pack',
+        'Cig_Sticks'
       ],
       where: whereClause,
       include: [
@@ -3861,7 +3867,7 @@ export class EpickService {
     const productImage = productImages?.[0] ?? null;
 
     // discount flags, product limit, qty discount
-    const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
+    const isDiscounted = false;
     const productLimit = await getProductLimit(e.Item_Number);
 
     // allowToOrder gate based on settings & stock
@@ -3872,7 +3878,7 @@ export class EpickService {
 
     let prepaidTaxRate = 0
     if (userJurisdiction != null && e.salesCategory) {
-      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category);
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.salesCategory?.Sales_Category,e,price + taxRate);
     }
 
     // Optional: mark new items if you have a similar helper as in list API

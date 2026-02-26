@@ -66,6 +66,7 @@ console.log(`🖥️ Server ID: ${SERVER_ID} - Using server-specific queues`);
 // Create server-specific queue names
 export const EMAIL_QUEUE_NAME = `email-queue-${SERVER_ID}`;
 export const EMAIL_NOTIFICATION_QUEUE_NAME = `email-notification-${SERVER_ID}`;
+export const PRODUCT_DISCOUNT_QUEUE_NAME = `product-discount-${SERVER_ID}`;
 
 export const emailQueue = new Queue(EMAIL_QUEUE_NAME, {
   connection: redisConnection,
@@ -76,3 +77,4 @@ export const emailNotificationQueue = new Queue(EMAIL_NOTIFICATION_QUEUE_NAME, {
 });
 
 console.log(`📧 Email queues initialized: ${EMAIL_QUEUE_NAME}, ${EMAIL_NOTIFICATION_QUEUE_NAME}`);
+console.log(`💰 Product Discount queue prefix: ${PRODUCT_DISCOUNT_QUEUE_NAME}`);

@@ -235,6 +235,9 @@ router.get('/tradeShow',verifyRole(ROLES.RETAILER),catchAsync(retailerController
 // upload images
 router.post('/uploadImages',verifyRole(ROLES.RETAILER),multerUpload.single('image'),catchAsync(retailerController.uploadImages.bind(retailerController)));
 
-
+// retailer suggested items
+router.post('/retailerSuggestedItems',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getRetailerSuggestedItems.bind(retailerController)));
+router.post('/retailerSuggestedItemsByCustomer',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getRetailerSuggestedItemsByCustomer.bind(retailerController)));
+router.get('/customerLastBalance/:customerNumber',verifyRole(ROLES.RETAILER),catchAsync(retailerController.getCustomerLastBalance.bind(retailerController)));
 
 export default router; 

@@ -1750,7 +1750,7 @@ export const getEpickSettingsQuerySchema = Joi.object({
 
 // Driver CRUD validation schemas
 export const createDriverSchema = Joi.object({
- 
+
   firstName: Joi.string().trim().required().messages({
     'string.base': 'First name must be a string',
     'string.empty': 'First name cannot be empty',
@@ -1856,30 +1856,58 @@ export const updateDistributorSchema = Joi.object({
 
 
 export const updateDriverSchema = Joi.object({
-  firstName: Joi.string().trim().optional().messages({
+  firstName: Joi.string().trim().required().messages({
     'string.base': 'First name must be a string',
-    'string.empty': 'First name cannot be empty'
+    'string.empty': 'First name cannot be empty',
+    'any.required': 'First name is required',
   }),
-  lastName: Joi.string().trim().optional().messages({
+
+  lastName: Joi.string().trim().required().messages({
     'string.base': 'Last name must be a string',
-    'string.empty': 'Last name cannot be empty'
+    'string.empty': 'Last name cannot be empty',
+    'any.required': 'Last name is required',
   }),
-  email: Joi.string().email().optional().messages({
+
+  email: Joi.string().email().required().messages({
     'string.base': 'Email must be a string',
     'string.email': 'Email must be a valid email address',
-    'string.empty': 'Email cannot be empty'
+    'string.empty': 'Email cannot be empty',
+    'any.required': 'Email is required',
   }),
-  currentLatitude: Joi.number().min(-90).max(90).allow(null).optional().messages({
-    'number.base': 'Latitude must be a number',
-    'number.min': 'Latitude must be between -90 and 90',
-    'number.max': 'Latitude must be between -90 and 90'
+
+  driverLicenseNo: Joi.string().trim().allow(null).optional().messages({
+    'string.base': 'Driver license number must be a string',
   }),
-  currentLongitude: Joi.number().min(-180).max(180).allow(null).optional().messages({
-    'number.base': 'Longitude must be a number',
-    'number.min': 'Longitude must be between -180 and 180',
-    'number.max': 'Longitude must be between -180 and 180'
-  })
+
+  licenseExpirationDate: Joi.date().allow(null).optional().messages({
+    'date.base': 'License expiration date must be a valid date',
+  }),
+
+  licenseClass: Joi.string()
+    .valid('A', 'B', 'C', 'D')
+    .allow(null)
+    .optional()
+    .messages({
+      'any.only': 'License class must be one of A, B, C, or D',
+    }),
+
+  driverPicture: Joi.string().allow(null).optional().messages({
+    'string.base': 'Driver picture must be a string (file path or URL)',
+  }),
+
+  dotMedicalCertificate: Joi.string().allow(null).optional().messages({
+    'string.base': 'DOT medical certificate must be a string (file path or URL)',
+  }),
+
+  password: Joi.string().optional().allow('').messages({
+    'string.base': 'Password must be a string',
+  }),
+
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
 });
+
 
 export const updateDriverLocationSchema = Joi.object({
   currentLatitude: Joi.number().min(-90).max(90).required().messages({
@@ -2630,7 +2658,7 @@ export const createDeliveryRouteSchema = Joi.object({
       'array.base': 'stops must be an array',
       'array.min': 'stops must contain at least one stop',
     })
-  });
+});
 // PreBook validation schemas
 export const createPreBookSchema = Joi.object({
   startDate: Joi.date().required().messages({
@@ -3174,7 +3202,7 @@ export const createBulkTradeShowVendorsSchema = Joi.object({
           'number.positive': 'Primary_Vendor must be a positive number',
           'any.required': 'Primary_Vendor is required',
         }),
-        V_Description: Joi.string().trim().optional().allow('',null).messages({
+        V_Description: Joi.string().trim().optional().allow('', null).messages({
           'string.base': 'V_Description must be a string',
         }),
       })
@@ -3484,88 +3512,125 @@ export const bulkRemoveCustomerAssignInvoiceTemplatesSchema = Joi.object({
 
 // InvoiceTemplate validation schemas
 export const createInvoiceTemplateSchema = Joi.object({
-  name: Joi.string().required().messages({
-    'string.base': 'Name must be a string',
-    'any.required': 'Name is required',
-  }),
-  mainTemplate: Joi.boolean().optional().default(false),
-  groupBy: Joi.string().optional().allow('').default(''),
-  showGroupHeader: Joi.boolean().optional().default(true),
+  name: Joi.string().trim().required(),
+  mainTemplate: Joi.boolean().default(false),
+  groupBy: Joi.string().allow("").default(""),
+  showGroupHeader: Joi.boolean().default(true),
   selectedColumns: Joi.object({
-    orderQty: Joi.boolean().optional(),
-    shippedQty: Joi.boolean().optional(),
-    description: Joi.boolean().optional(),
-    itemNumber: Joi.boolean().optional(),
-    sortNumber: Joi.boolean().optional(),
-    upc: Joi.boolean().optional(),
-    price: Joi.boolean().optional(),
-    tax: Joi.boolean().optional(),
-    priceWithTax: Joi.boolean().optional(),
-    totalPrice: Joi.boolean().optional(),
-    retail1: Joi.boolean().optional(),
-    ebt: Joi.boolean().optional(),
-    pack: Joi.boolean().optional(),
-    size: Joi.boolean().optional(),
-    deposit: Joi.boolean().optional(),
-  }).optional(),
-  upcOption: Joi.string().optional().default('barcode_primary'),
-  showDistributorDetails: Joi.boolean().optional().default(true),
-  showCustomerDetails: Joi.boolean().optional().default(true),
-  showDocNumber: Joi.boolean().optional().default(true),
-  showPageOf: Joi.boolean().optional().default(true),
-  showInvoiceDate: Joi.boolean().optional().default(true),
-  showInvoiceDateWithTime: Joi.boolean().optional().default(false),
-  showRoute: Joi.boolean().optional().default(true),
-  showStop: Joi.boolean().optional().default(true),
-  showLogo: Joi.boolean().optional().default(true),
-  logoPosition: Joi.string().optional().default('center'),
-  showTerms: Joi.boolean().optional().default(true),
-  headerOnPages: Joi.string().optional().default('all'),
-  showHeaderMessage: Joi.boolean().optional().default(false),
-  headerMessageFirstPage: Joi.string().optional().allow('').default(''),
-  footerLayout: Joi.string().optional().default('messageLeft'),
-  showFooterMessage: Joi.boolean().optional().default(true),
-  footerMessageLastPage: Joi.string().optional().allow('').default(''),
-  showSubTotal: Joi.boolean().optional().default(true),
-  showDeliveryCharge: Joi.boolean().optional().default(true),
-  showLastBalance: Joi.boolean().optional().default(true),
-  showTotalAmountDue: Joi.boolean().optional().default(true),
-  showReportGeneratedByWoopsa: Joi.boolean().optional().default(true),
-  selectedCustomerIds: Joi.array().items(Joi.number().integer().positive()).optional().messages({
-    'array.base': 'selectedCustomerIds must be an array',
-    'number.base': 'Each customer ID must be a number',
-    'number.integer': 'Each customer ID must be an integer',
-    'number.positive': 'Each customer ID must be positive',
-  }),
-});
+    orderQty: Joi.boolean().default(true),
+    shippedQty: Joi.boolean().default(true),
+    itemNumber: Joi.boolean().default(true),
+    description: Joi.boolean().default(true),
+    pack: Joi.boolean().default(true),
+    size: Joi.boolean().default(true),
+    upc: Joi.boolean().default(true),
+    sortNumber: Joi.boolean().default(true),
+    ebt: Joi.boolean().default(true),
+    retail1: Joi.boolean().default(false),
+    deposit: Joi.boolean().default(false),
+    price: Joi.boolean().default(true),
+    unitPrice: Joi.boolean().default(false),
+    tax: Joi.boolean().default(false),
+    prepaidTaxAmount: Joi.boolean().default(false),
+    totalPPD: Joi.boolean().default(false),
+    priceWithTaxWithPPD: Joi.boolean().default(false),
+    priceWithTaxWithoutPPD: Joi.boolean().default(false),
+    extendedTotal: Joi.boolean().default(true),
+  })
+    .default()
+    .unknown(false),
+
+  columnHeaderNames: Joi.object().default({}),
+  columnPlacement: Joi.string().default("default"),
+  columnOrder: Joi.object().default({}),
+
+  upcOption: Joi.string().default("barcode_primary"),
+
+  showDistributorDetails: Joi.boolean().default(true),
+  showCustomerDetails: Joi.boolean().default(true),
+  showBillTo: Joi.boolean().default(true),
+  showShipTo: Joi.boolean().default(true),
+  showDocNumber: Joi.boolean().default(true),
+  showPageOf: Joi.boolean().default(true),
+  showInvoiceDate: Joi.boolean().default(true),
+  showInvoiceDateWithTime: Joi.boolean().default(false),
+  showRoute: Joi.boolean().default(true),
+  showStop: Joi.boolean().default(true),
+  showLogo: Joi.boolean().default(true),
+  logoPosition: Joi.string().default("left"),
+  showTerms: Joi.boolean().default(true),
+
+  headerOnPages: Joi.string().default("firstplussummary"),
+  showHeaderMessage: Joi.boolean().default(false),
+  headerMessageFirstPage: Joi.string().allow("").default(""),
+
+  footerLayout: Joi.string().default("messageleft"),
+  showFooterMessage: Joi.boolean().default(false),
+  footerMessageLastPage: Joi.string().allow("").default(""),
+  footerSummaryLabels: Joi.object().default({}),
+
+  showSubTotal: Joi.boolean().default(true),
+  showDeliveryCharge: Joi.boolean().default(true),
+  showDeposit: Joi.boolean().default(true),
+  showHouseCharge: Joi.boolean().default(false),
+  showPosCheck: Joi.boolean().default(false),
+  showPosCash: Joi.boolean().default(false),
+  showPosCredit: Joi.boolean().default(false),
+  showInvoiceTotal: Joi.boolean().default(true),
+  showLastBalance: Joi.boolean().default(true),
+  showTotalAmountDue: Joi.boolean().default(true),
+
+  showReportGeneratedByWoopsa: Joi.boolean().default(true),
+
+  selectedCustomerIds: Joi.array()
+    .items(Joi.number().integer().positive())
+    .optional(),
+}).unknown(false);
+
+
+
 
 export const updateInvoiceTemplateSchema = Joi.object({
   name: Joi.string().optional().messages({
-    'string.base': 'Name must be a string',
+    "string.base": "Name must be a string",
   }),
   mainTemplate: Joi.boolean().optional(),
-  groupBy: Joi.string().optional().allow(''),
+
+  groupBy: Joi.string().optional().allow(""),
   showGroupHeader: Joi.boolean().optional(),
+
   selectedColumns: Joi.object({
     orderQty: Joi.boolean().optional(),
     shippedQty: Joi.boolean().optional(),
-    description: Joi.boolean().optional(),
     itemNumber: Joi.boolean().optional(),
-    sortNumber: Joi.boolean().optional(),
-    upc: Joi.boolean().optional(),
-    price: Joi.boolean().optional(),
-    tax: Joi.boolean().optional(),
-    priceWithTax: Joi.boolean().optional(),
-    totalPrice: Joi.boolean().optional(),
-    retail1: Joi.boolean().optional(),
-    ebt: Joi.boolean().optional(),
+    description: Joi.boolean().optional(),
     pack: Joi.boolean().optional(),
     size: Joi.boolean().optional(),
+    upc: Joi.boolean().optional(),
+    sortNumber: Joi.boolean().optional(),
+    ebt: Joi.boolean().optional(),
+    retail1: Joi.boolean().optional(),
     deposit: Joi.boolean().optional(),
+    price: Joi.boolean().optional(),
+    unitPrice: Joi.boolean().optional(),
+    tax: Joi.boolean().optional(),
+    prepaidTaxAmount: Joi.boolean().optional(),
+    totalPPD: Joi.boolean().optional(),
+    priceWithTaxWithPPD: Joi.boolean().optional(),
+    priceWithTaxWithoutPPD: Joi.boolean().optional(),
+    extendedTotal: Joi.boolean().optional(),
   }).optional(),
+
+  columnHeaderNames: Joi.object().optional(),
+  columnPlacement: Joi.string().optional(),
+  columnOrder: Joi.object().optional(),
+
   upcOption: Joi.string().optional(),
+
   showDistributorDetails: Joi.boolean().optional(),
   showCustomerDetails: Joi.boolean().optional(),
+  showBillTo: Joi.boolean().optional(),
+  showShipTo: Joi.boolean().optional(),
   showDocNumber: Joi.boolean().optional(),
   showPageOf: Joi.boolean().optional(),
   showInvoiceDate: Joi.boolean().optional(),
@@ -3577,14 +3642,24 @@ export const updateInvoiceTemplateSchema = Joi.object({
   showTerms: Joi.boolean().optional(),
   headerOnPages: Joi.string().optional(),
   showHeaderMessage: Joi.boolean().optional(),
-  headerMessageFirstPage: Joi.string().optional().allow(''),
+  headerMessageFirstPage: Joi.string().optional().allow(""),
+
   footerLayout: Joi.string().optional(),
   showFooterMessage: Joi.boolean().optional(),
-  footerMessageLastPage: Joi.string().optional().allow(''),
+  footerMessageLastPage: Joi.string().optional().allow(""),
+  footerSummaryLabels: Joi.object().optional(),
+
   showSubTotal: Joi.boolean().optional(),
   showDeliveryCharge: Joi.boolean().optional(),
+  showDeposit: Joi.boolean().optional(),
+  showHouseCharge: Joi.boolean().optional(),
+  showPosCheck: Joi.boolean().optional(),
+  showPosCash: Joi.boolean().optional(),
+  showPosCredit: Joi.boolean().optional(),
+  showInvoiceTotal: Joi.boolean().optional(),
   showLastBalance: Joi.boolean().optional(),
   showTotalAmountDue: Joi.boolean().optional(),
+
   showReportGeneratedByWoopsa: Joi.boolean().optional(),
 }).min(1);
 
@@ -3603,7 +3678,7 @@ export const getInvoiceTemplatesQuerySchema = Joi.object({
   search: Joi.string().optional().messages({
     'string.base': 'Search must be a string',
   }),
-  mainTemplate: Joi.boolean().optional().messages({
+  mainTemplate: Joi.boolean().truthy('true').falsy('false').optional().messages({
     'boolean.base': 'mainTemplate must be a boolean',
   }),
 });
@@ -3639,4 +3714,101 @@ export const bulkUploadItemImagesSchema = Joi.object({
       'array.max': 'Cannot upload more than 1000 items at once',
       'any.required': 'Items array is required',
     }),
+});
+
+// ProductDiscount validation schemas
+export const createProductDiscountSchema = Joi.object({
+  ItemNumber: Joi.number().required().messages({
+    'number.base': 'Item number must be a number',
+    'any.required': 'Item number is required',
+  }),
+  quantity: Joi.number().integer().min(1).required().messages({
+    'number.base': 'Quantity must be a number',
+    'number.integer': 'Quantity must be an integer',
+    'number.min': 'Quantity must be at least 1',
+    'any.required': 'Quantity is required',
+  }),
+  discountType: Joi.string().valid('flat', 'percentage').required().messages({
+    'string.base': 'Discount type must be a string',
+    'any.only': 'Discount type must be either "flat" or "percentage"',
+    'any.required': 'Discount type is required',
+  }),
+  discountValue: Joi.number().min(0).precision(2).required().messages({
+    'number.base': 'Discount value must be a number',
+    'number.min': 'Discount value must be at least 0',
+    'any.required': 'Discount value is required',
+  }),
+  startDate: Joi.date().required().messages({
+    'date.base': 'Start date must be a valid date',
+    'any.required': 'Start date is required',
+  }),
+  endDate: Joi.date().greater(Joi.ref('startDate')).required().messages({
+    'date.base': 'End date must be a valid date',
+    'date.greater': 'End date must be after start date',
+    'any.required': 'End date is required',
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
+});
+
+export const updateProductDiscountSchema = Joi.object({
+  ItemNumber: Joi.number().optional().messages({
+    'number.base': 'Item number must be a number',
+  }),
+  quantity: Joi.number().integer().min(1).optional().messages({
+    'number.base': 'Quantity must be a number',
+    'number.integer': 'Quantity must be an integer',
+    'number.min': 'Quantity must be at least 1',
+  }),
+  discountType: Joi.string().valid('flat', 'percentage').optional().messages({
+    'string.base': 'Discount type must be a string',
+    'any.only': 'Discount type must be either "flat" or "percentage"',
+  }),
+  discountValue: Joi.number().min(0).precision(2).optional().messages({
+    'number.base': 'Discount value must be a number',
+    'number.min': 'Discount value must be at least 0',
+  }),
+  startDate: Joi.date().optional().messages({
+    'date.base': 'Start date must be a valid date',
+  }),
+  endDate: Joi.date().optional().messages({
+    'date.base': 'End date must be a valid date',
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
+}).custom((value, helpers) => {
+  // If both startDate and endDate are provided, validate that endDate is after startDate
+  if (value.startDate && value.endDate) {
+    if (new Date(value.endDate) <= new Date(value.startDate)) {
+      return helpers.error('date.greater');
+    }
+  }
+  return value;
+}).messages({
+  'date.greater': 'End date must be after start date',
+});
+
+export const getProductDiscountsQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).optional().messages({
+    'number.base': 'Page must be a number',
+    'number.integer': 'Page must be an integer',
+    'number.min': 'Page must be at least 1',
+  }),
+  limit: Joi.number().integer().min(1).max(100).optional().messages({
+    'number.base': 'Limit must be a number',
+    'number.integer': 'Limit must be an integer',
+    'number.min': 'Limit must be at least 1',
+    'number.max': 'Limit cannot exceed 100',
+  }),
+  search: Joi.string().optional().messages({
+    'string.base': 'Search must be a string',
+  }),
+  ItemNumber: Joi.number().optional().messages({
+    'number.base': 'Item number must be a number',
+  }),
+  isActive: Joi.boolean().optional().messages({
+    'boolean.base': 'isActive must be a boolean',
+  }),
 });

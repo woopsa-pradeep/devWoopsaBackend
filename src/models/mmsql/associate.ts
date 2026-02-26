@@ -132,6 +132,11 @@ export function applyAssociations(): void {
     as: 'billTo',
   });
 
+  CustBillTo.belongsTo(Customer, {
+    foreignKey: 'C_Number',
+    as: 'CustBillTo'
+  })
+
 
 
   CustReceivables.belongsTo(ARDefinitions, {
@@ -384,12 +389,12 @@ export function applyAssociations(): void {
     foreignKey: 'Deposit_ID',
   });
 
-CustReceivables.belongsTo(ARDefinitions, {
-  foreignKey: 'AR_Type',
-  targetKey: 'AR_Type',
-  as: 'arTypeDef',
-  constraints: false,
-});
+  CustReceivables.belongsTo(ARDefinitions, {
+    foreignKey: 'AR_Type',
+    targetKey: 'AR_Type',
+    as: 'arTypeDef',
+    constraints: false,
+  });
 
   // Record_Locks -> Order_Header
   Record_Locks.belongsTo(OrderHeader, {
@@ -407,120 +412,120 @@ CustReceivables.belongsTo(ARDefinitions, {
     constraints: false,
   });
 
-OrderHeader.belongsTo(Users, {
-  foreignKey: 'User_ID',     // column in Order_Header
-  targetKey: 'UserNumber',   // PK in Users
-  as: 'user',
-});
+  OrderHeader.belongsTo(Users, {
+    foreignKey: 'User_ID',     // column in Order_Header
+    targetKey: 'UserNumber',   // PK in Users
+    as: 'user',
+  });
 
-// Optional reverse (not required for your query)
-Users.hasMany(OrderHeader, {
-  foreignKey: 'User_ID',
-  sourceKey: 'UserNumber',
-  as: 'orders',
-});
+  // Optional reverse (not required for your query)
+  Users.hasMany(OrderHeader, {
+    foreignKey: 'User_ID',
+    sourceKey: 'UserNumber',
+    as: 'orders',
+  });
 
-Customer.hasMany(CustomerRoute, {
-  foreignKey: 'C_Number',
-  as: 'routes',
-});
+  Customer.hasMany(CustomerRoute, {
+    foreignKey: 'C_Number',
+    as: 'routes',
+  });
 
-// CustomerRoutes.ts
-CustomerRoute.belongsTo(Customer, {
-  foreignKey: 'C_Number',
-  as: 'customer',
-});
+  // CustomerRoutes.ts
+  CustomerRoute.belongsTo(Customer, {
+    foreignKey: 'C_Number',
+    as: 'customer',
+  });
 
-CustReceivables.belongsTo(CustBillTo, {
-  foreignKey: 'C_Number',
-  as: 'Cust_BillTo'
-});
-
-
-// CustFinanceCharges → Customer
-CustFinanceCharges.belongsTo(Customer, {
-  foreignKey: 'C_Number',
-  targetKey: 'C_Number',
-});
-
-// Customer → CustFinanceCharges
-Customer.hasMany(CustFinanceCharges, {
-  foreignKey: 'C_Number',
-  sourceKey: 'C_Number',
-});
-
-CustReceivables.hasMany(CustFinanceCharges, {
-  foreignKey: 'C_Number', // CustFinanceCharges.C_Number
-  sourceKey: 'C_Number',  // CustReceivables.C_Number
-  as: 'financeCharges',   // alias required
-  constraints: false,
-});
-
-CustFinanceCharges.belongsTo(CustReceivables, {
-  foreignKey: 'C_Number',
-  targetKey: 'C_Number',
-  as: 'receivable',
-  constraints: false,
-});
-
-CustReceivables.belongsTo(Users, {
-  foreignKey: 'User_Number',
-  targetKey: 'UserNumber'
-})
-
-ARDeletes.belongsTo(Customer, {
-  foreignKey: 'C_Number',
-  targetKey:'C_Number'
-})
-
-Inventory.hasOne(InventoryStatus, {
-  foreignKey: 'Item_Number',
-  sourceKey: 'Item_Number'
-
-});
-
-Inventory.hasOne(InventorySavedDetail,{
-  foreignKey: 'Item_Number',
-  sourceKey: 'Item_Number',
-})
-
-InventorySavedDetail.belongsTo(Inventory, {
-  foreignKey: 'Item_Number',
-  targetKey: 'Item_Number'
-});
+  CustReceivables.belongsTo(CustBillTo, {
+    foreignKey: 'C_Number',
+    as: 'Cust_BillTo'
+  });
 
 
+  // CustFinanceCharges → Customer
+  CustFinanceCharges.belongsTo(Customer, {
+    foreignKey: 'C_Number',
+    targetKey: 'C_Number',
+  });
 
-CustReceivables.hasOne(CustBillTo, {
-  foreignKey: 'C_Number',
-  sourceKey: 'C_Number',
-  as: 'billTo',
-});
+  // Customer → CustFinanceCharges
+  Customer.hasMany(CustFinanceCharges, {
+    foreignKey: 'C_Number',
+    sourceKey: 'C_Number',
+  });
 
-CustBillTo.belongsTo(CustReceivables, {
-  foreignKey: 'C_Number',
-  targetKey: 'C_Number',
-});
+  CustReceivables.hasMany(CustFinanceCharges, {
+    foreignKey: 'C_Number', // CustFinanceCharges.C_Number
+    sourceKey: 'C_Number',  // CustReceivables.C_Number
+    as: 'financeCharges',   // alias required
+    constraints: false,
+  });
 
-POHeader.hasMany(PODetail, {
-  foreignKey: 'PO_Number',
-  sourceKey: 'PO_Number',
-});
+  CustFinanceCharges.belongsTo(CustReceivables, {
+    foreignKey: 'C_Number',
+    targetKey: 'C_Number',
+    as: 'receivable',
+    constraints: false,
+  });
 
-PODetail.belongsTo(POHeader, {
-  foreignKey: 'PO_Number',
-  targetKey: 'PO_Number',
-});
+  CustReceivables.belongsTo(Users, {
+    foreignKey: 'User_Number',
+    targetKey: 'UserNumber'
+  })
 
-PODetail.belongsTo(Inventory, {
-  foreignKey: 'Item_Number',
-  targetKey: 'Item_Number',
-});
+  ARDeletes.belongsTo(Customer, {
+    foreignKey: 'C_Number',
+    targetKey: 'C_Number'
+  })
 
-POHeader.belongsTo(Vendor, {
-  foreignKey: 'Primary_Vendor',
-  targetKey: 'Primary_Vendor',
-});
+  Inventory.hasOne(InventoryStatus, {
+    foreignKey: 'Item_Number',
+    sourceKey: 'Item_Number'
+
+  });
+
+  Inventory.hasOne(InventorySavedDetail, {
+    foreignKey: 'Item_Number',
+    sourceKey: 'Item_Number',
+  })
+
+  InventorySavedDetail.belongsTo(Inventory, {
+    foreignKey: 'Item_Number',
+    targetKey: 'Item_Number'
+  });
+
+
+
+  CustReceivables.hasOne(CustBillTo, {
+    foreignKey: 'C_Number',
+    sourceKey: 'C_Number',
+    as: 'billTo',
+  });
+
+  CustBillTo.belongsTo(CustReceivables, {
+    foreignKey: 'C_Number',
+    targetKey: 'C_Number',
+  });
+
+  POHeader.hasMany(PODetail, {
+    foreignKey: 'PO_Number',
+    sourceKey: 'PO_Number',
+  });
+
+  PODetail.belongsTo(POHeader, {
+    foreignKey: 'PO_Number',
+    targetKey: 'PO_Number',
+  });
+
+  PODetail.belongsTo(Inventory, {
+    foreignKey: 'Item_Number',
+    targetKey: 'Item_Number',
+  });
+
+  POHeader.belongsTo(Vendor, {
+    foreignKey: 'Primary_Vendor',
+    targetKey: 'Primary_Vendor',
+  });
 
 
 

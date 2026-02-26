@@ -1,0 +1,397 @@
+e\{
+  "ProductDiscount CRUD API Examples": {
+    "description": "Complete JSON examples for all ProductDiscount endpoints",
+    
+    "1. CREATE Product Discount": {
+      "endpoint": "POST /productDiscounts",
+      "method": "POST",
+      "headers": {
+        "Authorization": "Bearer <token>",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "ItemNumber": 12345,
+        "quantity": 10,
+        "discountType": "percentage",
+        "discountValue": 15.50,
+        "startDate": "2024-01-01",
+        "endDate": "2024-12-31",
+        "isActive": true
+      },
+      "responseSuccess": {
+        "success": true,
+        "statusCode": 201,
+        "message": "Product discount created successfully",
+        "data": {
+          "id": 1,
+          "ItemNumber": 12345,
+          "quantity": 10,
+          "discountType": "percentage",
+          "discountValue": "15.50",
+          "startDate": "2024-01-01T00:00:00.000Z",
+          "endDate": "2024-12-31T00:00:00.000Z",
+          "isActive": true,
+          "createdAt": "2024-01-15T10:30:00.000Z",
+          "updatedAt": "2024-01-15T10:30:00.000Z"
+        }
+      },
+      "requestBodyExample2": {
+        "ItemNumber": 67890,
+        "quantity": 5,
+        "discountType": "flat",
+        "discountValue": 2.50,
+        "startDate": "2024-02-01",
+        "endDate": "2024-06-30",
+        "isActive": true
+      }
+    },
+
+    "2. GET All Product Discounts": {
+      "endpoint": "GET /productDiscounts",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      },
+      "queryParameters": {
+        "page": 1,
+        "limit": 10,
+        "search": "12345",
+        "ItemNumber": 12345,
+        "isActive": true
+      },
+      "exampleRequest": "GET /productDiscounts?page=1&limit=10&isActive=true",
+      "responseSuccess": {
+        "success": true,
+        "statusCode": 200,
+        "message": "Product discount list fetched successfully",
+        "data": {
+          "data": [
+            {
+              "id": 1,
+              "ItemNumber": 12345,
+              "quantity": 10,
+              "discountType": "percentage",
+              "discountValue": "15.50",
+              "startDate": "2024-01-01T00:00:00.000Z",
+              "endDate": "2024-12-31T00:00:00.000Z",
+              "isActive": true,
+              "createdAt": "2024-01-15T10:30:00.000Z",
+              "updatedAt": "2024-01-15T10:30:00.000Z"
+            },
+            {
+              "id": 2,
+              "ItemNumber": 67890,
+              "quantity": 5,
+              "discountType": "flat",
+              "discountValue": "2.50",
+              "startDate": "2024-02-01T00:00:00.000Z",
+              "endDate": "2024-06-30T00:00:00.000Z",
+              "isActive": true,
+              "createdAt": "2024-01-16T11:20:00.000Z",
+              "updatedAt": "2024-01-16T11:20:00.000Z"
+            }
+          ],
+          "pagination": {
+            "page": 1,
+            "limit": 10,
+            "totalCount": 25,
+            "totalPages": 3
+          }
+        }
+      }
+    },
+
+    "3. GET Product Discount by ID": {
+      "endpoint": "GET /productDiscounts/:id",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      },
+      "exampleRequest": "GET /productDiscounts/1",
+      "responseSuccess": {
+        "success": true,
+        "statusCode": 200,
+        "message": "Product discount fetched successfully",
+        "data": {
+          "id": 1,
+          "ItemNumber": 12345,
+          "quantity": 10,
+          "discountType": "percentage",
+          "discountValue": "15.50",
+          "startDate": "2024-01-01T00:00:00.000Z",
+          "endDate": "2024-12-31T00:00:00.000Z",
+          "isActive": true,
+          "createdAt": "2024-01-15T10:30:00.000Z",
+          "updatedAt": "2024-01-15T10:30:00.000Z"
+        }
+      },
+      "responseError": {
+        "success": false,
+        "statusCode": 404,
+        "message": "Product discount not found"
+      }
+    },
+
+    "4. UPDATE Product Discount": {
+      "endpoint": "PUT /productDiscounts/:id",
+      "method": "PUT",
+      "headers": {
+        "Authorization": "Bearer <token>",
+        "Content-Type": "application/json"
+      },
+      "exampleRequest": "PUT /productDiscounts/1",
+      "requestBodyPartial": {
+        "quantity": 15,
+        "discountValue": 20.00,
+        "isActive": false
+      },
+      "requestBodyFull": {
+        "ItemNumber": 12345,
+        "quantity": 15,
+        "discountType": "percentage",
+        "discountValue": 20.00,
+        "startDate": "2024-01-01",
+        "endDate": "2024-12-31",
+        "isActive": true
+      },
+      "responseSuccess": {
+        "success": true,
+        "statusCode": 200,
+        "message": "Product discount updated successfully",
+        "data": {
+          "id": 1,
+          "ItemNumber": 12345,
+          "quantity": 15,
+          "discountType": "percentage",
+          "discountValue": "20.00",
+          "startDate": "2024-01-01T00:00:00.000Z",
+          "endDate": "2024-12-31T00:00:00.000Z",
+          "isActive": true,
+          "createdAt": "2024-01-15T10:30:00.000Z",
+          "updatedAt": "2024-01-20T14:45:00.000Z"
+        }
+      }
+    },
+
+    "5. DELETE Product Discount": {
+      "endpoint": "DELETE /productDiscounts/:id",
+      "method": "DELETE",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      },
+      "exampleRequest": "DELETE /productDiscounts/1",
+      "responseSuccess": {
+        "success": true,
+        "statusCode": 200,
+        "message": "Product discount deleted successfully",
+        "data": {
+          "success": true,
+          "message": "Product discount deleted successfully"
+        }
+      },
+      "responseError": {
+        "success": false,
+        "statusCode": 404,
+        "message": "Product discount not found"
+      }
+    },
+
+    "Validation Error Examples": {
+      "missingRequiredField": {
+        "requestBody": {
+          "ItemNumber": 12345,
+          "quantity": 10
+        },
+        "errorResponse": {
+          "success": false,
+          "statusCode": 400,
+          "message": "Validation error",
+          "errors": [
+            {
+              "field": "discountType",
+              "message": "Discount type is required"
+            },
+            {
+              "field": "discountValue",
+              "message": "Discount value is required"
+            },
+            {
+              "field": "startDate",
+              "message": "Start date is required"
+            },
+            {
+              "field": "endDate",
+              "message": "End date is required"
+            }
+          ]
+        }
+      },
+      "invalidDiscountType": {
+        "requestBody": {
+          "ItemNumber": 12345,
+          "quantity": 10,
+          "discountType": "invalid",
+          "discountValue": 15.50,
+          "startDate": "2024-01-01",
+          "endDate": "2024-12-31"
+        },
+        "errorResponse": {
+          "success": false,
+          "statusCode": 400,
+          "message": "Validation error",
+          "errors": [
+            {
+              "field": "discountType",
+              "message": "Discount type must be either \"flat\" or \"percentage\""
+            }
+          ]
+        }
+      },
+      "endDateBeforeStartDate": {
+        "requestBody": {
+          "ItemNumber": 12345,
+          "quantity": 10,
+          "discountType": "percentage",
+          "discountValue": 15.50,
+          "startDate": "2024-12-31",
+          "endDate": "2024-01-01"
+        },
+        "errorResponse": {
+          "success": false,
+          "statusCode": 400,
+          "message": "Validation error",
+          "errors": [
+            {
+              "field": "endDate",
+              "message": "End date must be after start date"
+            }
+          ]
+        }
+      },
+      "invalidQuantity": {
+        "requestBody": {
+          "ItemNumber": 12345,
+          "quantity": 0,
+          "discountType": "percentage",
+          "discountValue": 15.50,
+          "startDate": "2024-01-01",
+          "endDate": "2024-12-31"
+        },
+        "errorResponse": {
+          "success": false,
+          "statusCode": 400,
+          "message": "Validation error",
+          "errors": [
+            {
+              "field": "quantity",
+              "message": "Quantity must be at least 1"
+            }
+          ]
+        }
+      },
+      "negativeDiscountValue": {
+        "requestBody": {
+          "ItemNumber": 12345,
+          "quantity": 10,
+          "discountType": "percentage",
+          "discountValue": -5.00,
+          "startDate": "2024-01-01",
+          "endDate": "2024-12-31"
+        },
+        "errorResponse": {
+          "success": false,
+          "statusCode": 400,
+          "message": "Validation error",
+          "errors": [
+            {
+              "field": "discountValue",
+              "message": "Discount value must be at least 0"
+            }
+          ]
+        }
+      }
+    },
+
+    "Field Descriptions": {
+      "ItemNumber": {
+        "type": "number",
+        "required": true,
+        "description": "The item number from Inventory table"
+      },
+      "quantity": {
+        "type": "integer",
+        "required": true,
+        "min": 1,
+        "description": "Minimum quantity required to get the discount"
+      },
+      "discountType": {
+        "type": "string",
+        "required": true,
+        "values": ["flat", "percentage"],
+        "description": "Type of discount - 'flat' for fixed amount, 'percentage' for percentage off"
+      },
+      "discountValue": {
+        "type": "number (decimal)",
+        "required": true,
+        "min": 0,
+        "precision": 2,
+        "description": "Discount value - if flat, it's the amount; if percentage, it's the percentage (e.g., 15.50 for 15.5%)"
+      },
+      "startDate": {
+        "type": "date (YYYY-MM-DD)",
+        "required": true,
+        "description": "Start date when the discount becomes active"
+      },
+      "endDate": {
+        "type": "date (YYYY-MM-DD)",
+        "required": true,
+        "description": "End date when the discount expires (must be after startDate)"
+      },
+      "isActive": {
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": "Whether the discount is currently active"
+      }
+    },
+
+    "Usage Examples": {
+      "percentageDiscount": {
+        "description": "15% discount when buying 10 or more items",
+        "requestBody": {
+          "ItemNumber": 12345,
+          "quantity": 10,
+          "discountType": "percentage",
+          "discountValue": 15.00,
+          "startDate": "2024-01-01",
+          "endDate": "2024-12-31",
+          "isActive": true
+        }
+      },
+      "flatDiscount": {
+        "description": "$2.50 off when buying 5 or more items",
+        "requestBody": {
+          "ItemNumber": 67890,
+          "quantity": 5,
+          "discountType": "flat",
+          "discountValue": 2.50,
+          "startDate": "2024-02-01",
+          "endDate": "2024-06-30",
+          "isActive": true
+        }
+      },
+      "seasonalDiscount": {
+        "description": "20% discount during holiday season",
+        "requestBody": {
+          "ItemNumber": 11111,
+          "quantity": 1,
+          "discountType": "percentage",
+          "discountValue": 20.00,
+          "startDate": "2024-11-01",
+          "endDate": "2024-12-31",
+          "isActive": true
+        }
+      }
+    }
+  }
+}

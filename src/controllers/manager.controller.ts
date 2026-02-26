@@ -9,6 +9,7 @@ import { uploadFileToAzure } from "../utils/azureUploader";
 import { parseReportFilters } from "../utils/parseReportFilters";
 import { number } from "joi";
 import { AppError } from "../utils/AppError";
+import { send } from "process";
 
 
 export class ManagerController {
@@ -271,15 +272,15 @@ export class ManagerController {
   }
 
 
-async getOrderForPickListConfirmation(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getOrderForPickListConfirmation(req.query);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-} 
+  async getOrderForPickListConfirmation(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getOrderForPickListConfirmation(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getOrderHistoryByOrderNumber(Number(req.params.id), req.query as PaginationOptions);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getOrderHistoryByOrderNumber(Number(req.params.id), req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
   async getOrderDetailByOrderNumberForInvoice(req: AuthRequest, res: Response) {
     const data = await this.managerService.getOrderDetailByOrderNumberForInvoice(Number(req.params.id));
@@ -854,10 +855,10 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
   }
 
   async getAllEmailModuleConfigs(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getAllEmailModuleConfigs(req.query as PaginationOptions & { 
-      search?: string; 
-      emailModuleId?: number; 
-      isActive?: boolean 
+    const data = await this.managerService.getAllEmailModuleConfigs(req.query as PaginationOptions & {
+      search?: string;
+      emailModuleId?: number;
+      isActive?: boolean
     });
     sendResponse(res, 200, true, data, 'Email module configs list retrieved successfully');
   }
@@ -884,10 +885,10 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
   }
 
   async getAllCustomerAssignInvoiceTemplates(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getAllCustomerAssignInvoiceTemplates(req.query as PaginationOptions & { 
-      search?: string; 
-      customerNumber?: number; 
-      templateId?: number 
+    const data = await this.managerService.getAllCustomerAssignInvoiceTemplates(req.query as PaginationOptions & {
+      search?: string;
+      customerNumber?: number;
+      templateId?: number
     });
     sendResponse(res, 200, true, data, 'Customer invoice template assignments list retrieved successfully');
   }
@@ -899,6 +900,11 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
 
   async deleteCustomerAssignInvoiceTemplate(req: AuthRequest, res: Response) {
     const data = await this.managerService.deleteCustomerAssignInvoiceTemplate(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Customer invoice template assignment deleted successfully');
+  }
+
+  async deleteCustomerAssignInvoiceTemplateByCustomerNumber(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteCustomerAssignInvoiceTemplateByCustomerNumber(Number(req.params.customerNumber));
     sendResponse(res, 200, true, data, 'Customer invoice template assignment deleted successfully');
   }
 
@@ -924,8 +930,8 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
   }
 
   async getAllInvoiceTemplates(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getAllInvoiceTemplates(req.query as PaginationOptions & { 
-      search?: string; 
+    const data = await this.managerService.getAllInvoiceTemplates(req.query as PaginationOptions & {
+      search?: string;
       mainTemplate?: boolean;
     });
     sendResponse(res, 200, true, data, 'Invoice templates list retrieved successfully');
@@ -946,9 +952,14 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'Customer invoice template retrieved successfully');
   }
 
+  async getCustomerByInvoiceId(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerByInvoiceId(Number(req.params.id));
+    sendResponse(res, 200, true, data, 'Customer by invoice id retrieved successfully');
+  }
+
 
   async getCustomerListForTradeShow(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getCustomerListForTradeShow(req.body as PaginationOptions & { search?: string, Inactive?:string, cot?:string[],routes?:string[] });
+    const data = await this.managerService.getCustomerListForTradeShow(req.body as PaginationOptions & { search?: string, Inactive?: string, cot?: string[], routes?: string[] });
     sendResponse(res, 200, true, data, 'Customer list for trade show retrieved successfully');
   }
 
@@ -1525,7 +1536,7 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
   }
 
   async getDeliveryRoutes(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getDeliveryRoutes(req.body as PaginationOptions & { 
+    const data = await this.managerService.getDeliveryRoutes(req.body as PaginationOptions & {
       routeId?: number;
       day?: string;
       driverId?: number;
@@ -1539,14 +1550,14 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
     const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
     const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
     const page = typeof req.query.page === 'string' ? Math.max(parseInt(req.query.page, 10), 1) : 1;
-    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10)) : undefined ;
-    const data = await this.managerService.getARreports({ startDate,endDate,page,limit,});
+    const limit = typeof req.query.limit === 'string' ? Math.min(parseInt(req.query.limit, 10)) : undefined;
+    const data = await this.managerService.getARreports({ startDate, endDate, page, limit, });
     sendResponse(res, 200, true, data, 'Account Receivable report fetched successfully');
   }
 
   async getARreportsHistory(req: AuthRequest, res: Response) {
-      const data = await this.managerService.getARreportsHistory(req.query);
-      sendResponse(res, 200, true, data, General.SUCCESS);
+    const data = await this.managerService.getARreportsHistory(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
   // PreBook CRUD controller methods
@@ -1578,23 +1589,23 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
     const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
     const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
     const page = typeof req.query.page === 'string' ? Math.max(parseInt(req.query.page, 10), 1) : 1;
-    const limit = typeof req.query.limit === 'string'? Math.min(parseInt(req.query.limit, 10)) : undefined ;
-    const data = await this.managerService.getArStatementReport({ startDate,endDate,page,limit,});
+    const limit = typeof req.query.limit === 'string' ? Math.min(parseInt(req.query.limit, 10)) : undefined;
+    const data = await this.managerService.getArStatementReport({ startDate, endDate, page, limit, });
     sendResponse(res, 200, true, data, 'Account  report fetched successfully');
   }
-    
+
 
   async getOpenItemReport(req: AuthRequest, res: Response) {
-      const data = await this.managerService.getOpenItemReport(req.query);
-      sendResponse(res, 200, true, data, General.SUCCESS);
-    }
+    const data = await this.managerService.getOpenItemReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
   // TradeShow CRUD controller methods
   async createTradeShow(req: AuthRequest, res: Response) {
 
     const findActiveTradeShow = await this.managerService.findActiveTradeShow();
-      if(findActiveTradeShow) {
-        throw new AppError('Active trade show already exists', 400);
+    if (findActiveTradeShow) {
+      throw new AppError('Active trade show already exists', 400);
     }
 
     const data = await this.managerService.createTradeShow(req.body);
@@ -1607,11 +1618,11 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
   }
 
   async getAllTradeShows(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getAllTradeShows(req.query as PaginationOptions & { 
-      search?: string; 
-      status?: string; 
-      tradeShowDate?: string; 
-      deliveryStartDate?: string; 
+    const data = await this.managerService.getAllTradeShows(req.query as PaginationOptions & {
+      search?: string;
+      status?: string;
+      tradeShowDate?: string;
+      deliveryStartDate?: string;
       deliveryEndDate?: string;
     });
     sendResponse(res, 200, true, data, 'TradeShows fetched successfully');
@@ -1782,94 +1793,94 @@ async getOrderHistoryByOrderNumber(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, 'TradeShowDeliveryProduct deleted successfully');
   }
 
-async getARUndepositeFund(req: AuthRequest, res: Response) {
-  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
-  const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
-  const data = await this.managerService.getARUndepositeFund(startDate, endDate);
-  sendResponse(res,200,true,data,'Account Receivable Undeposite Fund report fetched successfully');
-}
+  async getARUndepositeFund(req: AuthRequest, res: Response) {
+    const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
+    const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
+    const data = await this.managerService.getARUndepositeFund(startDate, endDate);
+    sendResponse(res, 200, true, data, 'Account Receivable Undeposite Fund report fetched successfully');
+  }
 
-async getARDeletedPayment(req: AuthRequest, res: Response) {
-  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
-  const endDate = typeof  req.query.endDate === 'string' ? req.query.endDate : '';
-  const data = await this.managerService.getARDeletedPayment({ startDate, endDate });
-  sendResponse(res,200,true,data,'AR Deleted report fetched successfully');
-}
+  async getARDeletedPayment(req: AuthRequest, res: Response) {
+    const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
+    const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
+    const data = await this.managerService.getARDeletedPayment({ startDate, endDate });
+    sendResponse(res, 200, true, data, 'AR Deleted report fetched successfully');
+  }
 
-async getInventoryValuationSalesCategTotal(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getInventoryValuationSalesCategTotal();
-  sendResponse(res,200,true,data,'Inventory Valuation Sales_Categories Total fetched successfully');
-}
-async getAgingReport(req: AuthRequest, res: Response) {
-  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
-  const endDate = typeof  req.query.endDate === 'string' ? req.query.endDate : '';
-  const data = await this.managerService.getAgingReport({ startDate, endDate });
-  sendResponse(res,200,true,data,'AR Deleted report fetched successfully');
-}
-
-
-async getInventoryAsPerVendorIds(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getInventoryAsPerVendorIds(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
-
-async getInventoryAsPerTradeWeek(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getInventoryAsPerTradeWeek(req.query);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-} 
+  async getInventoryValuationSalesCategTotal(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryValuationSalesCategTotal();
+    sendResponse(res, 200, true, data, 'Inventory Valuation Sales_Categories Total fetched successfully');
+  }
+  async getAgingReport(req: AuthRequest, res: Response) {
+    const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : '';
+    const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : '';
+    const data = await this.managerService.getAgingReport({ startDate, endDate });
+    sendResponse(res, 200, true, data, 'AR Deleted report fetched successfully');
+  }
 
 
-async getVendorListForTradeShowIds(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getVendorListForTradeShowIds(Number(req.params.id));
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
-async getInventorySpotCheck(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getInventorySpotCheck();
-  sendResponse(res,200,true,data,'Inventory Spot Check fetched successfully');
-}
+  async getInventoryAsPerVendorIds(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryAsPerVendorIds(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async getTradeShowSummary(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getTradeShowSummary(Number(req.params.id), req.query);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
-
-async getTradeShowItemList(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getTradeShowItemList(Number(req.params.id), req.query);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
-
-async getTradeShowVendorsList(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getTradeShowVendorsList(Number(req.params.id), req.query);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getInventoryAsPerTradeWeek(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryAsPerTradeWeek(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
 
-async deleteBulkTradeShowVendors(req: AuthRequest, res: Response) {
-  const data = await this.managerService.deleteBulkTradeShowVendors(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getVendorListForTradeShowIds(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getVendorListForTradeShowIds(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+  async getInventorySpotCheck(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventorySpotCheck();
+    sendResponse(res, 200, true, data, 'Inventory Spot Check fetched successfully');
+  }
+
+  async getTradeShowSummary(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowSummary(Number(req.params.id), req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getTradeShowItemList(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowItemList(Number(req.params.id), req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getTradeShowVendorsList(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTradeShowVendorsList(Number(req.params.id), req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+
+  async deleteBulkTradeShowVendors(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteBulkTradeShowVendors(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
 
   async deleteBulkTradeShowItems(req: AuthRequest, res: Response) {
 
-  const data = await this.managerService.deleteBulkTradeShowItems(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+    const data = await this.managerService.deleteBulkTradeShowItems(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async deleteBulkTradeShowDeliveryProducts(req: AuthRequest, res: Response) {
-  const data = await this.managerService.deleteBulkTradeShowDeliveryProducts(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async deleteBulkTradeShowDeliveryProducts(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteBulkTradeShowDeliveryProducts(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async deleteBulkTradeShowRetailers(req: AuthRequest, res: Response) {
-  const data = await this.managerService.deleteBulkTradeShowRetailers(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async deleteBulkTradeShowRetailers(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteBulkTradeShowRetailers(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async getProductsByOrderNumber(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getProductsByOrderNumber(req.body);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getProductsByOrderNumber(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getProductsByOrderNumber(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
   async getTradeShowItemForEdit(req: AuthRequest, res: Response) {
     const data = await this.managerService.getTradeShowItemForEdit(Number(req.params.id));
@@ -1893,62 +1904,163 @@ async getProductsByOrderNumber(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
-async currentOrderStatusReport(req: AuthRequest, res: Response) {
-  const data = await this.managerService.currentOrderStatusReport(req.query);
-  sendResponse(res,200,true,data,'Current Order Status Report fetched successfully'); 
+  async currentOrderStatusReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.currentOrderStatusReport(req.query);
+    sendResponse(res, 200, true, data, 'Current Order Status Report fetched successfully');
 
-}
+  }
 
-async currentOrderDetailStatus(req: AuthRequest, res: Response) {
-  const orderNumber = Number(req.params.orderNumber);
-  const data = await this.managerService.currentOrderDetailStatus(orderNumber);
-  sendResponse(res,200,true,data,'Current Order Detail Status fetched successfully'); 
-}
+  async currentOrderDetailStatus(req: AuthRequest, res: Response) {
+    const orderNumber = Number(req.params.orderNumber);
+    const data = await this.managerService.currentOrderDetailStatus(orderNumber);
+    sendResponse(res, 200, true, data, 'Current Order Detail Status fetched successfully');
+  }
 
-async poReceivingHistoryReport(req: AuthRequest, res: Response) {
-  const data = await this.managerService.poReceivingHistoryReport(req.query);
-  sendResponse(res,200,true,data,'PO Receiving History Report fetched successfully');
-}
+  async poReceivingHistoryReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.poReceivingHistoryReport(req.query);
+    sendResponse(res, 200, true, data, 'PO Receiving History Report fetched successfully');
+  }
 
 
-async poTransferAdjustmentReport(req: AuthRequest, res: Response) {
-  const data = await this.managerService.poTransferAdjustmentReport(req.query);
-  sendResponse(res,200,true,data,'PO Transfer/Adjustment Report fetched successfully');
-}
+  async poTransferAdjustmentReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.poTransferAdjustmentReport(req.query);
+    sendResponse(res, 200, true, data, 'PO Transfer/Adjustment Report fetched successfully');
+  }
 
-async poCigOtpReport(req: AuthRequest, res: Response) {
-  const data = await this.managerService.poCigOtpReport(req.query);
-  sendResponse(res,200,true,data,'PO Cig OTP Report fetched successfully');
-}
+  async poCigOtpReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.poCigOtpReport(req.query);
+    sendResponse(res, 200, true, data, 'PO Cig OTP Report fetched successfully');
+  }
 
-async createInvoice(req: AuthRequest, res: Response) {
-  const orderNumber = Number(req.params.orderNumber);
-  const data = await this.managerService.createInvoice(orderNumber);
-  sendResponse(res, 200, true, data, 'Invoice created successfully');
-}
-async getInvoiceRegister(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getInvoiceRegister(req.query);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async createInvoice(req: AuthRequest, res: Response) {
+    const orderNumber = Number(req.params.orderNumber);
+    const data = await this.managerService.createInvoice(orderNumber);
+    sendResponse(res, 200, true, data, 'Invoice created successfully');
+  }
+  async getInvoiceRegister(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInvoiceRegister(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async uploadItemImage(req: AuthRequest, res: Response) {
-  const data = await this.managerService.uploadItemImage(req);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async uploadItemImage(req: AuthRequest, res: Response) {
+    const data = await this.managerService.uploadItemImage(req);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async bulkUploadItemImages(req: AuthRequest, res: Response) {
-  const data = await this.managerService.bulkUploadItemImages(req.body.items);
-  sendResponse(res, 200, true, data, data.success ? 'Item images uploaded successfully' : 'Some items failed to upload');
-}
+  async bulkUploadItemImages(req: AuthRequest, res: Response) {
+    const data = await this.managerService.bulkUploadItemImages(req.body.items);
+    sendResponse(res, 200, true, data, data.success ? 'Item images uploaded successfully' : 'Some items failed to upload');
+  }
 
-async getCustomerListForEmailModules(req: AuthRequest, res: Response) {
-  const data = await this.managerService.getCustomerListForEmailModules();
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getCustomerListForEmailModules(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerListForEmailModules();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
-async getTodayCount(req:AuthRequest, res: Response){
-  const data = await this.managerService.getTodayCount(req.query);
-  sendResponse(res, 200, true, data, General.SUCCESS)
-}
+  // ProductDiscount controller methods
+  async createProductDiscount(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createProductDiscount(req.body);
+    sendResponse(res, 201, true, data, Manager.PRODUCT_DISCOUNT_CREATED_SUCCESSFULLY);
+  }
+
+  async getProductDiscountById(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getProductDiscountById(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.PRODUCT_DISCOUNT_FETCHED_SUCCESSFULLY);
+  }
+
+  async getAllProductDiscounts(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllProductDiscounts(req.query as PaginationOptions & {
+      search?: string;
+      ItemNumber?: number;
+      isActive?: boolean;
+    });
+    sendResponse(res, 200, true, data, Manager.PRODUCT_DISCOUNT_LIST_FETCHED_SUCCESSFULLY);
+  }
+
+  async updateProductDiscount(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateProductDiscount(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, Manager.PRODUCT_DISCOUNT_UPDATED_SUCCESSFULLY);
+  }
+
+  async deleteProductDiscount(req: AuthRequest, res: Response) {
+    const data = await this.managerService.deleteProductDiscount(Number(req.params.id));
+    sendResponse(res, 200, true, data, Manager.PRODUCT_DISCOUNT_DELETED_SUCCESSFULLY);
+  }
+
+  async syncProductDiscountsToRedis(req: AuthRequest, res: Response) {
+    const data = await this.managerService.syncProductDiscountsToRedisManual();
+    sendResponse(res, 200, true, data, 'Product discounts synced to Redis successfully');
+  }
+
+  async getProductDiscountsFromRedis(req: AuthRequest, res: Response) {
+    const { itemNumber, date, getAll } = req.query;
+
+    const query: any = {};
+    if (itemNumber) query.itemNumber = Number(itemNumber);
+    if (date) query.date = date as string;
+    if (getAll === 'true') query.getAll = true;
+
+    const data = await this.managerService.getProductDiscountsFromRedis(query);
+    sendResponse(res, 200, true, data, 'Product discounts fetched from Redis successfully');
+  }
+
+  async getDiscountedPriceFromRedis(req: AuthRequest, res: Response) {
+    const { itemNumber, quantity, originalPrice } = req.body;
+
+    if (!itemNumber || quantity === undefined || originalPrice === undefined) {
+      return sendResponse(res, 400, false, null, 'itemNumber, quantity, and originalPrice are required');
+    }
+
+    const data = await this.managerService.getDiscountedPriceFromRedisService(
+      Number(itemNumber),
+      Number(quantity),
+      Number(originalPrice)
+    );
+    sendResponse(res, 200, true, data, 'Discounted price calculated successfully');
+  }
+  async getTodayCount(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getTodayCount(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS)
+  }
+
+  async getActiveMobileDevice(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getActiveMobileDevice();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCustomerLastSaleReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerLastSaleReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCustomerNoSalesReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerNoSalesReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getInventoryLogHistory(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryLogHistory(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCustomerWithProfit(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerWithProfit(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCustomerRankingSales(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerRankingSales(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getDailySalesReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getDailySalesReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCustomerPrepaidSalesTax(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerPrepaidSalesTax(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
 }

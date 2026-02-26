@@ -27,6 +27,7 @@ import { TaxRates } from "../models/mmsql/taxRates.model";
 import { Inventory_ExcludeState } from "../models/mmsql/inventoryExcludeState.model";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { OrderDetail } from "../models/mmsql/orderDetail.model";
+import { CustomerSpecialGroup } from "../models/mmsql/customerSpecialGroup.model";
 
 type PriceFields = {
   Price1?: number | null;
@@ -290,6 +291,495 @@ function calculateAdjustedPrice(priceAdjustment: any, inventory: any): number {
   return Number(result);
 }
 
+// export async function getDiscount(Item_Number: number, C_Number: number) {
+//   try {
+//     // let discount: any = await GetDiscount.findAll({
+//     //   where: {
+//     //     Item_Number: Item_Number,
+//     //     [Op.and]: [
+//     //       { C_Number: C_Number },
+//     //       { Conract_Cust: C_Number }
+//     //     ]
+//     //   }
+//     // });
+//     // console.log(discount, "discount")
+//     // const lastDiscount = discount.length > 0 ? discount[discount.length - 1] : null;
+//     // console.log(lastDiscount, "lastDiscount")
+//     // discount = lastDiscount;
+//     // discount = null
+//     // // check with view 
+//     // if (discount) {
+//     //   console.log(discount, "discount->>>>>")
+//     //   discount = discount.dataValues
+//     //   let adjustedPrice = 0;
+//     //   let specailPrice = null;
+//     //   let hasSpecailPrice = false;
+//     //   let applyContractPrice = true;
+//     //   let finalPrice = 0;
+
+//     //   if (discount.hasApplyCommanPrice) {
+//     //     if (discount.Perpetual) {
+//     //       hasSpecailPrice = true;
+//     //       specailPrice = discount.CommanPrice;
+//     //     }
+//     //     else if (discount.Idj_Startdate && discount.Idj_Enddate) {
+//     //       const currentDate = new Date();
+//     //       currentDate.setHours(0, 0, 0, 0); // Normalize to date-only
+
+//     //       const startDate = new Date(discount.Idj_Startdate);
+//     //       startDate.setHours(0, 0, 0, 0);
+
+//     //       const endDate = new Date(discount.Idj_Enddate);
+//     //       endDate.setHours(0, 0, 0, 0);
+
+//     //       // Check if current date is between start date and end date (inclusive)
+//     //       if (currentDate >= startDate && currentDate <= endDate) {
+//     //         hasSpecailPrice = true;
+//     //         specailPrice = discount.CommanPrice;
+//     //       }
+//     //     }
+
+
+//     //   }
+
+
+//     //   if (discount.Contract_Option !== null) {
+
+//     //     if (discount.Contract_Values === "Price") {
+
+//     //       adjustedPrice = discount.Contract_Price
+//     //     }
+//     //     else if (discount.Contract_Values === "Price1") {
+
+//     //       const tempPrice = discount.Price1
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "Price2") {
+
+//     //       const tempPrice = discount.Price2
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "Price3") {
+
+//     //       const tempPrice = discount.Price3
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "Price4") {
+
+//     //       const tempPrice = discount.Price4
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "Price5") {
+
+//     //       const tempPrice = discount.Price5
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "Price6") {
+
+//     //       const tempPrice = discount.Price6
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "discount_from_price1_as_per_p1") {
+//     //       const tempPrice = discount.Price1 - (discount.Price1 * discount.Contract_Price / 100)
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "discount_from_price1_as_price1") {
+//     //       const tempPrice = discount.Price1 - discount.Contract_Price
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "cost_on_base") {
+//     //       const tempPrice = discount.Price1
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "net-cost") {
+//     //       const tempPrice = discount.Price1
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "add_on_to_per_price1") {
+//     //       const tempPrice = discount.Price1 + (discount.Price1 * discount.Contract_Price / 100)
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "add_on_to_price1") {
+//     //       const tempPrice = discount.Price1 + discount.Contract_Price;
+//     //       adjustedPrice = tempPrice;
+//     //     }
+
+//     //     else if (discount.Contract_Values === "retail_price") {
+//     //       const tempPrice = discount.Retail1 - discount.CommanAllowance;
+//     //       adjustedPrice = tempPrice;
+//     //     }
+//     //     else if (discount.Contract_Values === "not_for_sold") {
+//     //       return null;
+//     //     }
+
+//     //   }
+//     //   else {
+//     //     console.log('GOES ELSEE')
+//     //     if (discount.Adj_Price) {
+//     //       adjustedPrice = discount.Adj_Price
+//     //     }
+//     //     else if (discount.Price_Adjustment && !discount.Price_Adj_Pct) {
+//     //       let tempPrice = getEffectivePrice(discount);
+//     //       adjustedPrice = tempPrice + discount.Price_Adjustment;
+//     //     }
+
+//     //     else if (discount.Price_Adjustment && discount.Price_Adj_Pct) {
+//     //       let tempPrice = getEffectivePrice(discount);
+//     //       adjustedPrice = tempPrice + (tempPrice * discount.Price_Adjustment / 100);
+//     //     }
+//     //     else {
+//     //       adjustedPrice = getEffectivePrice(discount);
+//     //     }
+//     //   }
+//     //   if (hasSpecailPrice && specailPrice != null) {
+//     //     if (specailPrice < adjustedPrice) {
+//     //       applyContractPrice = false
+//     //       finalPrice = specailPrice;
+//     //     } else {
+//     //       finalPrice = adjustedPrice;
+//     //     }
+//     //   } else {
+//     //     finalPrice = adjustedPrice;
+//     //   }
+
+//     //   adjustedPrice = finalPrice;
+//     //   // discount 
+//     //   let discountPrice = 0;
+//     //   if (discount.Perpetual) {
+//     //     if (discount.CommanAllowanceType === '$') {
+//     //       discountPrice += discount.CommanAllowance;
+//     //     }
+//     //     else if (discount.CommanAllowanceType === '%') {
+//     //       discountPrice += adjustedPrice * discount.CommanAllowance / 100;
+//     //       return discountPrice;
+//     //     }
+//     //   }
+//     //   else if (discount.Idj_Startdate && discount.Idj_Enddate) {
+//     //     const currentDate = new Date();
+//     //     currentDate.setHours(0, 0, 0, 0); // Normalize to date-only
+
+//     //     const startDate = new Date(discount.Idj_Startdate);
+//     //     startDate.setHours(0, 0, 0, 0);
+
+//     //     const endDate = new Date(discount.Idj_Enddate);
+//     //     endDate.setHours(0, 0, 0, 0);
+
+//     //     // Check if current date is between start date and end date (inclusive)
+//     //     if (currentDate >= startDate && currentDate <= endDate) {
+//     //       if (discount.CommanAllowanceType === '$') {
+//     //         discountPrice += discount.CommanAllowance;
+//     //       } else if (discount.CommanAllowanceType === '%') {
+//     //         discountPrice += (adjustedPrice * discount.CommanAllowance) / 100;
+//     //         return discountPrice;
+//     //       }
+//     //     }
+//     //   }
+
+//     //   //subcalass discount
+//     //   if (applyContractPrice) {
+//     //     const currentDate = new Date();
+//     //     currentDate.setHours(0, 0, 0, 0); // Normalize to date-only
+
+//     //     const startDate = new Date(discount.Subclass_Startdate);
+//     //     startDate.setHours(0, 0, 0, 0);
+
+//     //     const endDate = new Date(discount.Subclass_Enddate);
+//     //     endDate.setHours(0, 0, 0, 0);
+
+//     //     if (discount.UnlimitedFlag) {
+//     //       discountPrice += discount.Sub_Discount;
+//     //     } else if (startDate <= currentDate && currentDate <= endDate) {
+//     //       discountPrice += discount.Sub_Discount;
+//     //     }
+//     //   }
+
+
+//     //   return adjustedPrice - discountPrice;
+
+//     // }
+
+//     //check with query
+
+//     console.log(C_Number, 'C_Number--->')
+
+//   let customerPricingAccount : any = await Customer.findOne({
+//     where:{
+//       C_Number: C_Number,
+//     },
+//     // attributes: ['C_PricingAccount'],
+//   })
+
+//   customerPricingAccount = customerPricingAccount?.dataValues;
+
+
+//   console.log(customerPricingAccount,'customerPricingAccount')
+//   if(customerPricingAccount.C_PricingAccount){
+//     C_Number = customerPricingAccount.C_PricingAccount;
+//   }
+
+
+//   const tempCustomerGroupData: any = await CustomerSpecialGroup.findOne({
+//     where: {
+//       C_Number: C_Number
+//     }
+//   });
+//   const tempCustomerGroup = tempCustomerGroupData?.dataValues;
+
+//     console.log('GOES ELSE-->')
+//     let InventoryItem: any = await Inventory.findOne({
+//       where: {
+//         Item_Number: Item_Number
+//       }
+//     })
+
+//     InventoryItem = InventoryItem?.dataValues;
+
+
+//     let productPrice = 0;
+//     let myFinalPrice: any = null;
+//     let hasCustomerAuthorization = false;
+//     let letSpecailPrice = null;
+//     let allowancePrice = 0;
+//     let allowancePriceType = '$';
+//     let hasSpecailPriceApply = false;
+//     let discountPrice = 0;
+
+//     let findCustomerPricing: any = await CustPricing.findOne({
+//       where: {
+//         C_Number: C_Number,
+//         Price_Class: InventoryItem.Price_Class,
+
+//       } 
+//     })
+
+
+//     if(!findCustomerPricing){
+//       let tempSalesCategory = InventoryItem.Sales_Category;
+//       tempSalesCategory = 1000+tempSalesCategory;
+//       findCustomerPricing = await CustPricing.findOne({
+//         where: {
+//           C_Number: C_Number,
+//           Price_Class: tempSalesCategory,
+
+//         }
+//       })
+//     }
+
+
+
+
+
+
+//     let findCustomerAuthorization: any = await CustAuthorized.findOne({
+//       where: {
+//         C_Number: C_Number,
+//         Item_Number: Item_Number
+//       }
+//     })
+
+//     findCustomerPricing = findCustomerPricing?.dataValues;
+//     findCustomerAuthorization = findCustomerAuthorization?.dataValues;
+//     console.log(findCustomerPricing, 'c')
+//     // check is Customer has Authorization Price or not
+//     if (findCustomerAuthorization) {
+//       hasCustomerAuthorization = true;
+
+//       const price = calculateItemPrice(findCustomerAuthorization, InventoryItem);
+//       myFinalPrice = price;
+
+//     }
+//     // check is Customer has Pricing Price or not
+//     if (findCustomerPricing) {
+//       const price = calculateAdjustedPrice(findCustomerPricing, InventoryItem);
+//       myFinalPrice = price;
+//     }
+
+//     if (!findCustomerAuthorization && !findCustomerPricing) {
+//       myFinalPrice = InventoryItem.Price1;
+//     }
+//     if (findCustomerAuthorization && findCustomerPricing) {
+//       hasCustomerAuthorization = true;
+//       const price = calculateItemPrice(findCustomerAuthorization, InventoryItem);
+//       myFinalPrice = price;
+//     }
+
+//     // check the subclass price
+//     let isInventorySubclass: any = await InventorySubclass.findOne({
+//       where: {
+//         Price_Subclass: InventoryItem.Price_Subclass,
+//       }
+//     })
+
+//     //check the special price
+
+//     const isInventorySpecials = await InventorySpecials.findOne({
+//       where: {
+//         Item_Number: Item_Number,
+//         Order_Source: { [Op.in]: [0, 1, 12, 13] },
+//         Special_GroupID: { [Op.in]: [0, tempCustomerGroup?.Special_GroupID || 0] },
+//         Allowance: 0
+//       },
+//       order: [['myKey', 'DESC']], // or createdAt
+
+//     });
+
+
+//     if (!findCustomerAuthorization && !findCustomerPricing) {
+//       productPrice = InventoryItem.Price1;
+//     }
+
+
+//     console.log(isInventorySpecials, 'isInventorySpecials--->')
+//     if (isInventorySpecials) {
+
+//       let tempAllow = isInventorySpecials.dataValues;
+//       if (tempAllow.Perpetual) {
+//         letSpecailPrice = isInventorySpecials.dataValues.Price;
+//         allowancePrice = isInventorySpecials.dataValues.Allowance;
+//         allowancePriceType = isInventorySpecials.dataValues.AllowanceType;
+//       }
+//       if (tempAllow.Start_Date && tempAllow.End_Date) {
+//         const currentDate = new Date();
+//         currentDate.setHours(0, 0, 0, 0);
+
+//         const startDate = new Date(tempAllow.Start_Date);
+//         startDate.setHours(0, 0, 0, 0);
+
+//         const endDate = new Date(tempAllow.End_Date);
+//         endDate.setHours(0, 0, 0, 0);
+
+//         if (currentDate >= startDate && currentDate <= endDate) {
+//           letSpecailPrice = isInventorySpecials.dataValues.Price;
+//           allowancePrice = isInventorySpecials.dataValues.Allowance;
+//           allowancePriceType = isInventorySpecials.dataValues.AllowanceType;
+//         }
+
+
+//       }
+//     }
+
+//     if (letSpecailPrice != null) {
+//       if (letSpecailPrice < myFinalPrice) {
+//         productPrice = letSpecailPrice;
+//         hasSpecailPriceApply = true;
+//       } else {
+//         productPrice = myFinalPrice;
+//       }
+
+//     }
+//     if (!productPrice) {
+//       productPrice = myFinalPrice;
+//     }
+
+
+
+//     /// check Allowance
+
+//     // let findAllowance: any = await InventorySpecials.findOne({
+//     //   where: {
+//     //     Item_Number: Item_Number,
+//     //     Allowance: {
+//     //       [Op.ne]: 0
+//     //     }
+//     //   }
+//     // });
+
+//     let findAllowance :any= await InventorySpecials.findOne({
+//       where: { Item_Number ,Special_GroupID: { [Op.in]: [0, tempCustomerGroup?.Special_GroupID || 0] },Order_Source: { [Op.in]: [0, 1, 12, 13] }},
+//       order: [['myKey', 'DESC']], // or createdAt
+//     });
+
+//     findAllowance = findAllowance?.dataValues;
+//     if (!hasSpecailPriceApply) {
+//       if (findAllowance) {
+//         if (findAllowance.Perpetual) {
+//           if (findAllowance.AllowanceType === '$') {
+//             discountPrice += findAllowance.Allowance;
+//           }
+//           else if (findAllowance.AllowanceType === '%') {
+//             if (findAllowance.Allowance > 0) {
+//               discountPrice += productPrice * findAllowance.Allowance / 100;
+//             }
+
+//           }
+//         }
+
+//       }
+
+//       if (findAllowance) {
+//         if (findAllowance.Start_Date && findAllowance.End_Date) {
+//           const currentDate = new Date();
+//           currentDate.setUTCHours(0, 0, 0, 0);
+
+//           const startDate = new Date(findAllowance.Start_Date);
+//           startDate.setUTCHours(0, 0, 0, 0);
+
+//           const endDate = new Date(findAllowance.End_Date);
+//           endDate.setUTCHours(0, 0, 0, 0);
+
+//           console.log(currentDate, 'currentDate')
+//           console.log(startDate, 'startDate')
+//           console.log(endDate, 'endDate')
+//           // Check if current date is between start and end date (inclusive)
+//           if (currentDate >= startDate && currentDate <= endDate) {
+
+//             console.log('GOES IN DISCOUNT ALLOWANCE',findAllowance)
+//             if (findAllowance.AllowanceType === '$') {
+//               discountPrice += findAllowance.Allowance;
+//             } else if (findAllowance.AllowanceType === '%') {
+//               discountPrice += (productPrice * findAllowance.Allowance) / 100;
+//               return discountPrice;
+//             }
+//           }
+//         }
+//       }
+//     }
+
+
+
+//     isInventorySubclass = isInventorySubclass?.dataValues;
+//     // check subclass discount
+//     if (!hasSpecailPriceApply) {
+//       if (isInventorySubclass) {
+//         const currentDate = new Date();
+//         currentDate.setUTCHours(0, 0, 0, 0); // Normalize to date-only
+
+//         const startDate = new Date(isInventorySubclass.Start_Date);
+//         startDate.setUTCHours(0, 0, 0, 0);
+
+//         const endDate = new Date(isInventorySubclass.Cutoff_Date);
+//         endDate.setUTCHours(0, 0, 0, 0);
+
+//         // Apply discount
+//         if (isInventorySubclass.UnlimitedFlag) {
+//           discountPrice += isInventorySubclass.Discount;
+//         } else if (startDate <= currentDate && currentDate <= endDate) {
+//           discountPrice += isInventorySubclass.Discount;
+//         }
+//       }
+//     }
+
+
+
+//     console.log(allowancePrice, 'allowancePrice')
+//     console.log(allowancePriceType, 'allowancePriceType')
+//     console.log(letSpecailPrice, 'myFinalPrice')
+//     console.log(productPrice, 'productPrice')
+//     console.log(myFinalPrice, 'myFinalPrice')
+//     console.log(letSpecailPrice, 'letSpecailPrice')
+//     console.log(hasSpecailPriceApply, 'hasSpecailPriceApply')
+//     console.log(discountPrice, 'discountPrice')
+
+//     // dicount 
+//     return productPrice - discountPrice
+
+
+//   } catch (error) {
+//     console.log(error)
+//     return null
+//   }
+// }
+
 export async function getDiscount(Item_Number: number, C_Number: number) {
   try {
     // let discount: any = await GetDiscount.findAll({
@@ -500,23 +990,22 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     //check with query
 
 
-  let customerPricingAccount : any = await Customer.findOne({
-    where:{
-      C_Number: C_Number,
-    },
-    attributes: ['C_PricingAccount'],
-  })
+    let customerPricingAccount: any = await Customer.findOne({
+      where: {
+        C_Number: C_Number,
+      },
+    })
 
-  customerPricingAccount = customerPricingAccount?.dataValues;
-
-
-  console.log(customerPricingAccount,'customerPricingAccount')
-  if(customerPricingAccount.C_PricingAccount){
-    C_Number = customerPricingAccount.C_PricingAccount;
-  }
+    customerPricingAccount = customerPricingAccount?.dataValues;
 
 
-    
+    console.log(customerPricingAccount, 'customerPricingAccount')
+    if (customerPricingAccount.C_PricingAccount) {
+      C_Number = customerPricingAccount.C_PricingAccount;
+    }
+
+
+
     console.log('GOES ELSE-->')
     let InventoryItem: any = await Inventory.findOne({
       where: {
@@ -543,15 +1032,21 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
       }
     })
 
+    const tempCustomerGroupData: any = await CustomerSpecialGroup.findOne({
+      where: {
+        C_Number: C_Number
+      }
+    });
+    const tempCustomerGroup = tempCustomerGroupData?.dataValues;
 
-    if(!findCustomerPricing){
+    if (!findCustomerPricing) {
       let tempSalesCategory = InventoryItem.Sales_Category;
-      tempSalesCategory = 1000+tempSalesCategory;
+      tempSalesCategory = 1000 + tempSalesCategory;
       findCustomerPricing = await CustPricing.findOne({
         where: {
           C_Number: C_Number,
           Price_Class: tempSalesCategory,
-  
+
         }
       })
     }
@@ -605,18 +1100,21 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     const isInventorySpecials = await InventorySpecials.findOne({
       where: {
         Item_Number: Item_Number,
+        Order_Source: { [Op.in]: [0, 1, 12, 13] },
+        Special_GroupID: { [Op.in]: [0, tempCustomerGroup?.Special_GroupID || 0] },
         Allowance: 0
       },
       order: [['myKey', 'DESC']], // or createdAt
 
     });
 
-   
+
     if (!findCustomerAuthorization && !findCustomerPricing) {
       productPrice = InventoryItem.Price1;
     }
 
     if (isInventorySpecials) {
+      console.log(isInventorySpecials, 'isInventorySpecials---->')
 
       let tempAllow = isInventorySpecials.dataValues;
       if (tempAllow.Perpetual) {
@@ -670,14 +1168,19 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     //   }
     // });
 
-    let findAllowance :any= await InventorySpecials.findOne({
-      where: { Item_Number },
+    let findAllowance: any = await InventorySpecials.findOne({
+      where: {
+        Item_Number,
+        Order_Source: { [Op.in]: [0, 1, 12, 13] },
+        Special_GroupID: { [Op.in]: [0, tempCustomerGroup?.Special_GroupID || 0] },
+      },
       order: [['myKey', 'DESC']], // or createdAt
     });
-    
+
     findAllowance = findAllowance?.dataValues;
     if (!hasSpecailPriceApply) {
       if (findAllowance) {
+        console.log(findAllowance, 'findAllowance---->')
         if (findAllowance.Perpetual) {
           if (findAllowance.AllowanceType === '$') {
             discountPrice += findAllowance.Allowance;
@@ -709,7 +1212,7 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
           // Check if current date is between start and end date (inclusive)
           if (currentDate >= startDate && currentDate <= endDate) {
 
-            console.log('GOES IN DISCOUNT ALLOWANCE',findAllowance)
+            console.log('GOES IN DISCOUNT ALLOWANCE', findAllowance)
             if (findAllowance.AllowanceType === '$') {
               discountPrice += findAllowance.Allowance;
             } else if (findAllowance.AllowanceType === '%') {
@@ -778,7 +1281,7 @@ export async function getFirstValidPrice(data: PriceFields): Promise<number> {
   return 0;
 }
 
- async function getFirstValidPriceV1(data: PriceFields): Promise<number> {
+async function getFirstValidPriceV1(data: PriceFields): Promise<number> {
   for (let i = 1; i <= 12; i++) {
     const key = `Price${i}` as keyof PriceFields;
     const value = data[key];
@@ -816,11 +1319,18 @@ export async function getTaxRateV1(
   itemNumber: number,
   price: number
 ) {
+
+
+  console.log(OTP_Number, 'OTP_Number--->')
+  console.log(userJurisdiction, 'userJurisdiction--->')
+  console.log(itemNumber, 'itemNumber--->')
+  console.log(price, 'price--->')
   const taxRate = await TaxRatesOTP.findOne({
     where: {
       OTP_Number: OTP_Number,
       Jurisdiction_State: userJurisdiction
-    }
+    },
+    order: [['myKey', 'DESC']],
   });
 
   let item = await Inventory.findOne({
@@ -865,7 +1375,7 @@ export async function getTaxRateV1(
       break;
 
     case 6: // $ Rate / Pack
-      taxAmount = rate 
+      taxAmount = rate
       break;
 
     case 7: // % Rate on MFG Inv Cost
@@ -881,7 +1391,7 @@ export async function getTaxRateV1(
       break;
 
     case 10: // $ Rate / 100 Sticks
-      taxAmount = rate 
+      taxAmount = rate
       break;
 
     case 11: // $ Rate / 200 Sticks
@@ -1018,12 +1528,12 @@ export async function getInventoryOnHand(Item_Number: number) {
 
 
   const totalQty = result
-  .map((r: any) => Number(r['orderDetails.totalQuantityOrdered'] || 0))
-  .reduce((sum: any, qty: any) => sum + qty, 0);
+    .map((r: any) => Number(r['orderDetails.totalQuantityOrdered'] || 0))
+    .reduce((sum: any, qty: any) => sum + qty, 0);
 
-console.log(totalQty, 'totalQty----->'); // 13
+  console.log(totalQty, 'totalQty----->'); // 13
 
-  
+
 
   const inventoryOnHandSum: any = await InventoryStatus.findAll({
     attributes: [[fn("SUM", col("Inventory_OnHand")), "total_onhand"]],
@@ -1498,8 +2008,8 @@ export function renderOrderTableFromERP(rows: any, opts: any = {}, orderNumber: 
       totalPriceCell = `<td class="">${money(subtotal)}</td>`;
     }
 
-    const orderedQuantityCell = showOrderedQuantity 
-      ? `<td class="quantity">${esc(orderedQty)}</td>` 
+    const orderedQuantityCell = showOrderedQuantity
+      ? `<td class="quantity">${esc(orderedQty)}</td>`
       : '';
 
     // Get first letter of product name for icon
@@ -1641,7 +2151,7 @@ export async function getInventoryFullItemNumber(itemNumber: number) {
     Item_Number: itemNumber,
   };
 
-  
+
 
   const inventory = await Inventory.findOne({
     where: whereClause,
@@ -1781,7 +2291,7 @@ export async function getTopLatestItems() {
   const productList = await Inventory.findAll({
     attributes: ['Item_Number'],
     where: {
-    
+
       I_Inactive: false,
       ShortOrderForm: true,
     },
@@ -1790,14 +2300,14 @@ export async function getTopLatestItems() {
     offset: 0,
     logging: console.log // <-- logs the SQL
   });
-  
+
 
   return productList;
 }
 
 
 export const sendEmailToMarketing = async (data: any) => {
-  const {to, subject, html,attachments,id,cc} = data;
+  const { to, subject, html, attachments, id, cc } = data;
   const emailJobs: Promise<any>[] = [];
   for (const email of to) {
     emailJobs.push(
@@ -1844,8 +2354,10 @@ export function pgArrayToJsArray(value: any): string[] {
 
 
 
-export async function getPrepaidTaxRate(userJurisdiction:number,salesId:number){
- 
+export async function getPrepaidTaxRate(userJurisdiction: number, salesId: number, e: any,price: number) {
+
+  const cig = e?.Cig_Pack || 0;
+  const sticks = e?.Cig_Sticks || 0;
   const taxRate = await SalesCategoryTaxRate.findOne({
     where: {
       Jurisdiction_State: userJurisdiction,
@@ -1853,19 +2365,32 @@ export async function getPrepaidTaxRate(userJurisdiction:number,salesId:number){
     },
   });
 
-  if(!taxRate){
-    return 0;
-  }else{
+  if (taxRate) {
+    return taxRate?.dataValues?.Category_TaxRate || 0;
+  } else {
 
+    if (salesId != 1) {
+      return 0;
+    } else {
+      const taxRateValue = await TaxRates.findOne({
+        where: {
+          Jurisdiction_State: userJurisdiction,
+          PPD_SalesTax: true,
+        },
+      })
 
-    const taxRateValue = await TaxRates.findOne({
-      where:{
-        Jurisdiction_State: userJurisdiction,
-      },
-      attributes: ['TaxRate'],
-    })
+      if(cig == 10){
 
-    return taxRateValue?.dataValues?.TaxRate || 0;
+        return (sticks/cig) * (taxRateValue?.dataValues?.PPD_Rate10 || 0)/price;
+      }else if(cig == 20){
+        return (sticks/cig) * (taxRateValue?.dataValues?.PPD_Rate20 || 0)/price;
+      }else if(cig == 25){
+        return (sticks/cig) * (taxRateValue?.dataValues?.PPD_Rate25 || 0)/price;
+      }else{
+        return 0;
+      }
+    }
+
   }
 
 }
@@ -1889,7 +2414,7 @@ export async function getCustomerExcludeItem(
   });
 
   // convert array of objects → array of Item_Number
-  return rows.map((r :any)=> Number(r.Item_Number));
+  return rows.map((r: any) => Number(r.Item_Number));
 }
 
 
@@ -1911,9 +2436,9 @@ export async function getCustomerExcludeItemForTradeShow(
   });
 
   // convert array of objects → array of Item_Number
-  return rows.map((r :any)=> String(r.Item_Number));
+  return rows.map((r: any) => String(r.Item_Number));
 }
-export async function excludeItemByUser(userId: number){
+export async function excludeItemByUser(userId: number) {
   const excludeItem = await CustAuthorized.findAll({
     where: {
       C_Number: userId,
@@ -1921,13 +2446,13 @@ export async function excludeItemByUser(userId: number){
     },
     attributes: ['Item_Number'],
   })
-  if(excludeItem.length > 0){
+  if (excludeItem.length > 0) {
     return excludeItem.map((item: any) => Number(item.Item_Number));
   }
   return [];
 }
 
-export async function excludeItemByUserInTradeShow(userId: number){
+export async function excludeItemByUserInTradeShow(userId: number) {
   const excludeItem = await CustAuthorized.findAll({
     where: {
       C_Number: userId,
@@ -1935,14 +2460,14 @@ export async function excludeItemByUserInTradeShow(userId: number){
     },
     attributes: ['Item_Number'],
   })
-  if(excludeItem.length > 0){
+  if (excludeItem.length > 0) {
     return excludeItem.map((item: any) => String(item.Item_Number));
   }
   return [];
 }
 
 
-export const dayFunctionObject:any = {
+export const dayFunctionObject: any = {
   'monday': 1,
   'tuesday': 2,
   'wednesday': 3,
@@ -1968,16 +2493,16 @@ export const toNum = (v: any) => {
 
 
 
-export function hasPriceChange(obj:any){
-  const keysToCheck = ['Price1', 'Price2', 'Price3',"Price4","Price5","Price6","BaseCost","NetCost","Invoice_Cost"];
-  return keysToCheck.some((key:any) => obj.hasOwnProperty(key));
+export function hasPriceChange(obj: any) {
+  const keysToCheck = ['Price1', 'Price2', 'Price3', "Price4", "Price5", "Price6", "BaseCost", "NetCost", "Invoice_Cost"];
+  return keysToCheck.some((key: any) => obj.hasOwnProperty(key));
 }
 
 
 
 export async function getAllowedSalesCategoriesAndPriceClasses(customerNumber: number) {
   // 1) Fetch customer flags
-  const customer :any= await Customer.findOne({
+  const customer: any = await Customer.findOne({
     where: { C_Number: customerNumber },
     raw: true,
   });
@@ -2006,7 +2531,7 @@ export async function getAllowedSalesCategoriesAndPriceClasses(customerNumber: n
   // 4) Fetch Price Classes that belong to those groups (only needed columns)
   const priceClasses = await PriceClass.findAll({
     where: { Sales_Category_Group: { [Op.in]: allowedCategories } },
-    attributes: ["Price_Class", "Class_Desc","Sales_Category_Group"],
+    attributes: ["Price_Class", "Class_Desc", "Sales_Category_Group"],
     order: [["Price_Class", "ASC"]],
     raw: true,
   });
@@ -2016,7 +2541,7 @@ export async function getAllowedSalesCategoriesAndPriceClasses(customerNumber: n
 
 export async function getAllowedSalesCategories(customerNumber: number) {
   // 1) Fetch customer flags
-  const customer :any= await Customer.findOne({
+  const customer: any = await Customer.findOne({
     where: { C_Number: customerNumber },
     raw: true,
   });
@@ -2043,9 +2568,9 @@ export async function getAllowedSalesCategories(customerNumber: number) {
   });
 
   const retrunSalesCategories = salesCategories.map((r: any) => r.Sales_Category);
- 
 
-  return   retrunSalesCategories ;
+
+  return retrunSalesCategories;
 }
 
 export function getDiscountedPrice(price: number, discount: number, disType: string) {

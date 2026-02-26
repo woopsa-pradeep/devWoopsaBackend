@@ -1,80 +1,124 @@
-// seeder/invoiceTemplate.seeder.ts
-
 import { InvoiceTemplate } from "../models/postgres/invoiceTemplate.model";
 
+export const DEFAULT_INVOICE_TEMPLATE = {
+  mainTemplate: false,
+
+  // ==========================
+  // Grouping
+  // ==========================
+  groupBy: "",
+  showGroupHeader: true,
+
+  // ==========================
+  // Columns
+  // ==========================
+  selectedColumns: {
+    orderQty: true,
+    shippedQty: true,
+    itemNumber: true,
+    description: true,
+    pack: true,
+    size: true,
+    upc: true,
+    sortNumber: true,
+    ebt: true,
+    retail1: false,
+    deposit: false,
+    price: true,
+    unitPrice: false,
+    tax: false,
+    prepaidTaxAmount: false,
+    totalPPD: false,
+    priceWithTaxWithPPD: false,
+    priceWithTaxWithoutPPD: false,
+    extendedTotal: true,
+  },
+
+  columnHeaderNames: {},
+  columnPlacement: "default",
+  columnOrder: {},
+
+  // ==========================
+  // UPC
+  // ==========================
+  upcOption: "barcode_primary",
+
+  // ==========================
+  // Header Visibility
+  // ==========================
+  showDistributorDetails: true,
+  showCustomerDetails: true,
+  showBillTo: true,
+  showShipTo: true,
+  showDocNumber: true,
+  showPageOf: true,
+  showInvoiceDate: true,
+  showInvoiceDateWithTime: false,
+  showRoute: true,
+  showStop: true,
+  showLogo: true,
+  logoPosition: "left",
+  showTerms: true,
+
+  headerOnPages: "firstplussummary",
+  showHeaderMessage: false,
+  headerMessageFirstPage: "",
+
+  // ==========================
+  // Footer
+  // ==========================
+  footerLayout: "messageleft",
+  showFooterMessage: false,
+  footerMessageLastPage: "",
+  footerSummaryLabels: {},
+
+  // ==========================
+  // Totals Section
+  // ==========================
+  showSubTotal: true,
+  showDeliveryCharge: true,
+  showDeposit: true,
+  showHouseCharge: false,
+  showPosCheck: false,
+  showPosCash: false,
+  showPosCredit: false,
+  showInvoiceTotal: true,
+  showLastBalance: true,
+  showTotalAmountDue: true,
+
+  // ==========================
+  // Misc
+  // ==========================
+  showReportGeneratedByWoopsa: true,
+};
+
 export async function seedInvoiceTemplates() {
-  const templateData = {
-    name: "Invoice Template 1",
-    mainTemplate: true,
-    groupBy: "",
-    showGroupHeader: true,
-    selectedColumns: {
-      orderQty: true,
-      shippedQty: true,
-      description: true,
-      itemNumber: true,
-      sortNumber: true,
-      upc: true,
-      price: true,
-      tax: false,
-      priceWithTax: true,
-      totalPrice: true,
-      retail1: false,
-      ebt: true,
-      pack: true,
-      size: true,
-      deposit: false,
-    },
-    upcOption: "barcode_primary",
-    showDistributorDetails: true,
-    showCustomerDetails: true,
-    showDocNumber: true,
-    showPageOf: true,
-    showInvoiceDate: true,
-    showInvoiceDateWithTime: false,
-    showRoute: true,
-    showStop: true,
-    showLogo: true,
-    logoPosition: "center",
-    showTerms: true,
-    headerOnPages: "firstPlusSummary",
-    showHeaderMessage: false,
-    headerMessageFirstPage: "",
-    footerLayout: "messageLeft",
-    showFooterMessage: false,
-    footerMessageLastPage: "",
-    showSubTotal: true,
-    showDeliveryCharge: true,
-    showLastBalance: true,
-    showTotalAmountDue: true,
-    showReportGeneratedByWoopsa: true,
-    showBillTo: true,
-    showShipTo: true,
-    showDeposit: true,
-  };
+  const templateName = "invoice template 1";
 
-  // Convert all string fields to lowercase
-  const templateToCreate = {
-    ...templateData,
-    name: templateData.name.toLowerCase(),
-    groupBy: templateData.groupBy.toLowerCase(),
-    upcOption: templateData.upcOption.toLowerCase(),
-    logoPosition: templateData.logoPosition.toLowerCase(),
-    headerOnPages: templateData.headerOnPages.toLowerCase(),
-    headerMessageFirstPage: templateData.headerMessageFirstPage.toLowerCase(),
-    footerLayout: templateData.footerLayout.toLowerCase(),
-    footerMessageLastPage: templateData.footerMessageLastPage.toLowerCase(),
-  };
+  try {
+    const existingTemplate = await InvoiceTemplate.findOne({
+      where: { name: templateName },
+    });
 
-  // Check if template with this name already exists (case-insensitive check)
-  const existingTemplate = await InvoiceTemplate.findOne({
-    where: { name: templateToCreate.name },
-  });
+    if (existingTemplate) {
+      console.log(`ℹ️ InvoiceTemplate "${templateName}" already exists`);
+      return;
+    }
 
-  if (!existingTemplate) {
-    await InvoiceTemplate.create(templateToCreate);
-    console.log(`✅ Seeded InvoiceTemplate: ${templateToCreate.name}`);
-  } else {
-    console.log(`ℹ️ InvoiceTemplate "${templateToCreate.name}" already exists, skipping seed`);
+    // Ensure no other template remains main
+    await InvoiceTemplate.update(
+      { mainTemplate: false },
+      { where: { mainTemplate: true } }
+    );
+
+    await InvoiceTemplate.create({
+      ...DEFAULT_INVOICE_TEMPLATE,
+      name: templateName,
+      mainTemplate: true,
+    });
+
+    console.log(`✅ Seeded InvoiceTemplate: ${templateName}`);
+  } catch (error) {
+    console.error("❌ Seeder error:", error);
   }
 }

@@ -8,7 +8,6 @@ applyAssociations();
 export const syncPostgresModels = async () => {
   try {
     await postgresSequelize.sync({ alter: true });
-   
     console.log('PostgreSQL models synchronized successfully');
 
   } catch (error) {

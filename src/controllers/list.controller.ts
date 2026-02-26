@@ -7,9 +7,9 @@ import { sendResponse } from "../utils/sendResponse";
 
 export class ListController {
     private listService: ListService;
-  
+
     constructor() {
-      this.listService = new ListService();
+        this.listService = new ListService();
     }
 
     async getSalesCategoryList(req: Request, res: Response) {
@@ -35,7 +35,7 @@ export class ListController {
     async getUserList(req: Request, res: Response) {
         const data = await this.listService.getUserList();
         sendResponse(res, 200, true, data, General.SUCCESS);
-    }   
+    }
 
     async getSalesRepList(req: Request, res: Response) {
         const data = await this.listService.getSalesRepList();
@@ -71,7 +71,12 @@ export class ListController {
         const data = await this.listService.getListForInventory();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
-    
+
+    async listOfRetailer(req: Request, res: Response) {
+        const data = await this.listService.listOfRetailer();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async getListOfCustomersCreate(req: Request, res: Response) {
         const data = await this.listService.getListOfCustomersCreate();
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -130,6 +135,11 @@ export class ListController {
 
     async getClassOfTradeList(req: Request, res: Response) {
         const data = await this.listService.getClassOfTradeList();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getListOfInventoryLogHistory(req: Request, res: Response) {
+        const data = await this.listService.getListOfInventoryLogHistory();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 }

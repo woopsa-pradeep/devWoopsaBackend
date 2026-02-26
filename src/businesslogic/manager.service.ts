@@ -12,7 +12,7 @@ import { AppError } from "../utils/AppError";
 import { Operations } from "../utils/operations";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
-import { cast, col, literal, Op, fn, Order, Sequelize, where, and ,FindAttributeOptions, FindOptions} from 'sequelize';
+import { cast, col, literal, Op, fn, Order, Sequelize, where, and, FindAttributeOptions, FindOptions } from 'sequelize';
 import { PriceClass } from "../models/mmsql/priceClass.model";
 import Banner from "../models/postgres/banner.model";
 import { SalesCategory } from "../models/mmsql/salesCategory.model";
@@ -121,7 +121,19 @@ import { CustFinanceCharges } from "../models/mmsql/custFinanceCharges.model"
 import { ARDeletes } from "../models/mmsql/arDeletes.mode";
 import { InventorySavedDetail } from "../models/mmsql/inventorySavedDetail.model"
 import { DeliveryTypes } from "../models/mmsql/deliveryType.model";
+import { ProductDiscount } from "../models/postgres/productDiscount.model";
+import { syncProductDiscountsToRedis } from "../cron/productDiscount.cron";
+import {
+  getAllProductDiscountsFromRedis,
+  getProductDiscountFromRedis,
+  getAllProductDiscountsForItemFromRedis,
+  getProductDiscountsByDateFromRedis,
+  getDiscountedPriceFromRedis
+} from "../utils/productDiscount.redis";
 import ApiLog from "../models/postgres/apilogs.model";
+import { InventoryLogHistory } from "../models/mmsql/InventoryLogHistory.model";
+import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model"
+import { DEFAULT_INVOICE_TEMPLATE } from "../seeder/invoiceTemplate.seeder"
 type DisType = "PERCENT" | "FLAT";
 
 type BulkItemInput = {
@@ -598,23 +610,23 @@ export class ManagerService {
   }
 
   async getProductList(query: PaginationOptions & { search?: string; all?: boolean }) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, I_Inactive, ShortOrderForm, all } = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, I_Inactive, ShortOrderForm, all, vendor } = query;
 
     page = Number(page);
     limit = Number(limit);
-    
+
     let whereClause: any = {};
 
     // If all = true, skip I_Inactive and ShortOrderForm filters
     if (all !== true) {
-      if(!I_Inactive){
+      if (!I_Inactive) {
         I_Inactive = false;
-      }else {
+      } else {
         I_Inactive = true;
       }
-      if(!ShortOrderForm){
+      if (!ShortOrderForm) {
         ShortOrderForm = false;
-      }else {
+      } else {
         ShortOrderForm = true;
       }
 
@@ -636,7 +648,8 @@ export class ManagerService {
       // Both filters exist → use OR condition
       whereClause[Op.or] = [
         { Sales_Category: { [Op.in]: salesCategoryId } },
-        { Price_Class: { [Op.in]: priceClassId } }
+        { Price_Class: { [Op.in]: priceClassId } },
+        { Primary_Vendor: { [Op.in]: vendor } }
       ];
     } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
       // Only Sales_Category filter
@@ -645,6 +658,10 @@ export class ManagerService {
       // Only Price_Class filter
       whereClause.Price_Class = { [Op.in]: priceClassId };
     }
+    else if (Array.isArray(vendor) && vendor.length > 0) {
+      whereClause.Primary_Vendor = { [Op.in]: vendor };
+    }
+
 
 
     if (search) {
@@ -845,18 +862,18 @@ export class ManagerService {
   }
 
   async getProductListWithTax(query: PaginationOptions & { search?: string }) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId,I_Inactive,ShortOrderForm ,customerId} = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, I_Inactive, ShortOrderForm, customerId } = query;
 
     page = Number(page);
     limit = Number(limit);
-    if(!I_Inactive){
+    if (!I_Inactive) {
       I_Inactive = false;
-    }else {
+    } else {
       I_Inactive = true;
     }
-    if(!ShortOrderForm){
+    if (!ShortOrderForm) {
       ShortOrderForm = false;
-    }else {
+    } else {
       ShortOrderForm = true;
     }
 
@@ -872,74 +889,74 @@ export class ManagerService {
     let searchInUPC = false;
     let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
-   
- 
 
-      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
-        // Both filters exist → use OR condition
-        whereClause[Op.or] = [
-          { Sales_Category: { [Op.in]: salesCategoryId } },
-          { Price_Class: { [Op.in]: priceClassId } }
-        ];
-      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
-        // Only Sales_Category filter
-        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
-        // Only Price_Class filter
-        whereClause.Price_Class = { [Op.in]: priceClassId };
+
+
+    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+      // Both filters exist → use OR condition
+      whereClause[Op.or] = [
+        { Sales_Category: { [Op.in]: salesCategoryId } },
+        { Price_Class: { [Op.in]: priceClassId } }
+      ];
+    } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+      // Only Sales_Category filter
+      whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+    } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      // Only Price_Class filter
+      whereClause.Price_Class = { [Op.in]: priceClassId };
+    }
+
+
+    if (search) {
+      if (/^\d{8,}$/.test(search)) {
+        searchInUPC = true;
       }
+      else {
+
+        const term = search.toLowerCase();
+        const anywhere = `%${term}%`;
+        const starts = `${term}%`
 
 
-      if (search) {
-        if (/^\d{8,}$/.test(search)) {
-          searchInUPC = true;
-        } 
-        else {
-        
-          const term = search.toLowerCase();
-          const anywhere = `%${term}%`;
-          const starts = `${term}%`
+        whereClause[Op.or] = [
+          Sequelize.where(
+            Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
+            { [Op.like]: anywhere }
+          ),
+          Sequelize.where(
+            Sequelize.fn("LOWER", Sequelize.col("Description")),
+            { [Op.like]: anywhere }
+          ),
+          Sequelize.where(
+            Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
+            { [Op.like]: anywhere }
+          )
+        ];
 
-          
-  whereClause[Op.or] = [
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Item_Number")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("Description")),
-      { [Op.like]: anywhere }
-    ),
-    Sequelize.where(
-      Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")),
-      { [Op.like]: anywhere }
-    )
-  ];
-
-  // ORDER RULE:
-  // 1. Items starting with search term first
-  // 2. Then items containing it anywhere
-  // 3. Finally alphabetical
-  orderClause = [
-    [
-      Sequelize.literal(`
+        // ORDER RULE:
+        // 1. Items starting with search term first
+        // 2. Then items containing it anywhere
+        // 3. Finally alphabetical
+        orderClause = [
+          [
+            Sequelize.literal(`
         CASE 
           WHEN LOWER("Description") LIKE '${starts}' THEN 0
           WHEN LOWER("Description") LIKE '${anywhere}' THEN 1
           ELSE 2
         END
       `),
-      'ASC'
-    ],
-    ['Description', 'ASC']
-  ];
-}
-
-
-        
+            'ASC'
+          ],
+          ['Description', 'ASC']
+        ];
       }
 
-    
+
+
+    }
+
+
 
     // === UPC JOIN logic ===
     const includeUPC = {
@@ -956,7 +973,7 @@ export class ManagerService {
 
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
-    
+
 
     let totalCount = 0;
 
@@ -983,20 +1000,20 @@ export class ManagerService {
       });
     }
 
-    
+
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces','EBT'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT'
       ],
       where: whereClause,
       include: [
         {
           model: SalesCategory,
           as: 'SalesCategory',
-          attributes: ['Category_Desc','Sales_Category'],
+          attributes: ['Category_Desc', 'Sales_Category'],
           required: false
         },
         {
@@ -1020,7 +1037,7 @@ export class ManagerService {
     });
 
     const itemNumbers = productList.map(e => e.Item_Number);
-    
+
 
     const productImages = await ProductImage.findAll({
       where: {
@@ -1042,10 +1059,10 @@ export class ManagerService {
 
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
       let userJurisdiction = null;
-      if(customerId){
-       userJurisdiction = await getJurisdiction(Number(customerId));
+      if (customerId) {
+        userJurisdiction = await getJurisdiction(Number(customerId));
       }
-      if(userJurisdiction){
+      if (userJurisdiction) {
         const taxRate = await getTaxRateV1(Number(e.OTP_Number), userJurisdiction as number, e.Item_Number, Number(e.Price1));
         e.Price1 = Number(e.Price1) + Number(taxRate);
       }
@@ -2048,7 +2065,7 @@ export class ManagerService {
 
     // Handle item_sort_by update
     if (body.item_sort_by !== undefined) {
-      const validSortOptions = ['sales_location', 'section_location','sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number'];
+      const validSortOptions = ['sales_location', 'section_location', 'sales_section_location', 'alphabetically', 'alphabetically_section_location', 'item_number', 'short_number', 'line_number'];
       if (!validSortOptions.includes(body.item_sort_by)) {
         throw new AppError(`Invalid item_sort_by. Must be one of: ${validSortOptions.join(', ')}`, 400);
       }
@@ -2537,24 +2554,24 @@ export class ManagerService {
   }
 
 
- async getOrderHistory(query: PaginationOptions) {
-   
+  async getOrderHistory(query: PaginationOptions) {
+
     const currentStatus = query.currentStatus || 'all';
- 
-   console.log(query, 'query--->');
- 
- 
- 
+
+    console.log(query, 'query--->');
+
+
+
     // Handle query parameters with potential trailing spaces
     const page = Number(query.page || (query as any)['page ']) || 1;
     const limit = Number(query.limit || (query as any)['limit ']) || 10;
     const customerNumber = query.customerNumber || (query as any)['customerNumber '];
     const startDate = query.startDate || (query as any)['startDate '];
     const endDate = query.endDate || (query as any)['endDate '];
- 
+
     const offset = (page - 1) * limit;
- 
-    if(currentStatus === 'recordLocks'){
+
+    if (currentStatus === 'recordLocks') {
       const recordLocks = await Record_Locks.findAll({
         where: {
           Lock_Type: 0
@@ -2565,11 +2582,11 @@ export class ManagerService {
       const recordLocksOrderNumbers = recordLocks.map((lock: any) => lock.Lock_Number);
       const whereCondition: any = {
       };
-      if(recordLocksOrderNumbers.length > 0){
+      if (recordLocksOrderNumbers.length > 0) {
         whereCondition.Order_Number = {
           [Op.in]: recordLocksOrderNumbers
         };
-      }else {
+      } else {
         return {
           totalCount: 0,
           page: page,
@@ -2578,26 +2595,26 @@ export class ManagerService {
           orderList: [],
         };
       }
-      if(query.isDeleted){
+      if (query.isDeleted) {
         whereCondition.Order_Deleted = query.isDeleted;
       }
-      if(query.updated){
+      if (query.updated) {
         whereCondition.Order_Updated = query.updated;
       }
- 
- 
-   
-     
+
+
+
+
       if (customerNumber) {
         whereCondition.C_Number = Number(customerNumber);
       }
- 
+
       if (startDate && endDate) {
         whereCondition.Order_Date = {
           [Op.between]: [startDate, endDate]
         };
       }
- 
+
       // First, get the order headers with pagination
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
         attributes: [
@@ -2628,15 +2645,15 @@ export class ManagerService {
         ],
         distinct: true,
         col: 'Order_Number',
- 
+
         order: [['Order_Number', 'DESC']],
         limit,
         offset,
       });
- 
+
       // Get the order numbers to fetch quantities
       const orderNumbers = orderList.map((order: any) => order.Order_Number);
- 
+
       // Get total quantities for these orders
       let quantityMap = new Map();
       if (orderNumbers.length > 0) {
@@ -2651,13 +2668,13 @@ export class ManagerService {
           group: ['Order_Number'],
           raw: true
         });
- 
+
         // Create a map for quick lookup
         quantityResults.forEach((result: any) => {
           quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
         });
       }
- 
+
       // Format the response
       const formattedOrderList = orderList.map((order: any) => {
         // Map Order_Source to readable names
@@ -2688,7 +2705,7 @@ export class ManagerService {
           totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0
         };
       });
- 
+
       return {
         totalCount,
         page,
@@ -2696,33 +2713,33 @@ export class ManagerService {
         totalPages: Math.ceil(Number(totalCount) / Number(limit)),
         orderList: formattedOrderList,
       };
- 
+
     }
- 
-    else if(currentStatus === 'orderConfirmation') {
- 
+
+    else if (currentStatus === 'orderConfirmation') {
+
       const whereCondition: any = {
       };
-      if(query.isDeleted){
+      if (query.isDeleted) {
         whereCondition.Order_Deleted = query.isDeleted;
       }
-      if(query.updated){
+      if (query.updated) {
         whereCondition.Order_Updated = query.updated;
       }
- 
-   
- 
-   
+
+
+
+
       if (customerNumber) {
         whereCondition.C_Number = Number(customerNumber);
       }
- 
+
       if (startDate && endDate) {
         whereCondition.Order_Date = {
           [Op.between]: [startDate, endDate]
         };
       }
- 
+
       // First, get the order headers with pagination
       const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
         attributes: [
@@ -2775,11 +2792,11 @@ export class ManagerService {
         limit,
         offset,
       });
-     
- 
+
+
       // Get the order numbers to fetch quantities
       const orderNumbers = orderList.map((order: any) => order.Order_Number);
- 
+
       // Get total quantities for these orders
       let quantityMap = new Map();
       if (orderNumbers.length > 0) {
@@ -2794,13 +2811,13 @@ export class ManagerService {
           group: ['Order_Number'],
           raw: true
         });
- 
+
         // Create a map for quick lookup
         quantityResults.forEach((result: any) => {
           quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
         });
       }
- 
+
       // Format the response
       const formattedOrderList = orderList.map((order: any) => {
         // Map Order_Source to readable names
@@ -2831,7 +2848,7 @@ export class ManagerService {
           totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0
         };
       });
- 
+
       return {
         totalCount,
         page,
@@ -2839,180 +2856,180 @@ export class ManagerService {
         totalPages: Math.ceil(Number(totalCount) / Number(limit)),
         orderList: formattedOrderList,
       };
- 
+
     }
-   
+
     else {
-    // Build where condition
-    const whereCondition: any = {
-    };
-    if(query.isDeleted == true){
-      whereCondition.Order_Deleted = true;
-    }
-    if(query.updated){
-      whereCondition.Order_Updated = query.updated;
-    }
- 
- 
- 
-    if(currentStatus === 'invoices'){
-      whereCondition.Invoice_Number = {
-        [Op.gt]: 0
+      // Build where condition
+      const whereCondition: any = {
       };
-    } else if(currentStatus === 'non_invoices'){
-      whereCondition.Invoice_Number = {
-        [Op.eq]: 0
-      };
-    }else if(currentStatus === 'picklist'){
-      whereCondition.Picklist_Printed = true;
-    }else if(currentStatus === 'EpickStatusFromPicker'){
-      whereCondition.EpickStatusFromPicker ='completed'
-    }
-   
-    if (customerNumber) {
-      whereCondition.C_Number = Number(customerNumber);
-    }
- 
-    if (startDate && endDate) {
-      whereCondition.Order_Date = {
-        [Op.between]: [startDate, endDate]
-      };
-    }
- 
-    // First, get the order headers with pagination
-    const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
-      attributes: [
-        'Order_Number',
-        'C_Number',
-        'Invoice_Number',
-        'Order_Source',
-        'Order_Date',
-        'Picklist_Printed',
-        'Order_Deleted'
-      ],
-      where: whereCondition,
-      include: [
-        {
-          model: Customer,
-          as: 'customer',
-          attributes: ['C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country'],
-          required: false,
-          include: [
-            {
-              model: CustomerRoute,
-              as: 'Routes',
-              attributes: ['Route_Number', 'Stop_Number'],
-              required: false
-            }
-          ]
-        },
-        {
-          model:OrderDetail,
-          as: 'orderDetails',
-          attributes: ['Order_Number', 'Quantity_Ordered'],
-          required: true
-         
-        }
-      ],
-      distinct: true,
-      col: 'Order_Number',
- 
-      order: [['Order_Number', 'DESC']],
-      limit,
-      offset,
-    });
- 
-    // Get the order numbers to fetch quantities
-    const orderNumbers = orderList.map((order: any) => order.Order_Number);
- 
-    // Get total quantities for these orders
-    let quantityMap = new Map();
-    let isConfirmed = new Map();
-    if (orderNumbers.length > 0) {
-      // Get total quantities grouped by Order_Number
-      const quantityResults = await OrderDetail.findAll({
+      if (query.isDeleted == true) {
+        whereCondition.Order_Deleted = true;
+      }
+      if (query.updated) {
+        whereCondition.Order_Updated = query.updated;
+      }
+
+
+
+      if (currentStatus === 'invoices') {
+        whereCondition.Invoice_Number = {
+          [Op.gt]: 0
+        };
+      } else if (currentStatus === 'non_invoices') {
+        whereCondition.Invoice_Number = {
+          [Op.eq]: 0
+        };
+      } else if (currentStatus === 'picklist') {
+        whereCondition.Picklist_Printed = true;
+      } else if (currentStatus === 'EpickStatusFromPicker') {
+        whereCondition.EpickStatusFromPicker = 'completed'
+      }
+
+      if (customerNumber) {
+        whereCondition.C_Number = Number(customerNumber);
+      }
+
+      if (startDate && endDate) {
+        whereCondition.Order_Date = {
+          [Op.between]: [startDate, endDate]
+        };
+      }
+
+      // First, get the order headers with pagination
+      const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
         attributes: [
           'Order_Number',
-          [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+          'C_Number',
+          'Invoice_Number',
+          'Order_Source',
+          'Order_Date',
+          'Picklist_Printed',
+          'Order_Deleted'
         ],
-        where: {
-          Order_Number: { [Op.in]: orderNumbers }
-        },
-        group: ['Order_Number'],
-        raw: true
+        where: whereCondition,
+        include: [
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: ['C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country'],
+            required: false,
+            include: [
+              {
+                model: CustomerRoute,
+                as: 'Routes',
+                attributes: ['Route_Number', 'Stop_Number'],
+                required: false
+              }
+            ]
+          },
+          {
+            model: OrderDetail,
+            as: 'orderDetails',
+            attributes: ['Order_Number', 'Quantity_Ordered'],
+            required: true
+
+          }
+        ],
+        distinct: true,
+        col: 'Order_Number',
+
+        order: [['Order_Number', 'DESC']],
+        limit,
+        offset,
       });
- 
-      // Create a map for quick lookup of quantities
-      quantityResults.forEach((result: any) => {
-        quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
-      });
- 
-      // Get all OrderDetails to check Confirmed status
-      const allOrderDetails = await OrderDetail.findAll({
-        attributes: ['Order_Number', 'Confirmed'],
-        where: {
-          Order_Number: { [Op.in]: orderNumbers }
-        },
-        raw: true
-      });
- 
-      // Group OrderDetails by Order_Number and check if all are confirmed
-      const orderDetailsByOrder = new Map<number, any[]>();
-      allOrderDetails.forEach((detail: any) => {
-        const orderNum = detail.Order_Number;
-        if (!orderDetailsByOrder.has(orderNum)) {
-          orderDetailsByOrder.set(orderNum, []);
-        }
-        orderDetailsByOrder.get(orderNum)!.push(detail);
-      });
- 
-      // For each order, check if ALL OrderDetails have Confirmed=true
-      orderDetailsByOrder.forEach((details: any[], orderNum: number) => {
-        const allConfirmed = details.every((detail: any) => detail.Confirmed === true);
-        isConfirmed.set(orderNum, allConfirmed);
-      });
-    }
- 
-    // Format the response
-    const formattedOrderList = orderList.map((order: any) => {
-      // Map Order_Source to readable names
-      let orderSourceName = 'ERP';
-      if (order.Order_Source === 13) {
-        orderSourceName = 'Web';
-      } else if (order.Order_Source === 12) {
-        orderSourceName = 'App';
+
+      // Get the order numbers to fetch quantities
+      const orderNumbers = orderList.map((order: any) => order.Order_Number);
+
+      // Get total quantities for these orders
+      let quantityMap = new Map();
+      let isConfirmed = new Map();
+      if (orderNumbers.length > 0) {
+        // Get total quantities grouped by Order_Number
+        const quantityResults = await OrderDetail.findAll({
+          attributes: [
+            'Order_Number',
+            [Sequelize.fn('SUM', Sequelize.col('Quantity_Ordered')), 'totalQuantity']
+          ],
+          where: {
+            Order_Number: { [Op.in]: orderNumbers }
+          },
+          group: ['Order_Number'],
+          raw: true
+        });
+
+        // Create a map for quick lookup of quantities
+        quantityResults.forEach((result: any) => {
+          quantityMap.set(result.Order_Number, Number(result.totalQuantity || 0));
+        });
+
+        // Get all OrderDetails to check Confirmed status
+        const allOrderDetails = await OrderDetail.findAll({
+          attributes: ['Order_Number', 'Confirmed'],
+          where: {
+            Order_Number: { [Op.in]: orderNumbers }
+          },
+          raw: true
+        });
+
+        // Group OrderDetails by Order_Number and check if all are confirmed
+        const orderDetailsByOrder = new Map<number, any[]>();
+        allOrderDetails.forEach((detail: any) => {
+          const orderNum = detail.Order_Number;
+          if (!orderDetailsByOrder.has(orderNum)) {
+            orderDetailsByOrder.set(orderNum, []);
+          }
+          orderDetailsByOrder.get(orderNum)!.push(detail);
+        });
+
+        // For each order, check if ALL OrderDetails have Confirmed=true
+        orderDetailsByOrder.forEach((details: any[], orderNum: number) => {
+          const allConfirmed = details.every((detail: any) => detail.Confirmed === true);
+          isConfirmed.set(orderNum, allConfirmed);
+        });
       }
-      const route = order.customer?.Routes?.[0];
+
+      // Format the response
+      const formattedOrderList = orderList.map((order: any) => {
+        // Map Order_Source to readable names
+        let orderSourceName = 'ERP';
+        if (order.Order_Source === 13) {
+          orderSourceName = 'Web';
+        } else if (order.Order_Source === 12) {
+          orderSourceName = 'App';
+        }
+        const route = order.customer?.Routes?.[0];
+        return {
+          Order_Number: order.Order_Number,
+          C_Number: order.C_Number,
+          Invoice_Number: order.Invoice_Number,
+          Order_Source: order.Order_Source,
+          Order_Deleted: order.Order_Deleted,
+          Order_Source_Name: orderSourceName,
+          Order_Date: order.Order_Date,
+          Picklist_Printed: order.Picklist_Printed,
+          customerName: order.customer?.C_Name || 'N/A',
+          address: order.customer?.C_Address || 'N/A',
+          city: order.customer?.C_City || 'N/A',
+          state: order.customer?.C_State || 'N/A',
+          zip: order.customer?.C_Zip || 'N/A',
+          country: order.customer?.C_Country || 'N/A',
+          route: route?.Route_Number ?? null,
+          stop: route?.Stop_Number ?? null,
+          totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
+          isConfirmed: isConfirmed.get(order.Order_Number) || false
+        };
+      });
+
       return {
-        Order_Number: order.Order_Number,
-        C_Number: order.C_Number,
-        Invoice_Number: order.Invoice_Number,
-        Order_Source: order.Order_Source,
-        Order_Deleted: order.Order_Deleted,
-        Order_Source_Name: orderSourceName,
-        Order_Date: order.Order_Date,
-        Picklist_Printed: order.Picklist_Printed,
-        customerName: order.customer?.C_Name || 'N/A',
-        address: order.customer?.C_Address || 'N/A',
-        city: order.customer?.C_City || 'N/A',
-        state: order.customer?.C_State || 'N/A',
-        zip: order.customer?.C_Zip || 'N/A',
-        country: order.customer?.C_Country || 'N/A',
-        route: route?.Route_Number ?? null,
-        stop: route?.Stop_Number ?? null,
-        totalQuantityOrdered: quantityMap.get(order.Order_Number) || 0,
-        isConfirmed: isConfirmed.get(order.Order_Number) || false
+        totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(Number(totalCount) / Number(limit)),
+        orderList: formattedOrderList,
       };
-    });
- 
-    return {
-      totalCount,
-      page,
-      limit,
-      totalPages: Math.ceil(Number(totalCount) / Number(limit)),
-      orderList: formattedOrderList,
-    };
-  }
+    }
   }
 
 
@@ -3060,7 +3077,7 @@ export class ManagerService {
 
   //     return orderNumbers.map((order: any) => order.Order_Number);
   //   };
-  
+
 
   //   if(currentStatus === 'recordLocks'){
   //     const recordLocks = await Record_Locks.findAll({
@@ -3081,12 +3098,12 @@ export class ManagerService {
   //     }else {
   //       return {
   //         totalCount: 0,
-        
+
   //         totalPages: 0,
   //         orderList: [],
   //       };
   //     }
-  
+
   //       whereCondition.Order_Deleted = false
   //       whereCondition.Picklist_Printed = false;
   //       whereCondition.Order_Updated = false;
@@ -3095,7 +3112,7 @@ export class ManagerService {
   //       whereCondition.Order_Date = {
   //         [Op.between]: [startDate, endDate]
   //       };
-    
+
   //     // First, get the order headers with pagination
   //     const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
   //       attributes: [
@@ -3109,7 +3126,7 @@ export class ManagerService {
   //           as: 'orderDetails',
   //           attributes: ['Order_Number', 'Quantity_Ordered'],
   //           required: true
-           
+
   //         },
   //         {
   //           model: Customer,
@@ -3124,29 +3141,29 @@ export class ManagerService {
   //               required: false
   //             }
   //           ]
-            
+
   //         }
-          
+
   //       ],
-        
+
   //       distinct: true,
   //       col: 'Order_Number',
-  
+
   //       order: [['Order_Number', 'DESC']],
-       
+
   //     });
-  
+
   //     // Get the order numbers to fetch quantities
-  
+
   //     // Get total quantities for these orders
-    
-  
+
+
   //     // Format the response
-     
-  
+
+
   //     return {
   //       totalCount,
-       
+
   //       orderList: orderList,
   //     };
 
@@ -3158,7 +3175,7 @@ export class ManagerService {
   //       Invoice_Number: { [Op.gt]: 0 }
 
   //     };
-     
+
   //     whereCondition.Order_Deleted = false
   //     whereCondition.Picklist_Printed = false;
   //     whereCondition.Order_Updated = false;
@@ -3167,17 +3184,17 @@ export class ManagerService {
   //     whereCondition.Order_Date = {
   //           [Op.between]: [startDate, endDate]
   //         };
-    
+
   //     // First, get the order headers with pagination
   //     const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
   //       attributes: [
   //         'Order_Number',
   //         'C_Number',
-          
+
   //       ],
   //       where: {
   //         ...whereCondition,
-        
+
   //       },
   //       include: [
 
@@ -3186,7 +3203,7 @@ export class ManagerService {
   //           as: 'orderDetails',
   //           attributes: ['Order_Number', 'Quantity_Ordered'],
   //           required: true
-           
+
   //         },
   //         {
   //           model: Customer,
@@ -3206,17 +3223,17 @@ export class ManagerService {
   //       distinct: true,
   //       col: 'Order_Number',
   //       order: [['Order_Number', 'DESC']],
-       
+
   //     });
-    
+
   //     return {
   //       totalCount,
-       
+
   //       orderList: orderList,
   //     };
 
   //   }
-    
+
   //   else {
   //   // Build where condition
   //   const whereCondition: any = {
@@ -3232,7 +3249,7 @@ export class ManagerService {
   //           [Op.between]: [startDate, endDate]
   //         };
 
- 
+
   // if(currentStatus === 'non_invoices'){
   //     whereCondition.Invoice_Number = {
   //       [Op.eq]: 0
@@ -3240,15 +3257,15 @@ export class ManagerService {
   //   }else if(currentStatus === 'EpickStatusFromPicker'){
   //     whereCondition.EpickStatusFromPicker ='completed'
   //   }
-    
-    
+
+
   //   console.log('Final whereCondition for order confirmation--->', whereCondition);
   //   // First, get the order headers with pagination
   //   const { count: totalCount, rows: orderList } = await OrderHeader.findAndCountAll({
   //     attributes: [
   //       'Order_Number',
   //       'C_Number'
-       
+
   //     ],
   //     where: whereCondition,
   //     include: [
@@ -3271,26 +3288,26 @@ export class ManagerService {
   //         as: 'orderDetails',
   //         attributes: ['Order_Number', 'Quantity_Ordered'],
   //         required: true
-         
+
   //       }
   //     ],
   //     distinct: true,
   //     col: 'Order_Number',
 
   //     order: [['Order_Number', 'DESC']],
-     
+
   //   });
 
   //   // Get the order numbers to fetch quantities
 
-   
+
 
   //   // Format the response
-    
+
 
   //   return {
   //     totalCount,
-     
+
   //     orderList: orderList,
   //   };
   // }
@@ -3328,7 +3345,7 @@ export class ManagerService {
 
       whereCondition.Invoice_Number = { [Op.lte]: 0 };
 
-      const orderList  = await OrderHeader.findAll({
+      const orderList = await OrderHeader.findAll({
         attributes: ['Order_Number', 'C_Number'],
         where: whereCondition,
         include: [
@@ -3342,11 +3359,12 @@ export class ManagerService {
         order: [['Order_Number', 'DESC']],
       });
 
-      return { 
-        totalCount: orderList.length, 
-        orderList: orderList };
-      }
-    
+      return {
+        totalCount: orderList.length,
+        orderList: orderList
+      };
+    }
+
 
     if (currentStatus === 'recordLocks') {
 
@@ -3483,7 +3501,7 @@ export class ManagerService {
   }
 
 
-  
+
   async getOrderHistoryByOrderNumber(orderNumber: number, query: PaginationOptions) {
     let { page = 1, limit = 10 } = query;
     page = Number(query.page || (query as any)['page ']) || 1;
@@ -5874,7 +5892,7 @@ export class ManagerService {
 
     const customerNumbers = customers.map((c: any) => c.C_Number);
 
-const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
+    const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
 
     // 2️⃣ Orders for those customers on that date
     const orders = await OrderHeader.findAll({
@@ -5884,7 +5902,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
           [Op.gte]: normalizedDate,
           [Op.lt]: nextDate,
         },
-        },
+      },
       attributes: ["Order_Number", "C_Number"],
       raw: true,
     });
@@ -5904,7 +5922,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return {
       total: count,
       doneCount,
-      customerOrder:orders?.length || 0,
+      customerOrder: orders?.length || 0,
       pendingCount
     };
   }
@@ -6108,7 +6126,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     // Transform the data to include configuration status and config data
     const moduleData: any = emailModule.toJSON();
     const hasConfig = moduleData.configs && moduleData.configs.length > 0;
-    
+
     return {
       ...moduleData,
       configuration: hasConfig,
@@ -6150,7 +6168,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     const transformedData = rows.map((module) => {
       const moduleData: any = module.toJSON();
       const hasConfig = moduleData.configs && moduleData.configs.length > 0;
-      
+
       return {
         ...moduleData,
         configuration: hasConfig,
@@ -6239,10 +6257,10 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return emailModuleConfig;
   }
 
-  async getAllEmailModuleConfigs(query: PaginationOptions & { 
-    search?: string; 
-    emailModuleId?: number; 
-    isActive?: boolean 
+  async getAllEmailModuleConfigs(query: PaginationOptions & {
+    search?: string;
+    emailModuleId?: number;
+    isActive?: boolean
   }) {
     const { page = 1, limit = 10, search = '', emailModuleId, isActive } = query;
     const offset = (page - 1) * limit;
@@ -6452,11 +6470,11 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   }
 
   async testEmailMarketing(data: any) {
-    const { to, subject, html,  attachments, cc } = data;
+    const { to, subject, html, attachments, cc } = data;
     const result = await sendEmailMarketing({ to, subject, html, attachments, cc });
     return result;
   }
-  
+
   // Email Marketing CRUD service methods
   async createEmailMarketing(data: any) {
 
@@ -7377,7 +7395,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     if (existingDriver) {
       throw new AppError('Driver with this email already exists', 400);
     }
-   
+
     const hashedPassword = await hashPassword(body.password);
 
     body.password = hashedPassword;
@@ -7544,7 +7562,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     };
   }
 
-  
+
   async updateVehicle(id: number, body: any) {
     const vehicle = await Vehicle.findByPk(id);
     if (!vehicle) {
@@ -7591,33 +7609,34 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
 
 
 
- 
 
-  async getAllOrderNumbers (){
+
+  async getAllOrderNumbers() {
     const orderNumbers = await OrderHeader.findAll({
       attributes: ['Order_Number'],
-      where: { Picklist_Printed: false , Confirmed: false, Order_Deleted: false, Order_Updated: false, Order_Type: { [Op.ne]: 6 }, Invoice_Number: { [Op.lte]: 0 } }, 
+      where: { Picklist_Printed: false, Confirmed: false, Order_Deleted: false, Order_Updated: false, Order_Type: { [Op.ne]: 6 }, Invoice_Number: { [Op.lte]: 0 } },
       order: [['Order_Number', 'DESC']]
     });
     return orderNumbers;
   }
 
-   async getAllOrderNumbersByCustomer (body:any){
-    const {customerId} = body
- let orderNumbers : any
-    if(customerId.length === 0){
-       orderNumbers = await OrderHeader.findAll({ 
+  async getAllOrderNumbersByCustomer(body: any) {
+    const { customerId } = body
+    let orderNumbers: any
+    if (customerId.length === 0) {
+      orderNumbers = await OrderHeader.findAll({
         attributes: ['Order_Number'],
         order: [['Order_Number', 'DESC']]
       });
-    }else {
-       orderNumbers = await OrderHeader.findAll({ where: { C_Number: { [Op.in]: customerId } },
+    } else {
+      orderNumbers = await OrderHeader.findAll({
+        where: { C_Number: { [Op.in]: customerId } },
         attributes: ['Order_Number'],
         order: [['Order_Number', 'DESC']]
       });
     }
-   
-    
+
+
     return {
       totalCount: orderNumbers.length,
       orderNumbers
@@ -7730,8 +7749,8 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
   async makeBulkPickListPrinted(orderNumbers: number[]) {
     const now = new Date();
     const formatted =
-    now.toISOString().slice(0, 19).replace("T", " "); // 
-    await OrderHeader.update({ Picklist_Printed: true, Picklist_Time: formatted}, { where: { Order_Number: { [Op.in]: orderNumbers } } });
+      now.toISOString().slice(0, 19).replace("T", " "); // 
+    await OrderHeader.update({ Picklist_Printed: true, Picklist_Time: formatted }, { where: { Order_Number: { [Op.in]: orderNumbers } } });
     return { message: "Bulk picklist printed successfully" };
   }
 
@@ -8650,31 +8669,31 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     const { startDate, endDate, page = 1, limit = 10, } = filters;
     const offset = (page - 1) * limit;
 
-  let start: Date | undefined;
-  let end: Date | undefined;
+    let start: Date | undefined;
+    let end: Date | undefined;
 
-  if (startDate) {
-    start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-  }
-  if (endDate){
-  end = new Date(endDate);
-  end.setHours(23, 59, 59, 999);
-  }
+    if (startDate) {
+      start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+    }
+    if (endDate) {
+      end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+    }
 
-  const invoiceDateWhere: any = {};
+    const invoiceDateWhere: any = {};
 
-  if (start) {
-    invoiceDateWhere[Op.gte] = start;
-  }
+    if (start) {
+      invoiceDateWhere[Op.gte] = start;
+    }
 
-  invoiceDateWhere[Op.lte] = end;
+    invoiceDateWhere[Op.lte] = end;
 
-  const orderHeaderWhere: any = {
-    Order_Updated: 'True',
-    Order_Deleted: 'False',
-    Invoice_Date: invoiceDateWhere,
-  };
+    const orderHeaderWhere: any = {
+      Order_Updated: 'True',
+      Order_Deleted: 'False',
+      Invoice_Date: invoiceDateWhere,
+    };
 
     /**
      * Selected Attributes
@@ -8848,7 +8867,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
       [col('inventory.Location'), 'Location'],
       [col('inventory.Section'), 'Section'],
       [col('inventory.PickArea'), 'PickArea'],
-      
+
       [col('inventory.Pack'), 'Pack'],
       [col('inventory.UnitOunces'), 'UnitOunces'],
       [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
@@ -8856,7 +8875,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
       [col('inventory.Cig_Pack'), 'Cig_Pack'],
       [col('inventory.Price_Class'), 'Price_Class_Number'],
       [col('inventory.PriceClass.Class_Desc'), 'Class_Desc'],
-      
+
 
       [col('orderHeader.customer.C_Name'), 'C_Name'],
       [col('orderHeader.customer.c_address'), 'c_address'],
@@ -8936,13 +8955,13 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
 
   async getAllOrderForDriver(query: PaginationOptions) {
     let { page = 1, limit = 10, routeNumber } = query;
-  
+
     page = Number(page);
     limit = Number(limit);
     const offset = (page - 1) * limit;
-  
+
     const driverStartDate = process.env.DELIVERY_START_DATE;
-  
+
     const whereCondition: any = {
       Order_Date: {
         [Op.gte]: driverStartDate,
@@ -8959,11 +8978,11 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
       Order_Deleted: false,
       Suspend: false,
     };
-  
+
     if (routeNumber) {
       whereCondition.Route_Number = routeNumber;
     }
-  
+
     const { rows: orders, count: totalRecords } =
       await OrderHeader.findAndCountAll({
         where: whereCondition,
@@ -9001,18 +9020,18 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
         offset,
       });
 
-      const finalOrders= await Promise.all(orders.map(async (order: any) => {
-        let orderData = order.dataValues;
-        const customerLocation = await RetailerLocation.findOne({
-          where: {
-            C_Number: orderData.C_Number,
-          },
-        });
-        return {
-          ...orderData,
-          customerLocation : customerLocation ? customerLocation.dataValues : null,
-        };
-      }));
+    const finalOrders = await Promise.all(orders.map(async (order: any) => {
+      let orderData = order.dataValues;
+      const customerLocation = await RetailerLocation.findOne({
+        where: {
+          C_Number: orderData.C_Number,
+        },
+      });
+      return {
+        ...orderData,
+        customerLocation: customerLocation ? customerLocation.dataValues : null,
+      };
+    }));
 
     return {
       data: finalOrders,
@@ -9046,29 +9065,29 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     // legs[N] = last optimized stop -> destination
     const optimizedStops = waypointOrder.map((originalIndex: number, optimizedIndex: number) => {
       const stop = stops[originalIndex];
-      
+
       // Get the leg that ends at this stop (leg index = optimizedIndex)
       // This leg goes from previous point (or origin) to this stop
       const leg = legs[optimizedIndex];
-      
+
       if (!leg) {
         throw new AppError(`Missing leg data for stop at index ${optimizedIndex}`, 500);
       }
-      
+
       // Per-stop distance (distance for this specific leg to reach this stop)
       const legDistanceMeters = Number(leg?.distance?.value ?? 0);
       const legDistanceKm = Number((legDistanceMeters / 1000).toFixed(3));
-      
+
       // Cumulative distance (sum of all legs from origin up to and including this stop)
       const cumulativeMeters = legs
         .slice(0, optimizedIndex + 1)
         .reduce((sum, l) => sum + Number(l?.distance?.value ?? 0), 0);
       const cumulativeKm = Number((cumulativeMeters / 1000).toFixed(3));
-      
+
       // Get coordinates from the leg's end location (where the stop is)
       // This is more accurate than the original coordinates as Google geocodes the exact route location
       const stopLocation = leg?.end_location || { lat: stop.lat, lng: stop.lng };
-      
+
       return {
         stopSequence: optimizedIndex + 1,
         C_Number: stop.C_Number,
@@ -9097,88 +9116,88 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     };
   }
 
-   async  createDeliveryRoute(body: any) {
+  async createDeliveryRoute(body: any) {
     return await postgresSequelize.transaction(async (t) => {
       // CASE A: normal route (no children)
       if (body.deliveryRoute && Array.isArray(body.deliveryRouteStops)) {
         const deliveryRoute = body.deliveryRoute;
         const deliveryRouteStops = body.deliveryRouteStops;
-  
+
         // enforce parent fields for normal route
         deliveryRoute.hasChildren = false;
         deliveryRoute.parentRouteId = null;
         deliveryRoute.splitIndex = 0;
         deliveryRoute.routeGroupKey = deliveryRoute.routeGroupKey || deliveryRoute.routeNumber;
-  
+
         const newRoute = await DeliveryRoute.create(deliveryRoute, { transaction: t });
-  
+
         const stopsToInsert = deliveryRouteStops.map((stop: any) => ({
           ...stop,
           routeId: newRoute.id,
         }));
-  
+
         await DeliveryRouteStop.bulkCreate(stopsToInsert, { transaction: t });
-  
+
         return { parentRoute: newRoute, children: [] };
       }
-  
+
       // CASE B: split route (parent + children)
       if (body.parentDeliveryRoute && Array.isArray(body.children) && body.children.length) {
         const parentPayload = body.parentDeliveryRoute;
-  
+
         parentPayload.hasChildren = true;
         parentPayload.parentRouteId = null;
         parentPayload.splitIndex = 0;
         parentPayload.routeGroupKey = parentPayload.routeGroupKey || parentPayload.routeNumber;
-  
+
         // 1) create parent
         const parentRoute = await DeliveryRoute.create(parentPayload, { transaction: t });
-  
+
         // 2) create children and their stops
         const createdChildren: any[] = [];
-  
+
         for (const child of body.children) {
           if (!child.deliveryRoute || !Array.isArray(child.deliveryRouteStops)) {
             throw new Error("Each child must contain deliveryRoute and deliveryRouteStops");
           }
-  
+
           const childRoutePayload = child.deliveryRoute;
-  
+
           // enforce child linkage
           childRoutePayload.parentRouteId = parentRoute.id;
           childRoutePayload.routeGroupKey = parentRoute.routeGroupKey;
           childRoutePayload.hasChildren = false;
-  
+
           const childRoute = await DeliveryRoute.create(childRoutePayload, { transaction: t });
-  
+
           const childStops = child.deliveryRouteStops.map((stop: any) => ({
             ...stop,
             routeId: childRoute.id,
           }));
-  
+
           await DeliveryRouteStop.bulkCreate(childStops, { transaction: t });
-  
+
           createdChildren.push(childRoute);
         }
-  
+
         return { parentRoute, children: createdChildren };
       }
-  
+
       throw new Error("Invalid payload. Send either {deliveryRoute, deliveryRouteStops} OR {parentDeliveryRoute, children[]}");
     });
   }
 
-  async getDeliveryRoutes(query: PaginationOptions & { 
+  async getDeliveryRoutes(query: PaginationOptions & {
     routeId?: number;
     day?: string;
     driverId?: number;
     routeStatus?: string;
     includeStops?: boolean;
     includeChildren?: boolean;
-}) {
-    const { 
-      page = 1, 
-      limit = 10, 
+  }) {
+    const {
+      page = 1,
+      limit = 10,
       routeId,
       day,
       driverId,
@@ -9327,10 +9346,10 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
       };
     }
 
-   
 
-    }
- async getARreports(query: {
+
+  }
+  async getARreports(query: {
     startDate: string;
     endDate: string;
     page?: number;
@@ -9340,18 +9359,18 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
       startDate,
       endDate,
       page = 1,
-      limit ,
+      limit,
     } = query;
 
     const offset = limit ? (page - 1) * limit : undefined;
     const end = new Date(endDate);
-    end.setDate(end.getDate() );
+    end.setDate(end.getDate());
 
 
     const total = await ARDeposits.count({
       distinct: true,
       col: 'Deposit_ID',
-      where: { 
+      where: {
         Deposit_Date: {
           [Op.gte]: startDate,
           [Op.lte]: end,
@@ -9376,7 +9395,7 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
         {
           model: CustReceivables,
           as: 'custReceivables',
-          required: false, 
+          required: false,
           include: [
 
             {
@@ -9387,8 +9406,8 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
             },
             {
               model: Users,
-              required:false,
-              attributes:['UserNumber','UserName']
+              required: false,
+              attributes: ['UserNumber', 'UserName']
             },
             {
               model: ARDefinitions,
@@ -9417,317 +9436,317 @@ const nextDate = moment(normalizedDate).add(1, 'day').format('YYYY-MM-DD');
     return { total, page, limit, data, };
   }
 
- async getARUndepositeFund(startDate: string, endDate: string) {
-  const end = new Date(endDate);
-  end.setDate(end.getDate() + 1);
-  const data = await CustReceivables.findAll({
-    attributes: {
-      include: [
-        // SubType from AR_Definitions (matching both AR_Type & AR_SubType)
-        [
-          sequelize.literal(`(
+  async getARUndepositeFund(startDate: string, endDate: string) {
+    const end = new Date(endDate);
+    end.setDate(end.getDate() + 1);
+    const data = await CustReceivables.findAll({
+      attributes: {
+        include: [
+          // SubType from AR_Definitions (matching both AR_Type & AR_SubType)
+          [
+            sequelize.literal(`(
             SELECT AR_SubTypeRef 
             FROM AR_Definitions 
             WHERE AR_Definitions.AR_Type = CustReceivables.AR_Type 
               AND AR_Definitions.AR_SubType = CustReceivables.AR_SubType
           )`),
-          'SubType'
-        ],
-        // RepName from SalesRep
-        [
-          sequelize.literal(`(
+            'SubType'
+          ],
+          // RepName from SalesRep
+          [
+            sequelize.literal(`(
             SELECT S_Desc 
             FROM SalesRep 
             WHERE SalesRep.S_Number = Customer.C_Salesman
           )`),
-          'RepName'
-        ],
-        // DaysUntilDue from Invoice_Terms
-        [
-          sequelize.literal(`(
+            'RepName'
+          ],
+          // DaysUntilDue from Invoice_Terms
+          [
+            sequelize.literal(`(
             SELECT DaysUntilDue 
             FROM Invoice_Terms 
             WHERE Invoice_Terms.TermsCode = Customer.TermsCode
           )`),
-          'DaysUntilDue'
-        ],
-        // Terms from Invoice_Terms
-        [
-          sequelize.literal(`(
+            'DaysUntilDue'
+          ],
+          // Terms from Invoice_Terms
+          [
+            sequelize.literal(`(
             SELECT Terms 
             FROM Invoice_Terms 
             WHERE Invoice_Terms.TermsCode = Customer.TermsCode
           )`),
-          'Terms'
-        ],
-        // Sum of Finance_Charge
-        [
-          sequelize.literal(`ISNULL((
+            'Terms'
+          ],
+          // Sum of Finance_Charge
+          [
+            sequelize.literal(`ISNULL((
             SELECT SUM(Finance_Charge) 
             FROM Cust_FinanceCharges 
             WHERE Cust_FinanceCharges.C_Number = CustReceivables.C_Number
           ), 0)`),
-          'fCharge'
-        ],
-      ]
-    },
-    include: [
-      {
-        model: Customer,
-        as: 'customer',
-        attributes: [
-          'C_Name',
-          'C_Address',
-          'C_City',
-          'C_State',
-          'C_Zip',
-          'C_Phone',
-          'C_Fax',
-          'C_Email',
-          'TermsCode',
-          'C_Salesman',
-          'C_StatementAccount',
+            'fCharge'
+          ],
         ]
-      }
-    ],
-    where: {
-      Deposit_ID: 0,
-      AR_Type: { [Op.ne]: 'I' },
-      AR_CheckDate: {
-        // [Op.between]: [startDate, endDate]
-        [Op.gte]: startDate,
+      },
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: [
+            'C_Name',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Zip',
+            'C_Phone',
+            'C_Fax',
+            'C_Email',
+            'TermsCode',
+            'C_Salesman',
+            'C_StatementAccount',
+          ]
+        }
+      ],
+      where: {
+        Deposit_ID: 0,
+        AR_Type: { [Op.ne]: 'I' },
+        AR_CheckDate: {
+          // [Op.between]: [startDate, endDate]
+          [Op.gte]: startDate,
+          [Op.lte]: end,
+        }
+      },
+      order: [['AR_CheckDate', 'ASC']]
+    });
+
+    return data;
+  }
+
+  async getARDeletedPayment(filters: {
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const { startDate, endDate } = filters;
+
+    const whereCondition: any = {
+      AR_Type: {
+        [Op.in]: ['C', 'A'],
+      },
+    };
+
+    let start: Date | undefined;
+    let end: Date | undefined;
+
+    if (filters.startDate) {
+      start = new Date(filters.startDate);
+      start.setHours(0, 0, 0, 0);
+    }
+
+    if (filters.endDate) {
+      end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+    }
+
+    if (start && end) {
+      whereCondition.AR_CheckDate = {
+        [Op.gte]: start,
         [Op.lte]: end,
-      }
-    },
-    order: [['AR_CheckDate', 'ASC']]
-  });
+      };
+    }
 
-  return data;
-}
+    // if (startDate && endDate) {
+    //   whereCondition.AR_CheckDate = {
+    //     [Op.between]: [startDate, endDate],
+    //   };
+    // }
 
-async getARDeletedPayment(filters: {
-  startDate?: string;
-  endDate?: string;
-}) {
-  const { startDate, endDate } = filters;
+    const data = await ARDeletes.findAll({
+      attributes: [
+        'P_Number',
 
-  const whereCondition: any = {
-    AR_Type: {
-      [Op.in]: ['C', 'A'],
-    },
-  };
+        // ✅ FIXED CAST
+        [
+          literal('CAST([ARDeletes].[C_Number] AS varchar)'),
+          'C_Number',
+        ],
 
-      let start: Date | undefined;
-      let end: Date | undefined;
+        'Invoice_Number',
+        'AR_Type',
+        'AR_SubType',
+        'AR_Date',
 
-      if (filters.startDate) {
-        start = new Date(filters.startDate);
-        start.setHours(0, 0, 0, 0);
-      }
+        // ✅ FIXED CAST
+        [
+          literal('CAST([ARDeletes].[AR_CheckDate] AS date)'),
+          'AR_CheckDate',
+        ],
 
-      if (filters.endDate) {
-        end = new Date(filters.endDate);
-        end.setHours(23, 59, 59, 999);
-      }
+        'AR_Ref',
+        'AR_Amount',
+        'User_Number',
 
-      if (start && end) {
-        whereCondition.AR_CheckDate = {
-          [Op.gte]: start,
-          [Op.lte]: end, 
-        };
-      }
+        // ✅ FIXED CAST
+        [
+          literal('CAST([ARDeletes].[AR_DeleteDate] AS date)'),
+          'AR_DeleteDate',
+        ],
 
-  // if (startDate && endDate) {
-  //   whereCondition.AR_CheckDate = {
-  //     [Op.between]: [startDate, endDate],
-  //   };
-  // }
-
-  const data = await ARDeletes.findAll({
-    attributes: [
-      'P_Number',
-
-      // ✅ FIXED CAST
-      [
-        literal('CAST([ARDeletes].[C_Number] AS varchar)'),
-        'C_Number',
-      ],
-
-      'Invoice_Number',
-      'AR_Type',
-      'AR_SubType',
-      'AR_Date',
-
-      // ✅ FIXED CAST
-      [
-        literal('CAST([ARDeletes].[AR_CheckDate] AS date)'),
-        'AR_CheckDate',
-      ],
-
-      'AR_Ref',
-      'AR_Amount',
-      'User_Number',
-
-      // ✅ FIXED CAST
-      [
-        literal('CAST([ARDeletes].[AR_DeleteDate] AS date)'),
-        'AR_DeleteDate',
-      ],
-
-      [
-        literal(`(
+        [
+          literal(`(
           SELECT AR_SubTypeRef
           FROM AR_Definitions
           WHERE AR_Definitions.AR_Type = ARDeletes.AR_Type
             AND AR_Definitions.AR_SubType = ARDeletes.AR_SubType
         )`),
-        'SubTypeRef',
-      ],
+          'SubTypeRef',
+        ],
 
-      [
-        literal(`(
+        [
+          literal(`(
           SELECT UserName
           FROM Users
           WHERE Users.UserNumber = ARDeletes.User_Number
         )`),
-        'Deleted_UserName',
+          'Deleted_UserName',
+        ],
+
+        // ✅ Association column
+        [col('Customer.C_Name'), 'C_Name'],
       ],
 
-      // ✅ Association column
-      [col('Customer.C_Name'), 'C_Name'],
-    ],
+      include: [
+        {
+          model: Customer,
+          attributes: [],
+          required: false,
+        },
+      ],
 
-    include: [
-      {
-        model: Customer,
-        attributes: [],
-        required: false,
-      },
-    ],
+      order: [
+        [col('Customer.C_Name'), 'ASC'],
+        ['AR_CheckDate', 'ASC'],
+      ],
 
-    order: [
-      [col('Customer.C_Name'), 'ASC'],
-      ['AR_CheckDate', 'ASC'],
-    ],
+      where: whereCondition,
+      raw: true,
+    });
 
-    where: whereCondition,
-    raw: true,
-  });
-
-  return data;
-}
-
-async getAgingReport(filters: {
-  startDate?: string;
-  endDate?: string;
-}) {
-  const { startDate, endDate } = filters;
-
-  const whereCondition: any = {
-    AR_Type: { [Op.in]: ["I", "C", "A"] },
-  };
-
-  if (startDate && endDate) {
-    whereCondition.AR_Date = {
-      [Op.between]: [new Date(startDate), new Date(endDate)],
-    };
+    return data;
   }
 
-  return await CustReceivables.findAll({
-    where: whereCondition,
-    subQuery: false,
+  async getAgingReport(filters: {
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const { startDate, endDate } = filters;
 
-    attributes: [
-      "C_Number",
+    const whereCondition: any = {
+      AR_Type: { [Op.in]: ["I", "C", "A"] },
+    };
 
-      [
-        Sequelize.literal(`
+    if (startDate && endDate) {
+      whereCondition.AR_Date = {
+        [Op.between]: [new Date(startDate), new Date(endDate)],
+      };
+    }
+
+    return await CustReceivables.findAll({
+      where: whereCondition,
+      subQuery: false,
+
+      attributes: [
+        "C_Number",
+
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 C_Name
            FROM Customer
            WHERE Customer.C_Number = CustReceivables.C_Number)
         `),
-        "C_Name",
-      ],
-      [
-        Sequelize.literal(`
+          "C_Name",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 C_Salesman
            FROM Customer
            WHERE Customer.C_Number = CustReceivables.C_Number)
         `),
-        "C_Salesman",
-      ],
-      [
-        Sequelize.literal(`
+          "C_Salesman",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 Route_Number
            FROM Customer_Routes
            WHERE Customer_Routes.C_Number = CustReceivables.C_Number)
         `),
-        "Route_Number",
-      ],
-      [
-        Sequelize.literal(`
+          "Route_Number",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 C_CoName
            FROM Customer
            WHERE Customer.C_Number = CustReceivables.C_Number)
         `),
-        "C_CoName",
-      ],
-      [
-        Sequelize.literal(`
+          "C_CoName",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 C_Address
            FROM Customer
            WHERE Customer.C_Number = CustReceivables.C_Number)
         `),
-        "C_Address",
-      ],
-      [
-        Sequelize.literal(`
+          "C_Address",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 C_City
            FROM Customer
            WHERE Customer.C_Number = CustReceivables.C_Number)
         `),
-        "C_City",
-      ],
-      [
-        Sequelize.literal(`
+          "C_City",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 C_State
            FROM Customer
            WHERE Customer.C_Number = CustReceivables.C_Number)
         `),
-        "C_State",
-      ],
-      [
-        Sequelize.literal(`
+          "C_State",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 C_Zip
            FROM Customer
            WHERE Customer.C_Number = CustReceivables.C_Number)
         `),
-        "C_Zip",
-      ],
+          "C_Zip",
+        ],
 
-      /* ===================== BILL TO ===================== */
-      [
-        Sequelize.literal(`
+        /* ===================== BILL TO ===================== */
+        [
+          Sequelize.literal(`
           ISNULL(
             (SELECT TOP 1 C_Number
              FROM Cust_BillTo
              WHERE Cust_BillTo.C_Number = CustReceivables.C_Number),
           0)
         `),
-        "BT_Number",
-      ],
-      [
-        Sequelize.literal(`
+          "BT_Number",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 C_Name
            FROM Cust_BillTo
            WHERE Cust_BillTo.C_Number = CustReceivables.C_Number)
         `),
-        "BT_Name",
-      ],
+          "BT_Name",
+        ],
 
-      /* ===================== REP & TERMS ===================== */
-      [
-        Sequelize.literal(`
+        /* ===================== REP & TERMS ===================== */
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 S_Desc
            FROM SalesRep
            WHERE SalesRep.S_Number =
@@ -9735,10 +9754,10 @@ async getAgingReport(filters: {
               FROM Customer
               WHERE Customer.C_Number = CustReceivables.C_Number))
         `),
-        "RepName",
-      ],
-      [
-        Sequelize.literal(`
+          "RepName",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 DaysUntilDue
            FROM Invoice_Terms
            WHERE Invoice_Terms.TermsCode =
@@ -9746,10 +9765,10 @@ async getAgingReport(filters: {
               FROM Customer
               WHERE Customer.C_Number = CustReceivables.C_Number))
         `),
-        "DaysUntilDue",
-      ],
-      [
-        Sequelize.literal(`
+          "DaysUntilDue",
+        ],
+        [
+          Sequelize.literal(`
           (SELECT TOP 1 Terms
            FROM Invoice_Terms
            WHERE Invoice_Terms.TermsCode =
@@ -9757,96 +9776,96 @@ async getAgingReport(filters: {
               FROM Customer
               WHERE Customer.C_Number = CustReceivables.C_Number))
         `),
-        "Terms",
-      ],
+          "Terms",
+        ],
 
-      /* ===================== FINANCE CHARGE ===================== */
-      [
-        Sequelize.literal(`
+        /* ===================== FINANCE CHARGE ===================== */
+        [
+          Sequelize.literal(`
           ISNULL(
             (SELECT SUM(Finance_Charge)
              FROM Cust_FinanceCharges
              WHERE Cust_FinanceCharges.C_Number = CustReceivables.C_Number),
           0)
         `),
-        "fCharge",
-      ],
+          "fCharge",
+        ],
 
-      /* ===================== AGING TOTAL ===================== */
-      [
-        Sequelize.literal(`
+        /* ===================== AGING TOTAL ===================== */
+        [
+          Sequelize.literal(`
           SUM(AR_Amount - AR_Applied)
         `),
-        "netAmount",
-      ],
+          "netAmount",
+        ],
 
-      /* ===================== AGING BUCKETS ===================== */
-      [
-        Sequelize.literal(`
+        /* ===================== AGING BUCKETS ===================== */
+        [
+          Sequelize.literal(`
           SUM(CASE
             WHEN DATEDIFF(DAY, AR_Date, GETDATE()) <= 7
             THEN AR_Amount - AR_Applied ELSE 0 END)
         `),
-        "current",
-      ],
-      [
-        Sequelize.literal(`
+          "current",
+        ],
+        [
+          Sequelize.literal(`
           SUM(CASE
             WHEN DATEDIFF(DAY, AR_Date, GETDATE()) BETWEEN 8 AND 14
             THEN AR_Amount - AR_Applied ELSE 0 END)
         `),
-        "over7",
-      ],
-      [
-        Sequelize.literal(`
+          "over7",
+        ],
+        [
+          Sequelize.literal(`
           SUM(CASE
             WHEN DATEDIFF(DAY, AR_Date, GETDATE()) BETWEEN 15 AND 30
             THEN AR_Amount - AR_Applied ELSE 0 END)
         `),
-        "over14",
-      ],
-      [
-        Sequelize.literal(`
+          "over14",
+        ],
+        [
+          Sequelize.literal(`
           SUM(CASE
             WHEN DATEDIFF(DAY, AR_Date, GETDATE()) BETWEEN 31 AND 60
             THEN AR_Amount - AR_Applied ELSE 0 END)
         `),
-        "over30",
-      ],
-      [
-        Sequelize.literal(`
+          "over30",
+        ],
+        [
+          Sequelize.literal(`
           SUM(CASE
             WHEN DATEDIFF(DAY, AR_Date, GETDATE()) > 60
             THEN AR_Amount - AR_Applied ELSE 0 END)
         `),
-        "over60",
+          "over60",
+        ],
       ],
-    ],
 
-    group: ["CustReceivables.C_Number"],
+      group: ["CustReceivables.C_Number"],
 
-    having: Sequelize.literal(`
+      having: Sequelize.literal(`
       SUM(AR_Amount - AR_Applied) <> 0
     `),
 
-    order: [[Sequelize.literal("C_Name"), "ASC"]],
-  });
-}
+      order: [[Sequelize.literal("C_Name"), "ASC"]],
+    });
+  }
 
 
-  async getARreportsHistory(query: any){
+  async getARreportsHistory(query: any) {
     const arReportHistort = await ARDeposits.findAll({
-          attributes: ['Deposit_ID','Deposit_Date','Deposit_Reference','Deposit_Batch','QB_Transfer','QB_TransferDate','Deposit_Deleted','Deposit_DeleteDate','Deposit_DeleteUser',
-            'Payment_Total','Adjustment_Total','ReturnCheck_Total'
-          ],
-          where: {
-            Deposit_Date: {
-              [Op.gte]: query.startDate,
-              [Op.lte]: query.endDate
-            }
-          }
-        })
-      
+      attributes: ['Deposit_ID', 'Deposit_Date', 'Deposit_Reference', 'Deposit_Batch', 'QB_Transfer', 'QB_TransferDate', 'Deposit_Deleted', 'Deposit_DeleteDate', 'Deposit_DeleteUser',
+        'Payment_Total', 'Adjustment_Total', 'ReturnCheck_Total'
+      ],
+      where: {
+        Deposit_Date: {
+          [Op.gte]: query.startDate,
+          [Op.lte]: query.endDate
+        }
+      }
+    })
+
     return arReportHistort
   }
 
@@ -9855,7 +9874,7 @@ async getAgingReport(filters: {
     // Validate date range
     const start = new Date(body.startDate);
     const end = new Date(body.endDate);
-    
+
     if (start > end) {
       throw new AppError('Start date must be before or equal to end date', 400);
     }
@@ -9883,13 +9902,13 @@ async getAgingReport(filters: {
       throw new AppError('PreBook not found', 404);
     }
 
-    const  products = await Inventory.findAll({
+    const products = await Inventory.findAll({
       where: {
         Item_Number: {
           [Op.in]: preBook.products
         }
       },
-      attributes: ['Item_Number', 'Description', 'Price1', 'Sales_Category','Price_Class','Pack','UOM'],
+      attributes: ['Item_Number', 'Description', 'Price1', 'Sales_Category', 'Price_Class', 'Pack', 'UOM'],
       include: [
         {
           model: SalesCategory,
@@ -9959,21 +9978,21 @@ async getAgingReport(filters: {
     if (body.startDate && body.endDate) {
       const start = new Date(body.startDate);
       const end = new Date(body.endDate);
-      
+
       if (start > end) {
         throw new AppError('Start date must be before or equal to end date', 400);
       }
     } else if (body.startDate) {
       const start = new Date(body.startDate);
       const end = new Date(preBook.endDate);
-      
+
       if (start > end) {
         throw new AppError('Start date must be before or equal to end date', 400);
       }
     } else if (body.endDate) {
       const start = new Date(preBook.startDate);
       const end = new Date(body.endDate);
-      
+
       if (start > end) {
         throw new AppError('Start date must be before or equal to end date', 400);
       }
@@ -10002,13 +10021,13 @@ async getAgingReport(filters: {
   }
 
   // TradeShow CRUD methods
-  async createTradeShow(body: { 
-    name: string; 
-    description?: string | null; 
-    tradeShowDate: string; 
-    deliveryStartDate: string; 
-    deliveryEndDate: string; 
-    deliveryWeeks: number; 
+  async createTradeShow(body: {
+    name: string;
+    description?: string | null;
+    tradeShowDate: string;
+    deliveryStartDate: string;
+    deliveryEndDate: string;
+    deliveryWeeks: number;
     status?: string;
   }) {
 
@@ -10018,7 +10037,7 @@ async getAgingReport(filters: {
     const tradeShowDate = new Date(body.tradeShowDate);
     const deliveryStartDate = new Date(body.deliveryStartDate);
     const deliveryEndDate = new Date(body.deliveryEndDate);
-    
+
     if (deliveryStartDate > deliveryEndDate) {
       throw new AppError('Delivery start date must be before or equal to delivery end date', 400);
     }
@@ -10070,7 +10089,7 @@ async getAgingReport(filters: {
     });
     return tradeShow;
   }
-  
+
   async getTradeShowById(id: number) {
     const tradeShow = await TradeShow.findByPk(id);
 
@@ -10081,11 +10100,11 @@ async getAgingReport(filters: {
     return tradeShow;
   }
 
-  async getAllTradeShows(query: PaginationOptions & { 
-    search?: string; 
-    status?: string; 
-    tradeShowDate?: string; 
-    deliveryStartDate?: string; 
+  async getAllTradeShows(query: PaginationOptions & {
+    search?: string;
+    status?: string;
+    tradeShowDate?: string;
+    deliveryStartDate?: string;
     deliveryEndDate?: string;
   }) {
     const page = parseInt(query.page as any) || 1;
@@ -10145,13 +10164,13 @@ async getAgingReport(filters: {
     };
   }
 
-  async updateTradeShow(id: number, body: Partial<{ 
-    name: string; 
-    description: string | null; 
-    tradeShowDate: string; 
-    deliveryStartDate: string; 
-    deliveryEndDate: string; 
-    deliveryWeeks: number; 
+  async updateTradeShow(id: number, body: Partial<{
+    name: string;
+    description: string | null;
+    tradeShowDate: string;
+    deliveryStartDate: string;
+    deliveryEndDate: string;
+    deliveryWeeks: number;
     status: string;
   }>) {
     const tradeShow = await TradeShow.findByPk(id);
@@ -10166,7 +10185,7 @@ async getAgingReport(filters: {
       const deliveryEndDate = new Date(body.deliveryEndDate);
 
 
-      
+
 
 
       if (deliveryStartDate > deliveryEndDate) {
@@ -10175,14 +10194,14 @@ async getAgingReport(filters: {
     } else if (body.deliveryStartDate) {
       const deliveryStartDate = new Date(body.deliveryStartDate);
       const deliveryEndDate = new Date(tradeShow.deliveryEndDate);
-      
+
       if (deliveryStartDate > deliveryEndDate) {
         throw new AppError('Delivery start date must be before or equal to delivery end date', 400);
       }
     } else if (body.deliveryEndDate) {
       const deliveryStartDate = new Date(tradeShow.deliveryStartDate);
       const deliveryEndDate = new Date(body.deliveryEndDate);
-      
+
       if (deliveryStartDate > deliveryEndDate) {
         throw new AppError('Delivery start date must be before or equal to delivery end date', 400);
       }
@@ -10227,14 +10246,14 @@ async getAgingReport(filters: {
     return tradeShow;
   }
 
- async deActiveTradeShow(id: number) {
-  const tradeShow = await TradeShow.findByPk(id);
-  if (!tradeShow) {
-    throw new AppError('TradeShow not found', 404);
+  async deActiveTradeShow(id: number) {
+    const tradeShow = await TradeShow.findByPk(id);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+    await tradeShow.update({ status: 'expire' });
+    return tradeShow;
   }
-  await tradeShow.update({ status: 'expire' });
-  return tradeShow;
- }
 
   async deleteTradeShow(id: number) {
     const tradeShow = await TradeShow.findByPk(id);
@@ -10246,7 +10265,7 @@ async getAgingReport(filters: {
     await tradeShow.destroy();
     return { success: true, message: 'TradeShow deleted successfully' };
   }
-    
+
   // TradeShowItem CRUD methods
   async createTradeShowItem(body: {
     tradeShowId: number;
@@ -10316,14 +10335,14 @@ async getAgingReport(filters: {
     }
   }
 
-   async  createBulkTradeShowItems(body: {
+  async createBulkTradeShowItems(body: {
     tradeShowId: number;
     items: BulkItemInput[];
   }) {
     // 1) Validate TradeShow exists
     const tradeShow = await TradeShow.findByPk(body.tradeShowId);
     if (!tradeShow) throw new AppError("TradeShow not found", 404);
-  
+
     // 2) Validate items array
     if (!Array.isArray(body.items) || body.items.length === 0) {
       throw new AppError("Items array must contain at least one item", 400);
@@ -10331,14 +10350,14 @@ async getAgingReport(filters: {
     if (body.items.length > 100) {
       throw new AppError("Cannot create more than 100 items at once", 400);
     }
-  
+
     // 3) Validate each item + normalize itemNumbers (trim)
     const validationErrors: string[] = [];
     const seen = new Set<string>();
-  
+
     const normalizedItems = body.items.map((item, index) => {
       const itemNumber = (item.itemNumber ?? "").trim();
-  
+
       if (!itemNumber) {
         validationErrors.push(`Item at index ${index}: Item number is required`);
       } else {
@@ -10350,9 +10369,9 @@ async getAgingReport(filters: {
         }
         seen.add(key);
       }
-  
-    
-  
+
+
+
       // discount
       const discountValue = Number.parseFloat(String(item.discount));
       if (!Number.isFinite(discountValue) || discountValue < 0) {
@@ -10360,20 +10379,20 @@ async getAgingReport(filters: {
           `Item at index ${index}: Discount must be a valid non-negative number`
         );
       }
-  
+
       // disType
       if (item.disType !== "PERCENT" && item.disType !== "FLAT") {
         validationErrors.push(
           `Item at index ${index}: Discount type must be either "PERCENT" or "FLAT"`
         );
       }
-  
+
       if (item.disType === "PERCENT" && Number.isFinite(discountValue) && discountValue > 100) {
         validationErrors.push(
           `Item at index ${index}: Percentage discount cannot exceed 100`
         );
       }
-  
+
       return {
         ...item,
         itemNumber,
@@ -10381,13 +10400,13 @@ async getAgingReport(filters: {
         discount: String(item.discount),
       };
     });
-  
+
     if (validationErrors.length) {
       throw new AppError(`Validation errors: ${validationErrors.join("; ")}`, 400);
     }
-  
+
     const itemNumbers = normalizedItems.map((i) => i.itemNumber);
-  
+
     // 4) Transaction + duplicate check + bulk insert
     return await postgresSequelize.transaction(async (transaction) => {
       // Correct where clause: use Op.in (your previous code was wrong)
@@ -10400,7 +10419,7 @@ async getAgingReport(filters: {
         transaction,
         lock: transaction.LOCK.UPDATE, // optional; helps reduce race conditions on some DBs
       });
-  
+
       if (existingItems.length) {
         const existingItemNumbers = existingItems.map((x: any) => x.itemNumber).join(", ");
         throw new AppError(
@@ -10408,7 +10427,7 @@ async getAgingReport(filters: {
           409
         );
       }
-  
+
       const itemsToCreate = normalizedItems.map((item) => ({
         tradeShowId: body.tradeShowId,
         itemNumber: item.itemNumber,
@@ -10421,14 +10440,14 @@ async getAgingReport(filters: {
         priceClass: item.priceClass,
         vendorId: item.vendorId,
       }));
-  
+
       try {
         const createdItems = await TradeShowItem.bulkCreate(itemsToCreate, {
           transaction,
           returning: true,
           validate: true,
         });
-  
+
         return {
           success: true,
           count: createdItems.length,
@@ -11048,9 +11067,9 @@ async getAgingReport(filters: {
     const page = parseInt(query.page as any) || 1;
     const limit = parseInt(query.limit as any) || 10;
     const offset = (page - 1) * limit;
-  
+
     const whereCondition: any = {};
-  
+
     if (query.search) {
       whereCondition[Op.or] = [
         { retailerName: { [Op.iLike]: `%${query.search}%` } },
@@ -11062,7 +11081,7 @@ async getAgingReport(filters: {
     }
     if (query.tradeShowId) whereCondition.tradeShowId = query.tradeShowId;
     if (query.retailerId) whereCondition.retailerId = query.retailerId;
-  
+
     const { count: totalCount, rows: tradeShowRetailers } =
       await TradeShowRetailer.findAndCountAll({
         where: whereCondition,
@@ -11077,7 +11096,7 @@ async getAgingReport(filters: {
         offset,
         order: [["createdAt", "DESC"]],
       });
-  
+
     const finalData = await Promise.all(
       tradeShowRetailers.map(async (tradeShowRetailer: any) => {
         const retailer = await Customer.findOne({
@@ -11106,14 +11125,14 @@ async getAgingReport(filters: {
             },
           ],
         });
-  
+
         return {
           ...tradeShowRetailer.toJSON(),
           retailer: retailer ? retailer.toJSON() : null,
         };
       })
     );
-  
+
     return {
       data: finalData,
       total: totalCount,
@@ -11122,7 +11141,7 @@ async getAgingReport(filters: {
       totalPages: Math.ceil(totalCount / limit),
     };
   }
-  
+
 
   async updateTradeShowRetailer(id: number, body: Partial<{
     tradeShowId: number;
@@ -11348,8 +11367,8 @@ async getAgingReport(filters: {
     const limit = parseInt(query.limit as any) || 10;
     const offset = (page - 1) * limit;
     const search = query.search || '';
-  
-  
+
+
     const whereCondition: any = {};
     if (search) {
       whereCondition[Op.or] = [
@@ -11360,10 +11379,10 @@ async getAgingReport(filters: {
         ),
       ];
     }
-  
+
     if (query.tradeShowId) whereCondition.tradeShowId = query.tradeShowId;
     if (query.vendorId) whereCondition.vendorId = query.vendorId;
-  
+
     const { count: totalCount, rows: tradeShowVendors } =
       await TradeShowVendor.findAndCountAll({
         where: whereCondition,
@@ -11378,7 +11397,7 @@ async getAgingReport(filters: {
         offset,
         order: [["createdAt", "DESC"]],
       });
-  
+
     const finalData = await Promise.all(
       tradeShowVendors.map(async (tradeShowVendor: any) => {
         const vendor = await Vendor.findOne({
@@ -11396,14 +11415,14 @@ async getAgingReport(filters: {
             "V_Status",
           ],
         });
-  
+
         return {
           ...tradeShowVendor.toJSON(),
           vendor: vendor ? vendor.toJSON() : null,
         };
       })
     );
-  
+
     return {
       data: finalData,
       total: totalCount,
@@ -11412,7 +11431,7 @@ async getAgingReport(filters: {
       totalPages: Math.ceil(totalCount / limit),
     };
   }
-  
+
 
   async updateTradeShowVendor(id: number, body: Partial<{
     tradeShowId: number;
@@ -11466,14 +11485,14 @@ async getAgingReport(filters: {
   async deleteTradeShowVendor(id: number) {
     const tradeShowVendor = await TradeShowVendor.findByPk(id);
 
-    console.log(tradeShowVendor,'the tradeSHow');
+    console.log(tradeShowVendor, 'the tradeSHow');
 
     if (!tradeShowVendor) {
       throw new AppError('TradeShowVendor not found', 404);
     }
 
     await tradeShowVendor.destroy();
-let vendorId = tradeShowVendor?.dataValues.vendorId;
+    let vendorId = tradeShowVendor?.dataValues.vendorId;
     await TradeShowItem.destroy({
       where: {
         tradeShowId: tradeShowVendor.tradeShowId,
@@ -11676,7 +11695,7 @@ let vendorId = tradeShowVendor?.dataValues.vendorId;
 
     const where: any = {};
 
-  
+
     if (query.tradeShowId) where.tradeShowId = query.tradeShowId;
     if (query.itemNumber) where.itemNumber = query.itemNumber;
     if (query.weekNumber) where.weekNumber = query.weekNumber;
@@ -11743,27 +11762,27 @@ let vendorId = tradeShowVendor?.dataValues.vendorId;
     };
   }
 
-  
-  
 
 
-  async getRemainItemInDelivery(query:PaginationOptions){
-let {page = 1,limit = 10,salesCategory,priceClass,tradeShowId} = query;
-tradeShowId = Number(tradeShowId);
-page = parseInt(page as any) || 1;
-limit = parseInt(limit as any) || 10;
-const offset = (page - 1) * limit;
 
-let whereCondition:any = {};
 
-if (salesCategory?.length > 0) {
-  const salesCategoryNumbers = salesCategory.map((v: any) => Number(v));
-  whereCondition.salesCategory = { [Op.in]: salesCategoryNumbers };
-}
-if (priceClass?.length > 0 ) {
-  const priceClassNumbers = priceClass.map((v: any) => Number(v));
-  whereCondition.priceClass = { [Op.in]: priceClassNumbers };
-}
+  async getRemainItemInDelivery(query: PaginationOptions) {
+    let { page = 1, limit = 10, salesCategory, priceClass, tradeShowId } = query;
+    tradeShowId = Number(tradeShowId);
+    page = parseInt(page as any) || 1;
+    limit = parseInt(limit as any) || 10;
+    const offset = (page - 1) * limit;
+
+    let whereCondition: any = {};
+
+    if (salesCategory?.length > 0) {
+      const salesCategoryNumbers = salesCategory.map((v: any) => Number(v));
+      whereCondition.salesCategory = { [Op.in]: salesCategoryNumbers };
+    }
+    if (priceClass?.length > 0) {
+      const priceClassNumbers = priceClass.map((v: any) => Number(v));
+      whereCondition.priceClass = { [Op.in]: priceClassNumbers };
+    }
 
     const tradeShow = await TradeShowDeliveryProduct.findAll({
       where: {
@@ -11774,7 +11793,7 @@ if (priceClass?.length > 0 ) {
 
     const itemInDelivery = tradeShow.map((item: any) => item.itemNumber);
 
-    const {rows: items, count: total} = await TradeShowItem.findAndCountAll({
+    const { rows: items, count: total } = await TradeShowItem.findAndCountAll({
       where: {
         tradeShowId: tradeShowId,
         itemNumber: {
@@ -11785,7 +11804,7 @@ if (priceClass?.length > 0 ) {
       limit,
       offset,
       order: [['createdAt', 'DESC']],
-      
+
     });
 
     const finalData = await Promise.all(
@@ -11920,7 +11939,7 @@ if (priceClass?.length > 0 ) {
     page?: number;
     limit?: number;
   }) {
-    const {startDate,endDate,page = 1,limit ,} = filters;
+    const { startDate, endDate, page = 1, limit, } = filters;
     const offset = limit ? (page - 1) * limit : undefined;
 
     /** Date Filter */
@@ -11952,23 +11971,23 @@ if (priceClass?.length > 0 ) {
       };
     }
 
-  const { rows, count } = await CustReceivables.findAndCountAll({
-    distinct: true,
-    where,
-    limit,
-    offset,
+    const { rows, count } = await CustReceivables.findAndCountAll({
+      distinct: true,
+      where,
+      limit,
+      offset,
 
-    order: [
-      [{ model: Customer, as: 'customer' }, 'C_Name', 'ASC'],
-      ['AR_Date', 'ASC'],
-      ['P_Number', 'ASC'],
-    ],
+      order: [
+        [{ model: Customer, as: 'customer' }, 'C_Name', 'ASC'],
+        ['AR_Date', 'ASC'],
+        ['P_Number', 'ASC'],
+      ],
 
-    attributes: {
-      include: [
-        /** Child Customer Name */
-        [
-          Sequelize.literal(`
+      attributes: {
+        include: [
+          /** Child Customer Name */
+          [
+            Sequelize.literal(`
             ISNULL(
               (
                 SELECT C_Name
@@ -11978,12 +11997,12 @@ if (priceClass?.length > 0 ) {
               ''
             )
           `),
-          'C_Name_Child',
-        ],
+            'C_Name_Child',
+          ],
 
-        /** Finance Charges */
-        [
-          Sequelize.literal(`
+          /** Finance Charges */
+          [
+            Sequelize.literal(`
             ISNULL(
               (
                 SELECT SUM(Finance_Charge)
@@ -11993,289 +12012,289 @@ if (priceClass?.length > 0 ) {
               0
             )
           `),
-          'fCharge',
-        ],
-      ],
-    },
-
-    include: [
-      {
-        model: Customer,
-        as: 'customer',
-        required: false,
-        attributes: [
-          'C_Name',
-          'C_CoName',
-          'C_Address',
-          'C_City',
-          'C_State',
-          'C_Zip',
-          'C_Phone',
-          'C_Fax',
-          'C_Email',
-          'TermsCode',
-          'C_Salesman',
-          'C_StatementAccount',
-          'C_StatusCode',
-          'C_StatementCode',
-          'C_Interest',
-
-        ],
-
-        include: [
-          {
-            model: SalesRep,
-            as: 'salesRep',
-            required: false,
-            attributes: [['S_Desc', 'RepName']],
-          },
-          {
-            model: Terms,
-            as: 'invoiceTerms',
-            required: false,
-            attributes: ['Terms', 'DaysUntilDue'],
-          },
-          {
-            model: CustBillTo,
-            as: 'billTo',
-            required: false,
-            attributes: [
-              ['C_Number', 'BT_Number'],
-              ['C_Name', 'BT_Name'],
-              ['C_CoName', 'BT_CoName'],
-              ['C_Address', 'BT_Address'],
-              ['C_City', 'BT_City'],
-              ['C_State', 'BT_State'],
-              ['C_Zip', 'BT_Zip'],
-            ],
-          },
-          {
-            model: CustomerRoute,
-            as: 'routes',
-            required: false,
-            attributes: ['Route_Number'],
-          },
+            'fCharge',
+          ],
         ],
       },
 
-      {
-        model: ARDefinitions,
-        as: 'arDefinition',
-        required: false,
-        attributes: [['AR_SubTypeRef', 'SubType']],
-        where: Sequelize.literal(`
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          required: false,
+          attributes: [
+            'C_Name',
+            'C_CoName',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Zip',
+            'C_Phone',
+            'C_Fax',
+            'C_Email',
+            'TermsCode',
+            'C_Salesman',
+            'C_StatementAccount',
+            'C_StatusCode',
+            'C_StatementCode',
+            'C_Interest',
+
+          ],
+
+          include: [
+            {
+              model: SalesRep,
+              as: 'salesRep',
+              required: false,
+              attributes: [['S_Desc', 'RepName']],
+            },
+            {
+              model: Terms,
+              as: 'invoiceTerms',
+              required: false,
+              attributes: ['Terms', 'DaysUntilDue'],
+            },
+            {
+              model: CustBillTo,
+              as: 'billTo',
+              required: false,
+              attributes: [
+                ['C_Number', 'BT_Number'],
+                ['C_Name', 'BT_Name'],
+                ['C_CoName', 'BT_CoName'],
+                ['C_Address', 'BT_Address'],
+                ['C_City', 'BT_City'],
+                ['C_State', 'BT_State'],
+                ['C_Zip', 'BT_Zip'],
+              ],
+            },
+            {
+              model: CustomerRoute,
+              as: 'routes',
+              required: false,
+              attributes: ['Route_Number'],
+            },
+          ],
+        },
+
+        {
+          model: ARDefinitions,
+          as: 'arDefinition',
+          required: false,
+          attributes: [['AR_SubTypeRef', 'SubType']],
+          where: Sequelize.literal(`
           [CustReceivables].[AR_Type] = [arDefinition].[AR_Type]
         `),
-      },
-    ],
-  });
+        },
+      ],
+    });
 
-  return {
-    data: rows,
-    pagination: {
-      page,
-      limit,
-      totalRecords: count,
-    },
-  };
-}
-
-async getOpenItemReport(query:any) {
-  const {startDate,endDate,} = query;
-  return await CustReceivables.findAll({
-
-    where: {
-      AR_Date: {
-        [Op.between]: [new Date(startDate), new Date(endDate)],
+    return {
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        totalRecords: count,
       },
-    },
-    include: [
-      {
-        model: Customer,
-        as: 'customer',
-        required: false,
-        attributes: [
-          'C_Number',
-          'C_Name',
-          'C_CoName',
-          'C_Address',
-          'C_City',
-          'C_State',
-          'C_Zip',
-          'C_Phone',
-          'C_Fax',
-          'C_Email',
-          'TermsCode',
-          'C_Salesman',
-          'C_StatementAccount',
-          'C_Interest',
-        ],
-        include: [
-          {
-            model: SalesRep,
-            as: 'salesRep',
-            attributes: [['S_Desc', 'RepName']],
-            required: false
-          },
-          {
-            model: Terms,
-            as: 'terms',
-            attributes: ['DaysUntilDue', 'Terms'],
-            required: false
-          }
-        ]
+    };
+  }
+
+  async getOpenItemReport(query: any) {
+    const { startDate, endDate, } = query;
+    return await CustReceivables.findAll({
+
+      where: {
+        AR_Date: {
+          [Op.between]: [new Date(startDate), new Date(endDate)],
+        },
       },
-      {
-        model: CustBillTo,
-        as: 'Cust_BillTo',
-        required: false,
-        attributes: [
-          [Sequelize.fn('ISNULL', Sequelize.col('Cust_BillTo.C_Number'), 0), 'BT_Number'],
-          ['C_Name', 'BT_Name'],
-          ['C_CoName', 'BT_CoName'],
-          ['C_Address', 'BT_Address'],
-          ['C_City', 'BT_City'],
-          ['C_State', 'BT_State'],
-          ['C_Zip', 'BT_Zip'],
-        ]
-      }
-    ],
-    attributes: {
       include: [
-        [
-          Sequelize.literal(`
+        {
+          model: Customer,
+          as: 'customer',
+          required: false,
+          attributes: [
+            'C_Number',
+            'C_Name',
+            'C_CoName',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Zip',
+            'C_Phone',
+            'C_Fax',
+            'C_Email',
+            'TermsCode',
+            'C_Salesman',
+            'C_StatementAccount',
+            'C_Interest',
+          ],
+          include: [
+            {
+              model: SalesRep,
+              as: 'salesRep',
+              attributes: [['S_Desc', 'RepName']],
+              required: false
+            },
+            {
+              model: Terms,
+              as: 'terms',
+              attributes: ['DaysUntilDue', 'Terms'],
+              required: false
+            }
+          ]
+        },
+        {
+          model: CustBillTo,
+          as: 'Cust_BillTo',
+          required: false,
+          attributes: [
+            [Sequelize.fn('ISNULL', Sequelize.col('Cust_BillTo.C_Number'), 0), 'BT_Number'],
+            ['C_Name', 'BT_Name'],
+            ['C_CoName', 'BT_CoName'],
+            ['C_Address', 'BT_Address'],
+            ['C_City', 'BT_City'],
+            ['C_State', 'BT_State'],
+            ['C_Zip', 'BT_Zip'],
+          ]
+        }
+      ],
+      attributes: {
+        include: [
+          [
+            Sequelize.literal(`
             ISNULL(
               (SELECT C_Name
                FROM Customer
                WHERE Customer.C_Number = CustReceivables.C_Number_Child),
             '')
           `),
-          'C_Name_Child'
-        ],
-        [
-          Sequelize.literal(`
+            'C_Name_Child'
+          ],
+          [
+            Sequelize.literal(`
             (SELECT AR_SubTypeRef
              FROM AR_Definitions
              WHERE CustReceivables.AR_Type = AR_Definitions.AR_Type
                AND CustReceivables.AR_SubType = AR_Definitions.AR_SubType)
           `),
-          'SubType'
-        ],
-        [
-          Sequelize.literal(`
+            'SubType'
+          ],
+          [
+            Sequelize.literal(`
             ISNULL(
               (SELECT SUM(Finance_Charge)
                FROM Cust_FinanceCharges
                WHERE Cust_FinanceCharges.C_Number = CustReceivables.C_Number),
             0)
           `),
-          'fCharge'
-        ],
-        [
-          Sequelize.literal(`
+            'fCharge'
+          ],
+          [
+            Sequelize.literal(`
             DATEDIFF(DAY, CustReceivables.AR_Date, GETDATE())
           `),
-          'aging'
+            'aging'
+          ]
         ]
+      },
+      order: [
+        [Sequelize.literal('[customer].[C_Name]'), 'ASC'],
+        ['AR_Date', 'ASC']
       ]
-    },
-    order: [
-      [Sequelize.literal('[customer].[C_Name]'), 'ASC'],
-      ['AR_Date', 'ASC']
-    ]
-  });
-}
+    });
+  }
 
-async getInventorySpotCheck() {
-  const data = await Inventory.findAll({
-    attributes: [
-      "Item_Number",
-      "Sales_Category",
-      "Section",
-      "Location",
-      "Price_Class",
-      "OTP_Number",
-      "Description",
-      "Pack",
-      "UOM",
-      "Price1",
-      "Sequence",
-      "Basecost",
-      "NetCost",
-      "AvgCost",
-      "Invoice_Cost",
-      "Retail1",
-      "HeadingFlag",
-      "Primary_Vendor",
-      "PickArea",
+  async getInventorySpotCheck() {
+    const data = await Inventory.findAll({
+      attributes: [
+        "Item_Number",
+        "Sales_Category",
+        "Section",
+        "Location",
+        "Price_Class",
+        "OTP_Number",
+        "Description",
+        "Pack",
+        "UOM",
+        "Price1",
+        "Sequence",
+        "Basecost",
+        "NetCost",
+        "AvgCost",
+        "Invoice_Cost",
+        "Retail1",
+        "HeadingFlag",
+        "Primary_Vendor",
+        "PickArea",
 
-      // UPC_Number
-      [
-        Sequelize.literal(`(
+        // UPC_Number
+        [
+          Sequelize.literal(`(
           SELECT TOP 1 UPC_Number
           FROM Inventory_UPC
           WHERE Inventory.Item_Number = Inventory_UPC.Item_Number
             AND Status = 0
             AND Priority = 1
         )`),
-        "UPC_Number"
-      ],
+          "UPC_Number"
+        ],
 
-      // classDesc
-      [
-        Sequelize.literal(`(
+        // classDesc
+        [
+          Sequelize.literal(`(
           SELECT Class_Desc
           FROM Price_Classes
           WHERE Inventory.Price_Class = Price_Classes.Price_Class
         )`),
-        "classDesc"
-      ],
+          "classDesc"
+        ],
 
-      // categoryDesc
-      [
-        Sequelize.literal(`(
+        // categoryDesc
+        [
+          Sequelize.literal(`(
           SELECT Category_Desc
           FROM Sales_Categories
           WHERE Inventory.Sales_Category = Sales_Categories.Sales_Category
         )`),
-        "categoryDesc"
-      ],
+          "categoryDesc"
+        ],
 
-      // otpDesc
-      [
-        Sequelize.literal(`(
+        // otpDesc
+        [
+          Sequelize.literal(`(
           SELECT OTP_Description
           FROM OtherTaxes
           WHERE Inventory.OTP_Number = OtherTaxes.OTP_Number
         )`),
-        "otpDesc"
-      ],
+          "otpDesc"
+        ],
 
-      // Inventory_OnHand
-      [
-        Sequelize.literal(`ISNULL((
+        // Inventory_OnHand
+        [
+          Sequelize.literal(`ISNULL((
           SELECT SUM(Inventory_OnHand)
           FROM Inventory_Status
           WHERE Inventory_Status.Code = 0
             AND Inventory_Status.Item_Number = Inventory.Item_Number
         ), 0)`),
-        "Inventory_OnHand"
-      ],
+          "Inventory_OnHand"
+        ],
 
-      // iPend
-      [
-        Sequelize.literal(`ISNULL((
+        // iPend
+        [
+          Sequelize.literal(`ISNULL((
           SELECT SUM(Quantity_Ordered)
           FROM Order_Detail
           WHERE Order_Detail.Item_Number = Inventory.Item_Number
             AND DetailUpdated = 'False'
         ), 0)`),
-        "iPend"
-      ],
+          "iPend"
+        ],
 
-      // Avail
-      [
-        Sequelize.literal(`(
+        // Avail
+        [
+          Sequelize.literal(`(
           ISNULL((
             SELECT SUM(Inventory_OnHand)
             FROM Inventory_Status
@@ -12290,45 +12309,45 @@ async getInventorySpotCheck() {
               AND DetailUpdated = 'False'
           ), 0)
         )`),
-        "Avail"
+          "Avail"
+        ]
+      ],
+
+      order: [
+        ["Sales_Category", "ASC"],
+        ["Description", "ASC"]
       ]
-    ],
+    });
 
-    order: [
-      ["Sales_Category", "ASC"],
-      ["Description", "ASC"]
-    ]
-  });
-
-  return data;
-}
+    return data;
+  }
 
 
-async getInventoryValuationSalesCategTotal(){
-  return await Inventory.findAll({
-     limit: 50000,
-    attributes: [
-      'Item_Number',
-      'Sales_Category',
-      'Price_Class',
-      'OTP_Number',
-      'Description',
-      'Pack',
-      'UOM',
-      'Price1',
-      'Sequence',
-      'Cig_Sticks',
-      'UnitOunces',
-      'Basecost',
-      'NetCost',
-      'AvgCost',
-      'Invoice_Cost',
-      'Retail1',
-      'HeadingFlag',
+  async getInventoryValuationSalesCategTotal() {
+    return await Inventory.findAll({
+      limit: 50000,
+      attributes: [
+        'Item_Number',
+        'Sales_Category',
+        'Price_Class',
+        'OTP_Number',
+        'Description',
+        'Pack',
+        'UOM',
+        'Price1',
+        'Sequence',
+        'Cig_Sticks',
+        'UnitOunces',
+        'Basecost',
+        'NetCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'Retail1',
+        'HeadingFlag',
 
-      // UPC_Number
-      [
-        Sequelize.literal(`
+        // UPC_Number
+        [
+          Sequelize.literal(`
           (
             SELECT TOP 1 UPC_Number
             FROM Inventory_UPC
@@ -12336,236 +12355,236 @@ async getInventoryValuationSalesCategTotal(){
            
           )
         `),
-        'UPC_Number'
-      ],
+          'UPC_Number'
+        ],
 
-      // classDesc
-      [
-        Sequelize.literal(`
+        // classDesc
+        [
+          Sequelize.literal(`
           (
             SELECT Class_Desc
             FROM Price_Classes
             WHERE Inventory.Price_Class = Price_Classes.Price_Class
           )
         `),
-        'classDesc'
-      ],
+          'classDesc'
+        ],
 
-      // categoryDesc
-      [
-        Sequelize.literal(`
+        // categoryDesc
+        [
+          Sequelize.literal(`
           (
             SELECT Category_Desc
             FROM Sales_Categories
             WHERE Inventory.Sales_Category = Sales_Categories.Sales_Category
           )
         `),
-        'categoryDesc'
-      ],
+          'categoryDesc'
+        ],
 
-      // otpDesc
-      [
-        Sequelize.literal(`
+        // otpDesc
+        [
+          Sequelize.literal(`
           (
             SELECT OTP_Description
             FROM OtherTaxes
             WHERE Inventory.OTP_Number = OtherTaxes.OTP_Number
           )
         `),
-        'otpDesc'
-      ],
+          'otpDesc'
+        ],
 
-      // TaxValue function
-      [
-        Sequelize.literal(`
+        // TaxValue function
+        [
+          Sequelize.literal(`
           ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0)
         `),
-        'TaxValue'
-      ],
-      [
-        Sequelize.literal(`
+          'TaxValue'
+        ],
+        [
+          Sequelize.literal(`
           ( ISNULL(Inventory.AvgCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
         `),
-        'ext_AvgCost'
-      ],
-      [
-        Sequelize.literal(`
+          'ext_AvgCost'
+        ],
+        [
+          Sequelize.literal(`
           ( ISNULL(Inventory.BaseCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
         `),
-        'ext_BaseCost'
-      ],
-      [
-        Sequelize.literal(`
+          'ext_BaseCost'
+        ],
+        [
+          Sequelize.literal(`
           ( ISNULL(Inventory.NetCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
         `),
-        'ext_NetCost'
-      ],
-      [
-        Sequelize.literal(`
+          'ext_NetCost'
+        ],
+        [
+          Sequelize.literal(`
           ( ISNULL(Inventory.Invoice_Cost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
         `),
-        'ext_Invoice_Cost'
+          'ext_Invoice_Cost'
+        ],
       ],
-    ],
 
-    include: [
-      {
-        model: InventoryStatus,
-        required: false,
-        attributes: {
-          include: [
-            // State Tax
-            [
-              Sequelize.literal(`
+      include: [
+        {
+          model: InventoryStatus,
+          required: false,
+          attributes: {
+            include: [
+              // State Tax
+              [
+                Sequelize.literal(`
                 (
                   SELECT TaxDescription
                   FROM TaxRates
                   WHERE TaxRates.Jurisdiction_State = InventoryStatus.Jurisdiction_State
                 )
               `),
-              'tState'
-            ],
+                'tState'
+              ],
 
-            // County Tax
-            [
-              Sequelize.literal(`
+              // County Tax
+              [
+                Sequelize.literal(`
                 (
                   SELECT TaxDescription
                   FROM TaxRates_County
                   WHERE TaxRates_County.Jurisdiction_County = InventoryStatus.Jurisdiction_County
                 )
               `),
-              'tCounty'
-            ],
+                'tCounty'
+              ],
 
-            // City Tax
-            [
-              Sequelize.literal(`
+              // City Tax
+              [
+                Sequelize.literal(`
                 (
                   SELECT TaxDescription
                   FROM TaxRates_City
                   WHERE TaxRates_City.Jurisdiction_City = InventoryStatus.Jurisdiction_City
                 )
               `),
-              'tCity'
-            ],
-          ]
-        }
-      },
+                'tCity'
+              ],
+            ]
+          }
+        },
 
-      {
-        model: InventorySavedDetail,
-        required: false,
-        // where: { Code: 1 },
-        attributes: {
-          include: [
-            [
-              Sequelize.literal(`
+        {
+          model: InventorySavedDetail,
+          required: false,
+          // where: { Code: 1 },
+          attributes: {
+            include: [
+              [
+                Sequelize.literal(`
                 (
                   SELECT TaxDescription
                   FROM TaxRates
                   WHERE TaxRates.Jurisdiction_State = InventorySavedDetail.Jurisdiction_State
                 )
               `),
-              'tState'
-            ],
-            [
-              Sequelize.literal(`
+                'tState'
+              ],
+              [
+                Sequelize.literal(`
                 (
                   SELECT STMP_VALUE20
                   FROM TaxRates
                   WHERE TaxRates.Jurisdiction_State = InventorySavedDetail.Jurisdiction_State
                 )
               `),
-              'STMP_VALUE20'
-            ],
-            [
-              Sequelize.literal(`
+                'STMP_VALUE20'
+              ],
+              [
+                Sequelize.literal(`
                 (
                   SELECT STMP_VALUE25
                   FROM TaxRates
                   WHERE TaxRates.Jurisdiction_State = InventorySavedDetail.Jurisdiction_State
                 )
               `),
-              'STMP_VALUE25'
-            ],
-          ]
+                'STMP_VALUE25'
+              ],
+            ]
+          }
         }
-      }
-    ],
+      ],
 
-    // where: {
-    //   // Code: 0,
-    //   PickArea: 'NOV1'
-    // },
+      // where: {
+      //   // Code: 0,
+      //   PickArea: 'NOV1'
+      // },
 
-    order: [['Description', 'ASC']]
-})
-}
-
-async getVendorListForTradeShowIds(ids: number) {
-  const tradeShowVendors = await TradeShowVendor.findAll({
-    where: { tradeShowId: ids },
-   attributes: ['vendorId'],
-  })
-  return{ data: tradeShowVendors, total: tradeShowVendors.length };
-}
-
-async getInventoryAsPerVendorIds(query:any) {
-  let {ids,page = 1,limit = 10,search,salesCategoryId,priceClassId} = query;
-
-  if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
-    salesCategoryId = salesCategoryId.map(id => Number(id));
+      order: [['Description', 'ASC']]
+    })
   }
 
-  if (Array.isArray(priceClassId) && priceClassId.length > 0) {
-    priceClassId = priceClassId.map(id => Number(id));
+  async getVendorListForTradeShowIds(ids: number) {
+    const tradeShowVendors = await TradeShowVendor.findAll({
+      where: { tradeShowId: ids },
+      attributes: ['vendorId'],
+    })
+    return { data: tradeShowVendors, total: tradeShowVendors.length };
   }
 
+  async getInventoryAsPerVendorIds(query: any) {
+    let { ids, page = 1, limit = 10, search, salesCategoryId, priceClassId } = query;
 
-  page = Number(page);
-  limit = Number(limit);
-  const offset = limit ? (page - 1) * limit : undefined;
-  let whereCondition: any = {};
+    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+      salesCategoryId = salesCategoryId.map(id => Number(id));
+    }
 
-  if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
-    // Both filters exist → use OR condition
-    whereCondition = {
-      Sales_Category: { [Op.in]: salesCategoryId },
-      Price_Class: { [Op.in]: priceClassId }
-    };
+    if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      priceClassId = priceClassId.map(id => Number(id));
+    }
 
-    console.log(salesCategoryId, 'salesCategoryId', priceClassId, 'priceClassId', 'both filters exist')
-  } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
-    // Only Sales_Category filter
-    whereCondition.Sales_Category = { [Op.in]: salesCategoryId };
-  } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
-    // Only Price_Class filter
-    whereCondition.Price_Class = { [Op.in]: priceClassId };
-  }
-  if (ids && ids.length > 0) {
-    whereCondition.Primary_Vendor = { [Op.in]: ids };
-  }
 
-  if (search) {
-    whereCondition[Op.or] = [
-      { Item_Number: { [Op.like]: `%${search}%` } },
-      { Description: { [Op.like]: `%${search}%` } },
-      { ALT_Description2: { [Op.like]: `%${search}%` } },
-      { AltDesc: { [Op.like]: `%${search}%` } },
-    ];
-  }
-  const { count: totalCount, rows: inventory } = await Inventory.findAndCountAll({
-    where: {I_Inactive: false,ShortOrderForm: true,...whereCondition  },
-    attributes: ['Item_Number', 'Description', 'Retail1', 'Retail2', 'Retail3','Primary_Vendor','Price1','Price2'],
-    include: [
-      {
-        model: Vendor,
-        as: 'primaryVendor',
-        attributes: ['Primary_Vendor', 'V_Description','V_Email','V_Phone','V_Addr1','V_City','V_State','V_Zip','V_Fax','V_Status'],
-      },
-      
-       {
+    page = Number(page);
+    limit = Number(limit);
+    const offset = limit ? (page - 1) * limit : undefined;
+    let whereCondition: any = {};
+
+    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+      // Both filters exist → use OR condition
+      whereCondition = {
+        Sales_Category: { [Op.in]: salesCategoryId },
+        Price_Class: { [Op.in]: priceClassId }
+      };
+
+      console.log(salesCategoryId, 'salesCategoryId', priceClassId, 'priceClassId', 'both filters exist')
+    } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+      // Only Sales_Category filter
+      whereCondition.Sales_Category = { [Op.in]: salesCategoryId };
+    } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      // Only Price_Class filter
+      whereCondition.Price_Class = { [Op.in]: priceClassId };
+    }
+    if (ids && ids.length > 0) {
+      whereCondition.Primary_Vendor = { [Op.in]: ids };
+    }
+
+    if (search) {
+      whereCondition[Op.or] = [
+        { Item_Number: { [Op.like]: `%${search}%` } },
+        { Description: { [Op.like]: `%${search}%` } },
+        { ALT_Description2: { [Op.like]: `%${search}%` } },
+        { AltDesc: { [Op.like]: `%${search}%` } },
+      ];
+    }
+    const { count: totalCount, rows: inventory } = await Inventory.findAndCountAll({
+      where: { I_Inactive: false, ShortOrderForm: true, ...whereCondition },
+      attributes: ['Item_Number', 'Description', 'Retail1', 'Retail2', 'Retail3', 'Primary_Vendor', 'Price1', 'Price2'],
+      include: [
+        {
+          model: Vendor,
+          as: 'primaryVendor',
+          attributes: ['Primary_Vendor', 'V_Description', 'V_Email', 'V_Phone', 'V_Addr1', 'V_City', 'V_State', 'V_Zip', 'V_Fax', 'V_Status'],
+        },
+
+        {
           model: SalesCategory,
           as: 'SalesCategory',
           attributes: ['Category_Desc', 'Sales_Category'],
@@ -12577,922 +12596,935 @@ async getInventoryAsPerVendorIds(query:any) {
           attributes: ['Class_Desc'],
           required: false
         }
-    ],
-    order: [['Item_Number', 'ASC']],
-    limit,
-    offset,
-  })
-  return{ data: inventory, total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) };
-}
-
-async getInventoryAsPerTradeWeek(query:any) {
-  let {page = 1,limit = 10,tradeId,weekNumber,search} = query;
-  tradeId = Number(tradeId);
-  weekNumber = Number(weekNumber);
-  page = Number(page);
-  limit = Number(limit);
-  const offset = limit ? (page - 1) * limit : undefined;
-
-  let whereCondition: any = {};
- 
-  const {rows: tradeShowItem, count: total} = await TradeShowDeliveryProduct.findAndCountAll({
-    where: {
-      tradeShowId: tradeId,
-      weekNumber: weekNumber,
-      ...whereCondition,
-    },
-    attributes: ['itemNumber','startDate','endDate'],
-    
-    
-    limit,
-    offset,
-  })
-
-
-  const finalData = await Promise.all(
-    tradeShowItem.map(async (item: any) => {
-      const inventory = await Inventory.findOne({
-        where: {
-          Item_Number: Number(item.itemNumber),
-
-        },
-        attributes: ['Item_Number', 'Description', 'Pack', 'UOM', 'Retail1', 'Retail2', 'Retail3'],
-      });
-      return {
-        ...item.toJSON(),
-        inventory: inventory ? inventory.toJSON() : null,
-      };
+      ],
+      order: [['Item_Number', 'ASC']],
+      limit,
+      offset,
     })
-  );
+    return { data: inventory, total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) };
+  }
 
- 
-    return{ data: finalData, total: total, page, limit, totalPages: Math.ceil(total / limit) };
-  
-}
+  async getInventoryAsPerTradeWeek(query: any) {
+    let { page = 1, limit = 10, tradeId, weekNumber, search } = query;
+    tradeId = Number(tradeId);
+    weekNumber = Number(weekNumber);
+    page = Number(page);
+    limit = Number(limit);
+    const offset = limit ? (page - 1) * limit : undefined;
 
-async getTradeShowSummary(id:number,query:any) {
-  let {page = 1,limit = 10} = query;
-  page = Number(page);
-  limit = Number(limit);
-  const offset = limit ? (page - 1) * limit : undefined;
+    let whereCondition: any = {};
 
-  const tradeShow = await TradeShow.findByPk(id, {
-   
-  });
-
-  const {rows: deliveryProducts, count: total} = await TradeShowItem.findAndCountAll({
-    where: {
-      tradeShowId: id,
-    },
-    limit,
-    offset,
-    order: [['createdAt', 'DESC']],
-  });
-
-  const vendorsIds = await TradeShowVendor.findAndCountAll({
-    where: {
-      tradeShowId: id,
-    },
-    attributes: ['vendorId'],
-    limit,
-    offset,
-    order: [['createdAt', 'DESC']],
-  });
-
-  const mapVendors = vendorsIds.rows.map((vendor: any) => vendor.vendorId);
-  const vendors = await Vendor.findAll({
-    where: {
-      Primary_Vendor: {
-        [Op.in]: mapVendors,
+    const { rows: tradeShowItem, count: total } = await TradeShowDeliveryProduct.findAndCountAll({
+      where: {
+        tradeShowId: tradeId,
+        weekNumber: weekNumber,
+        ...whereCondition,
       },
-      
-    },
-    attributes: ['Primary_Vendor', 'V_Description','V_Email','V_Phone','V_Addr1','V_City','V_State','V_Zip','V_Fax','V_Status'],
-  });
+      attributes: ['itemNumber', 'startDate', 'endDate'],
 
-  const tradeShowItemDeliveryWeeks = await TradeShowDeliveryProduct.findAll({
-    where: {
-      tradeShowId: id,
-    },
-    attributes: [
-      'weekNumber',
-      [fn('COUNT', col('id')), 'count']
-    ],
-    group: ['weekNumber'],
-    order: [['weekNumber', 'ASC']],
-    raw: true,
-  });
 
-  // Format the week-wise counts
-  const weekWiseCounts = tradeShowItemDeliveryWeeks.map((week: any) => ({
-    weekNumber: week.weekNumber,
-    count: Number(week.count) || 0
-  }));
+      limit,
+      offset,
+    })
 
-  const retails= await TradeShowRetailer.findAndCountAll({
-    where: {
-      tradeShowId: id,
-    },
-    attributes: ['retailerId','retailerName'],
-    order: [['createdAt', 'DESC']],
-    limit,
-    offset,
-  });
 
-  return { 
-    data: deliveryProducts, 
-    vendors: vendors, 
-    total: total, 
-    retails: retails,
-    page, 
-    limit, 
-    totalPages: Math.ceil(total / limit),
-    tradeShow: tradeShow,
-    weekWiseCounts: weekWiseCounts
-  };
-}
+    const finalData = await Promise.all(
+      tradeShowItem.map(async (item: any) => {
+        const inventory = await Inventory.findOne({
+          where: {
+            Item_Number: Number(item.itemNumber),
 
-async getTradeShowItemList(id:number,query:any) {
-  let {page = 1,limit = 10,search} = query;
-  page = Number(page);
-  limit = Number(limit);
-  const offset = limit ? (page - 1) * limit : undefined;
-let whereCondition: any = {};
-if (search) {
-  whereCondition[Op.or] = [
-    { description: { [Op.like]: `%${search}%` } },
-  ];
-}
-  const {rows: tradeShowItem, count: total} = await TradeShowItem.findAndCountAll({
-    where: {
-      tradeShowId: id,
-      ...whereCondition,
-    },
-    limit,
-    offset, 
-    order: [['createdAt', 'DESC']],
-  });
-  return { data: tradeShowItem, total: total, page, limit, totalPages: Math.ceil(total / limit) };
-}
+          },
+          attributes: ['Item_Number', 'Description', 'Pack', 'UOM', 'Retail1', 'Retail2', 'Retail3'],
+        });
+        return {
+          ...item.toJSON(),
+          inventory: inventory ? inventory.toJSON() : null,
+        };
+      })
+    );
 
-async getTradeShowVendorsList(id:number,query:any) {
-  let {page = 1,limit = 10,search} = query;
-  page = Number(page);
-  limit = Number(limit);
-  const offset = limit ? (page - 1) * limit : undefined;
-  let whereCondition: any = {};
-  if (search) {
-    whereCondition[Op.or] = [
-      { vendorName: { [Op.like]: `%${search}%` } },
-    ];
-  }
-  const {rows: tradeShowVendors, count: total} = await TradeShowVendor.findAndCountAll({
-    where: {
-      tradeShowId: id,
-      ...whereCondition,
-    },
-    limit,
-    offset,
-    order: [['createdAt', 'DESC']],
-  });
-  return { data: tradeShowVendors, total: total, page, limit, totalPages: Math.ceil(total / limit) };
-}
 
-async deleteBulkTradeShowVendors(body: {
-  tradeShowId: number;
-  vendorIds: number[];
-}) {
-  const tradeShow = await TradeShow.findByPk(body.tradeShowId);
-  if (!tradeShow) {
-    throw new AppError('TradeShow not found', 404);
-  }
-  const vendorIds = body.vendorIds;
-  if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
-    throw new AppError('Vendor IDs array must contain at least one vendor', 400);
+    return { data: finalData, total: total, page, limit, totalPages: Math.ceil(total / limit) };
+
   }
 
- 
-  
-  await TradeShowVendor.destroy({
-    where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
-  });
+  async getTradeShowSummary(id: number, query: any) {
+    let { page = 1, limit = 10 } = query;
+    page = Number(page);
+    limit = Number(limit);
+    const offset = limit ? (page - 1) * limit : undefined;
 
-  await TradeShowItem.destroy({
-    where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
-  });
+    const tradeShow = await TradeShow.findByPk(id, {
 
-  await TradeShowDeliveryProduct.destroy({
-    where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
-  });
+    });
 
-  return { success: true, message: 'TradeShowVendor deleted successfully' };
-}
+    const { rows: deliveryProducts, count: total } = await TradeShowItem.findAndCountAll({
+      where: {
+        tradeShowId: id,
+      },
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
 
-async deleteBulkTradeShowItems(body: {
-  tradeShowId: number;
-  itemNumbers: string[];
-}) {
-  const tradeShow = await TradeShow.findByPk(body.tradeShowId);
-  if (!tradeShow) {
-    throw new AppError('TradeShow not found', 404);
+    const vendorsIds = await TradeShowVendor.findAndCountAll({
+      where: {
+        tradeShowId: id,
+      },
+      attributes: ['vendorId'],
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    const mapVendors = vendorsIds.rows.map((vendor: any) => vendor.vendorId);
+    const vendors = await Vendor.findAll({
+      where: {
+        Primary_Vendor: {
+          [Op.in]: mapVendors,
+        },
+
+      },
+      attributes: ['Primary_Vendor', 'V_Description', 'V_Email', 'V_Phone', 'V_Addr1', 'V_City', 'V_State', 'V_Zip', 'V_Fax', 'V_Status'],
+    });
+
+    const tradeShowItemDeliveryWeeks = await TradeShowDeliveryProduct.findAll({
+      where: {
+        tradeShowId: id,
+      },
+      attributes: [
+        'weekNumber',
+        [fn('COUNT', col('id')), 'count']
+      ],
+      group: ['weekNumber'],
+      order: [['weekNumber', 'ASC']],
+      raw: true,
+    });
+
+    // Format the week-wise counts
+    const weekWiseCounts = tradeShowItemDeliveryWeeks.map((week: any) => ({
+      weekNumber: week.weekNumber,
+      count: Number(week.count) || 0
+    }));
+
+    const retails = await TradeShowRetailer.findAndCountAll({
+      where: {
+        tradeShowId: id,
+      },
+      attributes: ['retailerId', 'retailerName'],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset,
+    });
+
+    return {
+      data: deliveryProducts,
+      vendors: vendors,
+      total: total,
+      retails: retails,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      tradeShow: tradeShow,
+      weekWiseCounts: weekWiseCounts
+    };
   }
-  const itemIds = body.itemNumbers;
-  if (!Array.isArray(itemIds) || itemIds.length === 0) {
-    throw new AppError('Item IDs array must contain at least one item', 400);
-  }
-  await TradeShowItem.destroy({
-    where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemIds } },
-  });
 
-  await TradeShowDeliveryProduct.destroy({
-    where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemIds } },
-  });
-  return { success: true, message: 'TradeShowItem deleted successfully' };
-}
-
-async deleteBulkTradeShowDeliveryProducts(body: {
-  tradeShowId: number;
-  itemNumbers: string[];
-}) {
-  const tradeShow = await TradeShow.findByPk(body.tradeShowId);
-  if (!tradeShow) {
-    throw new AppError('TradeShow not found', 404);
-  }
-
-  const itemNumbers = body.itemNumbers;
-  if (!Array.isArray(itemNumbers) || itemNumbers.length === 0) {
-    throw new AppError('Item numbers array must contain at least one item number', 400);
-  }
-  await TradeShowDeliveryProduct.destroy({
-    where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemNumbers } },
-  });
-  return { success: true, message: 'TradeShowDeliveryProduct deleted successfully' };
-}
-
-
-async deleteBulkTradeShowRetailers(body: {
-  tradeShowId: number;
-  retailerIds: number[];
-}) {
-  const tradeShow = await TradeShow.findByPk(body.tradeShowId);
-  if (!tradeShow) {
-    throw new AppError('TradeShow not found', 404);
+  async getTradeShowItemList(id: number, query: any) {
+    let { page = 1, limit = 10, search } = query;
+    page = Number(page);
+    limit = Number(limit);
+    const offset = limit ? (page - 1) * limit : undefined;
+    let whereCondition: any = {};
+    if (search) {
+      whereCondition[Op.or] = [
+        { description: { [Op.like]: `%${search}%` } },
+      ];
+    }
+    const { rows: tradeShowItem, count: total } = await TradeShowItem.findAndCountAll({
+      where: {
+        tradeShowId: id,
+        ...whereCondition,
+      },
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+    return { data: tradeShowItem, total: total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  const retailerIds = body.retailerIds;
-  if (!Array.isArray(retailerIds) || retailerIds.length === 0) {
-    throw new AppError('Retailer IDs array must contain at least one retailer', 400);
+  async getTradeShowVendorsList(id: number, query: any) {
+    let { page = 1, limit = 10, search } = query;
+    page = Number(page);
+    limit = Number(limit);
+    const offset = limit ? (page - 1) * limit : undefined;
+    let whereCondition: any = {};
+    if (search) {
+      whereCondition[Op.or] = [
+        { vendorName: { [Op.like]: `%${search}%` } },
+      ];
+    }
+    const { rows: tradeShowVendors, count: total } = await TradeShowVendor.findAndCountAll({
+      where: {
+        tradeShowId: id,
+        ...whereCondition,
+      },
+      limit,
+      offset,
+      order: [['createdAt', 'DESC']],
+    });
+    return { data: tradeShowVendors, total: total, page, limit, totalPages: Math.ceil(total / limit) };
   }
-  await TradeShowRetailer.destroy({
-    where: { tradeShowId: tradeShow.id, retailerId: { [Op.in]: retailerIds } },
-  });
-  return { success: true, message: 'TradeShowRetailer deleted successfully' };
-}
 
-async poReceivingHistoryReport(query:any) {
-  let {startDate,endDate} = query;
+  async deleteBulkTradeShowVendors(body: {
+    tradeShowId: number;
+    vendorIds: number[];
+  }) {
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+    const vendorIds = body.vendorIds;
+    if (!Array.isArray(vendorIds) || vendorIds.length === 0) {
+      throw new AppError('Vendor IDs array must contain at least one vendor', 400);
+    }
 
-   const end = new Date(endDate);
-    end.setDate(end.getDate() );
+
+
+    await TradeShowVendor.destroy({
+      where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
+    });
+
+    await TradeShowItem.destroy({
+      where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
+    });
+
+    await TradeShowDeliveryProduct.destroy({
+      where: { tradeShowId: tradeShow.id, vendorId: { [Op.in]: vendorIds } },
+    });
+
+    return { success: true, message: 'TradeShowVendor deleted successfully' };
+  }
+
+  async deleteBulkTradeShowItems(body: {
+    tradeShowId: number;
+    itemNumbers: string[];
+  }) {
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+    const itemIds = body.itemNumbers;
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      throw new AppError('Item IDs array must contain at least one item', 400);
+    }
+    await TradeShowItem.destroy({
+      where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemIds } },
+    });
+
+    await TradeShowDeliveryProduct.destroy({
+      where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemIds } },
+    });
+    return { success: true, message: 'TradeShowItem deleted successfully' };
+  }
+
+  async deleteBulkTradeShowDeliveryProducts(body: {
+    tradeShowId: number;
+    itemNumbers: string[];
+  }) {
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    const itemNumbers = body.itemNumbers;
+    if (!Array.isArray(itemNumbers) || itemNumbers.length === 0) {
+      throw new AppError('Item numbers array must contain at least one item number', 400);
+    }
+    await TradeShowDeliveryProduct.destroy({
+      where: { tradeShowId: tradeShow.id, itemNumber: { [Op.in]: itemNumbers } },
+    });
+    return { success: true, message: 'TradeShowDeliveryProduct deleted successfully' };
+  }
+
+
+  async deleteBulkTradeShowRetailers(body: {
+    tradeShowId: number;
+    retailerIds: number[];
+  }) {
+    const tradeShow = await TradeShow.findByPk(body.tradeShowId);
+    if (!tradeShow) {
+      throw new AppError('TradeShow not found', 404);
+    }
+
+    const retailerIds = body.retailerIds;
+    if (!Array.isArray(retailerIds) || retailerIds.length === 0) {
+      throw new AppError('Retailer IDs array must contain at least one retailer', 400);
+    }
+    await TradeShowRetailer.destroy({
+      where: { tradeShowId: tradeShow.id, retailerId: { [Op.in]: retailerIds } },
+    });
+    return { success: true, message: 'TradeShowRetailer deleted successfully' };
+  }
+
+  async poReceivingHistoryReport(query: any) {
+    let { startDate, endDate } = query;
+
+    const end = new Date(endDate);
+    end.setDate(end.getDate());
     const startEnd = new Date(startDate);
     startEnd.setDate(startEnd.getDate());
 
-  const result = await PODetail.findAndCountAll({
-    subQuery: false,
-    distinct: true,
-    col: 'PO_Number',
+    const result = await PODetail.findAndCountAll({
+      subQuery: false,
+      distinct: true,
+      col: 'PO_Number',
 
-    attributes: {
-      include: [
-        [
-          literal(`Quantity_Recd * PO_Detail.Pack`),
-          'qtyRecd',
-        ],
-      ],
-    },
-
-    include: [
-      {
-        model: POHeader,
-        as: 'POHeader',
-        required: true,
-        where: {
-          PO_Posted: 'True',
-          PO_Deleted: 'False',
-          Receiving_Code: 'P',
-          Date_Received: {
-            [Op.between]: [startEnd, end],
-          },
-        },
-        attributes: [
-          'PO_Number',
-          'Invoice_Number',
-          'Date_Received',
-          'Primary_Vendor',
-        ],
+      attributes: {
         include: [
-          {
-            model: Vendor,
-            attributes: [
-              'Primary_Vendor',
-              'V_Description',
-              'V_Addr1',
-              'V_City',
-              'V_State',
-              'V_Zip',
-              'V_Phone',
-            ],
-          },
+          [
+            literal(`Quantity_Recd * PO_Detail.Pack`),
+            'qtyRecd',
+          ],
         ],
       },
-      {
-        model: Inventory,
-        attributes: [
-          'Description',
-          'Cig_Pack',
-          'Cig_Sticks',
-          'UnitOunces',
-          'UOM',
-          'Price_Class',
-          'location',
-          'section',
-          'PickArea',
-          ['Pack', 'iPack'],
-          ['OTP_Number', 'iOTP'],
-          [
-            literal(`
+
+      include: [
+        {
+          model: POHeader,
+          as: 'POHeader',
+          required: true,
+          where: {
+            PO_Posted: 'True',
+            PO_Deleted: 'False',
+            Receiving_Code: 'P',
+            Date_Received: {
+              [Op.between]: [startEnd, end],
+            },
+          },
+          attributes: [
+            'PO_Number',
+            'Invoice_Number',
+            'Date_Received',
+            'Invoice_Date',
+            'Primary_Vendor',
+          ],
+          include: [
+            {
+              model: Vendor,
+              attributes: [
+                'Primary_Vendor',
+                'V_Description',
+                'V_Addr1',
+                'V_City',
+                'V_State',
+                'V_Zip',
+                'V_Phone',
+              ],
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          attributes: [
+            'Description',
+            'Cig_Pack',
+            'Cig_Sticks',
+            'UnitOunces',
+            'UOM',
+            'Price_Class',
+            'location',
+            'section',
+            'PickArea',
+            ['Pack', 'iPack'],
+            ['OTP_Number', 'iOTP'],
+            [
+              literal(`
               (SELECT OTP_Description
                FROM OtherTaxes
                WHERE OtherTaxes.OTP_Number = Inventory.OTP_Number)
             `),
-            'otpName',
-          ],
-          [
-            literal(`
+              'otpName',
+            ],
+            [
+              literal(`
               (SELECT Brand_Family
                FROM Inventory_Brands
                WHERE Inventory_Brands.Brand_ID = Inventory.Brand_ID)
             `),
-            'Brand',
-          ],
-          [
-            literal(`
+              'Brand',
+            ],
+            [
+              literal(`
               (SELECT V_Description
                FROM Vendor
                WHERE Vendor.Primary_Vendor = Inventory.Manufacturer)
             `),
-            'Manuf',
+              'Manuf',
+            ],
           ],
-        ],
-      },
-    ],
-
-    order: [
-      [{ model: POHeader, as: 'POHeader' }, 'Date_Received', 'ASC'],
-      ['PO_Number', 'ASC'],
-    ],
-  });
-
-  return {
-    total: result.count,
-    data: result.rows,
-  };
-}
-
-async poTransferAdjustmentReport(query: any) {
-  const { startDate, endDate } = query;
-
-  const data = await PODetail.findAll({
-    attributes: {
-      include: [
-        [
-          literal(
-                    'ISNULL([PO_Detail].[Quantity_Recd], 0) * ISNULL([PO_Detail].[Cost], 0)'
-                  ),
-          'Ext_Cost',
-        ],
+        },
       ],
-    },
 
-    include: [
-      {
-        model: POHeader,
-        as: 'POHeader',
-        required: true, 
-        attributes: [
-          'PO_Number',
-          'PO_Date',
-          'Date_Received',
-          'Receiving_Code',
-        ],
-        where: {
-          PO_Posted: true,
-          PO_Deleted: false,
-          Receiving_Code: 'A',
-          Date_Received: {
-            [Op.between]: [startDate, endDate],
-          },
-        },
+      order: [
+        [{ model: POHeader, as: 'POHeader' }, 'Date_Received', 'ASC'],
+        ['PO_Number', 'ASC'],
+      ],
+    });
+
+    return {
+      total: result.count,
+      data: result.rows,
+    };
+  }
+
+  async poTransferAdjustmentReport(query: any) {
+    const { startDate, endDate } = query;
+
+    const data = await PODetail.findAll({
+      attributes: {
         include: [
-          {
-            model: Vendor,
-            required: false, // LEFT JOIN Vendor
-            attributes: [
-              'V_Description',
-              'V_Addr1',
-              'V_City',
-              'V_State',
-              'V_Zip',
-              'V_Phone',
-            ],
+          [
+            literal(
+              'ISNULL([PO_Detail].[Quantity_Recd], 0) * ISNULL([PO_Detail].[Cost], 0)'
+            ),
+            'Ext_Cost',
+          ],
+        ],
+      },
+
+      include: [
+        {
+          model: POHeader,
+          as: 'POHeader',
+          required: true,
+          attributes: [
+            'PO_Number',
+            'PO_Date',
+            'Date_Received',
+            'Receiving_Code',
+          ],
+          where: {
+            PO_Posted: true,
+            PO_Deleted: false,
+            Receiving_Code: 'A',
+            Date_Received: {
+              [Op.between]: [startDate, endDate],
+            },
           },
-        ],
-      },
-      {
-        model: Inventory,
-        required: false, // LEFT JOIN Inventory
-        attributes: [
-          'Item_Number',
-          'Description',
-          'UOM',
-          'Price_Class',
-          'location',
-          'section',
-          'PickArea',
-          ['Pack', 'iPack'],
-        ],
-      },
-    ],
-
-    order: [
-      [{ model: POHeader, as: 'POHeader' }, 'Date_Received', 'ASC'],
-      [{ model: POHeader, as: 'POHeader' }, 'PO_Number', 'ASC'],
-    ],
-  });
-  return data;
-}
-
-async poCigOtpReport(query: any) {
-  const { startDate, endDate } = query;
-
-  const end = new Date(endDate);
-  const startEnd = new Date(startDate);
-
-  return await POHeader.findAll({
-    where: {
-      PO_Posted: true,
-      PO_Deleted: false,
-      Receiving_Code: 'P',
-      Date_Received: {
-        [Op.between]: [startEnd, end],
-      },
-    },
-    order: [
-      ['Date_Received', 'ASC'],
-      ['PO_Number', 'ASC'],
-    ],
-    include: [
-      {
-        model: PODetail,
-        as: 'PO_Details',
-        required: true,
-        separate: true,
-
-        attributes: {
           include: [
-            [
-              Sequelize.literal(
-                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Pack]'
-              ),
-              'qtyRecd',
-            ],
-            [
-              Sequelize.literal(
-                '[PO_Detail].[Quantity_Recd] * [Inventory].[UnitOunces]'
-              ),
-              'qtyOz',
-            ],
-            [
-              Sequelize.literal(
-                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[AvgCost]'
-              ),
-              'Ext_AvgCost',
-            ],
-            [
-              Sequelize.literal(
-                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[BaseCost]'
-              ),
-              'Ext_BaseCost',
-            ],
-            [
-              Sequelize.literal(
-                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[NetCost]'
-              ),
-              'Ext_NetCost',
-            ],
-            [
-              Sequelize.literal(
-                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Invoice_Cost]'
-              ),
-              'Ext_InvoiceCost',
-            ],
-            [
-              Sequelize.literal(
-                '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Cost]'
-              ),
-              'Ext_POCost',
-            ],
-            [
-              Sequelize.literal(
-                '[PO_Detail].[Quantity_Recd] * [Inventory].[Cig_Sticks]'
-              ),
-              'Total_Cig_Sticks',
-            ],
-            [
-              Sequelize.literal(
-                '([PO_Detail].[Quantity_Recd] * [Inventory].[Cig_Sticks]) / NULLIF([Inventory].[Cig_Pack], 0)'
-              ),
-              'Total_Pack',
-            ],
-
+            {
+              model: Vendor,
+              required: false, // LEFT JOIN Vendor
+              attributes: [
+                'V_Description',
+                'V_Addr1',
+                'V_City',
+                'V_State',
+                'V_Zip',
+                'V_Phone',
+              ],
+            },
           ],
         },
+        {
+          model: Inventory,
+          required: false, // LEFT JOIN Inventory
+          attributes: [
+            'Item_Number',
+            'Description',
+            'UOM',
+            'Price_Class',
+            'location',
+            'section',
+            'PickArea',
+            ['Pack', 'iPack'],
+          ],
+        },
+      ],
 
-        include: [
-          {
-            model: Inventory,
-            required: false,
-            attributes: [
-              'Description',
-              'Cig_Pack',
-              'Cig_Sticks',
-              'UnitOunces',
-              'UOM',
-              ['Pack', 'iPack'],
-              ['OTP_Number', 'iOTP'],
-              
+      order: [
+        [{ model: POHeader, as: 'POHeader' }, 'Date_Received', 'ASC'],
+        [{ model: POHeader, as: 'POHeader' }, 'PO_Number', 'ASC'],
+      ],
+    });
+    return data;
+  }
 
+  async poCigOtpReport(query: any) {
+    const { startDate, endDate } = query;
+
+    const end = new Date(endDate);
+    const startEnd = new Date(startDate);
+
+    return await POHeader.findAll({
+      where: {
+        PO_Posted: true,
+        PO_Deleted: false,
+        Receiving_Code: 'P',
+        Date_Received: {
+          [Op.between]: [startEnd, end],
+        },
+      },
+      order: [
+        ['Date_Received', 'ASC'],
+        ['PO_Number', 'ASC'],
+      ],
+      include: [
+        {
+          model: PODetail,
+          as: 'PO_Details',
+          required: true,
+          separate: true,
+
+          attributes: {
+            include: [
               [
-                Sequelize.literal(`(
+                Sequelize.literal(
+                  '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Pack]'
+                ),
+                'qtyRecd',
+              ],
+              [
+                Sequelize.literal(
+                  '[PO_Detail].[Quantity_Recd] * [Inventory].[UnitOunces]'
+                ),
+                'qtyOz',
+              ],
+              [
+                Sequelize.literal(
+                  '[PO_Detail].[Quantity_Recd] * [PO_Detail].[AvgCost]'
+                ),
+                'Ext_AvgCost',
+              ],
+              [
+                Sequelize.literal(
+                  '[PO_Detail].[Quantity_Recd] * [PO_Detail].[BaseCost]'
+                ),
+                'Ext_BaseCost',
+              ],
+              [
+                Sequelize.literal(
+                  '[PO_Detail].[Quantity_Recd] * [PO_Detail].[NetCost]'
+                ),
+                'Ext_NetCost',
+              ],
+              [
+                Sequelize.literal(
+                  '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Invoice_Cost]'
+                ),
+                'Ext_InvoiceCost',
+              ],
+              [
+                Sequelize.literal(
+                  '[PO_Detail].[Quantity_Recd] * [PO_Detail].[Cost]'
+                ),
+                'Ext_POCost',
+              ],
+              [
+                Sequelize.literal(
+                  '[PO_Detail].[Quantity_Recd] * [Inventory].[Cig_Sticks]'
+                ),
+                'Total_Cig_Sticks',
+              ],
+              [
+                Sequelize.literal(
+                  '([PO_Detail].[Quantity_Recd] * [Inventory].[Cig_Sticks]) / NULLIF([Inventory].[Cig_Pack], 0)'
+                ),
+                'Total_Pack',
+              ],
+
+            ],
+          },
+
+          include: [
+            {
+              model: Inventory,
+              required: false,
+              attributes: [
+                'Description',
+                'Cig_Pack',
+                'Cig_Sticks',
+                'UnitOunces',
+                'UOM',
+                'Price_Class',
+                ['Pack', 'iPack'],
+                ['OTP_Number', 'iOTP'],
+
+
+                [
+                  Sequelize.literal(`(
                   SELECT OT.OTP_Description
                   FROM OtherTaxes OT
                   WHERE OT.OTP_Number = [Inventory].[OTP_Number]
                 )`),
-                'otpName',
-              ],
+                  'otpName',
+                ],
 
-              [
-                Sequelize.literal(`(
+                [
+                  Sequelize.literal(`(
                   SELECT IB.Brand_Family
                   FROM Inventory_Brands IB
                   WHERE IB.Brand_ID = [Inventory].[Brand_ID]
                 )`),
-                'Brand',
-              ],
+                  'Brand',
+                ],
 
-              [
-                Sequelize.literal(`(
+                [
+                  Sequelize.literal(`(
                   SELECT V.V_Description
                   FROM Vendor V
                   WHERE V.Primary_Vendor = [Inventory].[Manufacturer]
                 )`),
-                'Manuf',
+                  'Manuf',
+                ],
               ],
-            ],
-          },
-        ],
-      }
-      ,
-      {
-        model: Vendor,
-        required: true,
-        attributes: [
-          'Primary_Vendor',
-          'V_Description',
-          'V_Addr1',
-          'V_City',
-          'V_State',
-          'V_Zip',
-          'V_Phone',
-        ],
+            },
+          ],
+        }
+        ,
+        {
+          model: Vendor,
+          required: true,
+          attributes: [
+            'Primary_Vendor',
+            'V_Description',
+            'V_Addr1',
+            'V_City',
+            'V_State',
+            'V_Zip',
+            'V_Phone',
+          ],
+        },
+      ],
+
+      subQuery: false,
+    });
+  }
+
+  async createInvoice(orderNumber: number) {
+
+    // 1. Order Header + Customer + SalesRep
+    const orderHeader = await OrderHeader.findOne({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Order_Number',
+        'Order_Date',
+        'C_Number',
+        'S_Number',
+        'Delivery_Date',
+        'Delivery_Charge',
+        'Tracking_Number',
+        'Invoice_Date',
+        'Invoice_time',
+        'Invoice_Total',
+        'PrepaidTax_Amount',
+        'Route_Number',
+        'Stop_Number',
+        'POS_House',
+        'POS_Cash',
+        'POS_Check',
+        'POS_Credit',
+        'HouseChargeApplied',
+        ...Array.from({ length: 12 }, (_, i) => `Sales${String(i + 1).padStart(2, '0')}`),
+        ...Array.from({ length: 12 }, (_, i) => `Taxes${String(i + 1).padStart(2, '0')}`)
+      ],
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: [
+            'C_Number',
+            'C_Name',
+            'C_CoName',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Zip',
+            'C_Country',
+            'C_Email', 'C_Phone', 'TermsCode', 'C_Fax', 'C_SalesTaxNumber', 'C_CigtLicenseNumber', 'Credit_Limit', 'EDI_Format', 'C_FEIN', 'C_PhoneMobile',
+            'LastBalance', 'LastInvoiceNumber', 'LastInvoiceAmount', 'LastPaymentAmount', 'LastPaymentDate', 'TermsCode',
+          ],
+          include: [
+            {
+              model: Terms,
+              as: 'terms',
+              attributes: ['TermsCode', 'Terms'],
+              required: false,
+            },
+            {
+              model: CustBillTo,
+              as: 'billTo',
+              attributes: ['C_Number', 'C_Name', 'C_CoName', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_AddressType', 'DriversLicense'],
+              required: false,
+            }
+          ]
+        },
+        {
+          model: SalesRep,
+          as: "salesRep",
+          attributes: ['S_Number', 'S_Desc'],
+          required: false,
+        },
+        {
+          model: DeliveryTypes,
+          as: 'DeliveryType',
+          attributes: ['Delivery_ID', 'Delivery_Description'],
+          required: false,
+        }
+
+      ]
+    });
+
+    if (!orderHeader) {
+      throw new Error('Order not found');
+    }
+
+    // 2. Order Detail + Inventory + UPC
+    const orderItems = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Item_Number',
+        'Sales_Category',
+        'OTP_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Pack',
+        'Price',
+        'CaseCount',
+        'Taxable', 'EBT', 'CasesPerPallet', 'Item_Message', 'ItemDescription', 'Special_ID', 'Tote_ID', 'OTP_Amount_State', 'OTP_Amount_County', 'OTP_Amount_City',
+        'OffInvoice_Amount', 'OffInvoice_OffCost', 'OffInvoice_Special', 'Points', 'PrepaidTax_Amount', 'DepositAmount'],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: ['Item_Number', 'Description', 'UOM', 'Unit_Price', 'Price_Class', 'location', 'section', 'PickArea', 'Retail1', 'Retail2', 'Retail3', 'UnitOunces', 'CaseLength', 'CaseWidth', 'CaseHeight', 'CasesPerPallet',
+            'EBT', 'FrozenFlag', 'CoolerFlag', 'HazMatFlag', 'StandardUnitDescription', 'MSA_Promotion_Code', 'MSA_Promotion', 'Lot_ID', 'NACS_Unit', 'Brand_ID', 'NACS', 'MSA_Category_Code', 'Sequence', 'Retail1', 'Retail2', 'Retail3',
+          ],
+          include: [
+            {
+              model: InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              where: { Status: 0 },
+              required: false
+            },
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Sales_Category', 'Category_Desc'],
+              required: false
+            },
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: ['Price_Class', 'Class_Desc'],
+              required: false,
+            }
+          ]
+        },
+
+      ]
+    });
+
+    // 3. Final Invoice Object
+    return {
+      invoiceHeader: orderHeader,
+      invoiceItems: orderItems
+    };
+  }
+
+
+  // async currentOrderStatusReport(query: any) {
+  //   const {
+  //     startDate,
+  //     endDate,
+  //     customerNumber,
+  //     currentStatus,
+  //   } = query;
+
+  //   const whereCondition: any = {
+  //     Order_Updated: false,
+  //     Order_Deleted: false,
+  //   };
+
+  //   if (startDate && endDate) {
+  //     whereCondition.Order_Date = {
+  //       [Op.between]: [startDate, endDate],
+  //     };
+  //   }
+
+  //   if (customerNumber) {
+  //     whereCondition.C_Number = Number(customerNumber);
+  //   }
+
+  //   if (currentStatus === 'invoices') {
+  //     whereCondition.Invoice_Number = { [Op.gt]: 0 };
+  //   }
+
+  //   if (currentStatus === 'non_invoices') {
+  //     whereCondition.Invoice_Number = { [Op.eq]: 0 };
+  //   }
+
+  //   if (currentStatus === 'picklist') {
+  //     whereCondition.Picklist_Printed = true;
+  //   }
+
+  //   if (currentStatus === 'EpickStatusFromPicker') {
+  //     whereCondition.EpickStatusFromPicker = 'completed';
+  //   }
+
+  //   const data = await OrderHeader.findAll({
+  //     where: whereCondition,
+  //     order: [['Order_Number', 'DESC']],
+
+  //     attributes: [
+  //       'Order_Number',
+  //       'Invoice_Number',
+  //       'Invoice_Date',
+  //       'Invoice_Total',
+  //       'Picklist_Printed',
+  //       'Order_Date',
+  //       'Delivery_Date',
+  //       'Order_Source',
+  //       'C_Number',
+  //       'S_Number',
+  //       'Route_Number',
+  //       'Stop_Number',
+
+  //       [
+  //         Sequelize.literal(`
+  //           IIF(
+  //             OrderHeader.Invoice_Number_Legacy <> 0,
+  //             CONVERT(varchar(10), OrderHeader.Invoice_Number_Legacy),
+  //             IIF(
+  //               OrderHeader.Invoice_Number > 1,
+  //               CONCAT(OrderHeader.Order_Number, '-', OrderHeader.Invoice_Number),
+  //               CONVERT(varchar(10), OrderHeader.Order_Number)
+  //             )
+  //           )
+  //         `),
+  //         'Document_Number',
+  //       ],
+
+  //       [
+  //         Sequelize.fn(
+  //           'SUM',
+  //           Sequelize.col('orderDetails.Quantity_Ordered')
+  //         ),
+  //         'total_item_quantity',
+  //       ],
+
+  //       [
+  //         Sequelize.fn(
+  //           'COUNT',
+  //           Sequelize.col('orderDetails.Line_Number')
+  //         ),
+  //         'total_line_number',
+  //       ],
+  //     ],
+
+  //     include: [
+  //       {
+  //         model: OrderDetail,
+  //         as: 'orderDetails',
+  //         required: false,
+  //         attributes: [],
+  //       },
+  //       {
+  //         model: Customer,
+  //         as: 'customer',
+  //         attributes: [
+  //           'C_Number',
+  //           'C_Name',
+  //           'C_CoName',
+  //           'C_Address',
+  //           'C_City',
+  //           'C_State',
+  //           'C_Zip',
+  //           'C_PhoneMobile',
+  //         ],
+  //       },
+  //       {
+  //         model: SalesRep,
+  //         as: 'salesRep',
+  //         attributes: ['S_Number', 'S_Desc'],
+  //       },
+  //     ],
+
+  //     group: [
+  //       'OrderHeader.Order_Number',
+  //       'OrderHeader.Invoice_Number',
+  //       'OrderHeader.Invoice_Date',
+  //       'OrderHeader.Invoice_Total',
+  //       'OrderHeader.Picklist_Printed',
+  //       'OrderHeader.Order_Date',
+  //       'OrderHeader.Delivery_Date',
+  //       'OrderHeader.Order_Source',
+  //       'OrderHeader.C_Number',
+  //       'OrderHeader.S_Number',
+  //       'OrderHeader.Route_Number',
+  //       'OrderHeader.Stop_Number',
+  //       'OrderHeader.Invoice_Number_Legacy',
+  //       'customer.C_Number',
+  //       'customer.C_Name',
+  //       'customer.C_CoName',
+  //       'customer.C_Address',
+  //       'customer.C_City',
+  //       'customer.C_State',
+  //       'customer.C_Zip',
+  //       'customer.C_PhoneMobile',
+  //       'salesRep.S_Number',
+  //       'salesRep.S_Desc',
+  //     ],
+  //   });
+
+  //   return data;
+  // }
+
+  async currentOrderStatusReport(query: any) {
+    const { startDate, endDate } = query;
+
+    if (!startDate || !endDate) {
+      throw new Error('startDate and endDate are required');
+    }
+
+    const baseWhere = {
+      Order_Date: {
+        [Op.between]: [startDate, endDate],
       },
-    ],
+    };
 
-    subQuery: false,
-  });
-}
+    const recordLocks = await Record_Locks.findAll({
+      where: { Lock_Type: 0 },
+      attributes: ['Lock_Number'],
+      raw: true,
+    });
 
-async createInvoice(orderNumber: number) {
+    const lockedOrderNumbers = recordLocks.map(
+      (r: { Lock_Number: number }) => r.Lock_Number
+    );
 
-  // 1. Order Header + Customer + SalesRep
-  const orderHeader = await OrderHeader.findOne({
-    where: { Order_Number: orderNumber },
-    attributes: [
+    const commonAttributes: FindAttributeOptions = [
       'Order_Number',
+      'Invoice_Number',
+      'Invoice_Date',
+      'Invoice_Total',
+      'Picklist_Printed',
       'Order_Date',
+      'Delivery_Date',
+      'Order_Source',
       'C_Number',
       'S_Number',
-      'Delivery_Date',
-      'Delivery_Charge',
-      'Tracking_Number',
-      'Invoice_Date',
-      'Invoice_time',
-      'Invoice_Total',
-      'PrepaidTax_Amount',
       'Route_Number',
       'Stop_Number',
-      ...Array.from({ length: 12 }, (_, i) => `Sales${String(i + 1).padStart(2, '0')}`),
-      ...Array.from({ length: 12 }, (_, i) => `Taxes${String(i + 1).padStart(2, '0')}`)
-    ],
-    include: [
-      {
-        model: Customer,
-        as: 'customer',
-        attributes: [
-          'C_Number',
-          'C_Name',
-          'C_CoName',
-          'C_Address',
-          'C_City',
-          'C_State',
-          'C_Zip',
-          'C_Country',
-          'C_Email','C_Phone','TermsCode','C_Fax','C_SalesTaxNumber','C_CigtLicenseNumber','Credit_Limit','EDI_Format','C_FEIN','C_PhoneMobile',
-          'LastBalance','LastInvoiceNumber','LastInvoiceAmount','LastPaymentAmount','LastPaymentDate','TermsCode',
-        ],
-        include: [
-          {
-            model:Terms,
-            as:'terms',
-            attributes:['TermsCode','Terms'],
-            required:false,
-          }
-        ]
-      },
-      {
-        model: SalesRep,
-        as: "salesRep",
-        attributes: ['S_Number', 'S_Desc'],
-        required:false,
-      },
-      {
-        model: DeliveryTypes,
-        as: 'DeliveryType',
-        attributes: ['Delivery_ID', 'Delivery_Description'],
-        required: false,
-      }
-      
-    ]
-  });
+      'Invoice_Number_Legacy',
+      'Order_Deleted',
+      'Order_Updated',
 
-  if (!orderHeader) {
-    throw new Error('Order not found');
-  }
-
-  // 2. Order Detail + Inventory + UPC
-  const orderItems = await OrderDetail.findAll({
-    where: { Order_Number: orderNumber },
-    attributes: [
-      'Item_Number',
-      'Sales_Category',
-      'OTP_Number',
-      'Quantity_Ordered',
-      'Quantity_Shipped',
-      'Pack',
-      'Price',
-      'CaseCount',
-      'Taxable','EBT','CasesPerPallet','Item_Message','ItemDescription','Special_ID','Tote_ID', 'OTP_Amount_State','OTP_Amount_County','OTP_Amount_City',
-      'OffInvoice_Amount','OffInvoice_OffCost','OffInvoice_Special','Points','PrepaidTax_Amount','DepositAmount'  ],
-    include: [
-      {
-        model: Inventory,
-        as: 'inventory',
-        attributes: ['Item_Number','Description','UOM','Price_Class','location','section','PickArea','Retail1','Retail2','Retail3','UnitOunces','CaseLength','CaseWidth','CaseHeight','CasesPerPallet',
-          'EBT','FrozenFlag','CoolerFlag','HazMatFlag','StandardUnitDescription','MSA_Promotion_Code','MSA_Promotion','Lot_ID','NACS_Unit','Brand_ID','NACS','MSA_Category_Code','Sequence','Retail1','Retail2','Retail3',
-        ],
-        include: [
-          {
-            model: InventoryUPC,
-            as: 'UPCList',
-            attributes: ['UPC_Number'],
-            where: { Status: 0 },
-            required: false
-          },
-          {
-            model: SalesCategory,
-            as: 'SalesCategory',
-            attributes: ['Sales_Category', 'Category_Desc'],
-            required: false
-          },
-          {
-            model:PriceClass,
-            as:'PriceClass',
-            attributes:['Price_Class','Class_Desc'],
-            required:false,
-            }
-        ]
-      },
-      
-    ]
-  });
-
-  // 3. Final Invoice Object
-  return {
-    invoiceHeader: orderHeader,
-    invoiceItems: orderItems
-  };
-}
-
-
-// async currentOrderStatusReport(query: any) {
-//   const {
-//     startDate,
-//     endDate,
-//     customerNumber,
-//     currentStatus,
-//   } = query;
-
-//   const whereCondition: any = {
-//     Order_Updated: false,
-//     Order_Deleted: false,
-//   };
-
-//   if (startDate && endDate) {
-//     whereCondition.Order_Date = {
-//       [Op.between]: [startDate, endDate],
-//     };
-//   }
-
-//   if (customerNumber) {
-//     whereCondition.C_Number = Number(customerNumber);
-//   }
-
-//   if (currentStatus === 'invoices') {
-//     whereCondition.Invoice_Number = { [Op.gt]: 0 };
-//   }
-
-//   if (currentStatus === 'non_invoices') {
-//     whereCondition.Invoice_Number = { [Op.eq]: 0 };
-//   }
-
-//   if (currentStatus === 'picklist') {
-//     whereCondition.Picklist_Printed = true;
-//   }
-
-//   if (currentStatus === 'EpickStatusFromPicker') {
-//     whereCondition.EpickStatusFromPicker = 'completed';
-//   }
-
-//   const data = await OrderHeader.findAll({
-//     where: whereCondition,
-//     order: [['Order_Number', 'DESC']],
-
-//     attributes: [
-//       'Order_Number',
-//       'Invoice_Number',
-//       'Invoice_Date',
-//       'Invoice_Total',
-//       'Picklist_Printed',
-//       'Order_Date',
-//       'Delivery_Date',
-//       'Order_Source',
-//       'C_Number',
-//       'S_Number',
-//       'Route_Number',
-//       'Stop_Number',
-
-//       [
-//         Sequelize.literal(`
-//           IIF(
-//             OrderHeader.Invoice_Number_Legacy <> 0,
-//             CONVERT(varchar(10), OrderHeader.Invoice_Number_Legacy),
-//             IIF(
-//               OrderHeader.Invoice_Number > 1,
-//               CONCAT(OrderHeader.Order_Number, '-', OrderHeader.Invoice_Number),
-//               CONVERT(varchar(10), OrderHeader.Order_Number)
-//             )
-//           )
-//         `),
-//         'Document_Number',
-//       ],
-
-//       [
-//         Sequelize.fn(
-//           'SUM',
-//           Sequelize.col('orderDetails.Quantity_Ordered')
-//         ),
-//         'total_item_quantity',
-//       ],
-
-//       [
-//         Sequelize.fn(
-//           'COUNT',
-//           Sequelize.col('orderDetails.Line_Number')
-//         ),
-//         'total_line_number',
-//       ],
-//     ],
-
-//     include: [
-//       {
-//         model: OrderDetail,
-//         as: 'orderDetails',
-//         required: false,
-//         attributes: [],
-//       },
-//       {
-//         model: Customer,
-//         as: 'customer',
-//         attributes: [
-//           'C_Number',
-//           'C_Name',
-//           'C_CoName',
-//           'C_Address',
-//           'C_City',
-//           'C_State',
-//           'C_Zip',
-//           'C_PhoneMobile',
-//         ],
-//       },
-//       {
-//         model: SalesRep,
-//         as: 'salesRep',
-//         attributes: ['S_Number', 'S_Desc'],
-//       },
-//     ],
-
-//     group: [
-//       'OrderHeader.Order_Number',
-//       'OrderHeader.Invoice_Number',
-//       'OrderHeader.Invoice_Date',
-//       'OrderHeader.Invoice_Total',
-//       'OrderHeader.Picklist_Printed',
-//       'OrderHeader.Order_Date',
-//       'OrderHeader.Delivery_Date',
-//       'OrderHeader.Order_Source',
-//       'OrderHeader.C_Number',
-//       'OrderHeader.S_Number',
-//       'OrderHeader.Route_Number',
-//       'OrderHeader.Stop_Number',
-//       'OrderHeader.Invoice_Number_Legacy',
-//       'customer.C_Number',
-//       'customer.C_Name',
-//       'customer.C_CoName',
-//       'customer.C_Address',
-//       'customer.C_City',
-//       'customer.C_State',
-//       'customer.C_Zip',
-//       'customer.C_PhoneMobile',
-//       'salesRep.S_Number',
-//       'salesRep.S_Desc',
-//     ],
-//   });
-
-//   return data;
-// }
-
-async currentOrderStatusReport(query: any) {
-  const { startDate, endDate } = query;
-
-  if (!startDate || !endDate) {
-    throw new Error('startDate and endDate are required');
-  }
-
-  const baseWhere = {
-    Order_Date: {
-      [Op.between]: [startDate, endDate],
-    },
-  };
-
-  const recordLocks = await Record_Locks.findAll({
-    where: { Lock_Type: 0 },
-    attributes: ['Lock_Number'],
-    raw: true,
-  });
-
-  const lockedOrderNumbers = recordLocks.map(
-    (r: { Lock_Number: number }) => r.Lock_Number
-  );
-
-  const commonAttributes: FindAttributeOptions = [
-    'Order_Number',
-    'Invoice_Number',
-    'Invoice_Date',
-    'Invoice_Total',
-    'Picklist_Printed',
-    'Order_Date',
-    'Delivery_Date',
-    'Order_Source',
-    'C_Number',
-    'S_Number',
-    'Route_Number',
-    'Stop_Number',
-    'Invoice_Number_Legacy',
-    'Order_Deleted',
-    'Order_Updated',
-
-    [
-      Sequelize.literal(`
+      [
+        Sequelize.literal(`
         IIF(
           OrderHeader.Invoice_Number_Legacy <> 0,
           CONVERT(varchar(10), OrderHeader.Invoice_Number_Legacy),
@@ -13503,111 +13535,111 @@ async currentOrderStatusReport(query: any) {
           )
         )
       `),
-      'Document_Number',
-    ],
+        'Document_Number',
+      ],
 
-    [
-      Sequelize.fn('SUM', Sequelize.col('orderDetails.Quantity_Ordered')),
-      'total_item_quantity',
-    ],
+      [
+        Sequelize.fn('SUM', Sequelize.col('orderDetails.Quantity_Ordered')),
+        'total_item_quantity',
+      ],
 
-    [
-      Sequelize.fn('COUNT', Sequelize.col('orderDetails.Line_Number')),
-      'total_line_number',
-    ],
-  ];
+      [
+        Sequelize.fn('COUNT', Sequelize.col('orderDetails.Line_Number')),
+        'total_line_number',
+      ],
+    ];
 
-  const commonQuery: Omit<FindOptions, 'where'> = {
-    include: [
-      {
-        model: OrderDetail,
-        as: 'orderDetails',
-        attributes: [],
-        required: true,
-      },
-      {
-        model: Customer,
-        as: 'customer',
-        attributes: [
-          'C_Number',
-          'C_Name',
-          'C_CoName',
-          'C_Address',
-          'C_City',
-          'C_State',
-          'C_Zip',
-          'C_PhoneMobile',
-        ],
-      },
-      {
-        model: SalesRep,
-        as: 'salesRep',
-        attributes: ['S_Number', 'S_Desc'],
-      },
-    ],
-    attributes: commonAttributes,
-    group: [
-      'OrderHeader.Order_Number',
-      'OrderHeader.Invoice_Number',
-      'OrderHeader.Invoice_Date',
-      'OrderHeader.Invoice_Total',
-      'OrderHeader.Picklist_Printed',
-      'OrderHeader.Order_Date',
-      'OrderHeader.Delivery_Date',
-      'OrderHeader.Order_Source',
-      'OrderHeader.C_Number',
-      'OrderHeader.S_Number',
-      'OrderHeader.Route_Number',
-      'OrderHeader.Stop_Number',
-      'OrderHeader.Invoice_Number_Legacy',
-      'OrderHeader.Order_Deleted',
-      'OrderHeader.Order_Updated',
-      'customer.C_Number',
-      'customer.C_Name',
-      'customer.C_CoName',
-      'customer.C_Address',
-      'customer.C_City',
-      'customer.C_State',
-      'customer.C_Zip',
-      'customer.C_PhoneMobile',
-      'salesRep.S_Number',
-      'salesRep.S_Desc',
-    ],
-  };
+    const commonQuery: Omit<FindOptions, 'where'> = {
+      include: [
+        {
+          model: OrderDetail,
+          as: 'orderDetails',
+          attributes: [],
+          required: true,
+        },
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: [
+            'C_Number',
+            'C_Name',
+            'C_CoName',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Zip',
+            'C_PhoneMobile',
+          ],
+        },
+        {
+          model: SalesRep,
+          as: 'salesRep',
+          attributes: ['S_Number', 'S_Desc'],
+        },
+      ],
+      attributes: commonAttributes,
+      group: [
+        'OrderHeader.Order_Number',
+        'OrderHeader.Invoice_Number',
+        'OrderHeader.Invoice_Date',
+        'OrderHeader.Invoice_Total',
+        'OrderHeader.Picklist_Printed',
+        'OrderHeader.Order_Date',
+        'OrderHeader.Delivery_Date',
+        'OrderHeader.Order_Source',
+        'OrderHeader.C_Number',
+        'OrderHeader.S_Number',
+        'OrderHeader.Route_Number',
+        'OrderHeader.Stop_Number',
+        'OrderHeader.Invoice_Number_Legacy',
+        'OrderHeader.Order_Deleted',
+        'OrderHeader.Order_Updated',
+        'customer.C_Number',
+        'customer.C_Name',
+        'customer.C_CoName',
+        'customer.C_Address',
+        'customer.C_City',
+        'customer.C_State',
+        'customer.C_Zip',
+        'customer.C_PhoneMobile',
+        'salesRep.S_Number',
+        'salesRep.S_Desc',
+      ],
+    };
 
-  const results = await Promise.allSettled([
+    const results = await Promise.allSettled([
 
-    // Invoices
-    OrderHeader.findAll({
-      ...commonQuery,
-      where: { ...baseWhere, Invoice_Number: { [Op.gt]: 0 } },
-    }),
+      // Invoices
+      OrderHeader.findAll({
+        ...commonQuery,
+        where: { ...baseWhere, Invoice_Number: { [Op.gt]: 0 } },
+      }),
 
-    // Non Invoices (FIXED)
-    OrderHeader.findAll({
-      ...commonQuery,
-      where: { ...baseWhere, Invoice_Number: { [Op.eq]: 0 } },
-    }),
+      // Non Invoices (FIXED)
+      OrderHeader.findAll({
+        ...commonQuery,
+        where: { ...baseWhere, Invoice_Number: { [Op.eq]: 0 } },
+      }),
 
-    // Picklist Printed
-    OrderHeader.findAll({
-      ...commonQuery,
-      where: { ...baseWhere, Picklist_Printed: true },
-    }),
+      // Picklist Printed
+      OrderHeader.findAll({
+        ...commonQuery,
+        where: { ...baseWhere, Picklist_Printed: true },
+      }),
 
-    // Epick Completed
-    OrderHeader.findAll({
-      ...commonQuery,
-      where: { ...baseWhere, EpickStatusFromPicker: 'completed' },
-    }),
+      // Epick Completed
+      OrderHeader.findAll({
+        ...commonQuery,
+        where: { ...baseWhere, EpickStatusFromPicker: 'completed' },
+      }),
 
-    // Order Confirmation (NEW)
-    OrderHeader.findAll({
-      ...commonQuery,
-      where: {
-        ...baseWhere,Order_Deleted: false, Order_Updated: false ,
-        [Op.and]: [
-          Sequelize.literal(`
+      // Order Confirmation (NEW)
+      OrderHeader.findAll({
+        ...commonQuery,
+        where: {
+          ...baseWhere, Order_Deleted: false, Order_Updated: false,
+          [Op.and]: [
+            Sequelize.literal(`
             EXISTS (
               SELECT 1
               FROM [Order_Detail] od
@@ -13620,66 +13652,66 @@ async currentOrderStatusReport(query: any) {
                 AND (od2.Confirmed = 0 OR od2.Confirmed IS NULL)
             )
           `),
-        ],
-      },
-    }),
-
-  // Locked Orders
-  lockedOrderNumbers.length
-    ? OrderHeader.findAll({
-        ...commonQuery,
-        where: {
-          ...baseWhere,
-          Order_Number: { [Op.in]: lockedOrderNumbers },
+          ],
         },
-      })
-    : Promise.resolve([]),
+      }),
 
-]);
+      // Locked Orders
+      lockedOrderNumbers.length
+        ? OrderHeader.findAll({
+          ...commonQuery,
+          where: {
+            ...baseWhere,
+            Order_Number: { [Op.in]: lockedOrderNumbers },
+          },
+        })
+        : Promise.resolve([]),
 
-  const [
-    invoices,
-    non_invoices,
-    picklist,
-    epickCompleted,
-    orderConfirmation, 
-    lockedOrders,
-  ] = results.map((r) =>
-    r.status === 'fulfilled' ? r.value : []
-  );
+    ]);
 
-  return {
-    invoices,
-    non_invoices,
-    picklist,
-    epickCompleted,
-    orderConfirmation, 
-    recordLocks: lockedOrders,
-  };
-}
+    const [
+      invoices,
+      non_invoices,
+      picklist,
+      epickCompleted,
+      orderConfirmation,
+      lockedOrders,
+    ] = results.map((r) =>
+      r.status === 'fulfilled' ? r.value : []
+    );
 
-async getInvoiceRegister(query: any) {
-  const { startDate, endDate } = query;
+    return {
+      invoices,
+      non_invoices,
+      picklist,
+      epickCompleted,
+      orderConfirmation,
+      recordLocks: lockedOrders,
+    };
+  }
 
-  const data = await OrderHeader.findAll({
-    attributes: [
-      'Order_Number',
-      'C_Number',
-      'POS_Cash',
-      'POS_Check',
-      'POS_Credit',
-      'POS_Debit',
-      'POS_Other',
-      'POS_House',
-      'Invoice_Total',
-      'Workstation_ID',
-      'User_ID',
-      'Invoice_Date',
-      'Reprint_Invoice_Required',
+  async getInvoiceRegister(query: any) {
+    const { startDate, endDate } = query;
 
-      // Document_Number calculation
-      [
-        Sequelize.literal(`
+    const data = await OrderHeader.findAll({
+      attributes: [
+        'Order_Number',
+        'C_Number',
+        'POS_Cash',
+        'POS_Check',
+        'POS_Credit',
+        'POS_Debit',
+        'POS_Other',
+        'POS_House',
+        'Invoice_Total',
+        'Workstation_ID',
+        'User_ID',
+        'Invoice_Date',
+        'Reprint_Invoice_Required',
+
+        // Document_Number calculation
+        [
+          Sequelize.literal(`
           IIF(
             OrderHeader.Invoice_Number_Legacy <> 0,
             CONVERT(varchar(10), OrderHeader.Invoice_Number_Legacy),
@@ -13690,306 +13722,306 @@ async getInvoiceRegister(query: any) {
             )
           )
         `),
-        'Document_Number',
-      ],
+          'Document_Number',
+        ],
 
-      // Subqueries
-      [
-        Sequelize.literal(`(
+        // Subqueries
+        [
+          Sequelize.literal(`(
           SELECT S_Desc 
           FROM SalesRep 
           WHERE SalesRep.s_number = OrderHeader.s_number
         )`),
-        'repName',
-      ],
-      [
-        Sequelize.literal(`(
+          'repName',
+        ],
+        [
+          Sequelize.literal(`(
           SELECT Route_Description 
           FROM Routes 
           WHERE Routes.Route_Number = OrderHeader.Route_Number
         )`),
-        'routeName',
-      ],
-      [
-        Sequelize.literal(`(
+          'routeName',
+        ],
+        [
+          Sequelize.literal(`(
           SELECT Source_Description 
           FROM Order_Source 
           WHERE Order_Source.Order_Source = OrderHeader.Order_Source
         )`),
-        'sourceName',
-      ],
-      [
-        Sequelize.literal(`(
+          'sourceName',
+        ],
+        [
+          Sequelize.literal(`(
           SELECT UserName 
           FROM Users 
           WHERE Users.UserNumber = OrderHeader.User_ID
         )`),
-        'userName',
-      ],
-      [
-        Sequelize.literal(`(
+          'userName',
+        ],
+        [
+          Sequelize.literal(`(
           SELECT Workstation_Name 
           FROM Workstation_Defs 
           WHERE Workstation_Defs.Workstation_ID = OrderHeader.Workstation_ID
         )`),
-        'workstationName',
-      ],
-    ],
-
-    include: [
-      {
-        model: Customer,
-        as: 'customer',
-        attributes: [
-          'C_Name',
-          'C_Address',
-          'C_City',
-          'C_State',
-          'C_Zip',
+          'workstationName',
         ],
-        required: false, // LEFT JOIN
-      },
-    ],
-
-    where: {
-      Order_Deleted: 'False',
-      Order_Updated: 'True',
-      Invoice_Number: {
-        [Op.ne]: 0,
-      },
-      Invoice_Date: {
-        [Op.between]: [startDate, endDate],
-      },
-    },
-
-    order: [['Order_Number', 'ASC']],
-    raw: true,
-  });
-
-  return data;
-}
-
-async currentOrderDetailStatus(orderNumber: number) {
-  const orderDetails = await OrderDetail.findAll({  
-    where: { Order_Number: orderNumber },
-    attributes: [
-      'Line_Number',
-      'Item_Number',
-      'Quantity_Ordered',
-      'Quantity_Shipped',
-      'Price',
-      'OTP_Amount_State',
-      'OTP_Amount_County',
-      'OTP_Amount_City',
-      'PrepaidTax_Amount',
-      [
-        Sequelize.literal(`
-          (OrderDetail.Price + OrderDetail.OTP_Amount_State + OrderDetail.OTP_Amount_County + OrderDetail.OTP_Amount_City)
-        `),
-        'TotalPrice',
       ],
-    ],
-    include: [
-      {
-        model: Inventory,
-        as: 'inventory',
-        required: false,
-        attributes: [
-          'Item_Number',
-          'Description',
-          'CaseCount',
-          'CaseWeight',
-          'UOM',
-          'Section',
-          'Location',
-          'Pack',
-          [Sequelize.literal('0'), 'OnHand'],
-        ],  
+
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: [
+            'C_Name',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Zip',
+          ],
+          required: false, // LEFT JOIN
+        },
+      ],
+
+      where: {
+        Order_Deleted: 'False',
+        Order_Updated: 'True',
+        Invoice_Number: {
+          [Op.ne]: 0,
+        },
+        Invoice_Date: {
+          [Op.between]: [startDate, endDate],
+        },
       },
-    ],
-  });
-  return orderDetails;
-}
 
+      order: [['Order_Number', 'ASC']],
+      raw: true,
+    });
 
-
-async getProductsByOrderNumber(body: {
-  orderNumbers: number[];
-  customerId?: number;
-}) {
-  const { orderNumbers, customerId } = body;
-
-  if (!Array.isArray(orderNumbers) || orderNumbers.length === 0) {
-    throw new AppError('Order numbers array must contain at least one order number', 400);
+    return data;
   }
 
-  const products = await OrderDetail.findAll({
-    where: {
-      Order_Number: { [Op.in]: orderNumbers },
-    },
-    attributes: ['Order_Number', 'Item_Number', 'Quantity_Ordered'],
-    include: [
-      {
-        model: Inventory,
-        as: 'inventory',
-        attributes: ['Item_Number', 'Description', 'Pack', 'CaseCount', 'UOM', 'OTP_Number', 'Price1'],
-
-        include: [
-          {
-            model: InventoryUPC,
-            as: 'UPCList',
-            attributes: ['UPC_Number'],
-            where: { Status: 0 },
-            required: false,
-          },
-          {
-            model: SalesCategory,
-            as: 'SalesCategory',
-            attributes: ['Sales_Category', 'Category_Desc'],
-          },
-          {
-            model: PriceClass,
-            as: 'PriceClass',
-            attributes: ['Price_Class', 'Class_Desc'],
-          },
+  async currentOrderDetailStatus(orderNumber: number) {
+    const orderDetails = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        'Line_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Price',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+        'PrepaidTax_Amount',
+        [
+          Sequelize.literal(`
+          (OrderDetail.Price + OrderDetail.OTP_Amount_State + OrderDetail.OTP_Amount_County + OrderDetail.OTP_Amount_City)
+        `),
+          'TotalPrice',
         ],
+      ],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          required: false,
+          attributes: [
+            'Item_Number',
+            'Description',
+            'CaseCount',
+            'CaseWeight',
+            'UOM',
+            'Section',
+            'Location',
+            'Pack',
+            [Sequelize.literal('0'), 'OnHand'],
+          ],
+        },
+      ],
+    });
+    return orderDetails;
+  }
+
+
+
+  async getProductsByOrderNumber(body: {
+    orderNumbers: number[];
+    customerId?: number;
+  }) {
+    const { orderNumbers, customerId } = body;
+
+    if (!Array.isArray(orderNumbers) || orderNumbers.length === 0) {
+      throw new AppError('Order numbers array must contain at least one order number', 400);
+    }
+
+    const products = await OrderDetail.findAll({
+      where: {
+        Order_Number: { [Op.in]: orderNumbers },
       },
-    ],
-  });
+      attributes: ['Order_Number', 'Item_Number', 'Quantity_Ordered'],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: ['Item_Number', 'Description', 'Pack', 'CaseCount', 'UOM', 'OTP_Number', 'Price1'],
 
-  /* ------------------------------------
-     STEP 1 → Flatten order + inventory
-  ------------------------------------ */
+          include: [
+            {
+              model: InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              where: { Status: 0 },
+              required: false,
+            },
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Sales_Category', 'Category_Desc'],
+            },
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: ['Price_Class', 'Class_Desc'],
+            },
+          ],
+        },
+      ],
+    });
 
-  const productList = products.map((row: any) => ({
-    Order_Number: row.Order_Number,
-    Quantity_Ordered: row.Quantity_Ordered,
-    ...row.inventory?.dataValues,
-  }));
+    /* ------------------------------------
+       STEP 1 → Flatten order + inventory
+    ------------------------------------ */
 
-  /* ------------------------------------
-     STEP 2 → Your Promise.all mapping
-  ------------------------------------ */
+    const productList = products.map((row: any) => ({
+      Order_Number: row.Order_Number,
+      Quantity_Ordered: row.Quantity_Ordered,
+      ...row.inventory?.dataValues,
+    }));
 
-  const finalProductList = await Promise.all(
-    productList.map(async (e: any) => {
-      const itemStr = e.Item_Number.toString();
-      const productImage = await ProductImage.findOne({ where: { product_number: itemStr, isAllow: true } });
+    /* ------------------------------------
+       STEP 2 → Your Promise.all mapping
+    ------------------------------------ */
 
-      
-
-     let taxRate = 0;
-      if(customerId && e.OTP_Number){
-        let userJurisdiction: number | null = null;
-        if(customerId){
-          userJurisdiction = await getJurisdiction(Number(customerId));
-         }
-       taxRate = await getTaxRateV1(
-        e?.OTP_Number || 0,
-          userJurisdiction || 0,
-          e.Item_Number,
-          e.Price1
-        );
-      }
-      console.log(e.Price1,'e.Price1')
-      let price = (e.Price1 || 0) + taxRate;
-      taxRate = Math.ceil(taxRate * 100) / 100;
-
-      price = Math.ceil(price * 100) / 100;
-
-     
-
-      return {
-        Order_Number: e.Order_Number,
-
-        Pack: e.Pack,
-        Description: e.Description,
-        Item_Number: e.Item_Number,
-        CaseCount: e.CaseCount,
-        UOM: e.UOM,
-        Price1: price,
-       
-        Tax_Rate: taxRate,
-        
-        price,
-        priceWithTax: price + taxRate,
-
-      
-
-        UPCList: e.UPCList,
-
-     
-
-        SalesCategory: e.SalesCategory?.Category_Desc || null,
-        PriceClass: e.PriceClass?.Class_Desc || null,
-
-        showDistributorImage: productImage?.isAllow ?? false,
-        distributorImage: productImage?.img_url || null,
-        masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
-
-      };
-    })
-  );
-
-
- 
-
-  return finalProductList;
-}
+    const finalProductList = await Promise.all(
+      productList.map(async (e: any) => {
+        const itemStr = e.Item_Number.toString();
+        const productImage = await ProductImage.findOne({ where: { product_number: itemStr, isAllow: true } });
 
 
 
-async getTradeShowItemForEdit(tradeShowId:number) {
-  const tradeShowItem = await TradeShowItem.findAll({
-    where: {
-      tradeShowId: tradeShowId,
-    },
-  });
-  return tradeShowItem;
-}
+        let taxRate = 0;
+        if (customerId && e.OTP_Number) {
+          let userJurisdiction: number | null = null;
+          if (customerId) {
+            userJurisdiction = await getJurisdiction(Number(customerId));
+          }
+          taxRate = await getTaxRateV1(
+            e?.OTP_Number || 0,
+            userJurisdiction || 0,
+            e.Item_Number,
+            e.Price1
+          );
+        }
+        console.log(e.Price1, 'e.Price1')
+        let price = (e.Price1 || 0) + taxRate;
+        taxRate = Math.ceil(taxRate * 100) / 100;
+
+        price = Math.ceil(price * 100) / 100;
 
 
-async getTradeDeliverProductsForEdit(body:any) {
 
-  const {tradeShowId,weekNumber} = body;
-  const {rows:tradeShowDeliveryProducts,count:total} = await TradeShowDeliveryProduct.findAndCountAll({
-    where: {
-      tradeShowId: tradeShowId,
-      weekNumber: weekNumber,
-    },
-   
-  });
-  return {data:tradeShowDeliveryProducts,total:total};
-}
+        return {
+          Order_Number: e.Order_Number,
+
+          Pack: e.Pack,
+          Description: e.Description,
+          Item_Number: e.Item_Number,
+          CaseCount: e.CaseCount,
+          UOM: e.UOM,
+          Price1: price,
+
+          Tax_Rate: taxRate,
+
+          price,
+          priceWithTax: price + taxRate,
 
 
-async getTradeDeliveryProductSummary(tradeShowId:number) {
-  const result = await TradeShowDeliveryProduct.findAll({
-    where: {
-      tradeShowId: tradeShowId,
-    },
-    attributes: [
-      "weekNumber",
-      [fn("MIN", col("startDate")), "startDate"],
-      [fn("MAX", col("endDate")), "endDate"],
-      [fn("COUNT", col("id")), "totalCount"],
-    ],
-    group: ["weekNumber"],
-    order: [["weekNumber", "ASC"]],
-  });
 
-  return result;
-}
+          UPCList: e.UPCList,
 
-async getTradeShowRetailerForEdit(tradeShowId:number) {
-  const {rows:tradeShowRetailers,count:total} = await TradeShowRetailer.findAndCountAll({
-    where: {
-      tradeShowId: tradeShowId,
-    },
-    attributes: ['retailerId']
-  });
-  return {data:tradeShowRetailers,total:total};
-}
+
+
+          SalesCategory: e.SalesCategory?.Category_Desc || null,
+          PriceClass: e.PriceClass?.Class_Desc || null,
+
+          showDistributorImage: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url || null,
+          masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+
+        };
+      })
+    );
+
+
+
+
+    return finalProductList;
+  }
+
+
+
+  async getTradeShowItemForEdit(tradeShowId: number) {
+    const tradeShowItem = await TradeShowItem.findAll({
+      where: {
+        tradeShowId: tradeShowId,
+      },
+    });
+    return tradeShowItem;
+  }
+
+
+  async getTradeDeliverProductsForEdit(body: any) {
+
+    const { tradeShowId, weekNumber } = body;
+    const { rows: tradeShowDeliveryProducts, count: total } = await TradeShowDeliveryProduct.findAndCountAll({
+      where: {
+        tradeShowId: tradeShowId,
+        weekNumber: weekNumber,
+      },
+
+    });
+    return { data: tradeShowDeliveryProducts, total: total };
+  }
+
+
+  async getTradeDeliveryProductSummary(tradeShowId: number) {
+    const result = await TradeShowDeliveryProduct.findAll({
+      where: {
+        tradeShowId: tradeShowId,
+      },
+      attributes: [
+        "weekNumber",
+        [fn("MIN", col("startDate")), "startDate"],
+        [fn("MAX", col("endDate")), "endDate"],
+        [fn("COUNT", col("id")), "totalCount"],
+      ],
+      group: ["weekNumber"],
+      order: [["weekNumber", "ASC"]],
+    });
+
+    return result;
+  }
+
+  async getTradeShowRetailerForEdit(tradeShowId: number) {
+    const { rows: tradeShowRetailers, count: total } = await TradeShowRetailer.findAndCountAll({
+      where: {
+        tradeShowId: tradeShowId,
+      },
+      attributes: ['retailerId']
+    });
+    return { data: tradeShowRetailers, total: total };
+  }
 
   // CustomerAssignInvoiceTemplate CRUD service methods
   async createCustomerAssignInvoiceTemplate(data: { customerNumber: number; templateId: number }) {
@@ -14020,10 +14052,10 @@ async getTradeShowRetailerForEdit(tradeShowId:number) {
     return assignment;
   }
 
-  async getAllCustomerAssignInvoiceTemplates(query: PaginationOptions & { 
-    search?: string; 
-    customerNumber?: number; 
-    templateId?: number 
+  async getAllCustomerAssignInvoiceTemplates(query: PaginationOptions & {
+    search?: string;
+    customerNumber?: number;
+    templateId?: number
   }) {
     const { page = 1, limit = 10, search = '', customerNumber, templateId } = query;
     const offset = (page - 1) * limit;
@@ -14104,10 +14136,18 @@ async getTradeShowRetailerForEdit(tradeShowId:number) {
     return { message: 'Customer invoice template assignment deleted successfully' };
   }
 
+  async deleteCustomerAssignInvoiceTemplateByCustomerNumber(customerNumber: number) {
+  const deleted = await CustomerAssignInvoiceTemplate.destroy({
+      where: {
+        customerNumber: customerNumber,
+      },
+    });
+    return { message: 'Customer invoice template assignment deleted successfully', count: deleted };
+  }
   // Bulk operations
   async bulkAddCustomerAssignInvoiceTemplates(body: { assignments: { customerNumber: number; templateId: number }[] }) {
     const { assignments } = body;
-    
+
     if (!Array.isArray(assignments) || assignments.length === 0) {
       throw new AppError('Assignments must be a non-empty array', 400);
     }
@@ -14151,7 +14191,7 @@ async getTradeShowRetailerForEdit(tradeShowId:number) {
 
   async bulkRemoveCustomerAssignInvoiceTemplates(body: { assignments: { customerNumber: number; templateId: number }[] }) {
     const { assignments } = body;
-    
+
     if (!Array.isArray(assignments) || assignments.length === 0) {
       throw new AppError('Assignments must be a non-empty array', 400);
     }
@@ -14180,88 +14220,117 @@ async getTradeShowRetailerForEdit(tradeShowId:number) {
   }
 
   // InvoiceTemplate CRUD service methods
-  async createInvoiceTemplate(data: Partial<IInvoiceTemplate> & { selectedCustomerIds?: number[] }) {
-    // Extract selectedCustomerIds from data (not part of IInvoiceTemplate)
+  async createInvoiceTemplate(
+    data: Partial<IInvoiceTemplate> & { selectedCustomerIds?: number[] }
+  ) {
+    const transaction = await postgresSequelize.transaction();
+
     const { selectedCustomerIds, ...templateData } = data;
 
-    // Check if a template with the same name already exists (case-insensitive)
-    if (templateData.name) {
-      const trimmedName = templateData.name.trim().toLowerCase();
-      const existingTemplate = await InvoiceTemplate.findOne({
-        where: { name: trimmedName },
-      });
+    if (!templateData.name) {
+      throw new AppError("Template name is required", 400);
+    }
 
-      if (existingTemplate) {
-        throw new AppError(`An invoice template with the name "${templateData.name}" already exists`, 400);
+    const trimmedName = templateData.name.trim().toLowerCase();
+
+    // ==========================
+    // Check duplicate
+    // ==========================
+    const existingTemplate = await InvoiceTemplate.findOne({
+      where: { name: trimmedName },
+      transaction,
+    });
+
+    if (existingTemplate) {
+      throw new AppError(
+        `An invoice template with the name "${templateData.name}" already exists`,
+        400
+      );
+    }
+
+    // ==========================
+    // Merge with defaults
+    // ==========================
+    const finalTemplateData: any = {
+      ...DEFAULT_INVOICE_TEMPLATE,
+      ...templateData,
+      name: trimmedName,
+
+      // Deep merge for selectedColumns
+      selectedColumns: {
+        ...DEFAULT_INVOICE_TEMPLATE.selectedColumns,
+        ...(templateData.selectedColumns || {}),
+      },
+
+      // Ensure JSON fields are never undefined
+      columnHeaderNames: templateData.columnHeaderNames || {},
+      columnOrder: templateData.columnOrder || {},
+      footerSummaryLabels: templateData.footerSummaryLabels || {},
+    };
+
+    // ==========================
+    // Lowercase only ENUM-like fields
+    // ==========================
+    const enumFields = [
+      "groupBy",
+      "upcOption",
+      "logoPosition",
+      "headerOnPages",
+      "footerLayout",
+      "columnPlacement",
+    ];
+
+    enumFields.forEach((field) => {
+      if (
+        finalTemplateData[field] !== undefined &&
+        finalTemplateData[field] !== null
+      ) {
+        finalTemplateData[field] = String(finalTemplateData[field]).toLowerCase();
       }
-      
-      // Store name in lowercase
-      templateData.name = trimmedName;
+    });
+
+    // ⚠️ DO NOT lowercase message fields anymore
+    // headerMessageFirstPage & footerMessageLastPage
+    // because those are user content
+
+    // ==========================
+    // Ensure only ONE mainTemplate
+    // ==========================
+    if (finalTemplateData.mainTemplate === true) {
+      await InvoiceTemplate.update(
+        { mainTemplate: false },
+        { where: { mainTemplate: true }, transaction }
+      );
     }
 
-    // Convert all string fields to lowercase (matching seeder pattern)
-    if (templateData.groupBy !== undefined) {
-      templateData.groupBy = String(templateData.groupBy).toLowerCase();
-    }
-    if (templateData.upcOption !== undefined) {
-      templateData.upcOption = String(templateData.upcOption).toLowerCase();
-    }
-    if (templateData.logoPosition !== undefined) {
-      templateData.logoPosition = String(templateData.logoPosition).toLowerCase();
-    }
-    if (templateData.headerOnPages !== undefined) {
-      templateData.headerOnPages = String(templateData.headerOnPages).toLowerCase();
-    }
-    if (templateData.headerMessageFirstPage !== undefined) {
-      templateData.headerMessageFirstPage = String(templateData.headerMessageFirstPage).toLowerCase();
-    }
-    if (templateData.footerLayout !== undefined) {
-      templateData.footerLayout = String(templateData.footerLayout).toLowerCase();
-    }
-    if (templateData.footerMessageLastPage !== undefined) {
-      templateData.footerMessageLastPage = String(templateData.footerMessageLastPage).toLowerCase();
-    }
+    // ==========================
+    // Create Template
+    // ==========================
+    const template = await InvoiceTemplate.create(finalTemplateData, {
+      transaction,
+    });
 
-    // Create the invoice template
-    const template = await InvoiceTemplate.create(templateData as any);
-
-    // If selectedCustomerIds array has values, create customer assignments
-    if (selectedCustomerIds && Array.isArray(selectedCustomerIds) && selectedCustomerIds.length > 0) {
-      // Prepare assignments array
+    // ==========================
+    // Customer Assignments
+    // ==========================
+    if (selectedCustomerIds?.length) {
       const assignments = selectedCustomerIds.map((customerNumber) => ({
         customerNumber,
         templateId: template.id,
       }));
 
-      // Check for existing assignments to avoid duplicates
-      const existingAssignments = await CustomerAssignInvoiceTemplate.findAll({
-        where: {
-          [Op.or]: assignments.map((item) => ({
-            customerNumber: item.customerNumber,
-            templateId: item.templateId,
-          })),
-        },
+      await CustomerAssignInvoiceTemplate.bulkCreate(assignments, {
+        transaction,
+        ignoreDuplicates: true,
+        validate: true,
       });
-
-      // Filter out existing assignments
-      const existingSet = new Set(
-        existingAssignments.map((e) => `${e.customerNumber}-${e.templateId}`)
-      );
-      const newAssignments = assignments.filter(
-        (item) => !existingSet.has(`${item.customerNumber}-${item.templateId}`)
-      );
-
-      // Create only new assignments
-      if (newAssignments.length > 0) {
-        await CustomerAssignInvoiceTemplate.bulkCreate(newAssignments, {
-          validate: true,
-          ignoreDuplicates: true,
-        });
-      }
     }
+
+    await transaction.commit();
 
     return template;
   }
+
 
   async getInvoiceTemplateById(id: number) {
     const template = await InvoiceTemplate.findByPk(id);
@@ -14271,8 +14340,8 @@ async getTradeShowRetailerForEdit(tradeShowId:number) {
     return template;
   }
 
-  async getAllInvoiceTemplates(query: PaginationOptions & { 
-    search?: string; 
+  async getAllInvoiceTemplates(query: PaginationOptions & {
+    search?: string;
     mainTemplate?: boolean;
   }) {
     const { page = 1, limit = 10, search = '', mainTemplate } = query;
@@ -14340,15 +14409,25 @@ async getTradeShowRetailerForEdit(tradeShowId:number) {
     if (!template) {
       throw new AppError('Invoice template not found', 404);
     }
-if(template.mainTemplate){
-  throw new AppError('Default template cannot be deleted', 400);
-}
+    if (template.mainTemplate) {
+      throw new AppError('Default template cannot be deleted', 400);
+    }
     await template.destroy();
+    try{
+      await CustomerAssignInvoiceTemplate.destroy({
+        where: {
+          templateId: id,
+        },
+      });
+
+    }catch(error){
+      throw new AppError('Error deleting customer assign invoice template', 500);
+    }
     return { message: 'Invoice template deleted successfully' };
   }
 
 
-  async getCustomerInvoiceTemplate(customerNumber: number){
+  async getCustomerInvoiceTemplate(customerNumber: number) {
     const template = await CustomerAssignInvoiceTemplate.findOne({
       where: { customerNumber: customerNumber },
     });
@@ -14356,222 +14435,449 @@ if(template.mainTemplate){
 
 
       const invoiceTemplate = await InvoiceTemplate.findByPk(template.templateId);
-      return invoiceTemplate; 
-       }else{{
+      return invoiceTemplate;
+    } else {
+      {
         const template = await InvoiceTemplate.findOne({
           where: { mainTemplate: true },
         });
         if (template) {
           return template;
-        }else{
+        } else {
           throw new AppError('Default template not found', 404);
         }
-       }
-    
+      }
+    }
   }
+
+
+async getCustomerByInvoiceId(invoiceId: number){
+const customerInvoice = await CustomerAssignInvoiceTemplate.findAll({
+  attributes: ['customerNumber'],
+  where: {
+    templateId: invoiceId,
+  }
+});
+
+return customerInvoice;
+
 }
 
-async getCustomerListForTradeShow(query: PaginationOptions & { search?: string, Inactive?:string, cot?:string[] }) {
-  const page = parseInt(query.page as any) || 1;
-  const limit = parseInt(query.limit as any) || 10;
-  const search = query.search || '';
 
-  
-  let whereCondition :any = search
-    ? {
-      [Op.or]: [
-        { C_Number: { [Op.like]: `%${search}%` } },
-        { C_Name: { [Op.like]: `%${search}%` } },
-        { C_PhoneMobile: { [Op.like]: `%${search}%` } },
-        { C_Address: { [Op.like]: `%${search}%` } },
-        { C_Email: { [Op.like]: `%${search}%` } },
-      ],
-    }
-    : {};
 
-    if(query?.cot && query?.cot?.length > 0){
+  async getCustomerListForTradeShow(query: PaginationOptions & { search?: string, Inactive?: string, cot?: string[] }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const search = query.search || '';
+
+
+    let whereCondition: any = search
+      ? {
+        [Op.or]: [
+          { C_Number: { [Op.like]: `%${search}%` } },
+          { C_Name: { [Op.like]: `%${search}%` } },
+          { C_PhoneMobile: { [Op.like]: `%${search}%` } },
+          { C_Address: { [Op.like]: `%${search}%` } },
+          { C_Email: { [Op.like]: `%${search}%` } },
+        ],
+      }
+      : {};
+
+    if (query?.cot && query?.cot?.length > 0) {
       whereCondition.C_ClassOfTrade = { [Op.in]: query?.cot as string[] || [] };
-    } 
+    }
 
-    if(query.Inactive =='true'){
+    if (query.Inactive == 'true') {
       whereCondition.C_Inactive = true;
-    }else if(query.Inactive =='false'){
+    } else if (query.Inactive == 'false') {
       whereCondition.C_Inactive = false;
     }
     console.log(whereCondition, 'whereCondition')
 
-  const { count: totalCount, rows: customerList } = await Customer.findAndCountAll({
-    attributes: [
-      'C_Number',
-      'C_Name',
-      'C_Email',
-      'C_Inactive',
-      'C_CoName',
-      'C_PhoneMobile',
-      'C_Address',
-      'C_City',
-      'C_State',
-      'C_Zip',
-      'C_DateCreated'
-    ],
-    where: whereCondition,
-    include: [
-      {
-        model: CustomerRoute,
-        as: 'Routes',
-        attributes: ['Route_Number', 'Stop_Number'],
-      },
-    ],
-    limit,
-    offset: (page - 1) * limit,
-    order: [['C_DateCreated', 'DESC']],
-  });
+    const { count: totalCount, rows: customerList } = await Customer.findAndCountAll({
+      attributes: [
+        'C_Number',
+        'C_Name',
+        'C_Email',
+        'C_Inactive',
+        'C_CoName',
+        'C_PhoneMobile',
+        'C_Address',
+        'C_City',
+        'C_State',
+        'C_Zip',
+        'C_DateCreated'
+      ],
+      where: whereCondition,
+      include: [
+        {
+          model: CustomerRoute,
+          as: 'Routes',
+          attributes: ['Route_Number', 'Stop_Number'],
+        },
+      ],
+      limit,
+      offset: (page - 1) * limit,
+      order: [['C_DateCreated', 'DESC']],
+    });
 
-  return {
-    data: customerList,
-    total: totalCount,
-    page,
-    limit,
-    totalPages: Math.ceil(totalCount / limit),
-  };
+    return {
+      data: customerList,
+      total: totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+    };
 
-}
-
-
-async uploadItemImage(req: Request) {
-  const file = req.file;
-  const { itemNumber } = req.body;
-  
-  if (!file) {
-    throw new AppError('File not found', 404);
   }
 
-  if (!itemNumber) {
-    throw new AppError('Item number is required', 400);
-  }
 
-  // Create filename with item number and original file extension
-  const fileExtension = file.originalname.split('.').pop() || 'jpg';
-  const fileName = `${itemNumber}.${fileExtension}`;
+  async uploadItemImage(req: Request) {
+    const file = req.file;
+    const { itemNumber } = req.body;
 
-  const result = await uploadFileToAzure(file.buffer, fileName, file.mimetype, 'item-images');
-  if (!result.success) {
-    throw new AppError(result.error || 'Failed to upload image', 500);
-  }
-  return result;
-}
-
-async bulkUploadItemImages(body: Array<{ itemNumber: string | number; img_url: string }>) {
-  if (!Array.isArray(body) || body.length === 0) {
-    throw new AppError('Invalid request body. Expected an array of items with itemNumber and img_url', 400);
-  }
-
-  const results = [];
-  const errors = [];
-
-  for (const item of body) {
-    try {
-      const { itemNumber, img_url } = item;
-
-      if (!itemNumber || !img_url) {
-        errors.push({
-          itemNumber: itemNumber || 'missing',
-          error: 'itemNumber and img_url are required'
-        });
-        continue;
-      }
-
-      // Convert itemNumber to string to match product_number field type
-      const productNumber = itemNumber.toString().trim();
-      const imageUrl = img_url.trim();
-
-      // Check if product_image exists with this product_number
-      const existingProductImage = await ProductImage.findOne({
-        where: { product_number: productNumber }
-      });
-
-      let productImage;
-      let action: 'created' | 'updated';
-
-      if (existingProductImage) {
-        // Update existing record
-        await existingProductImage.update({
-          img_url: imageUrl,
-          isAllow: true,
-          isActive: true,
-        });
-        productImage = existingProductImage;
-        action = 'updated';
-      } else {
-        // Create new record
-        productImage = await ProductImage.create({
-          product_number: productNumber,
-          img_url: imageUrl,
-          isAllow: true,
-          isActive: true,
-        });
-        action = 'created';
-      }
-
-      results.push({
-        itemNumber: productNumber,
-        img_url: imageUrl,
-        action,
-        id: productImage.id,
-      });
-    } catch (error: any) {
-      errors.push({
-        itemNumber: item.itemNumber || 'unknown',
-        error: error.message || 'Failed to process item',
-      });
+    if (!file) {
+      throw new AppError('File not found', 404);
     }
+
+    if (!itemNumber) {
+      throw new AppError('Item number is required', 400);
+    }
+
+    // Create filename with item number and original file extension
+    const fileExtension = file.originalname.split('.').pop() || 'jpg';
+    const fileName = `${itemNumber}.${fileExtension}`;
+
+    const result = await uploadFileToAzure(file.buffer, fileName, file.mimetype, 'item-images');
+    if (!result.success) {
+      throw new AppError(result.error || 'Failed to upload image', 500);
+    }
+    return result;
   }
 
-  return {
-    success: errors.length === 0,
-    processed: results.length,
-    failed: errors.length,
-    results,
-    errors: errors.length > 0 ? errors : undefined,
-  };
-}
+  async bulkUploadItemImages(body: Array<{ itemNumber: string | number; img_url: string }>) {
+    if (!Array.isArray(body) || body.length === 0) {
+      throw new AppError('Invalid request body. Expected an array of items with itemNumber and img_url', 400);
+    }
 
-async getCustomerListForEmailModules(){
-  // Get all customer numbers that are already assigned to invoice templates
-  const assignedCustomers = await CustomerAssignInvoiceTemplate.findAll({
-    attributes: ['customerNumber'],
-    raw: true,
-  });
+    const results = [];
+    const errors = [];
 
-  const assignedCustomerNumbers = assignedCustomers.map((c: any) => c.customerNumber);
+    for (const item of body) {
+      try {
+        const { itemNumber, img_url } = item;
 
-  // Get all active customers from MSSQL Customer table that are not in the assigned list
-  const whereCondition: any = {
-    C_Inactive: { [Op.or]: [false] }, // Active customers (C_Inactive is false or null)
-  };
+        if (!itemNumber || !img_url) {
+          errors.push({
+            itemNumber: itemNumber || 'missing',
+            error: 'itemNumber and img_url are required'
+          });
+          continue;
+        }
 
-  // Exclude customers that are already assigned
-  if (assignedCustomerNumbers.length > 0) {
-    whereCondition.C_Number = {
-      [Op.notIn]: assignedCustomerNumbers,
+        // Convert itemNumber to string to match product_number field type
+        const productNumber = itemNumber.toString().trim();
+        const imageUrl = img_url.trim();
+
+        // Check if product_image exists with this product_number
+        const existingProductImage = await ProductImage.findOne({
+          where: { product_number: productNumber }
+        });
+
+        let productImage;
+        let action: 'created' | 'updated';
+
+        if (existingProductImage) {
+          // Update existing record
+          await existingProductImage.update({
+            img_url: imageUrl,
+            isAllow: true,
+            isActive: true,
+          });
+          productImage = existingProductImage;
+          action = 'updated';
+        } else {
+          // Create new record
+          productImage = await ProductImage.create({
+            product_number: productNumber,
+            img_url: imageUrl,
+            isAllow: true,
+            isActive: true,
+          });
+          action = 'created';
+        }
+
+        results.push({
+          itemNumber: productNumber,
+          img_url: imageUrl,
+          action,
+          id: productImage.id,
+        });
+      } catch (error: any) {
+        errors.push({
+          itemNumber: item.itemNumber || 'unknown',
+          error: error.message || 'Failed to process item',
+        });
+      }
+    }
+
+    return {
+      success: errors.length === 0,
+      processed: results.length,
+      failed: errors.length,
+      results,
+      errors: errors.length > 0 ? errors : undefined,
     };
   }
 
-  const customers = await Customer.findAll({
-    attributes: [
-      'C_Number',
-      'C_Name'
-      
-    ],
-    where: whereCondition,
-    order: [['C_Name', 'ASC']],
-  });
+  async getCustomerListForEmailModules() {
+    // Get all customer numbers that are already assigned to invoice templates
+    const assignedCustomers = await CustomerAssignInvoiceTemplate.findAll({
+      attributes: ['customerNumber'],
+      raw: true,
+    });
 
-  return customers;
-}
+    const assignedCustomerNumbers = assignedCustomers.map((c: any) => c.customerNumber);
 
-async getTodayCount(query: any) {
-  const { startDate, endDate } = query;
+    // Get all active customers from MSSQL Customer table that are not in the assigned list
+    const whereCondition: any = {
+      C_Inactive: { [Op.or]: [false] }, // Active customers (C_Inactive is false or null)
+    };
+
+    // Exclude customers that are already assigned
+    if (assignedCustomerNumbers.length > 0) {
+      whereCondition.C_Number = {
+        [Op.notIn]: assignedCustomerNumbers,
+      };
+    }
+
+    const customers = await Customer.findAll({
+      attributes: [
+        'C_Number',
+        'C_Name'
+
+      ],
+      where: whereCondition,
+      order: [['C_Name', 'ASC']],
+    });
+
+    return customers;
+  }
+
+  // ProductDiscount CRUD methods
+  async createProductDiscount(body: {
+    ItemNumber: number;
+    quantity: number;
+    discountType: string;
+    discountValue: number;
+    startDate: Date;
+    endDate: Date;
+    isActive?: boolean;
+  }) {
+    const productDiscount = await ProductDiscount.create({
+      ItemNumber: body.ItemNumber,
+      quantity: body.quantity,
+      discountType: body.discountType,
+      discountValue: body.discountValue,
+      startDate: body.startDate,
+      endDate: body.endDate,
+      isActive: body.isActive ?? true,
+    });
+
+    // Sync to Redis in background (don't wait for it)
+    syncProductDiscountsToRedis().catch((error) => {
+      console.error('Error syncing discounts to Redis after create:', error);
+    });
+
+    return productDiscount;
+  }
+
+  async getProductDiscountById(id: number) {
+    const productDiscount = await ProductDiscount.findByPk(id);
+    if (!productDiscount) {
+      throw new AppError(Manager.PRODUCT_DISCOUNT_NOT_FOUND, 404);
+    }
+    return productDiscount;
+  }
+
+  async getAllProductDiscounts(query: PaginationOptions & {
+    search?: string;
+    ItemNumber?: number;
+    isActive?: boolean;
+  }) {
+    const page = parseInt(query.page as any) || 1;
+    const limit = parseInt(query.limit as any) || 10;
+    const search = query.search || '';
+
+    const whereCondition: any = {};
+
+    if (search) {
+      whereCondition[Op.or] = [
+        { ItemNumber: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
+    if (query.ItemNumber !== undefined) {
+      whereCondition.ItemNumber = query.ItemNumber;
+    }
+
+    if (query.isActive !== undefined) {
+      whereCondition.isActive = query.isActive;
+    }
+
+    const { count: totalCount, rows: productDiscounts } = await ProductDiscount.findAndCountAll({
+      where: whereCondition,
+      limit,
+      offset: (page - 1) * limit,
+      order: [['id', 'DESC']],
+    });
+
+    return {
+      data: productDiscounts,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    };
+  }
+
+  async updateProductDiscount(id: number, body: Partial<{
+    ItemNumber: number;
+    quantity: number;
+    discountType: string;
+    discountValue: number;
+    startDate: Date;
+    endDate: Date;
+    isActive: boolean;
+  }>) {
+    const productDiscount = await ProductDiscount.findByPk(id);
+    if (!productDiscount) {
+      throw new AppError(Manager.PRODUCT_DISCOUNT_NOT_FOUND, 404);
+    }
+
+    // Validate that endDate is after startDate if both are being updated
+    if (body.startDate && body.endDate) {
+      if (new Date(body.endDate) <= new Date(body.startDate)) {
+        throw new AppError('End date must be after start date', 400);
+      }
+    } else if (body.endDate && !body.startDate) {
+      // If only endDate is being updated, compare with existing startDate
+      if (new Date(body.endDate) <= new Date(productDiscount.startDate)) {
+        throw new AppError('End date must be after start date', 400);
+      }
+    } else if (body.startDate && !body.endDate) {
+      // If only startDate is being updated, compare with existing endDate
+      if (new Date(productDiscount.endDate) <= new Date(body.startDate)) {
+        throw new AppError('End date must be after start date', 400);
+      }
+    }
+
+    await productDiscount.update(body);
+
+    // Sync to Redis in background (don't wait for it)
+    syncProductDiscountsToRedis().catch((error) => {
+      console.error('Error syncing discounts to Redis after update:', error);
+    });
+
+    return productDiscount;
+  }
+
+  async deleteProductDiscount(id: number) {
+    const productDiscount = await ProductDiscount.findByPk(id);
+    if (!productDiscount) {
+      throw new AppError(Manager.PRODUCT_DISCOUNT_NOT_FOUND, 404);
+    }
+    await productDiscount.destroy();
+
+    // Sync to Redis in background (don't wait for it)
+    syncProductDiscountsToRedis().catch((error) => {
+      console.error('Error syncing discounts to Redis after delete:', error);
+    });
+
+    return { success: true, message: 'Product discount deleted successfully' };
+  }
+
+  // Sync product discounts to Redis (can be called manually or via cron)
+  async syncProductDiscountsToRedisManual() {
+    const result = await syncProductDiscountsToRedis();
+    return result;
+  }
+
+  // Get product discounts from Redis
+  async getProductDiscountsFromRedis(query: {
+    itemNumber?: number;
+    date?: string;
+    getAll?: boolean;
+  }) {
+    try {
+
+
+      // // If itemNumber is provided, get discount for that specific item
+      // if (query.itemNumber) {
+      //   const discount = await getProductDiscountFromRedis(query.itemNumber);
+      //   const allDiscounts = await getAllProductDiscountsForItemFromRedis(query.itemNumber);
+
+      //   return {
+      //     itemNumber: query.itemNumber,
+      //     bestDiscount: discount,
+      //     allDiscounts: allDiscounts,
+      //     totalDiscounts: allDiscounts.length
+      //   };
+      // }
+
+      // // If date is provided, get discounts for that date
+      // if (query.date) {
+      //   const discounts = await getProductDiscountsByDateFromRedis(query.date);
+      //   return {
+      //     date: query.date,
+      //     discounts: discounts,
+      //     totalDiscounts: discounts.length
+      //   };
+      // }
+
+      // If getAll is true or no specific query, return all discounts
+      const allDiscounts = await getAllProductDiscountsFromRedis();
+      return {
+        discounts: allDiscounts,
+        totalDiscounts: allDiscounts.length,
+        date: new Date().toISOString().split('T')[0]
+      };
+    } catch (error: any) {
+      console.error('Error fetching discounts from Redis:', error);
+      throw new AppError('Failed to fetch discounts from Redis', 500);
+    }
+  }
+
+  // Get discounted price for an item from Redis
+  async getDiscountedPriceFromRedisService(
+    itemNumber: number,
+    quantity: number,
+    originalPrice: number
+  ) {
+    try {
+      const discountInfo = await getDiscountedPriceFromRedis(itemNumber, quantity, originalPrice);
+
+      if (!discountInfo) {
+        return {
+          hasDiscount: false,
+          itemNumber,
+          quantity,
+          originalPrice,
+          finalPrice: originalPrice,
+          message: 'No discount available for this item'
+        };
+      }
+
+      return discountInfo;
+    } catch (error: any) {
+      console.error('Error calculating discounted price from Redis:', error);
+      throw new AppError('Failed to calculate discounted price from Redis', 500);
+    }
+  }
+  async getTodayCount(query: any) {
+    const { startDate, endDate } = query;
 
     let dateFilter: any;
 
@@ -14598,6 +14904,710 @@ async getTodayCount(query: any) {
     });
 
     return count;
+  }
+
+  async getActiveMobileDevice() {
+
+    const devices = await RetailerDevice.findAll({
+      where: {
+        isAllow: true,
+        sessionActive: true,
+        isActive: true,
+      },
+      attributes: ['customerNumber', 'updatedAt', 'deviceName']
+    });
+
+    const result: any[] = [];
+
+    for (const device of devices) {
+
+      const allowDate = device.updatedAt;
+
+      const endDate = new Date(allowDate);
+      endDate.setDate(endDate.getDate() + 21);
+
+      const mobileOrder = await OrderHeader.findOne({
+        where: {
+          C_Number: device.customerNumber,
+          Order_Source: 12,
+          Order_Date: {
+            [Op.between]: [allowDate, endDate],
+          },
+        },
+        attributes: ['Order_Number', 'Order_Date'],
+        include: [
+          {
+            model: Customer,
+            attributes: ['C_Number', 'C_Name'],
+            as: 'customer',
+            required: false,
+          }
+        ]
+      });
+
+      result.push({
+        customerNumber: device.customerNumber,
+        customerDevice: device.deviceName,
+        customerName: (mobileOrder as any)?.customer?.C_Name || null,
+
+        allowDate,
+        orderWithin3Weeks: mobileOrder ? true : false,
+        orderNumber: mobileOrder?.Order_Number || null,
+        orderDate: mobileOrder?.Order_Date || null,
+      });
+    }
+
+    return result;
+  }
+
+  async getCustomerLastSaleReport(req: any) {
+    // const { startDate, endDate } = req.query;
+
+    const startDate = req.startDate;
+    const endDate = req.endDate;
+
+    const customers = await Customer.findAll({
+      attributes: [
+        'C_Number',
+        'C_Name',
+        'C_Address',
+        'C_City',
+        'C_State',
+        'C_Zip',
+        'C_Phone',
+      ],
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeaders',
+          required: true,
+          attributes: [
+            'Order_Number',
+            'Invoice_Number',
+            'Invoice_Date',
+            'Invoice_Total',
+            [fn('ISNULL', col('orderHeaders.Order_Number'), -1), 'Document_Number'],
+          ],
+          where: {
+            Order_Updated: true,
+            Order_Deleted: false,
+            Invoice_Date: {
+              [Op.between]: [new Date(startDate), new Date(endDate)],
+              [Op.not]: null,
+            },
+          },
+        },
+      ],
+      order: [
+        [{ model: OrderHeader, as: 'orderHeaders' }, 'Invoice_Date', 'ASC'],
+        [{ model: OrderHeader, as: 'orderHeaders' }, 'Order_Number', 'ASC'],
+      ],
+      raw: true,
+    });
+
+    return customers;
+
+
+  }
+
+  async getCustomerNoSalesReport(query: any) {
+
+    const startDate = query?.startDate;
+    const endDate = query?.endDate;
+
+    if (!startDate || !endDate) {
+      throw new Error('startDate and endDate are required');
+    }
+
+    const customers = await Customer.findAll({
+
+      attributes: [
+        'C_Number',
+        'C_Name',
+        'C_Address',
+        'C_City',
+        'C_State',
+        'C_Zip',
+        'C_Phone',
+
+        // Invoice_Date from join
+        [col('orderHeaders.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeaders.Invoice_Total'), 'Invoice_Total'],
+
+        // Subquery Count
+        [
+          literal(`
+            ISNULL(
+              (SELECT COUNT(Order_Number)
+               FROM Order_Header
+               WHERE Customer.C_Number = Order_Header.C_Number
+               AND Invoice_Date >= '${startDate}'
+               AND Invoice_Date <= '${endDate}'
+              ), 0
+            )
+          `),
+          'iCount'
+        ]
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeaders',
+          required: false, // LEFT JOIN
+          attributes: [],
+          where: {
+            Order_Updated: true,
+            Order_Deleted: false,
+          },
+        },
+      ],
+
+      where: literal(`
+        ISNULL(
+          (SELECT COUNT(Order_Number)
+           FROM Order_Header
+           WHERE Customer.C_Number = Order_Header.C_Number
+           AND Invoice_Date >= '${startDate}'
+           AND Invoice_Date <= '${endDate}'
+          ), 0
+        ) = 0
+      `),
+
+      order: [
+        [col('orderHeaders.Invoice_Date'), 'ASC'],
+        [col('orderHeaders.Order_Number'), 'ASC'],
+      ],
+
+      raw: true,
+    });
+
+    return customers;
+  }
+
+  async getInventoryLogHistory(query: any) {
+    const { Item_Number, modifyValue } = query;
+
+    if (!Item_Number || !modifyValue) {
+      throw new Error("itemNumber and modifyValue are required");
+    }
+
+    const allowedColumns = [
+      "BaseCost",
+      "NetCost",
+      "Invoice_Cost",
+      "AvgCost",
+      "Price1",
+      "Price2",
+      "Price3",
+      "Price4",
+      "Price5",
+      "Price6",
+      "Price7",
+      "Price10",
+      "Price11",
+      "Price12",
+      "Price13",
+      "Price14",
+      "Price15",
+      "Price16",
+      "Price17",
+      "Price18",
+      "Price19"
+    ];
+
+    if (!allowedColumns.includes(modifyValue)) {
+      throw new Error("Invalid price column selected");
+    }
+
+    const ItemHistory = await InventoryLogHistory.findAll({
+      attributes: ['Item_Number', 'Description', 'Primary_Vendor', modifyValue
+        //  'BaseCost', 'NetCost', 'Invoice_Cost', 'AvgCost', 'Price1', 'Price2', 'Price3', 'Price4', 'Price5', 'Price6'
+        // , 'Price7', 'Price10', 'Price11', 'Price12', 'Price13', 'Price14', 'Price15', 'Price16', 'Price17', 'Price18', 'Price19',
+      ],
+      where: {
+        Item_Number: Item_Number,
+      }
+    })
+    return ItemHistory
+  }
+
+  async getCustomerWithProfit(query: any) {
+    const { startDate, endDate, Value_Code } = query
+
+    const data = await OrderHeader.findAll({
+
+      where: {
+        Order_Updated: 'True',
+        Order_Deleted: 'False',
+        Invoice_Date: {
+          [Op.between]: [startDate, endDate]
+        }
+      },
+
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: ['C_Name', 'C_CoName', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country', 'C_Phone'],
+          required: false
+        },
+        {
+          model: Order_Header_Costs,
+          attributes: [],
+          required: false,
+          as: 'Order_Header_Costs',
+          where: {
+            Value_Code: Value_Code,
+          },
+        }
+      ],
+
+      attributes: {
+        include: [
+
+          // Document Number Logic
+          [
+            literal(`
+              IIF(OrderHeader.Invoice_Number_Legacy <> 0,
+                CONVERT(VARCHAR(10), OrderHeader.Invoice_Number_Legacy),
+                IIF(OrderHeader.Invoice_Number > 1,
+                  CONCAT(OrderHeader.Order_Number, '-', OrderHeader.Invoice_Number),
+                  CONVERT(VARCHAR(10), OrderHeader.Order_Number)
+                )
+              )
+            `),
+            'Document_Number'
+          ],
+
+          // Total Sales 01-12
+          [literal('Sales01 + Taxes01'), 'totalSales01'],
+          [literal('Sales02 + Taxes02'), 'totalSales02'],
+          [literal('Sales03 + Taxes03'), 'totalSales03'],
+          [literal('Sales04 + Taxes04'), 'totalSales04'],
+          [literal('Sales05 + Taxes05'), 'totalSales05'],
+          [literal('Sales06 + Taxes06'), 'totalSales06'],
+          [literal('Sales07 + Taxes07'), 'totalSales07'],
+          [literal('Sales08 + Taxes08'), 'totalSales08'],
+          [literal('Sales09 + Taxes09'), 'totalSales09'],
+          [literal('Sales10 + Taxes10'), 'totalSales10'],
+          [literal('Sales11 + Taxes11'), 'totalSales11'],
+          [literal('Sales12 + Taxes12'), 'totalSales12'],
+
+          // Total Cost 01-12
+          [literal('Order_Header_Costs.Value01 + Taxes01'), 'totalCost01'],
+          [literal('Order_Header_Costs.Value02 + Taxes02'), 'totalCost02'],
+          [literal('Order_Header_Costs.Value03 + Taxes03'), 'totalCost03'],
+          [literal('Order_Header_Costs.Value04 + Taxes04'), 'totalCost04'],
+          [literal('Order_Header_Costs.Value05 + Taxes05'), 'totalCost05'],
+          [literal('Order_Header_Costs.Value06 + Taxes06'), 'totalCost06'],
+          [literal('Order_Header_Costs.Value07 + Taxes07'), 'totalCost07'],
+          [literal('Order_Header_Costs.Value08 + Taxes08'), 'totalCost08'],
+          [literal('Order_Header_Costs.Value09 + Taxes09'), 'totalCost09'],
+          [literal('Order_Header_Costs.Value10 + Taxes10'), 'totalCost10'],
+          [literal('Order_Header_Costs.Value11 + Taxes11'), 'totalCost11'],
+          [literal('Order_Header_Costs.Value12 + Taxes12'), 'totalCost12'],
+
+          // Total Sales Tax
+          [literal('stax_State + stax_County + stax_City'), 'totalSalesTax'],
+
+          // Rep Name Subquery
+          [
+            literal(`
+              (SELECT S_Desc 
+               FROM SalesRep 
+               WHERE SalesRep.S_Number = customer.C_Salesman)
+            `),
+            'RepName'
+          ],
+
+          // Profit 
+          [literal(`(ISNULL(OrderHeader.Sales01, 0) - ISNULL(Order_Header_Costs.Value01, 0) )`), 'profit01'],
+          [literal(`(ISNULL(OrderHeader.Sales02, 0) - ISNULL(Order_Header_Costs.Value02, 0) )`), 'profit02'],
+          [literal(`(ISNULL(OrderHeader.Sales03, 0) - ISNULL(Order_Header_Costs.Value03, 0) )`), 'profit03'],
+          [literal(`(ISNULL(OrderHeader.Sales04, 0) - ISNULL(Order_Header_Costs.Value04, 0) )`), 'profit04'],
+          [literal(`(ISNULL(OrderHeader.Sales05, 0) - ISNULL(Order_Header_Costs.Value05, 0))`), 'profit05'],
+          [literal(`(ISNULL(OrderHeader.Sales06, 0) - ISNULL(Order_Header_Costs.Value06, 0) )`), 'profit06'],
+          [literal(`(ISNULL(OrderHeader.Sales07, 0) - ISNULL(Order_Header_Costs.Value07, 0) )`), 'profit07'],
+          [literal(`(ISNULL(OrderHeader.Sales08, 0) - ISNULL(Order_Header_Costs.Value08, 0) )`), 'profit08'],
+          [literal(`(ISNULL(OrderHeader.Sales09, 0) - ISNULL(Order_Header_Costs.Value09, 0))`), 'profit09'],
+          [literal(`(ISNULL(OrderHeader.Sales10, 0) - ISNULL(Order_Header_Costs.Value10, 0) )`), 'profit10'],
+          [literal(`(ISNULL(OrderHeader.Sales11, 0) - ISNULL(Order_Header_Costs.Value11, 0) )`), 'profit11'],
+          [literal(`(ISNULL(OrderHeader.Sales12, 0) - ISNULL(Order_Header_Costs.Value12, 0) )`), 'profit12'],
+
+
+          // Profiy in %
+          [literal(`((ISNULL(OrderHeader.Sales01,0) - ISNULL(Order_Header_Costs.Value01,0)) / NULLIF(ISNULL(OrderHeader.Sales01,0) + ISNULL(OrderHeader.Taxes01,0),0)) * 100`), 'profitPercent01'],
+          [literal(`((ISNULL(OrderHeader.Sales02,0) - ISNULL(Order_Header_Costs.Value02,0)) / NULLIF(ISNULL(OrderHeader.Sales02,0) + ISNULL(OrderHeader.Taxes02,0),0)) * 100`), 'profitPercent02'],
+          [literal(`((ISNULL(OrderHeader.Sales03,0) - ISNULL(Order_Header_Costs.Value03,0)) / NULLIF(ISNULL(OrderHeader.Sales03,0) + ISNULL(OrderHeader.Taxes03,0),0)) * 100`), 'profitPercent03'],
+          [literal(`((ISNULL(OrderHeader.Sales04,0) - ISNULL(Order_Header_Costs.Value04,0)) / NULLIF(ISNULL(OrderHeader.Sales04,0) + ISNULL(OrderHeader.Taxes04,0),0)) * 100`), 'profitPercent04'],
+          [literal(`((ISNULL(OrderHeader.Sales05,0) - ISNULL(Order_Header_Costs.Value05,0)) / NULLIF(ISNULL(OrderHeader.Sales05,0) + ISNULL(OrderHeader.Taxes05,0),0)) * 100`), 'profitPercent05'],
+          [literal(`((ISNULL(OrderHeader.Sales06,0) - ISNULL(Order_Header_Costs.Value06,0)) / NULLIF(ISNULL(OrderHeader.Sales06,0) + ISNULL(OrderHeader.Taxes06,0),0)) * 100`), 'profitPercent06'],
+          [literal(`((ISNULL(OrderHeader.Sales07,0) - ISNULL(Order_Header_Costs.Value07,0)) / NULLIF(ISNULL(OrderHeader.Sales07,0) + ISNULL(OrderHeader.Taxes07,0),0)) * 100`), 'profitPercent07'],
+          [literal(`((ISNULL(OrderHeader.Sales08,0) - ISNULL(Order_Header_Costs.Value08,0)) / NULLIF(ISNULL(OrderHeader.Sales08,0) + ISNULL(OrderHeader.Taxes08,0),0)) * 100`), 'profitPercent08'],
+          [literal(`((ISNULL(OrderHeader.Sales09,0) - ISNULL(Order_Header_Costs.Value09,0)) / NULLIF(ISNULL(OrderHeader.Sales09,0) + ISNULL(OrderHeader.Taxes09,0),0)) * 100`), 'profitPercent09'],
+          [literal(`((ISNULL(OrderHeader.Sales10,0) - ISNULL(Order_Header_Costs.Value10,0)) / NULLIF(ISNULL(OrderHeader.Sales10,0) + ISNULL(OrderHeader.Taxes10,0),0)) * 100`), 'profitPercent10'],
+          [literal(`((ISNULL(OrderHeader.Sales11,0) - ISNULL(Order_Header_Costs.Value11,0)) / NULLIF(ISNULL(OrderHeader.Sales11,0) + ISNULL(OrderHeader.Taxes11,0),0)) * 100`), 'profitPercent11'],
+          [literal(`((ISNULL(OrderHeader.Sales12,0) - ISNULL(Order_Header_Costs.Value12,0)) / NULLIF(ISNULL(OrderHeader.Sales12,0) + ISNULL(OrderHeader.Taxes12,0),0)) * 100`), 'profitPercent12'],
+        ]
+      },
+
+      order: [
+        ['Invoice_Date', 'ASC'],
+        ['Order_Number', 'ASC']
+      ],
+
+      raw: true,
+
+
+    });
+    return data
+  }
+
+  async getCustomerRankingSales(data: any) {
+    const { startDate, endDate, Value_Code } = data;
+
+    const result = await OrderHeader.findAll({
+      where: {
+        Order_Updated: 'True',
+        Order_Deleted: 'False',
+        Invoice_Date: {
+          [Op.gte]: startDate,
+          [Op.lte]: endDate,
+        },
+      },
+      attributes: [
+        'C_Number',
+
+        // Sales Monthly
+        [Sequelize.literal('SUM(Sales01+Taxes01)'), 'tSales01'],
+        [Sequelize.literal('SUM(Sales02+Taxes02)'), 'tSales02'],
+        [Sequelize.literal('SUM(Sales03+Taxes03)'), 'tSales03'],
+        [Sequelize.literal('SUM(Sales04+Taxes04)'), 'tSales04'],
+        [Sequelize.literal('SUM(Sales05+Taxes05)'), 'tSales05'],
+        [Sequelize.literal('SUM(Sales06+Taxes06)'), 'tSales06'],
+        [Sequelize.literal('SUM(Sales07+Taxes07)'), 'tSales07'],
+        [Sequelize.literal('SUM(Sales08+Taxes08)'), 'tSales08'],
+        [Sequelize.literal('SUM(Sales09+Taxes09)'), 'tSales09'],
+        [Sequelize.literal('SUM(Sales10+Taxes10)'), 'tSales10'],
+        [Sequelize.literal('SUM(Sales11+Taxes11)'), 'tSales11'],
+        [Sequelize.literal('SUM(Sales12+Taxes12)'), 'tSales12'],
+
+        [
+          Sequelize.literal(`
+          SUM(
+            Sales01+Taxes01+Sales02+Taxes02+Sales03+Taxes03+
+            Sales04+Taxes04+Sales05+Taxes05+Sales06+Taxes06+
+            Sales07+Taxes07+Sales08+Taxes08+Sales09+Taxes09+
+            Sales10+Taxes10+Sales11+Taxes11+Sales12+Taxes12
+          )
+        `),
+          'totalSales'
+        ],
+
+        // Cost Monthly
+        [Sequelize.literal('SUM(Value01+Taxes01)'), 'tCost01'],
+        [Sequelize.literal('SUM(Value02+Taxes02)'), 'tCost02'],
+        [Sequelize.literal('SUM(Value03+Taxes03)'), 'tCost03'],
+        [Sequelize.literal('SUM(Value04+Taxes04)'), 'tCost04'],
+        [Sequelize.literal('SUM(Value05+Taxes05)'), 'tCost05'],
+        [Sequelize.literal('SUM(Value06+Taxes06)'), 'tCost06'],
+        [Sequelize.literal('SUM(Value07+Taxes07)'), 'tCost07'],
+        [Sequelize.literal('SUM(Value08+Taxes08)'), 'tCost08'],
+        [Sequelize.literal('SUM(Value09+Taxes09)'), 'tCost09'],
+        [Sequelize.literal('SUM(Value10+Taxes10)'), 'tCost10'],
+        [Sequelize.literal('SUM(Value11+Taxes11)'), 'tCost11'],
+        [Sequelize.literal('SUM(Value12+Taxes12)'), 'tCost12'],
+
+        [
+          Sequelize.literal(`
+          SUM(
+            Value01+Taxes01+Value02+Taxes02+Value03+Taxes03+
+            Value04+Taxes04+Value05+Taxes05+Value06+Taxes06+
+            Value07+Taxes07+Value08+Taxes08+Value09+Taxes09+
+            Value10+Taxes10+Value11+Taxes11+Value12+Taxes12
+          )
+        `),
+          'totalCost'
+        ],
+        // Profit Monthly
+        [Sequelize.literal('SUM((Sales01+Taxes01) - (Value01+Taxes01))'), 'profit01'],
+        [Sequelize.literal('SUM((Sales02+Taxes02) - (Value02+Taxes02))'), 'profit02'],
+        [Sequelize.literal('SUM((Sales03+Taxes03) - (Value03+Taxes03))'), 'profit03'],
+        [Sequelize.literal('SUM((Sales04+Taxes04) - (Value04+Taxes04))'), 'profit04'],
+        [Sequelize.literal('SUM((Sales05+Taxes05) - (Value05+Taxes05))'), 'profit05'],
+        [Sequelize.literal('SUM((Sales06+Taxes06) - (Value06+Taxes06))'), 'profit06'],
+        [Sequelize.literal('SUM((Sales07+Taxes07) - (Value07+Taxes07))'), 'profit07'],
+        [Sequelize.literal('SUM((Sales08+Taxes08) - (Value08+Taxes08))'), 'profit08'],
+        [Sequelize.literal('SUM((Sales09+Taxes09) - (Value09+Taxes09))'), 'profit09'],
+        [Sequelize.literal('SUM((Sales10+Taxes10) - (Value10+Taxes10))'), 'profit10'],
+        [Sequelize.literal('SUM((Sales11+Taxes11) - (Value11+Taxes11))'), 'profit11'],
+        [Sequelize.literal('SUM((Sales12+Taxes12) - (Value12+Taxes12))'), 'profit12'],
+
+        // Profit in % 
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales01,0)) - SUM(ISNULL(Order_Header_Costs.Value01,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales01,0) + ISNULL(OrderHeader.Taxes01,0)),0)) * 100`), 'profitPercent01'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales02,0)) - SUM(ISNULL(Order_Header_Costs.Value02,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales02,0) + ISNULL(OrderHeader.Taxes02,0)),0)) * 100`), 'profitPercent02'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales03,0)) - SUM(ISNULL(Order_Header_Costs.Value03,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales03,0) + ISNULL(OrderHeader.Taxes03,0)),0)) * 100`), 'profitPercent03'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales04,0)) - SUM(ISNULL(Order_Header_Costs.Value04,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales04,0) + ISNULL(OrderHeader.Taxes04,0)),0)) * 100`), 'profitPercent04'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales05,0)) - SUM(ISNULL(Order_Header_Costs.Value05,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales05,0) + ISNULL(OrderHeader.Taxes05,0)),0)) * 100`), 'profitPercent05'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales06,0)) - SUM(ISNULL(Order_Header_Costs.Value06,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales06,0) + ISNULL(OrderHeader.Taxes06,0)),0)) * 100`), 'profitPercent06'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales07,0)) - SUM(ISNULL(Order_Header_Costs.Value07,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales07,0) + ISNULL(OrderHeader.Taxes07,0)),0)) * 100`), 'profitPercent07'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales08,0)) - SUM(ISNULL(Order_Header_Costs.Value08,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales08,0) + ISNULL(OrderHeader.Taxes08,0)),0)) * 100`), 'profitPercent08'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales09,0)) - SUM(ISNULL(Order_Header_Costs.Value09,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales09,0) + ISNULL(OrderHeader.Taxes09,0)),0)) * 100`), 'profitPercent09'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales10,0)) - SUM(ISNULL(Order_Header_Costs.Value10,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales10,0) + ISNULL(OrderHeader.Taxes10,0)),0)) * 100`), 'profitPercent10'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales11,0)) - SUM(ISNULL(Order_Header_Costs.Value11,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales11,0) + ISNULL(OrderHeader.Taxes11,0)),0)) * 100`), 'profitPercent11'],
+        [Sequelize.literal(`((SUM(ISNULL(OrderHeader.Sales12,0)) - SUM(ISNULL(Order_Header_Costs.Value12,0))) / NULLIF(SUM(ISNULL(OrderHeader.Sales12,0) + ISNULL(OrderHeader.Taxes12,0)),0)) * 100`), 'profitPercent12'],
+
+      ],
+
+      include: [
+        {
+          model: Customer,
+          attributes: [
+            'C_Number',
+            'C_Name',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Zip',
+            'C_Phone',
+          ],
+          as: 'customer',
+          required: false,
+        },
+        {
+          model: Order_Header_Costs,
+          attributes: [],
+          as: 'Order_Header_Costs',
+          required: false,
+          where: {
+            Value_Code: Value_Code,
+          },
+        },
+      ],
+
+      group: [
+        'OrderHeader.C_Number',
+        'customer.C_Number',
+        'customer.C_Name',
+        'customer.C_Address',
+        'customer.C_City',
+        'customer.C_State',
+        'customer.C_Zip',
+        'customer.C_Phone'
+      ],
+
+      raw: true,
+    });
+
+    return result;
+  }
+
+  async getDailySalesReport(data: any) {
+    const { startDate, endDate } = data;
+
+    const orders = await OrderHeader.findAll({
+      attributes: [
+
+        // Document_Number
+        [
+          sequelize.literal(`
+            IIF(OrderHeader.Invoice_Number_Legacy <> 0,
+              CONVERT(VARCHAR(10), OrderHeader.Invoice_Number_Legacy),
+              IIF(OrderHeader.Invoice_Number > 1,
+                CONCAT(OrderHeader.Order_Number, '-', OrderHeader.Invoice_Number),
+                CONVERT(VARCHAR(10), OrderHeader.Order_Number)
+              )
+            )
+          `),
+          'Document_Number'
+        ],
+
+        // Total Sales 01–12
+        [sequelize.literal(`Sales01 + Taxes01`), 'totalSales01'],
+        [sequelize.literal(`Sales02 + Taxes02`), 'totalSales02'],
+        [sequelize.literal(`Sales03 + Taxes03`), 'totalSales03'],
+        [sequelize.literal(`Sales04 + Taxes04`), 'totalSales04'],
+        [sequelize.literal(`Sales05 + Taxes05`), 'totalSales05'],
+        [sequelize.literal(`Sales06 + Taxes06`), 'totalSales06'],
+        [sequelize.literal(`Sales07 + Taxes07`), 'totalSales07'],
+        [sequelize.literal(`Sales08 + Taxes08`), 'totalSales08'],
+        [sequelize.literal(`Sales09 + Taxes09`), 'totalSales09'],
+        [sequelize.literal(`Sales10 + Taxes10`), 'totalSales10'],
+        [sequelize.literal(`Sales11 + Taxes11`), 'totalSales11'],
+        [sequelize.literal(`Sales12 + Taxes12`), 'totalSales12'],
+
+        // Total Tax
+        [sequelize.literal(`stax_State + stax_County + stax_City`), 'totalSalesTax'],
+
+        [
+          sequelize.literal(`
+                              OrderHeader.Sales01 + OrderHeader.Taxes01 +
+                              OrderHeader.Sales02 + OrderHeader.Taxes02 +
+                              OrderHeader.Sales03 + OrderHeader.Taxes03 +
+                              OrderHeader.Sales04 + OrderHeader.Taxes04 +
+                              OrderHeader.Sales05 + OrderHeader.Taxes05 +
+                              OrderHeader.Sales06 + OrderHeader.Taxes06 +
+                              OrderHeader.Sales07 + OrderHeader.Taxes07 +
+                              OrderHeader.Sales08 + OrderHeader.Taxes08 +
+                              OrderHeader.Sales09 + OrderHeader.Taxes09 +
+                              OrderHeader.Sales10 + OrderHeader.Taxes10 +
+                              OrderHeader.Sales11 + OrderHeader.Taxes11 +
+                              OrderHeader.Sales12 + OrderHeader.Taxes12
+                            `),
+          'totalCost'
+        ]
+
+      ],
+
+      include: [
+        {
+          model: Customer,
+          attributes: [
+            'c_name',
+            'c_address',
+            'c_city',
+            'c_state',
+            'c_zip',
+            'c_phone',
+            'c_Salesman',
+            'C_ClassOfTrade'
+          ],
+          as: 'customer',
+          required: false // LEFT JOIN
+        }
+      ],
+
+      where: {
+        Order_Updated: true,
+        Order_Deleted: false,
+        Invoice_Date: {
+          [Op.gte]: startDate,
+          [Op.lte]: endDate
+        }
+      },
+
+      order: [
+        ['Invoice_Date', 'ASC'],
+        ['Order_Number', 'ASC']
+      ]
+    });
+
+    return orders;
+  };
+
+  async getCustomerPrepaidSalesTax(data: any) {
+    const { startDate, endDate } = data;
+
+    const orders = await OrderHeader.findAll({
+      attributes: [
+        // Document Number
+        [
+          sequelize.literal(`
+            IIF(OrderHeader.Invoice_Number_Legacy <> 0,
+              CONVERT(VARCHAR(10), OrderHeader.Invoice_Number_Legacy),
+              IIF(OrderHeader.Invoice_Number > 1,
+                CONCAT(OrderHeader.Order_Number, '-', OrderHeader.Invoice_Number),
+                CONVERT(VARCHAR(10), OrderHeader.Order_Number)
+              )
+            )
+          `),
+          'Document_Number'
+        ],
+
+        // Sales 01–12
+        [sequelize.literal(`OrderHeader.Sales01 + OrderHeader.Taxes01`), 'totalSales01'],
+        [sequelize.literal(`OrderHeader.Sales02 + OrderHeader.Taxes02`), 'totalSales02'],
+        [sequelize.literal(`OrderHeader.Sales03 + OrderHeader.Taxes03`), 'totalSales03'],
+        [sequelize.literal(`OrderHeader.Sales04 + OrderHeader.Taxes04`), 'totalSales04'],
+        [sequelize.literal(`OrderHeader.Sales05 + OrderHeader.Taxes05`), 'totalSales05'],
+        [sequelize.literal(`OrderHeader.Sales06 + OrderHeader.Taxes06`), 'totalSales06'],
+        [sequelize.literal(`OrderHeader.Sales07 + OrderHeader.Taxes07`), 'totalSales07'],
+        [sequelize.literal(`OrderHeader.Sales08 + OrderHeader.Taxes08`), 'totalSales08'],
+        [sequelize.literal(`OrderHeader.Sales09 + OrderHeader.Taxes09`), 'totalSales09'],
+        [sequelize.literal(`OrderHeader.Sales10 + OrderHeader.Taxes10`), 'totalSales10'],
+        [sequelize.literal(`OrderHeader.Sales11 + OrderHeader.Taxes11`), 'totalSales11'],
+        [sequelize.literal(`OrderHeader.Sales12 + OrderHeader.Taxes12`), 'totalSales12'],
+
+        // Total Tax
+        [
+          sequelize.literal(`
+            OrderHeader.stax_State + 
+            OrderHeader.stax_County + 
+            OrderHeader.stax_City
+          `),
+          'totalSalesTax'
+        ],
+
+        // State Name
+        [
+          sequelize.literal(`
+            (SELECT TaxDescription 
+             FROM TaxRates 
+             WHERE TaxRates.Jurisdiction_State = OrderHeader.Jurisdiction_State)
+          `),
+          'StateName'
+        ],
+
+        // County Name
+        [
+          sequelize.literal(`
+            (SELECT TaxDescription 
+             FROM TaxRates_County 
+             WHERE TaxRates_County.Jurisdiction_County = OrderHeader.Jurisdiction_County)
+          `),
+          'CountyName'
+        ],
+
+        // City Name
+        [
+          sequelize.literal(`
+            (SELECT TaxDescription 
+             FROM TaxRates_City 
+             WHERE TaxRates_City.Jurisdiction_City = OrderHeader.Jurisdiction_City)
+          `),
+          'CityName'
+        ]
+      ],
+
+      include: [
+        {
+          model: Customer,
+          attributes: [
+            'c_name',
+            'c_address',
+            'c_city',
+            'c_state',
+            'c_zip',
+            'c_phone',
+            'c_Salesman',
+            'C_ClassOfTrade'
+          ],
+          as: 'customer',
+          required: false
+        }
+      ],
+
+      where: {
+        Order_Updated: true,
+        Order_Deleted: false,
+        PrepaidTax_Amount: {
+          [Op.ne]: 0
+        },
+        Invoice_Date: {
+          [Op.gte]: startDate,
+          [Op.lte]: endDate
+        }
+      },
+
+      order: [
+        ['C_Number', 'ASC']
+      ]
+    });
+
+    return orders;
+  };
 }
 
-}
+
+

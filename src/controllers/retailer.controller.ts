@@ -391,4 +391,23 @@ export class RetailerController {
     const data = await this.retailerService.uploadImages(req);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
+
+
+  async getRetailerSuggestedItems(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.getRetailerSuggestedItems(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getRetailerSuggestedItemsByCustomer(req: AuthRequest, res: Response) {
+    const { customerNumber } = req.body;
+    const data = await this.retailerService.getRetailerSuggestedItemsByCustomer(customerNumber);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+
+  async getCustomerLastBalance(req: AuthRequest, res: Response) {
+    const { customerNumber } = req.params;
+    const data = await this.retailerService.getCustomerLastBalance(Number(customerNumber));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 }

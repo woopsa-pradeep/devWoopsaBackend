@@ -48,7 +48,7 @@ import { sendMultiFCMNotification } from "../utils/sentNotification";
 import Policies from "../models/postgres/policies.model";
 import { WebUsers } from "../models/postgres/users.model";
 import { ContactUs } from "../models/postgres/contactUs.model";
-import { postgresSequelize } from "../db";
+import { postgresSequelize, sequelize } from "../db";
 import { QueryTypes } from "sequelize";
 import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { OrderPick } from "../models/postgres/epickOrder.model";
@@ -61,6 +61,7 @@ import { RetailerDocuments } from "../models/postgres/retailerDocuments.model";
 import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import TradeShowOrderHistory from "../models/postgres/tradeShowOrderHistory.model";
+import { getProductDiscountFromRedis } from "../utils/productDiscount.redis";
 
 
 
@@ -536,7 +537,7 @@ orderClause = [
         "CasesPerPallet",
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'Unit_Price',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT','Cig_Pack','Cig_Sticks'
       ],
       where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
       include: [
@@ -576,17 +577,12 @@ orderClause = [
       }
     });
 
-    const customer = await Customer.findOne({
-      where: {
-        C_Number: user.id
-      },
-      attributes:['C_PricingAccount']
-    });
+   
 
     let userId = user.id;
-    if(customer){
-      userId = customer?.dataValues.C_PricingAccount || user.id;
-    }
+    // if(customer){
+    //   userId = customer?.dataValues.C_PricingAccount || user.id;
+    // }
     const imageMap = new Map(productImages.map(img => [img.product_number, img]));
     const discountMap = await getDiscountsForItemNumbers(itemNumbers, userId);
 
@@ -597,7 +593,7 @@ orderClause = [
       const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
 
       let price = discountMap[e.Item_Number] ?? await getFirstValidPrice(e);
-      const isDiscounted = await hasDiscountedItem(e.Item_Number, e.Price_Subclass);
+      const isDiscounted = false;
       // price = Math.ceil(price * 100) / 100;
       const productLimit = await getProductLimit(e.Item_Number);
       let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
@@ -615,9 +611,10 @@ orderClause = [
       if (userJurisdiction != null && e.SalesCategory) {
 
         console.log(e?.SalesCategory, 'e.Sales_Category')
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category,e,price + taxRate);
       }
 
+      const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
 
 
       return {
@@ -631,6 +628,7 @@ orderClause = [
         Tax_Rate: taxRate,
         OTP_Number: e.OTP_Number,
         Unit_Price: e.Unit_Price,
+        productDiscount: discount ?? null,
         price,
         isNewItem,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
@@ -976,6 +974,8 @@ orderClause = [
           'OTP_Number',
           'Price_Subclass',
           'Sales_Category',
+          'Cig_Pack',
+          'Cig_Sticks',
         ],
         include: [
           {
@@ -1011,19 +1011,20 @@ findProduct = findProduct?.dataValues || null;
       const inventoryOnHand = await getInventoryOnHand(Number(e.itemNumber)) || 0;
 
       let price = discountMap[Number(e.itemNumber)] ?? await getFirstValidPrice(findProduct as any);
-      const isDiscounted = await hasDiscountedItem(Number(e.itemNumber), findProduct?.Price_Subclass ?? 0);
+      const isDiscounted = false;
       let priceWitoutTradeShow=  price || 0;
       // price = Math.ceil(price * 100) / 100;
       price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
       const productLimit = await getProductLimit(Number(e.itemNumber));
-      let taxRate = await getTaxRateV1(Number(findProduct?.OTP_Number), userJurisdiction as number, Number(e.itemNumber), price);
+      
+      let taxRate = await getTaxRateV1(Number(findProduct?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
       taxRate = Math.ceil(taxRate * 100) / 100;
 
       let prepaidTaxRate = 0
       if (userJurisdiction != null && findProduct?.Sales_Category) {
 
         console.log(findProduct?.Sales_Category, 'findProduct?.Sales_Category')
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category));
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category),findProduct,price + taxRate);
       }
 
 
@@ -1379,11 +1380,13 @@ tradeShowItem = tradeShowItem?.dataValues || null;
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
       const productLimit = await getProductLimit(e.Item_Number);
-      const isDiscounted = await hasDiscountedItem(e.Item_Number, product.Price_Subclass);
+      const isDiscounted = false;
       const userJurisdiction = await getJurisdiction(customerNumber);
       let prepaidTaxRate = 0
       if (userJurisdiction != null && product.SalesCategory) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category);
+        let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
+      taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category,product,price + taxRate);
       }
 
 
@@ -1769,11 +1772,13 @@ if (p1 !== p2) {
       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
 
       const productLimit = await getProductLimit(e.Item_Number);
-      const isDiscounted = await hasDiscountedItem(e.Item_Number, product.Price_Subclass);
+      const isDiscounted = false;
       const userJurisdiction = await getJurisdiction(customerNumber);
       let prepaidTaxRate = 0
       if (userJurisdiction != null && product.SalesCategory) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category);
+        let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
+      taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category,product,price + taxRate);
       }
 
       let priceChange = false;
@@ -3334,7 +3339,9 @@ if (p1 !== p2) {
         'eCommerce',
         'I_Inactive',
         'Date_Created',
-        'UnitOunces'
+        'UnitOunces',
+        'Cig_Pack',
+        'Cig_Sticks',
       ],
       where: whereClause,
       include: [
@@ -3382,7 +3389,7 @@ if (p1 !== p2) {
       const userJurisdiction = await getJurisdiction(user.id);
       let prepaidTaxRate = 0
       if (userJurisdiction != null && e.SalesCategory) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category,e,price );
       }
 
       return {
@@ -3689,7 +3696,7 @@ if (p1 !== p2) {
 
       const taxRate = await getTaxRateV1(detail?.inventory?.OTP_Number, userJurisdiction as number, detail?.Item_Number, price);
 
-      const isDiscounted = detail?.inventory?.Price_Subclass ? await hasDiscountedItem(detail?.Item_Number, detail?.inventory?.Price_Subclass) : false;
+      const isDiscounted = false;
       let allowToOrder = true;
       if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
         allowToOrder = false;
@@ -3704,7 +3711,7 @@ if (p1 !== p2) {
       let prepaidTaxRate = 0
       // console.log(detail?.inventory,'detail?.inventory?.Sales_Category')
       if (userJurisdiction != null && detail?.inventory?.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category,detail.inventory,price + taxRate);
       }
 
 
@@ -4072,7 +4079,9 @@ if (p1 !== p2) {
       attributes: [
         "Pack", "Description", "Item_Number", "CaseCount", "UOM",
         "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
-        "NetCost", "OTP_Number", "Price_Subclass"
+        "NetCost", "OTP_Number", "Price_Subclass",
+        "Cig_Pack",
+        "Cig_Sticks",
       ],
       include: [
         { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc", "Sales_Category"], required: false },
@@ -4090,7 +4099,7 @@ if (p1 !== p2) {
     console.log(item, 'item----->')
     // Step 3: Pricing & Tax
     let price = (await getDiscount(Number(item.Item_Number), userId)) || (await getFirstValidPrice(item));
-    const isDiscounted = await hasDiscountedItem(item.Item_Number || 0, item.Price_Subclass || 0);
+    const isDiscounted = false;
     // price = Math.ceil(price * 100) / 100;
 
     let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
@@ -4108,7 +4117,7 @@ if (p1 !== p2) {
 
     let prepaidTaxRate = 0
     if (userJurisdiction != null && item.SalesCategory) {
-      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category);
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category,item,price + taxRate);
     }
 
 
@@ -4204,7 +4213,9 @@ if (p1 !== p2) {
         attributes: [
           'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
           'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost',
-          'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created', 'OTP_Number'
+          'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created', 'OTP_Number',
+          'Cig_Pack',
+          'Cig_Sticks',
         ],
         include: [
           { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc', 'Sales_Category'], required: false },
@@ -4240,7 +4251,7 @@ if (p1 !== p2) {
         if (userJurisdiction != null && findItem?.SalesCategory) {
 
           console.log(e, 'e.Sales_Category')
-          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category);
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category,findItem,price + taxRate);
         }
 
 
@@ -5137,5 +5148,400 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
     }
     return result;
   }
+
+
+ async getRetailerSuggestedItems(body:any) {
+   const { customerNumber, itemNumber } = body;
+   
+   if (!customerNumber) {
+     throw new AppError('Customer number is required', 400);
+   }
+
+   // Calculate date 12 weeks ago from today
+   const currentDate = new Date();
+   const twelveWeeksAgo = new Date(currentDate.getTime() - 84 * 24 * 60 * 60 * 1000); // 12 weeks = 84 days
+
+   // First, get all order numbers from OrderHeader for this customer from last 12 weeks
+   const orderHeaders = await OrderHeader.findAll({
+     where: {
+       C_Number: customerNumber,
+       Order_Deleted: false,
+       Order_Date: {
+         [Op.gte]: twelveWeeksAgo // Only include orders from last 12 weeks
+       }
+     },
+     attributes: ['Order_Number'],
+     raw: true
+   });
+
+   const orderNumbers = orderHeaders.map((header: any) => header.Order_Number);
+
+   if (orderNumbers.length === 0) {
+     return [];
+   }
+
+   // Build where clause to exclude the provided itemNumber
+   const whereClause: any = {
+     Order_Number: { [Op.in]: orderNumbers },
+     Quantity_Ordered: {
+       [Op.gt]: 0 // Only include items that were actually ordered
+     }
+   };
+   if (itemNumber) {
+     whereClause.Item_Number = { [Op.ne]: itemNumber };
+   }
+
+   // Build SQL query to get top 10 most purchased items
+   const orderNumbersList = orderNumbers.join(',');
+   // Check if itemNumber is provided (including 0 as a valid value)
+   const hasItemNumber = itemNumber != null && itemNumber !== '' && itemNumber !== undefined;
+   const itemNumberCondition = hasItemNumber 
+     ? `AND od.Item_Number != ${Number(itemNumber)}` 
+     : '';
+   
+   const query = `
+     SELECT TOP 10
+       od.Item_Number,
+       SUM(od.Quantity_Ordered) AS totalQuantityOrdered,
+       COUNT(DISTINCT od.Order_Number) AS totalOrders
+     FROM Order_Detail od
+     INNER JOIN Inventory inv ON od.Item_Number = inv.Item_Number
+     WHERE od.Order_Number IN (${orderNumbersList})
+       AND od.Quantity_Ordered > 0
+       AND inv.I_Inactive = 0
+       AND inv.ShortOrderForm = 1
+       ${itemNumberCondition}
+     GROUP BY od.Item_Number
+     ORDER BY SUM(od.Quantity_Ordered) DESC
+   `;
+
+   const mostPurchasedItems = await sequelize.query(query, {
+     type: QueryTypes.SELECT,
+     raw: true
+   }) as any[];
+
+   if (mostPurchasedItems.length === 0) {
+     return [];
+   }
+
+   // Get item numbers for product images query
+   const itemNumbers = mostPurchasedItems.map((item: any) => item.Item_Number);
+
+   // Get product images
+   const productImages = await ProductImage.findAll({
+     where: {
+       product_number: { [Op.in]: itemNumbers.map(String) },
+       isAllow: true
+     }
+   });
+   const imageMap = new Map(productImages.map(img => [img.product_number, img]));
+
+   // Enrich items with inventory data and other information
+   const enrichedItems = await Promise.all(
+     mostPurchasedItems.map(async (item: any) => {
+       const itemNumber = item.Item_Number;
+       const itemStr = itemNumber.toString();
+       const productImage = imageMap.get(itemStr) || null;
+       
+       // Get inventory details
+       const inventoryData = await getInventoryFullItemNumber(itemNumber);
+       const inventoryOnHand = await getInventoryOnHand(itemNumber) || 0;
+      
+       let price = await getDiscount(itemNumber, customerNumber);
+       if (!price) {
+         const tempDetail: any = await Inventory.findOne({
+           where: { Item_Number: itemNumber }
+         });
+         price = await getFirstValidPrice(tempDetail);
+       }
+
+       const userJurisdiction = await getJurisdiction(customerNumber);
+       const taxRate = await getTaxRateV1(
+         inventoryData?.OTP_Number, 
+         userJurisdiction as number, 
+         itemNumber, 
+         price
+       );
+
+       const isDiscounted = inventoryData?.Price_Subclass 
+         ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass) 
+         : false;
+
+       let prepaidTaxRate = 0;
+       if (userJurisdiction != null && inventoryData?.Sales_Category) {
+         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category?.Sales_Category as number,inventoryData,price + taxRate);
+       }
+
+       return {
+         Item_Number: itemNumber,
+         Description: inventoryData?.Description || null,
+         totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
+         totalOrders: Number(item.totalOrders || 0),
+         price,
+         priceWithTax: price + taxRate,
+         Tax_Rate: taxRate,
+         isDiscounted,
+         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+         prepaidTaxRate: prepaidTaxRate,
+         Inventory_OnHand: inventoryOnHand,
+         showDistributorImage: productImage?.isAllow ?? false,
+         distributorImage: productImage?.img_url || null,
+         masterImage: inventoryData?.UPCList?.[0]?.UPC_Number 
+           ? `${process.env.AZUREIMAGESERVER}${inventoryData.UPCList[0].UPC_Number}.jpg`
+           : null,
+         SalesCategory: inventoryData?.SalesCategory?.Category_Desc || null,
+         PriceClass: inventoryData?.PriceClass?.Class_Desc || null,
+         Pack: inventoryData?.Pack || null,
+         CaseCount: inventoryData?.CaseCount || null,
+         UOM: inventoryData?.UOM || null
+       };
+     })
+   );
+
+   return enrichedItems;
+ }
+
+
+ async getRetailerSuggestedItemsByCustomer(customerNumber: number) {
+   if (!customerNumber) {
+     throw new AppError('Customer number is required', 400);
+   }
+
+   // Calculate date 12 weeks ago from today
+   const currentDate = new Date();
+   const twelveWeeksAgo = new Date(currentDate.getTime() - 84 * 24 * 60 * 60 * 1000); // 12 weeks = 84 days
+
+   // Query 1: Get top 10 products that this customer buys most
+   const customerOrderHeaders = await OrderHeader.findAll({
+     where: {
+       C_Number: customerNumber,
+       Order_Deleted: false,
+       Order_Date: {
+         [Op.gte]: twelveWeeksAgo
+       }
+     },
+     attributes: ['Order_Number'],
+     raw: true
+   });
+
+   const customerOrderNumbers = customerOrderHeaders.map((header: any) => header.Order_Number);
+   
+   // Step 1: Get top 10 products that this customer buys most
+   let customerMostPurchasedItems: any[] = [];
+   if (customerOrderNumbers.length > 0) {
+     const customerOrderNumbersList = customerOrderNumbers.join(',');
+     const customerQuery = `
+       SELECT TOP 10
+         od.Item_Number,
+         SUM(od.Quantity_Ordered) AS totalQuantityOrdered,
+         COUNT(DISTINCT od.Order_Number) AS totalOrders
+       FROM Order_Detail od
+       INNER JOIN Inventory inv ON od.Item_Number = inv.Item_Number
+       WHERE od.Order_Number IN (${customerOrderNumbersList})
+         AND od.Quantity_Ordered > 0
+         AND inv.I_Inactive = 0
+         AND inv.ShortOrderForm = 1
+       GROUP BY od.Item_Number
+       ORDER BY SUM(od.Quantity_Ordered) DESC
+     `;
+
+     customerMostPurchasedItems = await sequelize.query(customerQuery, {
+       type: QueryTypes.SELECT,
+       raw: true
+     }) as any[];
+   }
+
+   // Step 2: Get the item numbers from customer's top 10 to exclude from overall query
+   const customerItemNumbers = customerMostPurchasedItems.map((item: any) => item.Item_Number);
+   const excludeItemNumbersCondition = customerItemNumbers.length > 0 
+     ? `AND od.Item_Number NOT IN (${customerItemNumbers.join(',')})`
+     : '';
+
+   // Step 3: Get top 10 products that sell most overall (excluding customer's top 10 items)
+   const allOrderHeaders = await OrderHeader.findAll({
+     where: {
+       Order_Deleted: false,
+       Order_Date: {
+         [Op.gte]: twelveWeeksAgo
+       }
+     },
+     attributes: ['Order_Number'],
+     raw: true
+   });
+
+   const allOrderNumbers = allOrderHeaders.map((header: any) => header.Order_Number);
+   
+   let overallMostSoldItems: any[] = [];
+   if (allOrderNumbers.length > 0) {
+     const allOrderNumbersList = allOrderNumbers.join(',');
+     const overallQuery = `
+       SELECT TOP 10
+         od.Item_Number,
+         SUM(od.Quantity_Ordered) AS totalQuantityOrdered,
+         COUNT(DISTINCT od.Order_Number) AS totalOrders
+       FROM Order_Detail od
+       INNER JOIN Inventory inv ON od.Item_Number = inv.Item_Number
+       WHERE od.Order_Number IN (${allOrderNumbersList})
+         AND od.Quantity_Ordered > 0
+         AND inv.I_Inactive = 0
+         AND inv.ShortOrderForm = 1
+         ${excludeItemNumbersCondition}
+       GROUP BY od.Item_Number
+       ORDER BY SUM(od.Quantity_Ordered) DESC
+     `;
+
+     overallMostSoldItems = await sequelize.query(overallQuery, {
+       type: QueryTypes.SELECT,
+       raw: true
+     }) as any[];
+   }
+
+   // Step 4: Combine both sets (10 from customer + 10 from overall, no duplicates)
+   const combinedItems: any[] = [];
+
+   // Add customer's most purchased items (up to 10)
+   customerMostPurchasedItems.slice(0, 10).forEach((item: any) => {
+     combinedItems.push({ ...item, source: 'customer' });
+   });
+
+   // Add overall most sold items (up to 10) - already excluded customer items in query
+   overallMostSoldItems.slice(0, 10).forEach((item: any) => {
+     combinedItems.push({ ...item, source: 'overall' });
+   });
+
+   // Step 5: Get top 10 products with highest profit percentage from Inventory
+   const existingItemNumbers = combinedItems.map((item: any) => item.Item_Number);
+   const excludeProfitItemsCondition = existingItemNumbers.length > 0 
+     ? `AND inv.Item_Number NOT IN (${existingItemNumbers.join(',')})`
+     : '';
+
+   const profitQuery = `
+     SELECT TOP 10
+       inv.Item_Number,
+       inv.BaseCost,
+       inv.Price1,
+       CASE 
+         WHEN inv.BaseCost > 0 THEN ((inv.Price1 - inv.BaseCost) / inv.BaseCost) * 100
+         ELSE 0
+       END AS profitPercentage
+     FROM Inventory inv
+     WHERE inv.I_Inactive = 0
+       AND inv.ShortOrderForm = 1
+       AND inv.BaseCost > 0
+       AND inv.Price1 > inv.BaseCost
+       ${excludeProfitItemsCondition}
+     ORDER BY ((inv.Price1 - inv.BaseCost) / inv.BaseCost) * 100 DESC
+   `;
+
+   const highProfitItems = await sequelize.query(profitQuery, {
+     type: QueryTypes.SELECT,
+     raw: true
+   }) as any[];
+
+   // Add high profit items to combined items
+   highProfitItems.forEach((item: any) => {
+     combinedItems.push({ 
+       Item_Number: item.Item_Number,
+       totalQuantityOrdered: 0,
+       totalOrders: 0,
+       source: 'profit' 
+     });
+   });
+
+   // Limit to 30 items (10 customer + 10 overall + 10 profit)
+   const finalItems = combinedItems.slice(0, 30);
+
+   if (finalItems.length === 0) {
+     return [];
+   }
+
+   // Get item numbers for product images query
+   const itemNumbers = finalItems.map((item: any) => item.Item_Number);
+
+   // Get product images
+   const productImages = await ProductImage.findAll({
+     where: {
+       product_number: { [Op.in]: itemNumbers.map(String) },
+       isAllow: true
+     }
+   });
+   const imageMap = new Map(productImages.map(img => [img.product_number, img]));
+
+   // Enrich items with inventory data and other information
+   const enrichedItems = await Promise.all(
+     finalItems.map(async (item: any) => {
+       const itemNumber = item.Item_Number;
+       const itemStr = itemNumber.toString();
+       const productImage = imageMap.get(itemStr) || null;
+       
+       // Get inventory details
+       const inventoryData = await getInventoryFullItemNumber(itemNumber);
+       const inventoryOnHand = await getInventoryOnHand(itemNumber) || 0;
+      
+       let price = await getDiscount(itemNumber, customerNumber);
+       if (!price) {
+         const tempDetail: any = await Inventory.findOne({
+           where: { Item_Number: itemNumber }
+         });
+         price = await getFirstValidPrice(tempDetail);
+       }
+
+       const userJurisdiction = await getJurisdiction(customerNumber);
+       const taxRate = await getTaxRateV1(
+         inventoryData?.OTP_Number, 
+         userJurisdiction as number, 
+         itemNumber, 
+         price
+       );
+
+       const isDiscounted = inventoryData?.Price_Subclass 
+         ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass) 
+         : false;
+
+       let prepaidTaxRate = 0;
+       if (userJurisdiction != null && inventoryData?.Sales_Category) {
+         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category?.Sales_Category as number,inventoryData,price + taxRate);
+       }
+
+       return {
+         Item_Number: itemNumber,
+         Description: inventoryData?.Description || null,
+         totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
+         totalOrders: Number(item.totalOrders || 0),
+         price,
+         priceWithTax: price + taxRate,
+         Tax_Rate: taxRate,
+         isDiscounted,
+         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+         prepaidTaxRate: prepaidTaxRate,
+         Inventory_OnHand: inventoryOnHand,
+         showDistributorImage: productImage?.isAllow ?? false,
+         distributorImage: productImage?.img_url || null,
+         masterImage: inventoryData?.UPCList?.[0]?.UPC_Number 
+           ? `${process.env.AZUREIMAGESERVER}${inventoryData.UPCList[0].UPC_Number}.jpg`
+           : null,
+         SalesCategory: inventoryData?.SalesCategory?.Category_Desc || null,
+         PriceClass: inventoryData?.PriceClass?.Class_Desc || null,
+         Pack: inventoryData?.Pack || null,
+         CaseCount: inventoryData?.CaseCount || null,
+         UOM: inventoryData?.UOM || null,
+         source: item.source // 'customer', 'overall', or 'profit'
+       };
+     })
+   );
+
+   return enrichedItems;
+ }
+
+ async getCustomerLastBalance(customerNumber: number) {
+  const lastBalance = await Customer.findOne({
+    attributes: ['LastBalance'],
+    where: {
+      C_Number: customerNumber
+    }
+  });
+  return lastBalance
+ }
+ 
 
 }

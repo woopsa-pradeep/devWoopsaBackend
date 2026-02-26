@@ -1,5 +1,5 @@
-import { Model, DataTypes, Optional } from 'sequelize';
-import { postgresSequelize } from '../../db';
+import { Model, DataTypes, Optional } from "sequelize";
+import { postgresSequelize } from "../../db";
 
 export interface IInvoiceTemplate {
   id: number;
@@ -24,7 +24,19 @@ export interface IInvoiceTemplate {
     pack?: boolean;
     size?: boolean;
     deposit?: boolean;
+
+    // NEW FIELDS
+    unitPrice?: boolean;
+    prepaidTaxAmount?: boolean;
+    totalPPD?: boolean;
+    priceWithTaxWithPPD?: boolean;
+    priceWithTaxWithoutPPD?: boolean;
+    extendedTotal?: boolean;
   };
+
+  columnHeaderNames: Record<string, any>;
+  columnPlacement: string;
+  columnOrder: Record<string, any>;
 
   upcOption: string;
 
@@ -56,8 +68,17 @@ export interface IInvoiceTemplate {
   showSubTotal: boolean;
   showDeliveryCharge: boolean;
   showDeposit: boolean;
+
+  showHouseCharge: boolean;
+  showPosCheck: boolean;
+  showPosCash: boolean;
+  showPosCredit: boolean;
+  showInvoiceTotal: boolean;
+
   showLastBalance: boolean;
   showTotalAmountDue: boolean;
+
+  footerSummaryLabels: Record<string, any>;
 
   showReportGeneratedByWoopsa: boolean;
 
@@ -67,36 +88,28 @@ export interface IInvoiceTemplate {
 
 type InvoiceTemplateCreationAttributes = Optional<
   IInvoiceTemplate,
-  'id' | 'createdAt' | 'updatedAt'
+  "id" | "createdAt" | "updatedAt"
+>;
+
+export type UpdateInvoiceTemplateDTO = Omit<
+  Partial<IInvoiceTemplate>,
+  "id" | "createdAt" | "updatedAt"
 >;
 
 export class InvoiceTemplate
   extends Model<IInvoiceTemplate, InvoiceTemplateCreationAttributes>
-  implements IInvoiceTemplate
-{
+  implements IInvoiceTemplate {
   public id!: number;
   public name!: string;
   public mainTemplate!: boolean;
   public groupBy!: string;
   public showGroupHeader!: boolean;
 
-  public selectedColumns!: {
-    orderQty?: boolean;
-    shippedQty?: boolean;
-    description?: boolean;
-    itemNumber?: boolean;
-    sortNumber?: boolean;
-    upc?: boolean;
-    price?: boolean;
-    tax?: boolean;
-    priceWithTax?: boolean;
-    totalPrice?: boolean;
-    retail1?: boolean;
-    ebt?: boolean;
-    pack?: boolean;
-    size?: boolean;
-    deposit?: boolean;
-  };
+  public selectedColumns!: IInvoiceTemplate["selectedColumns"];
+
+  public columnHeaderNames!: Record<string, any>;
+  public columnPlacement!: string;
+  public columnOrder!: Record<string, any>;
 
   public upcOption!: string;
 
@@ -128,8 +141,17 @@ export class InvoiceTemplate
   public showSubTotal!: boolean;
   public showDeliveryCharge!: boolean;
   public showDeposit!: boolean;
+
+  public showHouseCharge!: boolean;
+  public showPosCheck!: boolean;
+  public showPosCash!: boolean;
+  public showPosCredit!: boolean;
+  public showInvoiceTotal!: boolean;
+
   public showLastBalance!: boolean;
   public showTotalAmountDue!: boolean;
+
+  public footerSummaryLabels!: Record<string, any>;
 
   public showReportGeneratedByWoopsa!: boolean;
 
@@ -159,7 +181,7 @@ InvoiceTemplate.init(
     groupBy: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: '',
+      defaultValue: "",
     },
 
     showGroupHeader: {
@@ -187,13 +209,38 @@ InvoiceTemplate.init(
         pack: false,
         size: false,
         deposit: false,
+
+        unitPrice: false,
+        prepaidTaxAmount: false,
+        totalPPD: false,
+        priceWithTaxWithPPD: false,
+        priceWithTaxWithoutPPD: false,
+        extendedTotal: false,
       },
+    },
+
+    columnHeaderNames: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {},
+    },
+
+    columnPlacement: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "default",
+    },
+
+    columnOrder: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {},
     },
 
     upcOption: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: 'barcode_primary',
+      defaultValue: "barcode_primary",
     },
 
     showDistributorDetails: {
@@ -265,7 +312,7 @@ InvoiceTemplate.init(
     logoPosition: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: 'center',
+      defaultValue: "center",
     },
 
     showTerms: {
@@ -277,7 +324,7 @@ InvoiceTemplate.init(
     headerOnPages: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: 'all',
+      defaultValue: "all",
     },
 
     showHeaderMessage: {
@@ -287,15 +334,15 @@ InvoiceTemplate.init(
     },
 
     headerMessageFirstPage: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: false,
-      defaultValue: '',
+      defaultValue: "",
     },
 
     footerLayout: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: 'messageLeft',
+      defaultValue: "messageLeft",
     },
 
     showFooterMessage: {
@@ -305,9 +352,9 @@ InvoiceTemplate.init(
     },
 
     footerMessageLastPage: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: false,
-      defaultValue: '',
+      defaultValue: "",
     },
 
     showSubTotal: {
@@ -328,6 +375,36 @@ InvoiceTemplate.init(
       defaultValue: true,
     },
 
+    showHouseCharge: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
+    showPosCheck: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
+    showPosCash: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
+    showPosCredit: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
+    showInvoiceTotal: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+
     showLastBalance: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -340,6 +417,12 @@ InvoiceTemplate.init(
       defaultValue: true,
     },
 
+    footerSummaryLabels: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {},
+    },
+
     showReportGeneratedByWoopsa: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -348,8 +431,8 @@ InvoiceTemplate.init(
   },
   {
     sequelize: postgresSequelize,
-    tableName: 'invoiceTemplates',
-    modelName: 'InvoiceTemplate',
+    tableName: "invoiceTemplates",
+    modelName: "InvoiceTemplate",
     timestamps: true,
   }
 );

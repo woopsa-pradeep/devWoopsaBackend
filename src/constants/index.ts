@@ -129,6 +129,13 @@ export const Manager = {
   RETAILER_LOCATION_FETCHED_SUCCESSFULLY: "Retailer location fetched successfully",
   RETAILER_LOCATION_LIST_FETCHED_SUCCESSFULLY: "Retailer location list fetched successfully",
   RETAILER_LOCATION_NOT_FOUND: "Retailer location not found",
+  // ProductDiscount messages
+  PRODUCT_DISCOUNT_CREATED_SUCCESSFULLY: "Product discount created successfully",
+  PRODUCT_DISCOUNT_UPDATED_SUCCESSFULLY: "Product discount updated successfully",
+  PRODUCT_DISCOUNT_DELETED_SUCCESSFULLY: "Product discount deleted successfully",
+  PRODUCT_DISCOUNT_FETCHED_SUCCESSFULLY: "Product discount fetched successfully",
+  PRODUCT_DISCOUNT_LIST_FETCHED_SUCCESSFULLY: "Product discount list fetched successfully",
+  PRODUCT_DISCOUNT_NOT_FOUND: "Product discount not found",
 }
 
 export const AuthMessage = {

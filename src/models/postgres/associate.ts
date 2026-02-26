@@ -31,207 +31,205 @@ import { TradeShow } from './tradeShow.model';
 import { TradeShowOrderHistory } from './tradeShowOrderHistory.model';
 import { EmailModule } from './emailModules.model';
 import { EmailModuleConfig } from './emailModuleConfig.model';
-// import  InventoryStatus  from '../mmsql/inventoryStatus.model'; 
 
 export function applyAssociations(): void {
 
 
 
-Retailer.hasMany(RetailerDevice, { foreignKey: 'customerNumber', sourceKey: 'Customer_Number' });
-RetailerDevice.belongsTo(Retailer, { foreignKey: 'customerNumber', targetKey: 'Customer_Number' });
-// Retailer.hasMany(Token, { foreignKey: 'retailerId' });
-// Token.belongsTo(Retailer, { foreignKey: 'retailerId' });
-
-WebUsers.hasMany(RolePermission, {
-  foreignKey: 'userId',
-  as: 'permissions',
-
-});
-
-// Role permission belongs to one user
-RolePermission.belongsTo(WebUsers, {
-  foreignKey: 'userId',
-  as: 'user',
-});
-Story.hasMany(StoryView, {
-  foreignKey: 'storyId',
-  as: 'views',
-});
-
-StoryView.belongsTo(Story, {
-  foreignKey: 'storyId',
-  as: 'story'
-});
+  Retailer.hasMany(RetailerDevice, { foreignKey: 'customerNumber', sourceKey: 'Customer_Number' });
+  RetailerDevice.belongsTo(Retailer, { foreignKey: 'customerNumber', targetKey: 'Customer_Number' });
 
 
-// order-pick.model.ts
-OrderPick.hasMany(OrderPickBox, {
-  foreignKey: 'orderNumber',
-  sourceKey: 'orderNumber',   
-  as: 'boxes'
-});
+  WebUsers.hasMany(RolePermission, {
+    foreignKey: 'userId',
+    as: 'permissions',
+
+  });
+
+  // Role permission belongs to one user
+  RolePermission.belongsTo(WebUsers, {
+    foreignKey: 'userId',
+    as: 'user',
+  });
+  Story.hasMany(StoryView, {
+    foreignKey: 'storyId',
+    as: 'views',
+  });
+
+  StoryView.belongsTo(Story, {
+    foreignKey: 'storyId',
+    as: 'story'
+  });
 
 
-
-OrderConfirmation.belongsTo(WebUsers, {
-  foreignKey: 'sales_id',
-  as: 'sales',       // ← use 'sales' consistently
-});
-
-WebUsers.hasMany(OrderConfirmation, {
-  foreignKey: 'sales_id',
-  as: 'salesOrders', // any name you like for reverse
-});
+  // order-pick.model.ts
+  OrderPick.hasMany(OrderPickBox, {
+    foreignKey: 'orderNumber',
+    sourceKey: 'orderNumber',
+    as: 'boxes'
+  });
 
 
 
-OrderPickBox.belongsTo(OrderPick, {
-  foreignKey: 'orderNumber',
-  targetKey: 'orderNumber',
-  as: 'order'
-});
+  OrderConfirmation.belongsTo(WebUsers, {
+    foreignKey: 'sales_id',
+    as: 'sales',       // ← use 'sales' consistently
+  });
 
-OrderPickBox.hasMany(OrderPickScan, {
-  as: 'scans',
-  foreignKey: 'boxId'
-});
-
-OrderPickScan.belongsTo(OrderPickBox, {
-  as: 'box',
-  foreignKey: 'boxId',
-});
-
- 
-OrderPick.hasMany(OrderPickScan, {
-  as: 'scans',
-  foreignKey: 'orderNumber',
-  sourceKey: 'orderNumber',
-});
-
-OrderPickScan.belongsTo(OrderPick, {
-  as: 'order',
-  foreignKey: 'orderNumber',
-  targetKey: 'orderNumber',
-});
-
-// OverrideRequest associations
-EpickUser.hasMany(OverrideRequest, {
-  foreignKey: 'pickerUserId',
-  as: 'overrideRequests',
-});
-
-OverrideRequest.belongsTo(EpickUser, {
-  foreignKey: 'pickerUserId',
-  as: 'user',
-});
-
-// EpickConfirmation associations
-EpickConfirmation.belongsTo(EpickUser, {
-  foreignKey: 'pickerUserNumber',
-  as: 'picker',
-});
-
-EpickUser.hasMany(EpickConfirmation, {
-  foreignKey: 'pickerUserNumber',
-  as: 'confirmations',
-
-});
+  WebUsers.hasMany(OrderConfirmation, {
+    foreignKey: 'sales_id',
+    as: 'salesOrders', // any name you like for reverse
+  });
 
 
 
-DeliveryRoute.hasMany(DeliveryRouteStop, {
-  foreignKey: 'routeId',
-  as: 'stops',
-});
+  OrderPickBox.belongsTo(OrderPick, {
+    foreignKey: 'orderNumber',
+    targetKey: 'orderNumber',
+    as: 'order'
+  });
 
-DeliveryRouteStop.belongsTo(DeliveryRoute, {
-  foreignKey: 'routeId',
-  as: 'route',
-});
+  OrderPickBox.hasMany(OrderPickScan, {
+    as: 'scans',
+    foreignKey: 'boxId'
+  });
 
-// TradeShow associations
-TradeShow.hasMany(TradeShowItem, {
-  foreignKey: 'tradeShowId',
-  as: 'items',
-});
-
-TradeShowItem.belongsTo(TradeShow, {
-  foreignKey: 'tradeShowId',
-  as: 'tradeShow',
-});
-
-TradeShow.hasMany(TradeShowRetailer, {
-  foreignKey: 'tradeShowId',
-  as: 'retailers',
-});
-
-TradeShowRetailer.belongsTo(TradeShow, {
-  foreignKey: 'tradeShowId',
-  as: 'tradeShow',
-});
-
-TradeShow.hasMany(TradeShowVendor, {
-  foreignKey: 'tradeShowId',
-  as: 'vendors',
-});
-
-TradeShowVendor.belongsTo(TradeShow, {
-  foreignKey: 'tradeShowId',
-  as: 'tradeShow',
-});
-
-TradeShow.hasMany(TradeShowDeliveryProduct, {
-  foreignKey: 'tradeShowId',
-  as: 'deliveryProducts',
-});
-
-TradeShowDeliveryProduct.belongsTo(TradeShow, {
-  foreignKey: 'tradeShowId',
-  as: 'tradeShow',
-});
+  OrderPickScan.belongsTo(OrderPickBox, {
+    as: 'box',
+    foreignKey: 'boxId',
+  });
 
 
-TradeShowDeliveryProduct.belongsTo(TradeShowItem, {
-  as: "item",
-  foreignKey: "itemNumber",   // column in tradeShowDeliveryProducts
-  targetKey: "itemNumber",    // column in tradeShowItems
-  constraints: false,
-});
+  OrderPick.hasMany(OrderPickScan, {
+    as: 'scans',
+    foreignKey: 'orderNumber',
+    sourceKey: 'orderNumber',
+  });
+
+  OrderPickScan.belongsTo(OrderPick, {
+    as: 'order',
+    foreignKey: 'orderNumber',
+    targetKey: 'orderNumber',
+  });
+
+  // OverrideRequest associations
+  EpickUser.hasMany(OverrideRequest, {
+    foreignKey: 'pickerUserId',
+    as: 'overrideRequests',
+  });
+
+  OverrideRequest.belongsTo(EpickUser, {
+    foreignKey: 'pickerUserId',
+    as: 'user',
+  });
+
+  // EpickConfirmation associations
+  EpickConfirmation.belongsTo(EpickUser, {
+    foreignKey: 'pickerUserNumber',
+    as: 'picker',
+  });
+
+  EpickUser.hasMany(EpickConfirmation, {
+    foreignKey: 'pickerUserNumber',
+    as: 'confirmations',
+
+  });
 
 
-TradeShowItem.hasMany(TradeShowDeliveryProduct, {
-  foreignKey: 'itemNumber',
-  sourceKey: 'itemNumber',
-  as: 'deliveryProducts',
-  constraints: false, 
-});
 
-// TradeShowOrderHistory associations
-TradeShow.hasMany(TradeShowOrderHistory, {
-  foreignKey: 'tradeShowId',
-  as: 'orderHistories',
-});
+  DeliveryRoute.hasMany(DeliveryRouteStop, {
+    foreignKey: 'routeId',
+    as: 'stops',
+  });
 
-TradeShowOrderHistory.belongsTo(TradeShow, {
-  foreignKey: 'tradeShowId',
-  as: 'tradeShow',
-});
+  DeliveryRouteStop.belongsTo(DeliveryRoute, {
+    foreignKey: 'routeId',
+    as: 'route',
+  });
 
-// EmailModule associations
-EmailModule.hasMany(EmailModuleConfig, {
-  foreignKey: 'emailModuleId',
-  as: 'configs',
-});
+  // TradeShow associations
+  TradeShow.hasMany(TradeShowItem, {
+    foreignKey: 'tradeShowId',
+    as: 'items',
+  });
 
-EmailModuleConfig.belongsTo(EmailModule, {
-  foreignKey: 'emailModuleId',
-  as: 'emailModule',
-});
+  TradeShowItem.belongsTo(TradeShow, {
+    foreignKey: 'tradeShowId',
+    as: 'tradeShow',
+  });
 
-// Inventory.belongsTo(InventoryStatus, {
-//   foreignKey: 'Item_Number',
-//   as: 'inventoryStatus'
-// });
+  TradeShow.hasMany(TradeShowRetailer, {
+    foreignKey: 'tradeShowId',
+    as: 'retailers',
+  });
+
+  TradeShowRetailer.belongsTo(TradeShow, {
+    foreignKey: 'tradeShowId',
+    as: 'tradeShow',
+  });
+
+  TradeShow.hasMany(TradeShowVendor, {
+    foreignKey: 'tradeShowId',
+    as: 'vendors',
+  });
+
+  TradeShowVendor.belongsTo(TradeShow, {
+    foreignKey: 'tradeShowId',
+    as: 'tradeShow',
+  });
+
+  TradeShow.hasMany(TradeShowDeliveryProduct, {
+    foreignKey: 'tradeShowId',
+    as: 'deliveryProducts',
+  });
+
+  TradeShowDeliveryProduct.belongsTo(TradeShow, {
+    foreignKey: 'tradeShowId',
+    as: 'tradeShow',
+  });
+
+
+  TradeShowDeliveryProduct.belongsTo(TradeShowItem, {
+    as: "item",
+    foreignKey: "itemNumber",   // column in tradeShowDeliveryProducts
+    targetKey: "itemNumber",    // column in tradeShowItems
+    constraints: false,
+  });
+
+
+  TradeShowItem.hasMany(TradeShowDeliveryProduct, {
+    foreignKey: 'itemNumber',
+    sourceKey: 'itemNumber',
+    as: 'deliveryProducts',
+    constraints: false,
+  });
+
+  // TradeShowOrderHistory associations
+  TradeShow.hasMany(TradeShowOrderHistory, {
+    foreignKey: 'tradeShowId',
+    as: 'orderHistories',
+  });
+
+  TradeShowOrderHistory.belongsTo(TradeShow, {
+    foreignKey: 'tradeShowId',
+    as: 'tradeShow',
+  });
+
+  // EmailModule associations
+  EmailModule.hasMany(EmailModuleConfig, {
+    foreignKey: 'emailModuleId',
+    as: 'configs',
+  });
+
+  EmailModuleConfig.belongsTo(EmailModule, {
+    foreignKey: 'emailModuleId',
+    as: 'emailModule',
+  });
+
+  // Inventory.belongsTo(InventoryStatus, {
+  //   foreignKey: 'Item_Number',
+  //   as: 'inventoryStatus'
+  // });
 
 
 

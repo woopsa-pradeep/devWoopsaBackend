@@ -4,7 +4,7 @@ import path from "path";
 
 const allowedExtensions = [
   // Images
-  ".jpg", ".jpeg", ".png", ".gif", ".svg",
+  ".jpg", ".jpeg", ".png", ".gif", ".svg", ".avif",
   // Documents
   ".pdf", ".doc", ".docx", ".txt", ".rtf",
   // Videos

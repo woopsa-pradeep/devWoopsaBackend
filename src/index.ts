@@ -51,75 +51,75 @@ createBullBoard({
 
 app.use('/admin/queues', serverAdapter.getRouter());
 
-app.get('/',(async(req:Request,res:Response)=>{
-  const data = await getPrepaidTaxRate(1,1);
-  console.log(data,'the data')
-  res.json({data});
+app.get('/', (async (req: Request, res: Response) => {
+  const data = await getPrepaidTaxRate(1, 1, { Cig_Pack: 20, Cig_Sticks: 200 }, 100);
+  console.log(data, 'the data')
+  res.json({ data });
 }))
 
 
-app.get('/checkServerDate',(async(req:Request,res:Response)=>{
+app.get('/checkServerDate', (async (req: Request, res: Response) => {
   const now = moment();
   const today = now.format('YYYY-MM-DD'); // current date
   const currentTime = now.format('HH:mm:ss'); // current time
   const fiveMinutesLater = now.add(5, 'minutes').format('HH:mm:ss'); // current + 5 minutes
 
-  res.json({today,currentTime,fiveMinutesLater});
+  res.json({ today, currentTime, fiveMinutesLater });
 }))
-app.post('/checkUrl',(req:Request,res:Response)=>{
+app.post('/checkUrl', (req: Request, res: Response) => {
   console.log(req.body)
-  const {url} = req.body;
-   if(url === process.env.SERVER_URL){
-    res.status(200).json({message:'Url is valid'});
-   }else{
-    res.status(400).json({message:'Url is not valid'});
-   }
+  const { url } = req.body;
+  if (url === process.env.SERVER_URL) {
+    res.status(200).json({ message: 'Url is valid' });
+  } else {
+    res.status(400).json({ message: 'Url is not valid' });
+  }
 })
 
-app.get('/testPrepaidTaxRate',(async(req:Request,res:Response)=>{
-  const data = await getPrepaidTaxRate(1,1);
-  console.log(data,'the data')
-  res.json({data});
+app.get('/testPrepaidTaxRate', (async (req: Request, res: Response) => {
+  const data = await getPrepaidTaxRate(1, 1, { Cig_Pack: 20, Cig_Sticks: 200 }, 100);
+  console.log(data, 'the data')
+  res.json({ data });
 }))
 
 app.use('/api', router);
 
-app.get('/testPrice',(async(req:Request,res:Response)=>{
-  const data = await getDiscount(1016 ,11187);
-  res.json({data});
+app.get('/testPrice', (async (req: Request, res: Response) => {
+  const data = await getDiscount(1016, 11187);
+  res.json({ data });
 }))
 
 
 
 
-app.get('/testInventory',(async(req:Request,res:Response)=>{
+app.get('/testInventory', (async (req: Request, res: Response) => {
   const date = moment().format('YYYY-MM-DD');
 
   const currentOrderInventory = await OrderHeader.findAll({
-    where:{
+    where: {
       Order_Updated: false,
       Order_Date: date
     }
   })
-  res.json({currentOrderInventory});
+  res.json({ currentOrderInventory });
 }))
 
-app.get('/testSalesCategory',(async(req:Request,res:Response)=>{
+app.get('/testSalesCategory', (async (req: Request, res: Response) => {
   const data = await getAllowedSalesCategories(5000);
-  res.json({data});
+  res.json({ data });
 }))
 
 
 
 
-app.get('/testVendor',(async(req:Request,res:Response)=>{
-  
+app.get('/testVendor', (async (req: Request, res: Response) => {
+
   const data = await getNextVendorNumber();
-  res.json({data});
+  res.json({ data });
 }))
 
-app.get('/test',(async(req:Request,res:Response)=>{
-  res.json({message:'Hello World'});
+app.get('/test', (async (req: Request, res: Response) => {
+  res.json({ message: 'Hello World' });
 }))
 
 // console.log(process.env.CI,'the ci')
@@ -135,12 +135,12 @@ async function safeMssqlSync() {
       model.tableName !== 'discoutViews' && model.tableName !== 'GetDiscount' &&
       model.tableName !== 'Order_Header' && model.tableName !== 'Order_Detail'
   );
-  
+
 
   for (const model of modelsToSync) {
     let retryCount = 0;
     const maxRetries = 3;
-    
+
     while (retryCount < maxRetries) {
       try {
         console.log(`🔄 Syncing MSSQL model: ${model.tableName} (attempt ${retryCount + 1})`);
@@ -149,20 +149,20 @@ async function safeMssqlSync() {
         break; // Success, exit retry loop
       } catch (err: any) {
         retryCount++;
-        
+
         // Check if it's a deadlock error
         if (err.code === 'EREQUEST' && err.number === 1205) {
           console.warn(`⚠️ Deadlock detected for ${model.tableName}, retrying... (${retryCount}/${maxRetries})`);
-          
+
           if (retryCount < maxRetries) {
             // Wait before retrying (exponential backoff)
             await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
             continue;
           }
         }
-        
+
         // If it's not a deadlock or we've exhausted retries
-        console.log(err,'the err')
+        console.log(err, 'the err')
         console.warn(`⚠️ Failed to sync ${model.tableName}: ${err.message}`);
         break;
       }
@@ -194,7 +194,7 @@ testConnections()
     console.log('✅ Policies seeded');
     await seedEmailModules();
     await seedInvoiceTemplates();
-    app.listen(Number(PORT),'localhost', () => {
+    app.listen(Number(PORT), 'localhost', () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
       console.log(`📊 Dual database setup: MSSQL + PostgreSQL`);
       console.log(`📧 Redis Queue UI available at http://localhost:${PORT}/admin/queues`);
