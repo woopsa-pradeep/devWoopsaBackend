@@ -14459,7 +14459,17 @@ const customerInvoice = await CustomerAssignInvoiceTemplate.findAll({
   }
 });
 
-return customerInvoice;
+const finalCustomer = Promise.all(customerInvoice.map(async (customer) => {
+  const customerData = await Customer.findOne({
+    attributes: ['C_Number', 'C_Name'],
+    where: {
+      C_Number: customer.customerNumber,
+    }
+  });
+  return customerData;
+}));
+
+return finalCustomer;
 
 }
 
@@ -14732,8 +14742,25 @@ return customerInvoice;
       order: [['id', 'DESC']],
     });
 
+    console.log(productDiscounts, 'productDiscounts')
+    // Fix: await Promise.all, actually get the data before returning
+    const finalProductDiscounts = await Promise.all(productDiscounts.map(async (productDiscount) => {
+
+      let productTemp =  productDiscount.dataValues;
+      const productData = await Inventory.findOne({
+        attributes: ['Item_Number', 'Description'],
+        where: {
+          Item_Number: Number(productTemp.ItemNumber),
+        }
+      });
+      return {
+        ...productTemp,
+        productData: productData,
+      };
+    }));
+
     return {
-      data: productDiscounts,
+      data: finalProductDiscounts,
       pagination: {
         page,
         limit,

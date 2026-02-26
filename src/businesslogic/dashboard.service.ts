@@ -1945,8 +1945,8 @@ export class DashboardService {
                     required: true
                 }
             ],
-            // order: [['Start_Date', 'DESC']],
-            order: [['Description', 'ASC']]
+            order: [['Start_Date', 'DESC']],
+            // order: [['Description', 'ASC']]
 
         });
 
