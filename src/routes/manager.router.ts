@@ -233,7 +233,7 @@ router.get('/invoice-templates/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), cat
 router.put('/invoice-templates/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(updateInvoiceTemplateSchema), catchAsync(managerController.updateInvoiceTemplate.bind(managerController)));
 router.delete('/invoice-templates/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.deleteInvoiceTemplate.bind(managerController)));
 router.get('/customer-invoice-template/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerInvoiceTemplate.bind(managerController)));
-
+router.get('/customer-by-invoice-id/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerByInvoiceId.bind(managerController)));
 // Customer List for Trade Show routes
 router.post('/customer-list-for-trade-show', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerListForTradeShow.bind(managerController)));
 
