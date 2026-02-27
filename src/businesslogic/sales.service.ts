@@ -2689,7 +2689,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
   async setSalesSession(userId: number, customerId: number) {
     const isSessionActive = await SalesSession.findOne({ where: { userId: userId } });
     let storeDetail: any = null;
-    let userData = await WebUsers.findOne({
+    let userData  :any= await WebUsers.findOne({
       where: { id: userId },
       attributes: ['setUserDiscountLimit', 'allowDiscount']
     });
@@ -2720,8 +2720,9 @@ console.log(findTheLimit, 'findTheLimit-->22')
     if (isTradeShow) {
       showTradeShow = true;
     }
-    store.dataValues.userData = userData?.dataValues || null;
     store.dataValues.showTradeShow = showTradeShow;
+    store.dataValues.discountLimit = userData?.dataValues?.setUserDiscountLimit || 0;
+    store.dataValues.allowDiscount = userData?.dataValues?.allowDiscount || false;
     console.log(store, 'strore -->')
     return store
   }
