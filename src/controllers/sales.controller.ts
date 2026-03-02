@@ -59,7 +59,7 @@ export class SalesController {
     }
 
     async getTradeShowCartItems(req: AuthRequest, res: Response) {
-        const data = await this.salesService.getTradeShowCartItems(Number(req.params.customerId),Number(req.query.tradeShowId));
+        const data = await this.salesService.getTradeShowCartItems(Number(req.params.customerId), Number(req.query.tradeShowId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -75,7 +75,7 @@ export class SalesController {
         const data = await this.salesService.getReturnCartItemsByType(Number(req.params.customerId), req.query.type as string);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
-    
+
     async getInventoryItems(req: AuthRequest, res: Response) {
         const data = await this.salesService.getInventoryItems(req.body as PaginationOptions & { search?: string, masterSearch?: string }, Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -88,9 +88,9 @@ export class SalesController {
     }
 
     async getInventoryShowPrepaidTax(req: AuthRequest, res: Response) {
-      const data = await this.salesService.getInventoryShowPrepaidTax(req.user);
+        const data = await this.salesService.getInventoryShowPrepaidTax(req.user);
         sendResponse(res, 200, true, data, General.SUCCESS);
-      }
+    }
 
 
     async getInventoryItemsBySalesMan(req: AuthRequest, res: Response) {
@@ -170,7 +170,7 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
-    
+
     async addToReturnCart(req: AuthRequest, res: Response) {
 
         const cartData = {
@@ -284,26 +284,26 @@ export class SalesController {
     }
 
     async addMultipleItems(req: AuthRequest, res: Response) {
-      try {
-        const data = await this.salesService.addMultipleItems(Number(req.params.customerId), req.body);
-        sendResponse(res, 200, true, data, "Items added successfully");
-      } catch (error: any) {
-        sendResponse(res, 500, false, null, error.message || "Something went wrong");
-      }
+        try {
+            const data = await this.salesService.addMultipleItems(Number(req.params.customerId), req.body);
+            sendResponse(res, 200, true, data, "Items added successfully");
+        } catch (error: any) {
+            sendResponse(res, 500, false, null, error.message || "Something went wrong");
+        }
     }
- 
+
     async addToCartMultiScanner(req: AuthRequest, res: Response) {
         const data = await this.salesService.addToCartMultiScanner(req.body, Number(req.params.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
     async getCustomerByIdInfoInCalender(req: AuthRequest, res: Response) {
-        const data = await this.salesService.getCustomerByIdInfoInCalender(Number(req.params.customerId),Number(req.user.id));
+        const data = await this.salesService.getCustomerByIdInfoInCalender(Number(req.params.customerId), Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
 
     async getCustomerCalenderList(req: AuthRequest, res: Response) {
-        console.log(req.user.id,'the sales id')
+        console.log(req.user.id, 'the sales id')
         const data = await this.salesService.getCustomerCalenderList(Number(req.user.id));
         sendResponse(res, 200, true, data, General.SUCCESS);
 
@@ -325,11 +325,11 @@ export class SalesController {
     }
 
     async getPdfOfOrderDetails(req: AuthRequest, res: Response) {
-        const { orderNumber, hasPrice, orientation,invoiceGenerated } = req.query;
+        const { orderNumber, hasPrice, orientation, invoiceGenerated } = req.query;
         if (!orderNumber) {
             return sendResponse(res, 400, false, null, "Order number is required");
         }
-         const result = await this.salesService.getPdfOfOrderDetails({
+        const result = await this.salesService.getPdfOfOrderDetails({
             orderNumber: Number(orderNumber),
             hasPrice: hasPrice === 'true',
             orientation: (orientation as 'portrait' | 'landscape') || 'landscape',
@@ -350,7 +350,7 @@ export class SalesController {
 
     // SalesCallTime methods
     async createSalesCallTime(req: AuthRequest, res: Response) {
-        const data = await this.salesService.createSalesCallTime(req.body,req.user.id);
+        const data = await this.salesService.createSalesCallTime(req.body, req.user.id);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -372,7 +372,7 @@ export class SalesController {
 
     async getAllSalesNotes(req: AuthRequest, res: Response) {
         const data = await this.salesService.getAllSalesNotes(
-            Number(req.params.customerId), 
+            Number(req.params.customerId),
             req.query as PaginationOptions & { search?: string }
         );
         sendResponse(res, 200, true, data, General.SUCCESS);
@@ -414,7 +414,7 @@ export class SalesController {
 
 
     async getItemForUpc(req: AuthRequest, res: Response) {
-        const data = await this.salesService.getItemForUpc(req.body );
+        const data = await this.salesService.getItemForUpc(req.body);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -494,13 +494,13 @@ export class SalesController {
     }
 
     async getSalesCategoryPriceClassByCustomer(req: AuthRequest, res: Response) {
-        const customerNumber = req.params.customerNumber ;
+        const customerNumber = req.params.customerNumber;
         const data = await this.salesService.getSalesCategoryPriceClassByCustomer(Number(customerNumber));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
     async getSalesCategoryByCustomer(req: AuthRequest, res: Response) {
-        const customerNumber = req.params.customerNumber ;
+        const customerNumber = req.params.customerNumber;
         const data = await this.salesService.getSalesCategoryByCustomer(Number(customerNumber));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
@@ -511,7 +511,7 @@ export class SalesController {
     }
 
     async placeOrderForCustomer(req: AuthRequest, res: Response) {
-        const data = await this.salesService.placeOrderForCustomer(req.body,  Number(req.params.customerId));
+        const data = await this.salesService.placeOrderForCustomer(req.body, Number(req.params.customerId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
@@ -529,6 +529,12 @@ export class SalesController {
 
     async getTradeShow(req: AuthRequest, res: Response) {
         const data = await this.salesService.getTradeShow();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getCustomerLastBalance(req: AuthRequest, res: Response) {
+        const { customerNumber } = req.params;
+        const data = await this.salesService.getCustomerLastBalance(Number(customerNumber));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 }

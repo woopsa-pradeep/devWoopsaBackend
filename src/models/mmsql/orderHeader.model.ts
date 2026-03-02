@@ -124,6 +124,25 @@ OrderHeader.init(
     EpickCompletedOn: { type: DataTypes.DATE, allowNull: true },
     OrderedOn: { type: DataTypes.DATE, allowNull: true },
     Order_Source: { type: DataTypes.INTEGER, allowNull: true },
+
+    Disc_Type: {
+      type: DataTypes.STRING(15),   // nvarchar(1)
+      allowNull: true,
+    },
+
+    Disc_Per: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true,
+    },
+
+    Disc_Amt: {
+      type: DataTypes.DECIMAL(18, 2),
+      allowNull: true,
+    },
+
+
+
+  
     // deliverd: { type: DataTypes.BOOLEAN },
     // Delivered: { type: DataTypes.BOOLEAN },
   },

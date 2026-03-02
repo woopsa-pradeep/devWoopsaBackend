@@ -193,6 +193,11 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getPickRightAreasForEpick(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPickRightAreasForEpick();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async getEpickReports(req: AuthRequest, res: Response) {
     const userId = req.query.userId ? Number(req.query.userId) : null;
     if (userId && isNaN(userId)) {
@@ -2062,5 +2067,16 @@ export class ManagerController {
     const data = await this.managerService.getCustomerPrepaidSalesTax(req.query);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
+
+  async getDeletedOrders(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getDeletedOrders(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getLostSaleCurrentOrders(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getLostSaleCurrentOrders();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
 
 }

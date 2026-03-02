@@ -760,6 +760,121 @@ export function generateSupportTicketEmail(
     </html>
   `;
 }
+
+/**
+ * Customer balance reminder email
+ * Shows the customer's pending LastBalance amount.
+ */
+export function generateCustomerBalanceEmail(
+  customerName: string,
+  balance: number
+): string {
+  const formattedBalance = balance.toFixed(2);
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Pending Balance Reminder</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          background-color: #f5f7fb;
+          margin: 0;
+          padding: 20px;
+          color: #333;
+        }
+        .container {
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #ffffff;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+          overflow: hidden;
+        }
+        .header {
+          background: linear-gradient(135deg, #3C7795 0%, #2a5a6e 100%);
+          color: #ffffff;
+          padding: 20px 24px;
+          text-align: center;
+        }
+        .header h1 {
+          margin: 0;
+          font-size: 22px;
+          font-weight: 600;
+        }
+        .content {
+          padding: 24px;
+        }
+        .greeting {
+          font-size: 16px;
+          margin-bottom: 16px;
+        }
+        .message {
+          font-size: 14px;
+          line-height: 1.6;
+          margin-bottom: 24px;
+        }
+        .balance-card {
+          background-color: #f0f7fb;
+          border-radius: 8px;
+          padding: 16px 20px;
+          border: 1px solid #d0e4f2;
+          text-align: center;
+          margin-bottom: 24px;
+        }
+        .balance-label {
+          font-size: 13px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          color: #666;
+          margin-bottom: 6px;
+        }
+        .balance-value {
+          font-size: 24px;
+          font-weight: 700;
+          color: #3C7795;
+        }
+        .footer {
+          font-size: 12px;
+          color: #888;
+          padding: 16px 24px 20px;
+          border-top: 1px solid #eee;
+          text-align: center;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Pending Balance Reminder</h1>
+        </div>
+        <div class="content">
+          <p class="greeting">Dear ${customerName},</p>
+          <p class="message">
+            This is a friendly reminder that you have a pending balance on your account.
+            Please review the amount below and arrange payment at your earliest convenience.
+          </p>
+          <div class="balance-card">
+            <div class="balance-label">Pending Amount</div>
+            <div class="balance-value">$${formattedBalance}</div>
+          </div>
+          <p class="message">
+            If you have already made the payment, please disregard this message.
+            For any questions or clarifications, feel free to contact our accounts team.
+          </p>
+        </div>
+        <div class="footer">
+          <p>This is an automated email. Please do not reply directly to this message.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 export function generateSupportTicketForDistributor(
   supportTicketId: number,
   supportTicketSubject: string,

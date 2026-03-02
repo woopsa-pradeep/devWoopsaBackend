@@ -1336,15 +1336,7 @@ export async function getTaxRateV1(
   let item = await Inventory.findOne({
     where: {
       Item_Number: itemNumber
-    },
-    attributes: [
-      'Cig_Sticks',
-      'BaseCost',
-      'NetCost',
-      'Cig_Pack',
-      'Invoice_Cost',
-      'SpecialTaxUnits'
-    ]
+    }
   });
   item = item?.dataValues;
 
@@ -1355,11 +1347,11 @@ export async function getTaxRateV1(
 
   switch (value) {
     case 0: // $ Rate / Stick
-      taxAmount = rate
+      taxAmount = rate * (item?.Cig_Sticks || 0);
       break;
 
     case 1: // $ Rate / Ounce
-      taxAmount = rate  // replace NetCost with weight field if available
+      taxAmount = rate   * (item?.UnitOunces || 0); // replace NetCost with weight field if available
       break;
 
     case 2: // % Rate on Net Cost (0.10 = 10%)
@@ -1375,7 +1367,7 @@ export async function getTaxRateV1(
       break;
 
     case 6: // $ Rate / Pack
-      taxAmount = rate
+      taxAmount = rate * (item?.Cig_Pack || 0);
       break;
 
     case 7: // % Rate on MFG Inv Cost
@@ -1383,15 +1375,15 @@ export async function getTaxRateV1(
       break;
 
     case 8: // $ Rate / Ounce Rounded
-      taxAmount = Math.ceil(rate || 0);
+      taxAmount = Math.ceil(rate * (item?.UnitOunces || 0));
       break;
 
     case 9: // $ Rate / Special Tax Units
-      taxAmount = rate
+      taxAmount = rate * (item?.SpecialTaxUnits || 0);
       break;
 
     case 10: // $ Rate / 100 Sticks
-      taxAmount = rate
+      taxAmount = rate / 2
       break;
 
     case 11: // $ Rate / 200 Sticks

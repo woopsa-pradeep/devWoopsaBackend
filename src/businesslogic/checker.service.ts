@@ -767,6 +767,7 @@ export class CheckerService {
         requestId: req.id,
         orderNumber: req.orderNumber,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         itemDescription: inventoryMap.get(req.itemNumber) || null,
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
@@ -999,15 +1000,6 @@ export class CheckerService {
     // Get unique item numbers from ALL order items
     const itemNumbers = Array.from(new Set(orderDetails.map((d: any) => d.Item_Number)));
 
-    // Create order detail map: itemNumber -> { Quantity_Ordered, Quantity_Shipped }
-    const orderDetailMap: any = {};
-    orderDetails.forEach((detail: any) => {
-      orderDetailMap[detail.Item_Number] = {
-        qtyOrdered: Number(detail.Quantity_Ordered) || 0,
-        qtyShipped: Number(detail.Quantity_Shipped) || 0
-      };
-    });
-
     // Get Inventory details for all items
     const inventories = await Inventory.findAll({
       where: {
@@ -1068,14 +1060,12 @@ export class CheckerService {
         const itemScans = scanMap[itemNumber] || [];
         const firstScan = itemScans[0] || null;
 
-        // Use scan qty if scanned, otherwise use Quantity_Shipped from OrderDetail
-        const qtyShipped = firstScan ? (firstScan.qty || 0) : (orderDetailMap[itemNumber]?.qtyShipped || 0);
+        // Use this order line's quantities (same item can appear on multiple lines)
+        const qtyOrdered = Number(orderDetail.Quantity_Ordered) || 0;
+        const qtyShipped = Number(orderDetail.Quantity_Shipped) || 0;
 
         // Get box info if item was scanned
         const box = firstScan ? (boxMap[firstScan.boxId] || null) : null;
-
-        // Get order detail info
-        const detail = orderDetailMap[itemNumber] || { qtyOrdered: 0, qtyShipped: 0 };
 
         // Get inventory details
         const inventory = inventoryMap[itemNumber] || null;
@@ -1094,8 +1084,8 @@ export class CheckerService {
         return {
           orderNumber: orderNumber,
           itemNumber: itemNumber,
-          qtyOrdered: detail.qtyOrdered,
-          qtyShipped: qtyShipped,
+          qtyOrdered,
+          qtyShipped,
           isSubsitute: firstScan ? (firstScan.isSubsitute || false) : false,
           boxId: firstScan ? firstScan.boxId : null,
           boxType: box?.type || null,

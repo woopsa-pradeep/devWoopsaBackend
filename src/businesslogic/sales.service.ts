@@ -52,6 +52,7 @@ import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
 import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import TradeShowOrderHistory from "../models/postgres/tradeShowOrderHistory.model";
+import { getProductDiscountFromRedis } from "../utils/productDiscount.redis";
 
 export class SalesService {
 
@@ -521,7 +522,7 @@ export class SalesService {
       Route_Number: customerRoutes?.Route_Number || 0,
       Stop_Number: customerRoutes?.Stop_Number || 0,
       Delivery_ID: deliveryId,
-      Order_Type:7,
+      Order_Type: 7,
       User_ID: Number(req.user.userNumber),
       Reference: `USER-${req.user.userNumber}`,
       Invoice_Type: customer.C_InvoiceFormat || 0,
@@ -744,15 +745,15 @@ export class SalesService {
       console.log(error, 'error--> in sales discount')
     }
 
-try{
-  await TradeShowOrderHistory.create({
-    tradeShowId: tradeShowId || 0,
-    orderNumber: orderHeaderCreated.Order_Number,
-    orderDate: new Date(),
-  });
-}catch(error){
-  console.log(error, 'error--> in trade show order history')
-}
+    try {
+      await TradeShowOrderHistory.create({
+        tradeShowId: tradeShowId || 0,
+        orderNumber: orderHeaderCreated.Order_Number,
+        orderDate: new Date(),
+      });
+    } catch (error) {
+      console.log(error, 'error--> in trade show order history')
+    }
     return {
       orderHeader: orderHeaderCreated,
       orderDetails,
@@ -1262,7 +1263,7 @@ try{
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
-     if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+      if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
         whereClause.Sales_Category = { [Op.in]: salesCategory };
       }
 
@@ -1287,15 +1288,15 @@ try{
         } else {
           let globalSearch: any = await Setting.findOne({});
           globalSearch = globalSearch?.dataValues || null;
-      
+
           const term = search.toLowerCase().trim();
           const anywhere = `%${term}%`;
           const starts = `${term}%`;
-      
-           if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
-        whereClause.Sales_Category = { [Op.in]: [salesCategoryId,...salesCategory] };
-      }
-      
+
+          if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+            whereClause.Sales_Category = { [Op.in]: [salesCategoryId, ...salesCategory] };
+          }
+
           // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: anywhere }),
@@ -1303,39 +1304,39 @@ try{
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: anywhere }),
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: anywhere }),
           ];
-      
+
           // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
           const esc = (s: string) => s.replace(/'/g, "''");
-const startsEsc = esc(starts);
-const anywhereEsc = esc(anywhere);
-      console.log(globalSearch?.splitSearchOption, 'globalSearch?.globalSearchOption')
+          const startsEsc = esc(starts);
+          const anywhereEsc = esc(anywhere);
+          console.log(globalSearch?.splitSearchOption, 'globalSearch?.globalSearchOption')
           // If globalSearchOption = true => rank matches across all fields
-          if ( globalSearch?.splitSearchOption === true) {
+          if (globalSearch?.splitSearchOption === true) {
             const term = search.toLowerCase().trim();
             const tokens = term.split(/\s+/).filter(Boolean);
-          
+
             // remove the "full-term" OR, otherwise it kills split search results
             delete whereClause[Op.or];
-          
+
             // Each token must match the start of ANY word in ANY of these fields
             whereClause[Op.and] = tokens.map((tok) => {
               const startsWord = `${tok}%`;
               const insideWord = `% ${tok}%`;
-          
+
               return {
                 [Op.or]: [
                   // Description
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: insideWord }),
-          
+
                   // AltDesc
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: insideWord }),
-          
+
                   // ALT_Description2
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: insideWord }),
-          
+
                   // Item_Number (no spaces usually, but keep it)
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: insideWord }),
@@ -1343,49 +1344,49 @@ const anywhereEsc = esc(anywhere);
               };
             });
 
-       
 
-// build rank across ALL tokens (sum). lower total = better match.
-const rankSql = tokens
-  .map((tok) => {
-    const startsWord = `%${tok}%`;     // 'mar%'
-    const insideWord = `% ${tok}%`;   // '% mar%'
-    const anywhere   = `%${tok}%`;    // '%mar%'
 
-    // Put your searchable fields here (same as whereClause)
-    const fields = ["Description", "AltDesc", "ALT_Description2", "Item_Number"];
+            // build rank across ALL tokens (sum). lower total = better match.
+            const rankSql = tokens
+              .map((tok) => {
+                const startsWord = `%${tok}%`;     // 'mar%'
+                const insideWord = `% ${tok}%`;   // '% mar%'
+                const anywhere = `%${tok}%`;    // '%mar%'
 
-    const startsAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
-      .join(" OR ");
+                // Put your searchable fields here (same as whereClause)
+                const fields = ["Description", "AltDesc", "ALT_Description2", "Item_Number"];
 
-    const wordStartAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
-      .join(" OR ");
+                const startsAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
+                  .join(" OR ");
 
-    const containsAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
-      .join(" OR ");
+                const wordStartAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
+                  .join(" OR ");
 
-    return `(CASE
+                const containsAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
+                  .join(" OR ");
+
+                return `(CASE
       WHEN (${startsAny}) THEN 0
       WHEN (${wordStartAny}) THEN 1
       WHEN (${containsAny}) THEN 2
       ELSE 3
     END)`;
-  })
-  .join(" + ");
+              })
+              .join(" + ");
 
-// order: best rank first, then Description
-orderClause = [
-  [literal(rankSql), "ASC"],
-  [col("Description"), "ASC"],
-] as Order;
-          
+            // order: best rank first, then Description
+            orderClause = [
+              [literal(rankSql), "ASC"],
+              [col("Description"), "ASC"],
+            ] as Order;
+
             // optional: order by Description
           }
-          
-          
+
+
           {
             // Your existing rule (Description-first)
             orderClause = [
@@ -1404,7 +1405,7 @@ orderClause = [
           }
         }
       }
-      
+
 
 
 
@@ -1429,26 +1430,26 @@ orderClause = [
 
     }
 
-    if(!salesCategoryId.length ) {
+    if (!salesCategoryId.length) {
       if (Array.isArray(salesCategory) && salesCategory.length > 0) {
         whereClause.Sales_Category = { [Op.in]: salesCategory };
       }
     }
-   
+
     // orderClause = [['Date_Created', 'DESC']] as Order;
 
     // if (search && !searchInUPC && !masterSearch) {
     //   orderClause = [[col('Description'), 'ASC']] as Order;
     // } else
     // 
-    if(!search){
+    if (!search) {
       if (Number(shortBy) === 1) {
         orderClause = [[col('Description'), 'ASC']] as Order;
       } else if (Number(shortBy) === 2) {
         orderClause = [[col('Description'), 'DESC']] as Order;
       }
     }
-    
+
 
 
     //  orderClause = [['Date_Created', 'DESC']] as Order;
@@ -1465,7 +1466,7 @@ orderClause = [
     if (searchInUPC) {
       const counted = await Inventory.findAll({
         attributes: ['Item_Number'],
-        where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
+        where: { ...whereClause, I_Inactive: false, ShortOrderForm: true },
         include: [
           {
             ...includeUPC,
@@ -1480,7 +1481,7 @@ orderClause = [
       totalCount = counted.length;
     } else {
       totalCount = await Inventory.count({
-        where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
+        where: { ...whereClause, I_Inactive: false, ShortOrderForm: true },
         logging: false
       });
     }
@@ -1552,11 +1553,11 @@ orderClause = [
         where: {
           C_Number: customerId
         },
-        attributes:['C_PricingAccount']
+        attributes: ['C_PricingAccount']
       });
-  
+
       let userId = customerId;
-      if(customer){
+      if (customer) {
         userId = customer?.dataValues.C_PricingAccount || customerId;
       }
 
@@ -1582,11 +1583,11 @@ orderClause = [
       console.log(e.SalesCategory?.Sales_Category, 'e.Sales_Category', userJurisdiction, 'userJurisdiction')
       let prepaidTaxRate = 0
       if (userJurisdiction != null && e.SalesCategory?.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number,e,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, price + taxRate);
       }
 
+      const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
      
-
       return {
         Pack: e.Pack,
         Description: e.Description,
@@ -1614,10 +1615,11 @@ orderClause = [
         UnitOunces: e.UnitOunces,
         AvgCost: e.AvgCost,
         NetCost: e.NetCost,
+        productDiscount: discount ?? null,
         UPCList: e.UPCList,
         Inventory_OnHand: inventoryOnHand,
         allowToOrder,
-        hasQtyDiscount: hasQtyDiscount.allowToDiscount,
+        hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
         qtyDiscount: hasQtyDiscount,
         showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
         showLowStock: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
@@ -1642,7 +1644,7 @@ orderClause = [
 
 
   async getTradeShowItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] ,tradeShowId} = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [], tradeShowId } = query;
 
     if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
       salesCategoryId = salesCategoryId.map(id => Number(id));
@@ -1661,7 +1663,7 @@ orderClause = [
     limit = Number(limit);
 
     let whereClause: any = {
-      
+
     };
 
     const excludeItem = await excludeItemByUserInTradeShow(Number(customerId));
@@ -1676,10 +1678,10 @@ orderClause = [
 
 
     let searchInUPC = false;
-     let orderClause: Order = [['createdAt', 'DESC'] as const];
+    let orderClause: Order = [['createdAt', 'DESC'] as const];
 
     if (masterSearch && typeof masterSearch === 'string') {
-      let  masterArray = masterSearch.split(',').map(i => i.trim());
+      let masterArray = masterSearch.split(',').map(i => i.trim());
       masterArray = masterArray.map(i => String(i));
       whereClause.itemNumber = { [Op.in]: masterArray };
 
@@ -1711,46 +1713,46 @@ orderClause = [
         } else {
           let globalSearch: any = await Setting.findOne({});
           globalSearch = globalSearch?.dataValues || null;
-      
+
           const term = search.toLowerCase().trim();
           const anywhere = `%${term}%`;
           const starts = `${term}%`;
-      
+
           if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
             whereClause.salesCategory = { [Op.in]: salesCategory };
           }
-      
+
           // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: anywhere }),
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: anywhere }),
-            
+
           ];
-      
+
           // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
           const esc = (s: string) => s.replace(/'/g, "''");
-const startsEsc = esc(starts);
-const anywhereEsc = esc(anywhere);
-      console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
+          const startsEsc = esc(starts);
+          const anywhereEsc = esc(anywhere);
+          console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
           // If globalSearchOption = true => rank matches across all fields
-          if ( globalSearch?.splitSearchOption === true) {
+          if (globalSearch?.splitSearchOption === true) {
             const term = search.toLowerCase().trim();
             const tokens = term.split(/\s+/).filter(Boolean);
-          
+
             // remove the "full-term" OR, otherwise it kills split search results
             delete whereClause[Op.or];
-          
+
             // Each token must match the start of ANY word in ANY of these fields
             whereClause[Op.and] = tokens.map((tok) => {
               const startsWord = `${tok}%`;
               const insideWord = `% ${tok}%`;
-          
+
               return {
                 [Op.or]: [
                   // Description
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: insideWord }),
-          
+
                   // Item_Number (no spaces usually, but keep it)
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: insideWord }),
@@ -1758,48 +1760,48 @@ const anywhereEsc = esc(anywhere);
               };
             });
 
-       
 
-// build rank across ALL tokens (sum). lower total = better match.
-const rankSql = tokens
-  .map((tok) => {
-    const startsWord = `%${tok}%`;     // 'mar%'
-    const insideWord = `% ${tok}%`;   // '% mar%'
-    const anywhere   = `%${tok}%`;    // '%mar%'
 
-    // Put your searchable fields here (same as whereClause)
-    const fields = ["description", "itemNumber"];
+            // build rank across ALL tokens (sum). lower total = better match.
+            const rankSql = tokens
+              .map((tok) => {
+                const startsWord = `%${tok}%`;     // 'mar%'
+                const insideWord = `% ${tok}%`;   // '% mar%'
+                const anywhere = `%${tok}%`;    // '%mar%'
 
-    const startsAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
-      .join(" OR ");
+                // Put your searchable fields here (same as whereClause)
+                const fields = ["description", "itemNumber"];
 
-    const wordStartAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
-      .join(" OR ");
+                const startsAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
+                  .join(" OR ");
 
-    const containsAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
-      .join(" OR ");
+                const wordStartAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
+                  .join(" OR ");
 
-    return `(CASE
+                const containsAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
+                  .join(" OR ");
+
+                return `(CASE
       WHEN (${startsAny}) THEN 0
       WHEN (${wordStartAny}) THEN 1
       WHEN (${containsAny}) THEN 2
       ELSE 3
     END)`;
-  })
-  .join(" + ");
+              })
+              .join(" + ");
 
-// order: best rank first, then Description
-orderClause = [
-  [literal(rankSql), "ASC"],
-  [col("description"), "ASC"],
-] as Order;
-          
+            // order: best rank first, then Description
+            orderClause = [
+              [literal(rankSql), "ASC"],
+              [col("description"), "ASC"],
+            ] as Order;
+
             // optional: order by Description
           }
-          
+
           else {
             // Your existing rule (Description-first)
             orderClause = [
@@ -1827,8 +1829,8 @@ orderClause = [
       }
     }
 
-    if(!salesCategoryId.length ) {
-    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+    if (!salesCategoryId.length) {
+      if (Array.isArray(salesCategory) && salesCategory.length > 0) {
         whereClause.salesCategory = { [Op.in]: salesCategory };
       }
     }
@@ -1847,15 +1849,15 @@ orderClause = [
     // };
 
 
-    
 
-    if(!search){
-     if (Number(shortBy) === 1) {
-      orderClause = [[col('description'), 'ASC']] as Order;
-    } else if (Number(shortBy) === 2) {
-      orderClause = [[col('description'), 'DESC']] as Order;
-    } 
-  }
+
+    if (!search) {
+      if (Number(shortBy) === 1) {
+        orderClause = [[col('description'), 'ASC']] as Order;
+      } else if (Number(shortBy) === 2) {
+        orderClause = [[col('description'), 'DESC']] as Order;
+      }
+    }
 
 
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
@@ -1889,7 +1891,7 @@ orderClause = [
     } else {
       totalCount = await TradeShowItem.count({
 
-        where: {...whereClause,tradeShowId:tradeShowId},
+        where: { ...whereClause, tradeShowId: tradeShowId },
         logging: false
       });
     }
@@ -1898,8 +1900,8 @@ orderClause = [
       attributes: [
         'description', 'itemNumber', 'discount', 'minQuantity', 'maxQuantity', 'disType'
       ],
-      where: {...whereClause, tradeShowId:tradeShowId},
-    
+      where: { ...whereClause, tradeShowId: tradeShowId },
+
       order: orderClause,
       limit,
       offset: (page - 1) * limit,
@@ -1920,11 +1922,11 @@ orderClause = [
       where: {
         C_Number: Number(customerId)
       },
-      attributes:['C_PricingAccount']
+      attributes: ['C_PricingAccount']
     });
 
     let userId = Number(customerId);
-    if(customer){
+    if (customer) {
       userId = customer?.dataValues.C_PricingAccount || Number(customerId);
     }
     const imageMap = new Map(productImages.map(img => [img.product_number, img]));
@@ -1975,13 +1977,13 @@ orderClause = [
         ]
       });
 
-console.log(e,'trade show item')
-let tradeShowItem = e.dataValues
+      console.log(e, 'trade show item')
+      let tradeShowItem = e.dataValues
 
-      if(!findProduct){
+      if (!findProduct) {
         throw new AppError("Product not found", 404);
       }
-findProduct = findProduct?.dataValues || null;
+      findProduct = findProduct?.dataValues || null;
       const itemStr = e.itemNumber.toString();
       const productImage = imageMap.get(itemStr) || null;
       const inventoryOnHand = await getInventoryOnHand(Number(e.itemNumber)) || 0;
@@ -1989,7 +1991,7 @@ findProduct = findProduct?.dataValues || null;
       let price = discountMap[Number(e.itemNumber)] ?? await getFirstValidPrice(findProduct as any);
       const isDiscounted = false;
       // price = Math.ceil(price * 100) / 100;
-      let priceWitoutTradeShow=  price || 0;
+      let priceWitoutTradeShow = price || 0;
       price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
       const productLimit = await getProductLimit(Number(e.itemNumber));
       let taxRate = await getTaxRateV1(Number(findProduct?.OTP_Number), userJurisdiction as number, Number(e.itemNumber), price);
@@ -1999,29 +2001,29 @@ findProduct = findProduct?.dataValues || null;
       if (userJurisdiction != null && findProduct?.Sales_Category) {
 
         console.log(findProduct?.Sales_Category, 'findProduct?.Sales_Category')
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category),findProduct,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category), findProduct, price + taxRate);
       }
 
 
 
       return {
-       
+
         isDiscounted,
         ...findProduct,
-       
+
         Tax_Rate: taxRate,
         ...tradeShowItem,
         price,
-        Inventory_OnHand:inventoryOnHand,
+        Inventory_OnHand: inventoryOnHand,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
         prepaidTaxRate: prepaidTaxRate,
         priceWithTax: price + taxRate,
-        priceWitoutTradeShow:priceWitoutTradeShow + taxRate,
+        priceWitoutTradeShow: priceWitoutTradeShow + taxRate,
         hasProductLimit: productLimit ? true : false,
         productLimit,
-       
-        
-      
+
+
+
         showDistributorImage: productImage?.isAllow ?? false,
         distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
@@ -2251,9 +2253,10 @@ findProduct = findProduct?.dataValues || null;
         let prepaidTaxRate = 0
         console.log(e.SalesCategory?.Sales_Category, 'e.SalesCategory?.Sales_Category----->SALES', userJurisdiction, 'userJurisdiction')
         if (userJurisdiction != null && e.SalesCategory) {
-          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number,e,price + taxRate);
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, price + taxRate);
         }
 
+        const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
         return {
           Pack: e.Pack,
           Description: e.Description,
@@ -2279,7 +2282,8 @@ findProduct = findProduct?.dataValues || null;
           UPCList: e.UPCList,
           Inventory_OnHand: inventoryOnHand,
           allowToOrder,
-          hasQtyDiscount: hasQtyDiscount.allowToDiscount,
+          productDiscount: discount ?? null,
+          hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
           qtyDiscount: hasQtyDiscount,
           showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
           showLowStock:
@@ -2319,7 +2323,7 @@ findProduct = findProduct?.dataValues || null;
         Customer_Number: cartData.Customer_Number,
         Item_Number: cartData.Item_Number,
         isActive: true,
-        type:'order'
+        type: 'order'
       }
     });
 
@@ -2466,21 +2470,22 @@ findProduct = findProduct?.dataValues || null;
         console.log(userJurisdiction, 'userJurisdiction')
         console.log(e, 'e.itemNumber')
         let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
-     
-      taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category,product,price + taxRate);
+
+        taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category, product, price + taxRate);
       }
       let priceChange = false;
 
       const p1 = Number(price.toFixed(2));
       const p2 = Number(Number(e?.originalPrice).toFixed(2));
 
-if (p1 !== p2) {
-  priceChange = true;
-}
+      if (p1 !== p2) {
+        priceChange = true;
+      }
 
 
-     
+      const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
+
 
       return {
 
@@ -2489,7 +2494,9 @@ if (p1 !== p2) {
         isDiscounted,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
         prepaidTaxRate: prepaidTaxRate,
+        hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
         // Description: product.Description,
+        productDiscount: discount ?? null,
         Item_Number: e.Item_Number,
         CaseCount: product.CaseCount,
         UOM: product.UOM,
@@ -2523,11 +2530,10 @@ if (p1 !== p2) {
         masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
         Product: e,
         size1: product.Size,
-        hasQtyDiscount: hasQtyDiscount.allowToDiscount,
         qtyDiscount: hasQtyDiscount,
       }
     }))
-    
+
     let findTheLimit: any = await Retailer.findOne({
       where: {
         Customer_Number: customerNumber,
@@ -2547,16 +2553,16 @@ if (p1 !== p2) {
         attributes: ['itemGlobal']
       })
 
-      if(globalMinOrderAmount){
+      if (globalMinOrderAmount) {
         globalMinOrderAmount = globalMinOrderAmount?.dataValues || null;
       }
     }
     if (findTheLimit) {
       findTheLimit = findTheLimit?.dataValues || null;
-      
+
       if (!findTheLimit?.minOrderAmount || findTheLimit?.minOrderAmount == 0) {
 
-        globalMinOrderAmount  = await Setting.findOne({
+        globalMinOrderAmount = await Setting.findOne({
 
           attributes: ['itemGlobal']
         })
@@ -2578,7 +2584,7 @@ if (p1 !== p2) {
     }
 
 
-console.log(findTheLimit, 'findTheLimit-->22')
+    console.log(findTheLimit, 'findTheLimit-->22')
 
     const totalItems = cartItems.reduce((sum: any, item: any) => sum + item.Qty, 0);
     const totalAmount = cartItems.reduce((sum: any, item: any) => sum + Number(item.TotalPrice), 0);
@@ -2693,14 +2699,14 @@ console.log(findTheLimit, 'findTheLimit-->22')
       where: { id: userId },
       attributes: ['setUserDiscountLimit', 'allowDiscount']
     });
-  
+
     if (isSessionActive) {
       storeDetail = await SalesSession.update({ currentCustomerId: customerId }, { where: { userId: userId } });
     }
     else {
       storeDetail = await SalesSession.create({ userId: userId, currentCustomerId: customerId });
     }
-    const store :any = await Customer.findOne({
+    const store: any = await Customer.findOne({
       where: { C_Number: customerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'Jurisdiction_State', 'C_Phone', 'LastBalance', 'C_Salesman', 'C_Name', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
       include: [
         {
@@ -3435,10 +3441,10 @@ console.log(findTheLimit, 'findTheLimit-->22')
 
       let prepaidTaxRate = 0
       if (userJurisdiction != null && detail.inventory.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category,detail.inventory,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category, detail.inventory, price + taxRate);
       }
-
-
+ 
+      const discount = await getProductDiscountFromRedis(Number(detail.Item_Number));
 
       return {
         isNewItem,
@@ -3459,7 +3465,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
         showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
         Pack: detail.inventory.Pack,
         Inventory_OnHand: inventoryOnHand,
-
+        productDiscount: discount ?? null,
         // Order detail information
         Line_Number: detail.Line_Number,
         Item_Number: detail.Item_Number,
@@ -3491,7 +3497,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
         // Category information
         SalesCategory: detail.inventory.SalesCategory?.Category_Desc || null,
         PriceClass: detail.inventory.PriceClass?.Class_Desc || null,
-        hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+        hasQtyDiscount: discount ? false : hasQtyDiscount?.allowToDiscount || false,
         qtyDiscount: hasQtyDiscount,
         // UPC information
         UPCList: detail.inventory.UPCList,
@@ -3777,7 +3783,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
 
       let prepaidTaxRate = 0
       if (userJurisdiction != null && detail.inventory.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category,detail.inventory,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category, detail.inventory, price + taxRate);
       }
 
 
@@ -4559,7 +4565,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       attributes: [
         "Pack", "Description", "Item_Number", "CaseCount", "UOM",
         "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
-        "NetCost", "OTP_Number", "Price_Subclass","Cig_Pack","Cig_Sticks"
+        "NetCost", "OTP_Number", "Price_Subclass", "Cig_Pack", "Cig_Sticks"
       ],
       include: [
         { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc", "Sales_Category"], required: false },
@@ -4592,7 +4598,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
     const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
     let prepaidTaxRate = 0
     if (userJurisdiction != null && item.SalesCategory) {
-      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category,item,price + taxRate);
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category, item, price + taxRate);
     }
     const formattedItem = {
       Pack: item.Pack,
@@ -4790,7 +4796,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
         const userJurisdiction = await getJurisdiction(userId);
         taxRate = await getTaxRateV1(findItem.OTP_Number, userJurisdiction as number, findItem.Item_Number, price);
         if (userJurisdiction != null && findItem?.SalesCategory) {
-          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category,findItem,price + taxRate);
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category, findItem, price + taxRate);
         }
       }
 
@@ -5560,7 +5566,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       POS_ChangeDue: 0,
       Points: 0,
       Total_Weight: 0,
-      Order_Type:6, // return order
+      Order_Type: 6, // return order
       Delivery_Charge_Select: !!customer.Delivery_Charge,
       Other_Charge_Select: !!customer.Other_Amount,
     };
@@ -5798,7 +5804,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       if (userJurisdiction != null && product.Sales_Category) {
         let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
         taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category,product,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category, product, price + taxRate);
       }
 
       return {
@@ -5910,13 +5916,13 @@ console.log(findTheLimit, 'findTheLimit-->22')
         }
       })
       tradeShowItem = tradeShowItem?.dataValues || null;
-     
+
       if (!price) {
         const data = await Inventory.findByPk(e.Item_Number)
         price = await getFirstValidPrice(data?.dataValues)
       }
 
-      if(tradeShowItem){
+      if (tradeShowItem) {
         price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
       }
       let priceChange = false;
@@ -5971,7 +5977,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       if (userJurisdiction != null && product.Sales_Category) {
         let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
         taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category,product,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category, product, price + taxRate);
       }
 
       return {
@@ -6212,7 +6218,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       if (userJurisdiction != null && product.Sales_Category) {
         let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
         taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category,product,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category, product, price + taxRate);
       }
 
       return {
@@ -6313,7 +6319,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       return newCartItem;
     }
   }
-  
+
 
   // OrderConfirmation CRUD methods
   async createOrderConfirmation(orderData: {
@@ -7525,7 +7531,7 @@ console.log(findTheLimit, 'findTheLimit-->22')
       if (userJurisdiction != null && e.SalesCategory) {
 
         console.log(e?.SalesCategory, 'e.Sales_Category')
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category,e,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
       }
 
 
@@ -7772,5 +7778,15 @@ console.log(findTheLimit, 'findTheLimit-->22')
       }
     });
     return tradeShow;
+  }
+
+  async getCustomerLastBalance(customerNumber: number) {
+    const lastBalance = await Customer.findOne({
+      attributes: ['LastBalance'],
+      where: {
+        C_Number: customerNumber
+      }
+    });
+    return lastBalance
   }
 }

@@ -26,6 +26,7 @@ import { sequelize } from "../db";
 import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model";
 import { Users } from "../models/mmsql/user.model";
 import { CustomerSpecialGroup } from "../models/mmsql/customerSpecialGroup.model";
+import { getProductDiscountFromRedis } from "../utils/productDiscount.redis";
 
 
 export class DashboardService {
@@ -213,6 +214,8 @@ export class DashboardService {
                         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
                     }
 
+                    const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
+
                     return {
                         Pack: e.Pack,
                         Description: e.Description,
@@ -234,6 +237,7 @@ export class DashboardService {
                         productLimit,
                         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
                         prepaidTaxRate: prepaidTaxRate,
+                        productDiscount: discount ?? null,
 
                         showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
                         showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
@@ -241,7 +245,7 @@ export class DashboardService {
                         allowToOrderSalesRep: allowToOrderSalesRep || null,
                         showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
 
-                        hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+                        hasQtyDiscount: discount ? false : hasQtyDiscount?.allowToDiscount || false,
                         qtyDiscount: hasQtyDiscount,
 
 
@@ -460,6 +464,7 @@ export class DashboardService {
                                 prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
                             }
 
+                            const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
                             return {
                                 Pack: e.Pack,
                                 Description: e.Description,
@@ -487,7 +492,8 @@ export class DashboardService {
                                 hasProductLimit: productLimit ? true : false,
                                 productLimit,
 
-                                hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+                                hasQtyDiscount: discount ? false : hasQtyDiscount?.allowToDiscount || false,
+                                productDiscount: discount ?? null,
                                 qtyDiscount: hasQtyDiscount,
                                 showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
                                 showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
@@ -691,6 +697,7 @@ export class DashboardService {
                         console.log(e, 'e.Sales_Category')
                         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
                     }
+                    const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
 
 
 
@@ -716,7 +723,8 @@ export class DashboardService {
                         allowToOrderSalesRep: allowToOrderSalesRep || null,
                         showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
 
-                        hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+                        hasQtyDiscount: discount ? false : hasQtyDiscount?.allowToDiscount || false,
+                        productDiscount: discount ?? null,
                         qtyDiscount: hasQtyDiscount,
 
                         Inventory_OnHand: inventoryOnHand || 0,
@@ -893,12 +901,13 @@ export class DashboardService {
 
 
 
-
+            const discount = await getProductDiscountFromRedis(Number(item.Item_Number));
 
             return {
                 Pack: item.Pack,
                 Description: item.Description,
                 Item_Number: item.Item_Number,
+                productDiscount: discount ?? null,
                 CaseCount: item.CaseCount,
                 UOM: item.UOM,
                 Price1: item.Price1,
@@ -927,8 +936,9 @@ export class DashboardService {
 
 
 
-                hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+                hasQtyDiscount: discount ? false : hasQtyDiscount?.allowToDiscount || false,
                 qtyDiscount: hasQtyDiscount,
+                
 
 
                 priceWithTax: price + taxRate,
@@ -1140,7 +1150,7 @@ export class DashboardService {
 
             let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, price + taxRate);
 
-
+            const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
 
             return {
                 Pack: e.Pack,
@@ -1156,6 +1166,7 @@ export class DashboardService {
                 Invoice_Cost: e.Invoice_Cost,
                 AvgCost: e.AvgCost,
                 NetCost: e.NetCost,
+                productDiscount: discount ?? null,
                 UPCList: e.UPCList,
                 hasProductLimit: productLimit ? true : false,
                 productLimit,
@@ -1168,7 +1179,7 @@ export class DashboardService {
                 allowToOrderSalesRep: allowToOrderSalesRep || null,
                 showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
 
-                hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+                hasQtyDiscount:discount ? false : hasQtyDiscount.allowToDiscount,
                 qtyDiscount: hasQtyDiscount,
 
                 Inventory_OnHand: inventoryOnHand || 0,
@@ -2067,7 +2078,7 @@ export class DashboardService {
             }
             const productLimit = await getProductLimit(special.inventory.Item_Number);
 
-
+            const discount = await getProductDiscountFromRedis(Number(special.inventory.Item_Number));
             return {
                 Pack: special.inventory.Pack,
                 Description: special.inventory.Description,
@@ -2092,8 +2103,9 @@ export class DashboardService {
                 allowToOrderSalesRep: allowToOrderSalesRep || null,
                 showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
 
-                hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+                hasQtyDiscount: discount ? false : hasQtyDiscount?.allowToDiscount || false,
                 qtyDiscount: hasQtyDiscount,
+                productDiscount: discount ?? null,
 
                 Inventory_OnHand: inventoryOnHand || 0,
                 allowToOrder,
@@ -2518,11 +2530,11 @@ export class DashboardService {
                 orderNumber: { [Op.in]: orderNumbers },
                 status: 'completed'
             },
-            attributes: ['orderNumber', 'pickerUserId', 'category', 'startedAt', 'completedAt'],
+            attributes: ['orderNumber', 'pickerUserId', 'category', 'pickRightAreas', 'startedAt', 'completedAt'],
             raw: true
         });
 
-        // Get all order details to calculate quantity per picker based on categories
+        // Get all order details to calculate quantity per picker (by category or PickRight area)
         let orderDetailsMap: { [key: number]: any[] } = {};
         if (completedOrderNumbersForQty.length > 0) {
             const allOrderDetails = await OrderDetail.findAll({
@@ -2533,7 +2545,7 @@ export class DashboardService {
                     {
                         model: Inventory,
                         as: 'inventory',
-                        attributes: ['Sales_Category'],
+                        attributes: ['Sales_Category', 'PickArea'],
                         required: false
                     }
                 ],
@@ -2571,14 +2583,18 @@ export class DashboardService {
             // Count unique orders per picker
             pickerOrderSet[pickerId].add(confirmation.orderNumber);
 
-            // Calculate quantity for this picker based on their categories
+            // Calculate quantity for this picker (categories or PickRight areas)
             let pickerQuantity = 0;
             const orderDetails = orderDetailsMap[confirmation.orderNumber] || [];
             const pickerCategories = confirmation.category || [];
+            const pickerAreas = (confirmation.pickRightAreas || []).map((a: string) => String(a).trim());
 
             orderDetails.forEach((detail: any) => {
                 const itemCategory = detail.inventory?.Sales_Category;
+                const itemArea = detail.inventory?.PickArea ? String(detail.inventory.PickArea).trim() : null;
                 if (itemCategory && pickerCategories.includes(itemCategory)) {
+                    pickerQuantity += parseFloat(detail.Quantity_Ordered) || 0;
+                } else if (itemArea && pickerAreas.includes(itemArea)) {
                     pickerQuantity += parseFloat(detail.Quantity_Ordered) || 0;
                 }
             });
@@ -2635,27 +2651,25 @@ export class DashboardService {
         const pickerScannedQty: { [key: number]: number } = {};
         const pickerScannedLines: { [key: number]: Set<string> } = {}; // Track unique item scans per picker
         if (completedOrderNumbersForQty.length > 0) {
-            // Create mapping from orderNumber to picker confirmations (with categories)
-            const orderToPickersMap: { [key: number]: Array<{ pickerUserId: number; categories: number[] }> } = {};
+            const orderToPickersMap: { [key: number]: Array<{ pickerUserId: number; categories: number[]; pickRightAreas: string[] }> } = {};
             completedConfirmations.forEach((conf: any) => {
                 if (!orderToPickersMap[conf.orderNumber]) {
                     orderToPickersMap[conf.orderNumber] = [];
                 }
                 if (conf.pickerUserId) {
-                    // Check if this picker is already in the map for this order
                     const existingPicker = orderToPickersMap[conf.orderNumber].find(
                         (p: any) => p.pickerUserId === conf.pickerUserId
                     );
+                    const areas = (conf.pickRightAreas || []).map((a: string) => String(a).trim());
                     if (!existingPicker) {
                         orderToPickersMap[conf.orderNumber].push({
                             pickerUserId: conf.pickerUserId,
-                            categories: conf.category || []
+                            categories: conf.category || [],
+                            pickRightAreas: areas
                         });
                     } else {
-                        // Merge categories if picker already exists
-                        const existingCategories = existingPicker.categories || [];
-                        const newCategories = conf.category || [];
-                        existingPicker.categories = [...new Set([...existingCategories, ...newCategories])];
+                        existingPicker.categories = [...new Set([...(existingPicker.categories || []), ...(conf.category || [])])];
+                        existingPicker.pickRightAreas = [...new Set([...(existingPicker.pickRightAreas || []), ...areas])];
                     }
                 }
             });
@@ -2669,37 +2683,28 @@ export class DashboardService {
                 raw: true
             });
 
-            // Distribute scanned quantity based on item categories matching picker categories
             allScans.forEach((scan: any) => {
                 const orderNum = scan.orderNumber;
                 const itemNum = scan.itemNumber;
                 const scanQty = parseFloat(scan.qty) || 0;
-
-                // Get order details for this order to find item's Sales_Category
                 const orderDetails = orderDetailsMap[orderNum] || [];
                 const itemDetail = orderDetails.find((detail: any) => detail.Item_Number === itemNum);
 
                 if (itemDetail) {
                     const itemCategory = itemDetail.inventory?.Sales_Category;
+                    const itemArea = itemDetail.inventory?.PickArea ? String(itemDetail.inventory.PickArea).trim() : null;
+                    const pickersForOrder = orderToPickersMap[orderNum] || [];
 
-                    if (itemCategory) {
-                        // Find pickers who worked on this order AND have this item's category
-                        const pickersForOrder = orderToPickersMap[orderNum] || [];
-                        pickersForOrder.forEach((pickerInfo: any) => {
-                            if (pickerInfo.categories.includes(itemCategory)) {
-                                const pickerId = pickerInfo.pickerUserId;
-
-                                // Add scanned quantity
-                                pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + scanQty;
-
-                                // Track unique scanned lines (orderNumber_itemNumber per picker)
-                                if (!pickerScannedLines[pickerId]) {
-                                    pickerScannedLines[pickerId] = new Set();
-                                }
-                                pickerScannedLines[pickerId].add(`${orderNum}_${itemNum}`);
-                            }
-                        });
-                    }
+                    pickersForOrder.forEach((pickerInfo: any) => {
+                        const matchByCategory = itemCategory && (pickerInfo.categories || []).includes(itemCategory);
+                        const matchByArea = itemArea && (pickerInfo.pickRightAreas || []).includes(itemArea);
+                        if (matchByCategory || matchByArea) {
+                            const pickerId = pickerInfo.pickerUserId;
+                            pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + scanQty;
+                            if (!pickerScannedLines[pickerId]) pickerScannedLines[pickerId] = new Set();
+                            pickerScannedLines[pickerId].add(`${orderNum}_${itemNum}`);
+                        }
+                    });
                 }
             });
 
@@ -3332,7 +3337,7 @@ export class DashboardService {
                 orderNumber: { [Op.in]: orderNumbers },
                 status: 'completed'
             },
-            attributes: ['orderNumber', 'pickerUserId', 'category', 'startedAt', 'completedAt'],
+            attributes: ['orderNumber', 'pickerUserId', 'category', 'pickRightAreas', 'startedAt', 'completedAt'],
             raw: true
         });
 
@@ -3344,7 +3349,7 @@ export class DashboardService {
                     {
                         model: Inventory,
                         as: 'inventory',
-                        attributes: ['Sales_Category'],
+                        attributes: ['Sales_Category', 'PickArea'],
                         required: false
                     }
                 ],
@@ -3374,9 +3379,13 @@ export class DashboardService {
             let pickerQuantity = 0;
             const orderDetails = orderDetailsMap[confirmation.orderNumber] || [];
             const pickerCategories = confirmation.category || [];
+            const pickerAreas = (confirmation.pickRightAreas || []).map((a: string) => String(a).trim());
             orderDetails.forEach((detail: any) => {
                 const itemCategory = detail.inventory?.Sales_Category;
+                const itemArea = detail.inventory?.PickArea ? String(detail.inventory.PickArea).trim() : null;
                 if (itemCategory && pickerCategories.includes(itemCategory)) {
+                    pickerQuantity += parseFloat(detail.Quantity_Ordered) || 0;
+                } else if (itemArea && pickerAreas.includes(itemArea)) {
                     pickerQuantity += parseFloat(detail.Quantity_Ordered) || 0;
                 }
             });
@@ -3408,17 +3417,21 @@ export class DashboardService {
         const pickerScannedQty: { [key: number]: number } = {};
         const pickerScannedLines: { [key: number]: Set<string> } = {};
         if (completedOrderNumbersForQty.length > 0) {
-            const orderToPickersMap: { [key: number]: Array<{ pickerUserId: number; categories: number[] }> } = {};
+            const orderToPickersMap: { [key: number]: Array<{ pickerUserId: number; categories: number[]; pickRightAreas: string[] }> } = {};
             completedConfirmations.forEach((conf: any) => {
                 if (!orderToPickersMap[conf.orderNumber]) orderToPickersMap[conf.orderNumber] = [];
                 if (conf.pickerUserId) {
                     const existingPicker = orderToPickersMap[conf.orderNumber].find((p: any) => p.pickerUserId === conf.pickerUserId);
+                    const areas = (conf.pickRightAreas || []).map((a: string) => String(a).trim());
                     if (!existingPicker) {
-                        orderToPickersMap[conf.orderNumber].push({ pickerUserId: conf.pickerUserId, categories: conf.category || [] });
+                        orderToPickersMap[conf.orderNumber].push({
+                            pickerUserId: conf.pickerUserId,
+                            categories: conf.category || [],
+                            pickRightAreas: areas
+                        });
                     } else {
-                        const existingCategories = existingPicker.categories || [];
-                        const newCategories = conf.category || [];
-                        existingPicker.categories = [...new Set([...existingCategories, ...newCategories])];
+                        existingPicker.categories = [...new Set([...(existingPicker.categories || []), ...(conf.category || [])])];
+                        existingPicker.pickRightAreas = [...new Set([...(existingPicker.pickRightAreas || []), ...areas])];
                     }
                 }
             });
@@ -3437,17 +3450,18 @@ export class DashboardService {
                 const itemDetail = orderDetails.find((detail: any) => detail.Item_Number === itemNum);
                 if (itemDetail) {
                     const itemCategory = itemDetail.inventory?.Sales_Category;
-                    if (itemCategory) {
-                        const pickersForOrder = orderToPickersMap[orderNum] || [];
-                        pickersForOrder.forEach((pickerInfo: any) => {
-                            if (pickerInfo.categories.includes(itemCategory)) {
-                                const pickerId = pickerInfo.pickerUserId;
-                                pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + scanQty;
-                                if (!pickerScannedLines[pickerId]) pickerScannedLines[pickerId] = new Set();
-                                pickerScannedLines[pickerId].add(`${orderNum}_${itemNum}`);
-                            }
-                        });
-                    }
+                    const itemArea = itemDetail.inventory?.PickArea ? String(itemDetail.inventory.PickArea).trim() : null;
+                    const pickersForOrder = orderToPickersMap[orderNum] || [];
+                    pickersForOrder.forEach((pickerInfo: any) => {
+                        const matchByCategory = itemCategory && (pickerInfo.categories || []).includes(itemCategory);
+                        const matchByArea = itemArea && (pickerInfo.pickRightAreas || []).includes(itemArea);
+                        if (matchByCategory || matchByArea) {
+                            const pickerId = pickerInfo.pickerUserId;
+                            pickerScannedQty[pickerId] = (pickerScannedQty[pickerId] || 0) + scanQty;
+                            if (!pickerScannedLines[pickerId]) pickerScannedLines[pickerId] = new Set();
+                            pickerScannedLines[pickerId].add(`${orderNum}_${itemNum}`);
+                        }
+                    });
                 }
             });
         }

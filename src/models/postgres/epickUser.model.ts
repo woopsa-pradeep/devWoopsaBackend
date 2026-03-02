@@ -1,6 +1,8 @@
 import { DataTypes, Model, Optional, CreationOptional } from "sequelize";
 import { postgresSequelize } from "../../db";
 
+export type EpickAssignmentType = 'sales_category' | 'pickright_area';
+
 export interface EpickUserAttributes {
   id: number;
   email: string;
@@ -8,7 +10,9 @@ export interface EpickUserAttributes {
   lastName: string;
   password: string;
   userNumber: string | null;
-  category: number[]; // Array of category IDs: [12, 10, 20]
+  assignmentType: EpickAssignmentType; // 'sales_category' | 'pickright_area'
+  category: number[]; // Sales Category IDs when assignmentType === 'sales_category'
+  pickRightAreas: string[]; // PickArea values when assignmentType === 'pickright_area'
   order_type: string | null; // 'order_number' | 'qty_number'
   shortby: string | null; // 'Asc' | 'Des'
   role: string; // 'epick' | 'receivable'
@@ -31,7 +35,9 @@ export class EpickUser
   public lastName!: string;
   public password!: string;
   public userNumber!: string | null;
+  public assignmentType!: EpickAssignmentType;
   public category!: number[];
+  public pickRightAreas!: string[];
   public order_type!: string | null;
   public shortby!: string | null;
   public item_sort_by!: string | null;
@@ -70,8 +76,21 @@ EpickUser.init(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    assignmentType: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'sales_category',
+      validate: {
+        isIn: [['sales_category', 'pickright_area']],
+      },
+    },
     category: {
       type: DataTypes.ARRAY(DataTypes.INTEGER),
+      allowNull: false,
+      defaultValue: [],
+    },
+    pickRightAreas: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
       allowNull: false,
       defaultValue: [],
     },

@@ -6,7 +6,8 @@ export interface EpickConfirmationAttributes {
   orderNumber: number;
   pickerUserNumber: number; // userNumber for display
   pickerUserId: number; // user id for unique tracking
-  category: number[]; // Array of categories user is picking: [12, 10]
+  category: number[]; // Sales categories when picker uses sales_category
+  pickRightAreas: string[]; // PickArea values when picker uses pickright_area
   status: 'in_progress' | 'completed';
   startedAt: Date | null;
   completedAt: Date | null;
@@ -26,6 +27,7 @@ export class EpickConfirmation
   public pickerUserNumber!: number;
   public pickerUserId!: number;
   public category!: number[];
+  public pickRightAreas!: string[];
   public status!: 'in_progress' | 'completed';
   public startedAt!: Date | null;
   public completedAt!: Date | null;
@@ -54,6 +56,11 @@ EpickConfirmation.init(
     },
     category: {
       type: DataTypes.ARRAY(DataTypes.INTEGER),
+      allowNull: false,
+      defaultValue: [],
+    },
+    pickRightAreas: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
       allowNull: false,
       defaultValue: [],
     },

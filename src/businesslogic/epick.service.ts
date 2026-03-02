@@ -135,74 +135,74 @@ export class EpickService {
   }
 
   /**
-   * Helper function: Get all unique categories in an order
-   * @param orderNumber - Order number
-   * @returns Array of unique category numbers
+   * Helper: Get all unique Sales_Category numbers in an order.
    */
   private async getOrderCategories(orderNumber: number): Promise<number[]> {
     const orderDetails = await OrderDetail.findAll({
-      where: {
-        Order_Number: orderNumber
-      },
+      where: { Order_Number: orderNumber },
       attributes: ['Item_Number'],
       include: [
-        {
-          model: Inventory,
-          as: 'inventory',
-          attributes: ['Sales_Category'],
-          required: true
-        }
+        { model: Inventory, as: 'inventory', attributes: ['Sales_Category'], required: true }
       ],
       raw: false
     });
-
     const categories = new Set<number>();
     orderDetails.forEach((detail: any) => {
-      const inventory = detail.inventory;
-      if (inventory && inventory.Sales_Category) {
-        categories.add(inventory.Sales_Category);
-      }
+      const inv = detail.inventory;
+      if (inv && inv.Sales_Category) categories.add(inv.Sales_Category);
     });
-
     return Array.from(categories);
   }
 
   /**
-   * Helper function: Check if all categories in an order are completed
-   * @param orderNumber - Order number
-   * @returns true if all categories have at least one completed confirmation
+   * Helper: Get all unique PickArea values in an order.
+   */
+  private async getOrderPickRightAreas(orderNumber: number): Promise<string[]> {
+    const orderDetails = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: ['Item_Number'],
+      include: [
+        { model: Inventory, as: 'inventory', attributes: ['PickArea'], required: true }
+      ],
+      raw: false
+    });
+    const areas = new Set<string>();
+    orderDetails.forEach((detail: any) => {
+      const inv = detail.inventory;
+      if (inv && inv.PickArea) areas.add(String(inv.PickArea).trim());
+    });
+    return Array.from(areas);
+  }
+
+  /**
+   * Check if all categories and PickRight areas in an order are completed (each has at least one completed confirmation).
    */
   private async areAllCategoriesCompleted(orderNumber: number): Promise<boolean> {
-    // Get all categories in the order
-    const orderCategories = await this.getOrderCategories(orderNumber);
+    const [orderCategories, orderAreas] = await Promise.all([
+      this.getOrderCategories(orderNumber),
+      this.getOrderPickRightAreas(orderNumber)
+    ]);
 
-    if (orderCategories.length === 0) {
-      return false; // No categories found, can't be completed
+    if (orderCategories.length === 0 && orderAreas.length === 0) {
+      return false;
     }
 
-    // Get all completed confirmations for this order
     const completedConfirmations = await EpickConfirmation.findAll({
-      where: {
-        orderNumber: orderNumber,
-        status: 'completed'
-      },
-      attributes: ['category'],
+      where: { orderNumber, status: 'completed' },
+      attributes: ['category', 'pickRightAreas'],
       raw: true
     });
 
-    // Get all completed categories (flatten all category arrays from confirmations)
     const completedCategories = new Set<number>();
-    completedConfirmations.forEach((confirmation: any) => {
-      const cats = confirmation.category || [];
-      cats.forEach((cat: number) => completedCategories.add(cat));
+    const completedAreas = new Set<string>();
+    completedConfirmations.forEach((c: any) => {
+      (c.category || []).forEach((cat: number) => completedCategories.add(cat));
+      (c.pickRightAreas || []).forEach((a: string) => completedAreas.add(String(a).trim()));
     });
 
-    // Check if every category in the order has at least one completed confirmation
-    const allCompleted = orderCategories.every((orderCat: number) =>
-      completedCategories.has(orderCat)
-    );
-
-    return allCompleted;
+    const categoriesDone = orderCategories.length === 0 || orderCategories.every((cat: number) => completedCategories.has(cat));
+    const areasDone = orderAreas.length === 0 || orderAreas.every((a: string) => completedAreas.has(String(a).trim()));
+    return categoriesDone && areasDone;
   }
 
   // async  getOrder() {
@@ -938,8 +938,9 @@ export class EpickService {
       throw new AppError('User not found', 404);
     }
 
-    // Get user's categories
-    const userCategories = isUserExist.category || [];
+    const assignmentType = (isUserExist as any).assignmentType || 'sales_category';
+    const userCategories = assignmentType === 'sales_category' ? ((isUserExist as any).category || []) : [];
+    const userPickRightAreas = assignmentType === 'pickright_area' ? ((isUserExist as any).pickRightAreas || []).map((a: string) => String(a).trim()) : [];
 
     // Check if order is already locked in RecordLock
     const existingLock = await RecordLock.findOne({
@@ -988,33 +989,36 @@ export class EpickService {
       }
     }
 
-    // Check category overlap with existing epick_confirmation records (in_progress)
     const existingConfirmations = inProgressConfirmations;
 
-    // Check if any existing confirmation has overlapping categories
     for (const confirmation of existingConfirmations) {
-      const existingCategories = confirmation.category || [];
+      const existingCategories = (confirmation as any).category || [];
+      const existingAreas = ((confirmation as any).pickRightAreas || []).map((a: string) => String(a).trim());
 
-      // Check for overlap (any common category)
-      const hasOverlap = userCategories.some((cat: number) => existingCategories.includes(cat));
+      const categoryOverlap = userCategories.some((cat: number) => existingCategories.includes(cat));
+      const areaOverlap = userPickRightAreas.length > 0 && existingAreas.some((a: string) => userPickRightAreas.includes(a));
+      const hasOverlap = categoryOverlap || areaOverlap;
 
       if (hasOverlap) {
-        // Get picker info for error message
         const picker = await EpickUser.findByPk(confirmation.pickerUserNumber, {
           attributes: ['firstName', 'lastName']
         });
         const pickerName = picker ? `${picker.firstName} ${picker.lastName}` : 'another picker';
 
-        // Map categories to names
-        const categoryNames = existingCategories.map((cat: number) => {
-          if (cat === 12) return 'CIG';
-          if (cat === 10) return 'General';
-          if (cat === 20) return 'Kratoms';
-          return `Category ${cat}`;
-        });
-
+        if (categoryOverlap) {
+          const categoryNames = existingCategories.map((cat: number) => {
+            if (cat === 12) return 'CIG';
+            if (cat === 10) return 'General';
+            if (cat === 20) return 'Kratoms';
+            return `Category ${cat}`;
+          });
+          throw new AppError(
+            `This order is already being picked by ${pickerName} (${categoryNames.join(', ')}) in your category`,
+            400
+          );
+        }
         throw new AppError(
-          `This order is already being picked by ${pickerName} (${categoryNames.join(', ')}) in your category`,
+          `This order is already being picked by ${pickerName} for your PickRight area(s).`,
           400
         );
       }
@@ -1088,12 +1092,12 @@ export class EpickService {
       data = existingOrderPick;
     }
 
-    // Always create epick_confirmation record (every picker creates this)
     await EpickConfirmation.create({
       orderNumber: body.orderNumber,
-      pickerUserNumber: id, // Use user's id, not userNumber (foreign key references epick_user.id)
+      pickerUserNumber: id,
       pickerUserId: id,
       category: userCategories,
+      pickRightAreas: userPickRightAreas,
       status: 'in_progress',
       startedAt: moment().toDate(),
     });
@@ -1151,33 +1155,43 @@ export class EpickService {
   }
 
   async getOrderItem(orderNumber: number, userId: number) {
-    // Get user's categories and item_sort_by preference
     const user = await EpickUser.findOne({
       where: { id: userId },
-      attributes: ['category', 'item_sort_by'],
+      attributes: ['assignmentType', 'category', 'pickRightAreas', 'item_sort_by'],
       raw: true,
     });
 
+    const assignmentType = (user as any)?.assignmentType || 'sales_category';
     const userCategories = (user as any)?.category || [];
+    const userPickRightAreas = (user as any)?.pickRightAreas || [];
     const itemSortBy = (user as any)?.item_sort_by || 'line_number';
 
-    // Get customer number from order header
     const orderHeader = await OrderHeader.findOne({
-      where: {
-        Order_Number: orderNumber
-      },
+      where: { Order_Number: orderNumber },
       attributes: ['C_Number']
     });
 
     const customerNumber = (orderHeader as any)?.C_Number || null;
 
+    const usePickRightFilter = assignmentType === 'pickright_area' && userPickRightAreas.length > 0;
+    const useCategoryFilter = !usePickRightFilter && userCategories.length > 0;
+
+    const inventoryWhere = usePickRightFilter
+      ? { PickArea: { [Op.in]: userPickRightAreas.map((a: string) => String(a).trim()) } }
+      : useCategoryFilter
+        ? { Sales_Category: { [Op.in]: userCategories } }
+        : undefined;
+
+    const inventoryAttributes = ["Item_Number", "Description", "Section", "Location", "Sales_Category", "Sequence"];
+    if (usePickRightFilter) {
+      inventoryAttributes.push("PickArea");
+    }
+
     const data = await OrderDetail.findAll({
       where: {
         Order_Number: orderNumber,
         [Op.and]: [
-          // Ensure Quantity_Ordered is greater than Quantity_Shipped
           { Quantity_Ordered: { [Op.gt]: sequelize.col("Quantity_Shipped") } },
-          // Only show items where Confirmed = 0 (pending from ERP)
           {
             [Op.or]: [
               { Confirmed: false },
@@ -1201,17 +1215,15 @@ export class EpickService {
         {
           model: Inventory,
           as: "inventory",
-          attributes: ["Item_Number", "Description", "Section", "Location", "Sales_Category", "Sequence"],
-          where: userCategories.length > 0 ? {
-            Sales_Category: { [Op.in]: userCategories }
-          } : undefined,
-          required: userCategories.length > 0,
+          attributes: inventoryAttributes as any,
+          where: inventoryWhere,
+          required: usePickRightFilter || useCategoryFilter,
           include: [
             {
               model: InventoryUPC,
               as: "UPCList",
               attributes: ["UPC_Number", "Status"],
-              required: false, // optional relation, it will work even if there are no matching records
+              required: false,
             },
             {
               model: SalesCategory,
@@ -3502,6 +3514,7 @@ export class EpickService {
         requestId: req.id,
         orderNumber: req.orderNumber,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         itemDescription: inventoryMap.get(req.itemNumber) || null,
         pickerId: req.pickerUserId, // Add pickerId (database ID)
         pickerUserNumber: req.pickerUserNumber,
@@ -3670,7 +3683,9 @@ export class EpickService {
       summary: {
         totalItemsOrdered: orderDetails.reduce((sum, detail: any) => sum + (detail.Quantity_Ordered || 0), 0),
         totalItemsShipped: orderDetails.reduce((sum, detail: any) => sum + (detail.Quantity_Shipped || 0), 0),
-        totalItems: orderDetails.length
+        totalItems: orderDetails.length,
+        totalLines: orderDetails.length,
+        scannedLines: orderDetails.filter((detail: any) => (Number(detail.Quantity_Shipped) || 0) > 0).length
       },
       salesCategorySummary: await this.getSalesCategorySummary(orderNumber, orderDetails)
     };
@@ -4082,11 +4097,12 @@ export class EpickService {
   async createOverrideRequest(data: {
     orderNumber: number;
     itemNumber: number;
+    lineNumber?: number | null;
     requestType?: 'scan' | 'pass';
     qty?: number;
     note?: string;
   }, userId: number) {
-    const { orderNumber, itemNumber, requestType, qty, note } = data;
+    const { orderNumber, itemNumber, lineNumber, requestType, qty, note } = data;
 
     // Get user info
     const user = await EpickUser.findOne({ where: { id: userId } });
@@ -4116,16 +4132,16 @@ export class EpickService {
       throw new AppError(`Item ${itemNumber} not found in order ${orderNumber}`, 404);
     }
 
-    // Check if there's already a pending request of the same type for this item
-    const existingRequest = await OverrideRequest.findOne({
-      where: {
-        orderNumber,
-        itemNumber,
-        pickerUserId: userId,
-        status: 'pending',
-        requestType: finalRequestType,
-      },
-    });
+    // Check if there's already a pending request of the same type for this item (and line, if provided)
+    const existingWhere: any = {
+      orderNumber,
+      itemNumber,
+      pickerUserId: userId,
+      status: 'pending',
+      requestType: finalRequestType,
+    };
+    if (lineNumber != null) existingWhere.lineNumber = lineNumber;
+    const existingRequest = await OverrideRequest.findOne({ where: existingWhere });
 
     if (existingRequest) {
       const requestTypeLabel = finalRequestType === 'scan' ? 'scan' : 'pass';
@@ -4137,6 +4153,7 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
+      lineNumber: lineNumber ?? null,
       pickerUserNumber: null, // No longer needed, using pickerUserId instead
       pickerUserId: userId,
       status: 'pending',
@@ -4153,6 +4170,7 @@ export class EpickService {
       status: overrideRequest.status,
       orderNumber: overrideRequest.orderNumber,
       itemNumber: overrideRequest.itemNumber,
+      lineNumber: overrideRequest.lineNumber,
       requestType: overrideRequest.requestType,
       qty: overrideRequest.qty,
       note: overrideRequest.note,
@@ -4166,10 +4184,11 @@ export class EpickService {
   async createScanOverrideRequest(data: {
     orderNumber: number;
     itemNumber: number;
+    lineNumber?: number | null;
     qty: number;
     note?: string;
   }, userId: number) {
-    const { orderNumber, itemNumber, qty, note } = data;
+    const { orderNumber, itemNumber, lineNumber, qty, note } = data;
 
     // Get EpickUser info
     const epickUser = await EpickUser.findOne({ where: { id: userId } });
@@ -4194,16 +4213,16 @@ export class EpickService {
       throw new AppError(`Item ${itemNumber} not found in order ${orderNumber}`, 404);
     }
 
-    // Check if there's already a pending 'scan' type request for this item
-    const existingRequest = await OverrideRequest.findOne({
-      where: {
-        orderNumber,
-        itemNumber,
-        pickerUserId: userId,
-        status: 'pending',
-        requestType: 'scan', // Only check for 'scan' type
-      },
-    });
+    // Check if there's already a pending 'scan' type request for this item (and line, if provided)
+    const existingScanWhere: any = {
+      orderNumber,
+      itemNumber,
+      pickerUserId: userId,
+      status: 'pending',
+      requestType: 'scan',
+    };
+    if (lineNumber != null) existingScanWhere.lineNumber = lineNumber;
+    const existingRequest = await OverrideRequest.findOne({ where: existingScanWhere });
 
     if (existingRequest) {
       throw new AppError('A pending scan override request already exists for this item', 400);
@@ -4213,6 +4232,7 @@ export class EpickService {
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
+      lineNumber: lineNumber ?? null,
       pickerUserNumber: null, // No longer needed, using pickerUserId instead
       pickerUserId: userId,
       status: 'pending',
@@ -4229,6 +4249,7 @@ export class EpickService {
       status: overrideRequest.status,
       orderNumber: overrideRequest.orderNumber,
       itemNumber: overrideRequest.itemNumber,
+      lineNumber: overrideRequest.lineNumber,
       requestType: overrideRequest.requestType,
       qty: overrideRequest.qty,
       note: overrideRequest.note,
@@ -4487,6 +4508,7 @@ export class EpickService {
         requestId: req.id,
         orderNumber: req.orderNumber,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         itemDescription: inventoryMap.get(req.itemNumber) || null,
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
@@ -4823,6 +4845,7 @@ export class EpickService {
         requestId: req.id,
         orderNumber: req.orderNumber,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         itemDescription: inventoryMap.get(req.itemNumber) || null,
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
@@ -4978,6 +5001,7 @@ export class EpickService {
           requestId: req.id,
           orderNumber: req.orderNumber,
           itemNumber: req.itemNumber,
+          lineNumber: req.lineNumber ?? null,
           itemDescription: (pickerItems.find((i: any) => i.Item_Number === req.itemNumber) as any)?.inventory?.Description || null,
           requestType: req.requestType,
           qty: req.qty,
@@ -5033,6 +5057,7 @@ export class EpickService {
       .map(req => ({
         requestId: req.id,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         status: req.status,
         qty: req.qty,
         note: req.note || null,
@@ -5041,16 +5066,14 @@ export class EpickService {
           : null,
       }));
 
-
-
     const scanOverrides = allRequests
       .filter(req => req.requestType === 'scan')
       .map(req => ({
         requestId: req.id,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         status: req.status,
         qty: req.qty,
-
         note: req.note || null,
         rejectionReason: (req.status === 'rejected' || req.status === 'cancelled')
           ? (req.rejectionReason || null)
@@ -5141,6 +5164,7 @@ export class EpickService {
       .map(req => ({
         requestId: req.id,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         status: req.status,
         qty: req.qty,
         note: req.note || null,
@@ -5154,6 +5178,7 @@ export class EpickService {
       .map(req => ({
         requestId: req.id,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         status: req.status,
         qty: req.qty,
         note: req.note || null,
@@ -5203,6 +5228,7 @@ export class EpickService {
         requestId: req.id,
         orderNumber: req.orderNumber,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         itemDescription: inventoryMap.get(req.itemNumber) || null,
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,
@@ -5252,6 +5278,7 @@ export class EpickService {
         requestId: req.id,
         orderNumber: req.orderNumber,
         itemNumber: req.itemNumber,
+        lineNumber: req.lineNumber ?? null,
         itemDescription: inventoryMap.get(req.itemNumber) || null,
         pickerUserNumber: req.pickerUserNumber,
         userName: user ? `${user.firstName} ${user.lastName}` : null,

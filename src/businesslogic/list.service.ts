@@ -39,6 +39,7 @@ import { ARDefinitions } from '../models/mmsql/arDefinitions.model'
 import Sequelize from "sequelize";
 import { ARDeposits } from "../models/mmsql/arDeposits.model";
 import { InventoryLogHistory } from "../models/mmsql/InventoryLogHistory.model"
+import { custom } from "joi";
 
 export class ListService {
 
@@ -446,6 +447,16 @@ export class ListService {
 
 
   async getListOfCustomersCreate() {
+    const customer = await Customer.findAll({
+      attributes: ['C_Inactive', 'C_Name', 'C_Number'],
+      order: [['C_Name', 'ASC']]
+    });
+
+    const routes = await Route.findAll({
+      attributes: ['Route_Number'],
+      order: [['Route_Number', 'ASC']]
+    });
+
     const terms = await Terms.findAll({
       attributes: ['TermsCode', 'Terms'],
       order: [['Terms', 'ASC']]
@@ -497,7 +508,7 @@ export class ListService {
     })
 
 
-    return { terms, customerStatus, classOfTrade, deliveryType, documentAdditionalFormat, ediFormatUser, salesRep, salesCategory, taxRateCity, taxRateCounty, taxRate };
+    return { customer, routes, terms, customerStatus, classOfTrade, deliveryType, documentAdditionalFormat, ediFormatUser, salesRep, salesCategory, taxRateCity, taxRateCounty, taxRate };
   }
 
 

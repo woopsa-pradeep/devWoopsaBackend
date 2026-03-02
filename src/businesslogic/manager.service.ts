@@ -82,6 +82,7 @@ import { markAsUntransferable } from "worker_threads";
 import { PriceSubclass_Defs } from "../models/mmsql/priceSubClassDefs.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { OrderPick } from "../models/postgres/epickOrder.model";
+import { PickRightAreaDefinition } from "../models/mmsql/pickRightAreaDefination.model";
 import { postgresSequelize, sequelize } from "../db";
 import { QueryTypes } from "sequelize";
 import InventoryHistory from "../models/mmsql/inventoryHistory.model";
@@ -1817,31 +1818,85 @@ export class ManagerService {
    */
   private async getAssignedCategories(excludeUserId?: number): Promise<{ [key: number]: number[] }> {
     const whereCondition: any = {
-      isActive: true // Only check active users, exclude deleted users
+      isActive: true,
+      [Op.or]: [{ assignmentType: null }, { assignmentType: 'sales_category' }]
     };
-
     if (excludeUserId) {
       whereCondition.id = { [Op.ne]: excludeUserId };
     }
-
     const allUsers = await EpickUser.findAll({
       where: whereCondition,
-      attributes: ['id', 'category']
+      attributes: ['id', 'category', 'assignmentType']
     });
-
     const assignedMap: { [key: number]: number[] } = {};
-
     allUsers.forEach((user: any) => {
+      const assignmentType = user.assignmentType || 'sales_category';
+      if (assignmentType !== 'sales_category') return;
       const categories = user.category || [];
       categories.forEach((cat: number) => {
-        if (!assignedMap[cat]) {
-          assignedMap[cat] = [];
-        }
+        if (!assignedMap[cat]) assignedMap[cat] = [];
         assignedMap[cat].push(user.id);
       });
     });
-
     return assignedMap;
+  }
+
+  /**
+   * Get all assigned PickRight areas from epick users (assignmentType === 'pickright_area').
+   * Returns a map: areaKey -> array of user IDs who have it.
+   */
+  private async getAssignedPickRightAreas(excludeUserId?: number): Promise<{ [key: string]: number[] }> {
+    const whereCondition: any = { isActive: true, assignmentType: 'pickright_area' };
+    if (excludeUserId) {
+      whereCondition.id = { [Op.ne]: excludeUserId };
+    }
+    const users = await EpickUser.findAll({
+      where: whereCondition,
+      attributes: ['id', 'pickRightAreas']
+    });
+    const assignedMap: { [key: string]: number[] } = {};
+    users.forEach((user: any) => {
+      const areas = user.pickRightAreas || [];
+      areas.forEach((area: string) => {
+        if (!assignedMap[area]) assignedMap[area] = [];
+        assignedMap[area].push(user.id);
+      });
+    });
+    return assignedMap;
+  }
+
+  /**
+   * Validate PickRight area assignment: areas must exist in PickRight_AreaDefinition;
+   * single area cannot be shared (same rule as category).
+   */
+  private async validatePickRightAreaAssignment(areas: string[], excludeUserId?: number): Promise<void> {
+    if (!Array.isArray(areas) || areas.length === 0) {
+      throw new AppError('PickRight areas must be a non-empty array', 400);
+    }
+    const validAreas = await PickRightAreaDefinition.findAll({
+      attributes: ['PickArea'],
+      raw: true
+    });
+    const validSet = new Set((validAreas as any[]).map((r: any) => String(r.PickArea).trim()));
+    for (const area of areas) {
+      const key = String(area).trim();
+      if (!key) {
+        throw new AppError('PickRight area cannot be empty', 400);
+      }
+      if (!validSet.has(key)) {
+        throw new AppError(`Invalid PickRight area: "${key}". Area must exist in PickRight_AreaDefinition.`, 400);
+      }
+    }
+    const assignedAreas = await this.getAssignedPickRightAreas(excludeUserId);
+    if (areas.length === 1) {
+      const area = String(areas[0]).trim();
+      if (assignedAreas[area] && assignedAreas[area].length > 0) {
+        throw new AppError(
+          `PickRight area "${area}" is already assigned to another user. Single areas cannot be shared. You can select multiple areas to share them.`,
+          400
+        );
+      }
+    }
   }
 
   /**
@@ -1924,37 +1979,41 @@ export class ManagerService {
       throw new AppError('Password is required', 400);
     }
 
-    // Validate category is provided and is an array
-    if (!body.category || !Array.isArray(body.category) || body.category.length === 0) {
-      throw new AppError('Category is required and must be a non-empty array', 400);
+    const assignmentType = (body.assignmentType || 'sales_category') as 'sales_category' | 'pickright_area';
+
+    if (assignmentType === 'sales_category') {
+      if (!body.category || !Array.isArray(body.category) || body.category.length === 0) {
+        throw new AppError('Category is required and must be a non-empty array when assignmentType is sales_category', 400);
+      }
+      await this.validateCategoryAssignment(body.category);
+    } else {
+      if (!body.pickRightAreas || !Array.isArray(body.pickRightAreas) || body.pickRightAreas.length === 0) {
+        throw new AppError('pickRightAreas is required and must be a non-empty array when assignmentType is pickright_area', 400);
+      }
+      await this.validatePickRightAreaAssignment(body.pickRightAreas);
     }
 
-    // Validate category assignment rules
-    await this.validateCategoryAssignment(body.category);
-
-    // Validate userNumber is provided (required like normal createUser)
-    // Allow 0 as valid userNumber, only reject undefined/null
     if (body.userNumber === undefined || body.userNumber === null) {
       throw new AppError('userNumber is required', 400);
     }
 
-    // Hash the password (user chosen password)
     const hashedPassword = await hashPassword(body.password);
 
-    // Create epick user - role is automatically set to 'epick' in backend
     const epickUser = await EpickUser.create({
       email: body.email,
       firstName: body.firstName,
       lastName: body.lastName,
       password: hashedPassword,
-      userNumber: String(body.userNumber), // Convert to string to match table type
-      category: body.category,
-      role: 'epick', // Automatically set to 'epick' - not from payload
+      userNumber: String(body.userNumber),
+      assignmentType,
+      category: assignmentType === 'sales_category' ? body.category : [],
+      pickRightAreas: assignmentType === 'pickright_area' ? (body.pickRightAreas || []).map((a: string) => String(a).trim()) : [],
       order_type: body.order_type || 'order_number',
       shortby: body.shortby || 'Des',
       item_sort_by: body.item_sort_by || 'line_number',
       status: body.status !== undefined ? body.status : true,
       isActive: body.isActive !== undefined ? body.isActive : true,
+      role: "epick"
     });
 
     // Return user without password
@@ -2020,28 +2079,53 @@ export class ManagerService {
       const hashedPassword = await hashPassword(body.password);
       updateData.password = hashedPassword;
     }
+    
+    // Handle assignmentType + category or pickRightAreas update
+    const activeConfirmations = await EpickConfirmation.findAll({
+      where: { pickerUserId: id, status: 'in_progress' }
+    });
+    const hasActiveOrders = activeConfirmations.length > 0;
 
-    // Handle category update
-    if (body.category !== undefined) {
-      // Validate category assignment rules (exclude current user)
-      await this.validateCategoryAssignment(body.category, id);
-
-      // Check if user has any active orders (in_progress)
-      const activeConfirmations = await EpickConfirmation.findAll({
-        where: {
-          pickerUserId: id,
-          status: 'in_progress'
-        }
-      });
-
-      if (activeConfirmations.length > 0) {
-        throw new AppError(
-          'Cannot update categories while user has active orders. Please complete all active orders first.',
-          400
-        );
+    if (body.assignmentType !== undefined) {
+      const newType = body.assignmentType as string;
+      if (newType !== 'sales_category' && newType !== 'pickright_area') {
+        throw new AppError('assignmentType must be sales_category or pickright_area', 400);
       }
-
+      if (hasActiveOrders) {
+        throw new AppError('Cannot change assignment type while user has active orders. Complete all active orders first.', 400);
+      }
+      updateData.assignmentType = newType;
+      if (newType === 'sales_category') {
+        if (!body.category || !Array.isArray(body.category) || body.category.length === 0) {
+          throw new AppError('category is required when assignmentType is sales_category', 400);
+        }
+        await this.validateCategoryAssignment(body.category, id);
+        updateData.category = body.category;
+        updateData.pickRightAreas = [];
+      } else {
+        if (!body.pickRightAreas || !Array.isArray(body.pickRightAreas) || body.pickRightAreas.length === 0) {
+          throw new AppError('pickRightAreas is required when assignmentType is pickright_area', 400);
+        }
+        await this.validatePickRightAreaAssignment(body.pickRightAreas, id);
+        updateData.pickRightAreas = (body.pickRightAreas as string[]).map((a: string) => String(a).trim());
+        updateData.category = [];
+      }
+    } else if (body.category !== undefined) {
+      await this.validateCategoryAssignment(body.category, id);
+      if (hasActiveOrders) {
+        throw new AppError('Cannot update categories while user has active orders. Complete all active orders first.', 400);
+      }
       updateData.category = body.category;
+      updateData.assignmentType = 'sales_category';
+      updateData.pickRightAreas = [];
+    } else if (body.pickRightAreas !== undefined) {
+      await this.validatePickRightAreaAssignment(body.pickRightAreas, id);
+      if (hasActiveOrders) {
+        throw new AppError('Cannot update PickRight areas while user has active orders. Complete all active orders first.', 400);
+      }
+      updateData.pickRightAreas = (body.pickRightAreas as string[]).map((a: string) => String(a).trim());
+      updateData.assignmentType = 'pickright_area';
+      updateData.category = [];
     }
 
     // Handle order_type update
@@ -2177,13 +2261,15 @@ export class ManagerService {
   }
 
   async updateEpickUserCategories(userId: number, categories: number[]) {
-    // Validate user exists
     const user = await EpickUser.findByPk(userId);
     if (!user) {
       throw new AppError('Epick user not found', 404);
     }
+    const assignmentType = (user as any).assignmentType || 'sales_category';
+    if (assignmentType !== 'sales_category') {
+      throw new AppError('User is assigned by PickRight areas. Use pickRightAreas update to change areas.', 400);
+    }
 
-    // Validate category assignment rules (exclude current user)
     await this.validateCategoryAssignment(categories, userId);
 
     // Check if user has any active orders (in_progress)
@@ -2211,7 +2297,7 @@ export class ManagerService {
 
     // Return updated user
     const updatedUser = await EpickUser.findByPk(userId, {
-      attributes: ['id', 'email', 'firstName', 'lastName', 'category'],
+      attributes: ['id', 'email', 'firstName', 'lastName', 'assignmentType', 'category', 'pickRightAreas'],
     });
 
     return {
@@ -2229,6 +2315,21 @@ export class ManagerService {
 
 
   /**
+   * Get PickRight areas for EPICK user assignment (from MSSQL PickRight_AreaDefinition).
+   */
+  async getPickRightAreasForEpick() {
+    const areas = await PickRightAreaDefinition.findAll({
+      attributes: ['PickArea', 'PickArea_Description'],
+      order: [['PickArea_Description', 'ASC']],
+      raw: true
+    });
+    return (areas as any[]).map((r: any) => ({
+      pickArea: r.PickArea,
+      pickAreaDescription: r.PickArea_Description || r.PickArea
+    }));
+  }
+
+  /**
    * Get all epick users with order preferences
    * Returns list of all epick users including order_type and shortby
    */
@@ -2237,7 +2338,7 @@ export class ManagerService {
       where: {
         isActive: true, // Only return active users
       },
-      attributes: ['id', 'email', 'firstName', 'lastName', 'category', 'order_type', 'shortby', 'item_sort_by', 'userNumber', 'role', 'isActive', 'status'],
+      attributes: ['id', 'email', 'firstName', 'lastName', 'assignmentType', 'category', 'pickRightAreas', 'order_type', 'shortby', 'item_sort_by', 'userNumber', 'isActive', 'status'],
       order: [['firstName', 'ASC'], ['lastName', 'ASC']],
     });
 
@@ -9643,7 +9744,7 @@ export class ManagerService {
     const { startDate, endDate } = filters;
 
     const whereCondition: any = {
-      AR_Type: { [Op.in]: ["I", "C", "A"] },
+      AR_Type: { [Op.in]: ["I", "C", "A", "R"] },
     };
 
     if (startDate && endDate) {
@@ -14137,7 +14238,7 @@ export class ManagerService {
   }
 
   async deleteCustomerAssignInvoiceTemplateByCustomerNumber(customerNumber: number) {
-  const deleted = await CustomerAssignInvoiceTemplate.destroy({
+    const deleted = await CustomerAssignInvoiceTemplate.destroy({
       where: {
         customerNumber: customerNumber,
       },
@@ -14413,14 +14514,14 @@ export class ManagerService {
       throw new AppError('Default template cannot be deleted', 400);
     }
     await template.destroy();
-    try{
+    try {
       await CustomerAssignInvoiceTemplate.destroy({
         where: {
           templateId: id,
         },
       });
 
-    }catch(error){
+    } catch (error) {
       throw new AppError('Error deleting customer assign invoice template', 500);
     }
     return { message: 'Invoice template deleted successfully' };
@@ -14451,27 +14552,27 @@ export class ManagerService {
   }
 
 
-async getCustomerByInvoiceId(invoiceId: number){
-const customerInvoice = await CustomerAssignInvoiceTemplate.findAll({
-  attributes: ['customerNumber'],
-  where: {
-    templateId: invoiceId,
+  async getCustomerByInvoiceId(invoiceId: number) {
+    const customerInvoice = await CustomerAssignInvoiceTemplate.findAll({
+      attributes: ['customerNumber'],
+      where: {
+        templateId: invoiceId,
+      }
+    });
+
+    const finalCustomer = Promise.all(customerInvoice.map(async (customer) => {
+      const customerData = await Customer.findOne({
+        attributes: ['C_Number', 'C_Name'],
+        where: {
+          C_Number: customer.customerNumber,
+        }
+      });
+      return customerData;
+    }));
+
+    return finalCustomer;
+
   }
-});
-
-const finalCustomer = Promise.all(customerInvoice.map(async (customer) => {
-  const customerData = await Customer.findOne({
-    attributes: ['C_Number', 'C_Name'],
-    where: {
-      C_Number: customer.customerNumber,
-    }
-  });
-  return customerData;
-}));
-
-return finalCustomer;
-
-}
 
 
 
@@ -14746,7 +14847,7 @@ return finalCustomer;
     // Fix: await Promise.all, actually get the data before returning
     const finalProductDiscounts = await Promise.all(productDiscounts.map(async (productDiscount) => {
 
-      let productTemp =  productDiscount.dataValues;
+      let productTemp = productDiscount.dataValues;
       const productData = await Inventory.findOne({
         attributes: ['Item_Number', 'Description'],
         where: {
@@ -15634,6 +15735,152 @@ return finalCustomer;
 
     return orders;
   };
+
+  async getDeletedOrders(data: any) {
+    const { startDate, endDate } = data
+
+    const orders = await OrderHeader.findAll({
+      attributes: [
+        'Order_Number',
+        'Order_Deleted',
+        'Order_Date', 'Picklist_Printed', 'Labels_Printed', 'Order_Source', 'Order_Type', 'Order_Deleted', 'S_Number'
+      ],
+      include: [
+        {
+          model: Customer,
+          attributes: ['C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip'],
+          required: false,
+          as: 'customer'
+        },
+      ],
+      where: {
+        Order_Deleted: true,
+        Order_Date: {
+          [Op.gte]: startDate,
+          [Op.lte]: endDate,
+        },
+      },
+      order: [['Order_Number', 'ASC']],
+      raw: false,
+    });
+
+
+    return orders;
+  }
+
+  async getLostSaleCurrentOrders() {
+    const result = await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+            IIF(orderHeader.Invoice_Number_Legacy <> 0,
+              CONVERT(VARCHAR(10), orderHeader.Invoice_Number_Legacy),
+              IIF(orderHeader.Invoice_Number > 1,
+                CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+                CONVERT(VARCHAR(10), orderHeader.Order_Number)
+              )
+            )
+          `),
+          'Document_Number'
+        ],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+        'Order_Number',
+        'Promo_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+
+        [col('Inventory.Description'), 'Description'],
+        [col('Inventory.UOM'), 'UOM'],
+        [col('Inventory.Pack'), 'Pack'],
+        [col('Inventory.UnitOunces'), 'UnitOunces'],
+        [col('Inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('Inventory.Cig_Pack'), 'Cig_Pack'],
+
+        [
+          literal(`
+            ISNULL(
+              (SELECT SUM(Inventory_OnHand)
+               FROM Inventory_Status
+               WHERE Inventory_Status.Code = 0
+               AND Inventory_Status.Item_Number = OrderDetail.Item_Number
+              ), 0
+            )
+          `),
+          'OnHand'
+        ],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        // [col('orderHeader.customer.S_Number'), 'c_Salesman']
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: false,
+          where: {
+            Order_Updated: false,
+            Order_Deleted: false
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+              required: false
+            }
+          ]
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          required: false
+        },
+
+      ],
+
+      where: {
+        Quantity_Shipped: {
+          [Op.lt]: col('Quantity_Ordered'),
+          [Op.gte]: 0
+        }
+      },
+
+      raw: true,
+      limit: 1000,
+    });
+
+    return result;
+
+
+
+  }
 }
 
 

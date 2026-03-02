@@ -207,14 +207,33 @@ export const createEpickUserSchema = Joi.object({
     'number.base': 'userNumber must be a number',
   }),
 
+  assignmentType: Joi.string().valid('sales_category', 'pickright_area').required().messages({
+    'any.required': 'assignmentType is required',
+    'any.only': 'assignmentType must be sales_category or pickright_area',
+  }),
+
   category: Joi.array()
     .items(Joi.number().integer())
-    .min(1)
-    .required()
     .messages({
       'array.base': 'category must be an array',
       'array.min': 'category must contain at least one category',
-      'any.required': 'category is required',
+    })
+    .when('assignmentType', {
+      is: 'sales_category',
+      then: Joi.array().items(Joi.number().integer()).min(1).required(),
+      otherwise: Joi.array().items(Joi.number().integer()).optional().default([]),
+    }),
+
+  pickRightAreas: Joi.array()
+    .items(Joi.string().min(1))
+    .messages({
+      'array.base': 'pickRightAreas must be an array',
+      'array.min': 'pickRightAreas must contain at least one area',
+    })
+    .when('assignmentType', {
+      is: 'pickright_area',
+      then: Joi.array().items(Joi.string().min(1)).min(1).required(),
+      otherwise: Joi.array().items(Joi.string().min(1)).optional().default([]),
     }),
 
   order_type: Joi.string().valid('order_number', 'qty_number').optional().default('order_number'),
@@ -238,6 +257,7 @@ export const updateEpickUserSchema = Joi.object({
   }),
   status: Joi.boolean().optional(),
   isActive: Joi.boolean().optional(),
+  assignmentType: Joi.string().valid('sales_category', 'pickright_area').optional(),
   category: Joi.array()
     .items(Joi.number().integer())
     .min(1)
@@ -245,6 +265,14 @@ export const updateEpickUserSchema = Joi.object({
     .messages({
       'array.base': 'category must be an array',
       'array.min': 'category must contain at least one category',
+    }),
+  pickRightAreas: Joi.array()
+    .items(Joi.string().min(1))
+    .min(1)
+    .optional()
+    .messages({
+      'array.base': 'pickRightAreas must be an array',
+      'array.min': 'pickRightAreas must contain at least one area',
     }),
   order_type: Joi.string().valid('order_number', 'qty_number').optional(),
   shortby: Joi.string().valid('asc', 'des', 'Asc', 'Des').optional(),

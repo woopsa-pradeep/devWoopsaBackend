@@ -44,6 +44,7 @@ import { postgresSequelize } from '../../db';
     public deliveryStartLong!: number | null;
     public deliveryEndLat!: number | null;
     public deliveryEndLong!: number | null;
+  
   }
 
 Setting.init(

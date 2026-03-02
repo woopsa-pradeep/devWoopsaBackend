@@ -404,7 +404,7 @@ export class EpickController {
             return sendResponse(res, 401, false, null, "User not authenticated");
         }
 
-        const { orderNumber, itemNumber, requestType, qty, note } = req.body;
+        const { orderNumber, itemNumber, lineNumber, requestType, qty, note } = req.body;
 
         if (!orderNumber || !itemNumber) {
             return sendResponse(res, 400, false, null, "orderNumber and itemNumber are required");
@@ -421,7 +421,7 @@ export class EpickController {
         }
 
         const data = await this.epickService.createOverrideRequest(
-            { orderNumber, itemNumber, requestType, qty, note },
+            { orderNumber, itemNumber, lineNumber, requestType, qty, note },
             userId
         );
 
@@ -437,7 +437,7 @@ export class EpickController {
             return sendResponse(res, 401, false, null, "User not authenticated");
         }
 
-        const { orderNumber, itemNumber, qty, note } = req.body;
+        const { orderNumber, itemNumber, lineNumber, qty, note } = req.body;
 
         if (!orderNumber || !itemNumber) {
             return sendResponse(res, 400, false, null, "orderNumber and itemNumber are required");
@@ -448,7 +448,7 @@ export class EpickController {
         }
 
         const data = await this.epickService.createScanOverrideRequest(
-            { orderNumber, itemNumber, qty, note },
+            { orderNumber, itemNumber, lineNumber, qty, note },
             userId
         );
 

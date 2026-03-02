@@ -3734,6 +3734,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category,detail.inventory,price + taxRate);
       }
 
+      const discount = await getProductDiscountFromRedis(Number(detail.Item_Number));
 
       return {
         isNewItem,
@@ -3754,7 +3755,8 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
         showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
         showLowStock: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
         showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
-        hasQtyDiscount: hasQtyDiscount?.allowToDiscount || false,
+        hasQtyDiscount: discount ? false : hasQtyDiscount?.allowToDiscount || false,
+        productDiscount: discount ?? null,
         qtyDiscount: hasQtyDiscount,
         Inventory_OnHand: inventoryOnHand,
 
