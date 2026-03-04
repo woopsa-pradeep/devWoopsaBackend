@@ -73,7 +73,7 @@ export const startCronJobs = () => {
     cron.schedule('0 14-21 * * *', async () => {
       try {
         console.log('[Cron] Starting invoice email processing...');
-        await processInvoiceEmails();
+        // await processInvoiceEmails();
         console.log('[Cron] Invoice email processing completed.');
       } catch (error) {
         console.error('[Cron] Error during invoice email processing:', error);
@@ -86,7 +86,7 @@ export const startCronJobs = () => {
     cron.schedule('30 2 * * *', async () => {
       try {
         console.log('[Cron] Starting customer balance email processing...');
-        await processCustomerBalanceEmails();
+        // await processCustomerBalanceEmails();
         console.log('[Cron] Customer balance email processing completed.');
       } catch (error) {
         console.error('[Cron] Error during customer balance email processing:', error);
