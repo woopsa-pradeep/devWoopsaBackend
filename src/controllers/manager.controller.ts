@@ -1520,6 +1520,11 @@ export class ManagerController {
     sendResponse(res, 200, true, data, 'Customer Velocity report fetched successfully');
   }
 
+  async getVelocityReportSalesRep(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getVelocityReportSalesRep(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async setRetailerLocation(req: AuthRequest, res: Response) {
     const data = await this.managerService.setRetailerLocation(req.body);
     sendResponse(res, 201, true, data, 'Retailer location set successfully');
@@ -2075,6 +2080,11 @@ export class ManagerController {
 
   async getLostSaleCurrentOrders(req: AuthRequest, res: Response) {
     const data = await this.managerService.getLostSaleCurrentOrders();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getSalesInvoiceReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getSalesInvoiceReport(req.query);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 

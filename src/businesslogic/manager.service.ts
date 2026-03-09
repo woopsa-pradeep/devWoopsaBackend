@@ -1,4 +1,4 @@
-import { Request } from "express";
+import { query, Request } from "express";
 import moment from "moment";
 import { AuthMessage, EmailMessage, Manager } from "../constants";
 import { PaginationOptions } from "../interfaces/pagination.interface";
@@ -2079,7 +2079,7 @@ export class ManagerService {
       const hashedPassword = await hashPassword(body.password);
       updateData.password = hashedPassword;
     }
-    
+
     // Handle assignmentType + category or pickRightAreas update
     const activeConfirmations = await EpickConfirmation.findAll({
       where: { pickerUserId: id, status: 'in_progress' }
@@ -9049,6 +9049,143 @@ export class ManagerService {
     };
   }
 
+  async getVelocityReportSalesRep(data: any) {
+    const { startDate, endDate } = data;
+
+    const invoices = await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+          IIF(orderHeader.Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), orderHeader.Invoice_Number_Legacy),
+            IIF(orderHeader.Invoice_Number > 1,
+              CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+              CONVERT(VARCHAR(10), orderHeader.Order_Number)
+            )
+          )
+        `),
+          'Document_Number'
+        ],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+        [col('orderHeader.SalesRep.S_Desc'), 'S_Desc'],
+
+        'Order_Number',
+        'Promo_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+
+        [col('Inventory.Price1'), 'Price1'],
+        'Price_Reference',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+
+        [
+          literal(`
+          (OrderDetail.Price +
+           OrderDetail.OTP_Amount_State +
+           OrderDetail.OTP_Amount_County +
+           OrderDetail.OTP_Amount_City)
+        `),
+          'TotalPrice'
+        ],
+
+        [
+          literal(`
+          (OrderDetail.Price_Reference +
+           OrderDetail.OTP_Amount_State +
+           OrderDetail.OTP_Amount_County +
+           OrderDetail.OTP_Amount_City)
+        `),
+          'TotalPriceRef'
+        ],
+
+        [col('Inventory.Description'), 'Description'],
+        [col('Inventory.UOM'), 'UOM'],
+        [col('Inventory.Pack'), 'Pack'],
+        [col('Inventory.UnitOunces'), 'UnitOunces'],
+        [col('Inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('Inventory.Points'), 'Points'],
+        [col('Inventory.Cig_Pack'), 'Cig_Pack'],
+        [col('Inventory.Price_Class'), 'Price_Class'],
+        [col('Inventory.PriceClass.Class_Desc'), 'Class_Desc'],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'True',
+            Order_Deleted: 'False',
+            Invoice_Date: {
+              [Op.between]: [startDate, endDate]
+            }
+          },
+          include: [
+            {
+              model: SalesRep,
+              as: 'salesRep',
+              attributes: []
+            },
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: []
+            }
+          ]
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          include: [
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: []
+            }
+          ]
+        }
+      ],
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC']
+      ],
+
+      raw: true
+    });
+
+    return invoices;
+  }
+
   async setRetailerLocation(body: any) {
     const retailerLocation = await RetailerLocation.create(body);
     return retailerLocation;
@@ -13400,7 +13537,7 @@ export class ManagerService {
         {
           model: Inventory,
           as: 'inventory',
-          attributes: ['Item_Number', 'Description', 'UOM', 'Unit_Price', 'Price_Class', 'location', 'section', 'PickArea', 'Retail1', 'Retail2', 'Retail3', 'UnitOunces', 'CaseLength', 'CaseWidth', 'CaseHeight', 'CasesPerPallet',
+          attributes: ['Item_Number', 'Description', 'UOM', 'Price_Class', 'location', 'section', 'PickArea', 'Retail1', 'Retail2', 'Retail3', 'UnitOunces', 'CaseLength', 'CaseWidth', 'CaseHeight', 'CasesPerPallet',
             'EBT', 'FrozenFlag', 'CoolerFlag', 'HazMatFlag', 'StandardUnitDescription', 'MSA_Promotion_Code', 'MSA_Promotion', 'Lot_ID', 'NACS_Unit', 'Brand_ID', 'NACS', 'MSA_Category_Code', 'Sequence', 'Retail1', 'Retail2', 'Retail3',
           ],
           include: [
@@ -13429,10 +13566,30 @@ export class ManagerService {
       ]
     });
 
-    // 3. Final Invoice Object
+    // 3. Previous Balance (AR)
+    const customerNumber = (orderHeader as any).C_Number;
+    const [balanceResult]: any = await CustReceivables.findAll({
+      attributes: [
+        [fn('SUM', literal('AR_Amount - AR_Applied')), 'TotalAR']
+      ],
+      where: { C_Number: customerNumber },
+      raw: true,
+    });
+    const previousBalance = Number(balanceResult?.TotalAR) || 0;
+
+    // 4. Calculate Unit_Price for each item
+    const invoiceItems = orderItems.map((item: any) => {
+      const plain = item.get({ plain: true });
+      const pack = Number(plain.Pack) || 1;
+      plain.Unit_Price = Number((plain.Price / pack).toFixed(4));
+      return plain;
+    });
+
+    // 5. Final Invoice Object
     return {
       invoiceHeader: orderHeader,
-      invoiceItems: orderItems
+      invoiceItems,
+      previousBalance
     };
   }
 
@@ -15766,6 +15923,162 @@ export class ManagerService {
 
 
     return orders;
+  }
+
+  async getSalesInvoiceReport(data: any) {
+
+    const { startDate, endDate, limit = 2000, offset = 0 } = data;
+
+    const result = await OrderDetail.findAll({
+      attributes: [
+
+        [
+          literal(`
+          IIF(orderHeader.Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), orderHeader.Invoice_Number_Legacy),
+            IIF(orderHeader.Invoice_Number > 1,
+              CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+              CONVERT(VARCHAR(10), orderHeader.Order_Number)
+            )
+          )
+        `),
+          "Document_Number"
+        ],
+
+        [col("orderHeader.Invoice_Date"), "Invoice_Date"],
+        [col("orderHeader.Invoice_Number"), "Invoice_Number"],
+        [col("orderHeader.C_Number"), "C_Number"],
+        [col("orderHeader.S_Number"), "S_Number"],
+        [col("orderHeader.Route_Number"), "Route_Number"],
+
+        [
+          literal(`(
+          SELECT S_Desc
+          FROM SalesRep
+          WHERE SalesRep.S_Number = orderHeader.S_Number
+        )`),
+          "S_Desc"
+        ],
+
+        "Order_Number",
+        "Promo_Number",
+        "Item_Number",
+        "Quantity_Ordered",
+        "Quantity_Shipped",
+        "Unit_Code",
+        "OrderDetail_Code",
+        "Delivered",
+        "Credit_ReturnToStock",
+        "Price",
+
+        [col("inventory.Price1"), "Price1"],
+
+        "Price_Reference",
+        "NetCost",
+        "BaseCost",
+        "AvgCost",
+        "Invoice_Cost",
+        "OTP_Amount_State",
+        "OTP_Amount_County",
+        "OTP_Amount_City",
+
+        [
+          literal(`
+          OrderDetail.Price +
+          OrderDetail.OTP_Amount_State +
+          OrderDetail.OTP_Amount_County +
+          OrderDetail.OTP_Amount_City
+        `),
+          "TotalPrice"
+        ],
+
+        [
+          literal(`
+          OrderDetail.Price_Reference +
+          OrderDetail.OTP_Amount_State +
+          OrderDetail.OTP_Amount_County +
+          OrderDetail.OTP_Amount_City
+        `),
+          "TotalPriceRef"
+        ],
+
+        [col("inventory.Description"), "Description"],
+        [col("inventory.UOM"), "UOM"],
+        [col("inventory.Pack"), "Pack"],
+        [col("inventory.UnitOunces"), "UnitOunces"],
+        [col("inventory.Cig_Sticks"), "Cig_Sticks"],
+        [col("inventory.Points"), "Points"],
+        [col("inventory.Cig_Pack"), "Cig_Pack"],
+        [col("inventory.Price_Class"), "Price_Class"],
+
+        [
+          literal(`
+          (
+            SELECT Class_Desc
+            FROM Price_Classes
+            WHERE Price_Classes.Price_Class = inventory.Price_Class
+          )
+        `),
+          "Class_Desc"
+        ],
+
+        [col("orderHeader.customer.C_Name"), "C_Name"],
+        [col("orderHeader.customer.c_address"), "c_address"],
+        [col("orderHeader.customer.c_city"), "c_city"],
+        [col("orderHeader.customer.c_state"), "c_state"],
+        [col("orderHeader.customer.c_zip"), "c_zip"],
+        [col("orderHeader.customer.c_phone"), "c_phone"],
+        [col("orderHeader.customer.c_Salesman"), "c_Salesman"]
+
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: "orderHeader",
+          attributes: [],
+          required: true,
+
+          where: {
+            Order_Updated: true,
+            Order_Deleted: false,
+            Invoice_Number: { [Op.ne]: null },
+            Invoice_Date: {
+              [Op.gte]: startDate,
+              [Op.lte]: endDate
+            }
+          },
+
+          include: [
+            {
+              model: Customer,
+              as: "customer",
+              attributes: [],
+              required: false
+            }
+          ]
+        },
+
+        {
+          model: Inventory,
+          as: "inventory",
+          attributes: [],
+          required: false
+        }
+      ],
+
+      order: [
+        [{ model: OrderHeader, as: "orderHeader" }, "Invoice_Date", "ASC"],
+        [{ model: OrderHeader, as: "orderHeader" }, "Order_Number", "ASC"]
+      ],
+
+      limit: Number(limit),
+      offset: Number(offset),
+      subQuery: false,
+      raw: true
+    });
+
+    return result;
   }
 
   async getLostSaleCurrentOrders() {

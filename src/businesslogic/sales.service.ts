@@ -1430,11 +1430,11 @@ export class SalesService {
 
     }
 
-    if (!salesCategoryId.length) {
+  
       if (Array.isArray(salesCategory) && salesCategory.length > 0) {
         whereClause.Sales_Category = { [Op.in]: salesCategory };
       }
-    }
+    
 
     // orderClause = [['Date_Created', 'DESC']] as Order;
 
@@ -1587,7 +1587,7 @@ export class SalesService {
       }
 
       const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
-     
+
       return {
         Pack: e.Pack,
         Description: e.Description,
@@ -2362,7 +2362,7 @@ export class SalesService {
         isActive: true,
         type: 'order'
       },
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'ASC']]
     });
 
     let todayTotalAmount = 0;
@@ -2695,7 +2695,7 @@ export class SalesService {
   async setSalesSession(userId: number, customerId: number) {
     const isSessionActive = await SalesSession.findOne({ where: { userId: userId } });
     let storeDetail: any = null;
-    let userData  :any= await WebUsers.findOne({
+    let userData: any = await WebUsers.findOne({
       where: { id: userId },
       attributes: ['setUserDiscountLimit', 'allowDiscount']
     });
@@ -3443,7 +3443,7 @@ export class SalesService {
       if (userJurisdiction != null && detail.inventory.Sales_Category) {
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category, detail.inventory, price + taxRate);
       }
- 
+
       const discount = await getProductDiscountFromRedis(Number(detail.Item_Number));
 
       return {

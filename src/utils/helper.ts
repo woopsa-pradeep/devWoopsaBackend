@@ -28,6 +28,7 @@ import { Inventory_ExcludeState } from "../models/mmsql/inventoryExcludeState.mo
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { OrderDetail } from "../models/mmsql/orderDetail.model";
 import { CustomerSpecialGroup } from "../models/mmsql/customerSpecialGroup.model";
+import { WebCategory } from "../models/postgres/webCategory.model";
 
 type PriceFields = {
   Price1?: number | null;
@@ -1351,7 +1352,7 @@ export async function getTaxRateV1(
       break;
 
     case 1: // $ Rate / Ounce
-      taxAmount = rate   * (item?.UnitOunces || 0); // replace NetCost with weight field if available
+      taxAmount = rate * (item?.UnitOunces || 0); // replace NetCost with weight field if available
       break;
 
     case 2: // % Rate on Net Cost (0.10 = 10%)
@@ -2346,7 +2347,7 @@ export function pgArrayToJsArray(value: any): string[] {
 
 
 
-export async function getPrepaidTaxRate(userJurisdiction: number, salesId: number, e: any,price: number) {
+export async function getPrepaidTaxRate(userJurisdiction: number, salesId: number, e: any, price: number) {
 
   const cig = e?.Cig_Pack || 0;
   const sticks = e?.Cig_Sticks || 0;
@@ -2371,14 +2372,14 @@ export async function getPrepaidTaxRate(userJurisdiction: number, salesId: numbe
         },
       })
 
-      if(cig == 10){
+      if (cig == 10) {
 
-        return (sticks/cig) * (taxRateValue?.dataValues?.PPD_Rate10 || 0)/price;
-      }else if(cig == 20){
-        return (sticks/cig) * (taxRateValue?.dataValues?.PPD_Rate20 || 0)/price;
-      }else if(cig == 25){
-        return (sticks/cig) * (taxRateValue?.dataValues?.PPD_Rate25 || 0)/price;
-      }else{
+        return (sticks / cig) * (taxRateValue?.dataValues?.PPD_Rate10 || 0) / price;
+      } else if (cig == 20) {
+        return (sticks / cig) * (taxRateValue?.dataValues?.PPD_Rate20 || 0) / price;
+      } else if (cig == 25) {
+        return (sticks / cig) * (taxRateValue?.dataValues?.PPD_Rate25 || 0) / price;
+      } else {
         return 0;
       }
     }
@@ -2520,6 +2521,20 @@ export async function getAllowedSalesCategoriesAndPriceClasses(customerNumber: n
     raw: true,
   });
 
+  const salesCategoriesWithImages = await Promise.all(salesCategories.map(async (e: any) => {
+    const categoryImage = await WebCategory.findOne({
+      where: {
+        categoryId: e.Sales_Category,
+        isActive: true
+      },
+      raw: true,
+    })
+    return {
+      ...e,
+      image: categoryImage?.image || "https://demo-res.cloudinary.com/image/upload/sample.png"
+    }
+  }))
+
   // 4) Fetch Price Classes that belong to those groups (only needed columns)
   const priceClasses = await PriceClass.findAll({
     where: { Sales_Category_Group: { [Op.in]: allowedCategories } },
@@ -2528,7 +2543,7 @@ export async function getAllowedSalesCategoriesAndPriceClasses(customerNumber: n
     raw: true,
   });
 
-  return { priceClasses, salesCategories };
+  return { priceClasses, salesCategories: salesCategoriesWithImages };
 }
 
 export async function getAllowedSalesCategories(customerNumber: number) {

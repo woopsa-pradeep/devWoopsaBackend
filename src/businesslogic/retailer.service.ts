@@ -503,7 +503,12 @@ orderClause = [
   }
 
 
-  if(!salesCategoryId.length ) {
+    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    }
+  
+
+  if ( salesCategoryId && !salesCategoryId.length) {
     if (Array.isArray(salesCategory) && salesCategory.length > 0) {
       whereClause.Sales_Category = { [Op.in]: salesCategory };
     }
@@ -5179,6 +5184,16 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
      throw new AppError('Customer number is required', 400);
    }
 
+   // Normalize itemNumber to always be an array (handle single value, array, or undefined)
+   let itemNumbersToExclude: number[] = [];
+   if (itemNumber != null) {
+     if (Array.isArray(itemNumber)) {
+       itemNumbersToExclude = itemNumber.filter((num: any) => num != null && num !== '').map((num: any) => Number(num));
+     } else {
+       itemNumbersToExclude = [Number(itemNumber)];
+     }
+   }
+
    // Calculate date 12 weeks ago from today
    const currentDate = new Date();
    const twelveWeeksAgo = new Date(currentDate.getTime() - 84 * 24 * 60 * 60 * 1000); // 12 weeks = 84 days
@@ -5202,23 +5217,12 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
      return [];
    }
 
-   // Build where clause to exclude the provided itemNumber
-   const whereClause: any = {
-     Order_Number: { [Op.in]: orderNumbers },
-     Quantity_Ordered: {
-       [Op.gt]: 0 // Only include items that were actually ordered
-     }
-   };
-   if (itemNumber) {
-     whereClause.Item_Number = { [Op.ne]: itemNumber };
-   }
-
    // Build SQL query to get top 10 most purchased items
    const orderNumbersList = orderNumbers.join(',');
-   // Check if itemNumber is provided (including 0 as a valid value)
-   const hasItemNumber = itemNumber != null && itemNumber !== '' && itemNumber !== undefined;
-   const itemNumberCondition = hasItemNumber 
-     ? `AND od.Item_Number != ${Number(itemNumber)}` 
+   
+   // Build condition to exclude item numbers
+   const itemNumberCondition = itemNumbersToExclude.length > 0
+     ? `AND od.Item_Number NOT IN (${itemNumbersToExclude.join(',')})` 
      : '';
    
    const query = `
@@ -5285,20 +5289,20 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
          price
        );
 
-       const isDiscounted = inventoryData?.Price_Subclass 
-         ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass) 
-         : false;
+      const isDiscounted = inventoryData?.Price_Subclass 
+        ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass) 
+        : false;
 
-       let prepaidTaxRate = 0;
-       if (userJurisdiction != null && inventoryData?.Sales_Category) {
-         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category?.Sales_Category as number,inventoryData,price + taxRate);
-       }
+      let prepaidTaxRate = 0;
+      if (userJurisdiction != null && inventoryData?.Sales_Category?.Sales_Category != null) {
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category.Sales_Category as number, inventoryData, price + taxRate);
+      }
 
-       return {
-         Item_Number: itemNumber,
-         Description: inventoryData?.Description || null,
-         totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
-         totalOrders: Number(item.totalOrders || 0),
+      return {
+        Item_Number: itemNumber,
+        Description: inventoryData?.Description || null,
+        totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
+        totalOrders: Number(item.totalOrders || 0),
          price,
          priceWithTax: price + taxRate,
          Tax_Rate: taxRate,
@@ -5516,39 +5520,40 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
          price
        );
 
-       const isDiscounted = inventoryData?.Price_Subclass 
-         ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass) 
-         : false;
+      const isDiscounted = inventoryData?.Price_Subclass 
+        ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass) 
+        : false;
 
-       let prepaidTaxRate = 0;
-       if (userJurisdiction != null && inventoryData?.Sales_Category) {
-         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category?.Sales_Category as number,inventoryData,price + taxRate);
-       }
+      let prepaidTaxRate = 0;
+      if (userJurisdiction != null && inventoryData?.Sales_Category != null) {
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category as number, inventoryData, price + taxRate);
+      }
 
-       return {
-         Item_Number: itemNumber,
-         Description: inventoryData?.Description || null,
-         totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
-         totalOrders: Number(item.totalOrders || 0),
-         price,
-         priceWithTax: price + taxRate,
-         Tax_Rate: taxRate,
-         isDiscounted,
-         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
-         prepaidTaxRate: prepaidTaxRate,
-         Inventory_OnHand: inventoryOnHand,
-         showDistributorImage: productImage?.isAllow ?? false,
-         distributorImage: productImage?.img_url || null,
-         masterImage: inventoryData?.UPCList?.[0]?.UPC_Number 
-           ? `${process.env.AZUREIMAGESERVER}${inventoryData.UPCList[0].UPC_Number}.jpg`
-           : null,
-         SalesCategory: inventoryData?.SalesCategory?.Category_Desc || null,
-         PriceClass: inventoryData?.PriceClass?.Class_Desc || null,
-         Pack: inventoryData?.Pack || null,
-         CaseCount: inventoryData?.CaseCount || null,
-         UOM: inventoryData?.UOM || null,
-         source: item.source // 'customer', 'overall', or 'profit'
-       };
+      console.log(inventoryData?.Sales_Category, 'inventoryData?.Sales_Category?.Sales_Category')
+      return {
+        Item_Number: itemNumber,
+        Description: inventoryData?.Description || null,
+        totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
+        totalOrders: Number(item.totalOrders || 0),
+        price,
+        priceWithTax: price + taxRate,
+        Tax_Rate: taxRate,
+        isDiscounted,
+        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+        prepaidTaxRate: prepaidTaxRate,
+        Inventory_OnHand: inventoryOnHand,
+        showDistributorImage: productImage?.isAllow ?? false,
+        distributorImage: productImage?.img_url || null,
+        masterImage: inventoryData?.UPCList?.[0]?.UPC_Number 
+          ? `${process.env.AZUREIMAGESERVER}${inventoryData.UPCList[0].UPC_Number}.jpg`
+          : null,
+        SalesCategory: inventoryData?.SalesCategory?.Category_Desc || null,
+        PriceClass: inventoryData?.PriceClass?.Class_Desc || null,
+        Pack: inventoryData?.Pack || null,
+        CaseCount: inventoryData?.CaseCount || null,
+        UOM: inventoryData?.UOM || null,
+        source: item.source // 'customer', 'overall', or 'profit'
+      };
      })
    );
 

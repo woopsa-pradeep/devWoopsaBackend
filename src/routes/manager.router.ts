@@ -412,6 +412,7 @@ router.delete('/retailer-location/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), 
 
 router.get('/getShortShipmentReport', catchAsync(managerController.getShortShipmentReport.bind(managerController)));
 router.get('/getVelocityReportCustomer', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getVelocityReportCustomer.bind(managerController)));
+router.get('/getVelocityReportSalesRep', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getVelocityReportSalesRep.bind(managerController)));
 
 // Retailer Location routes
 router.post('/setRetailerLocation', verifyToken, catchAsync(managerController.setRetailerLocation.bind(managerController)));
@@ -558,5 +559,7 @@ router.get('/deletedOrders', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(
 router.get('/lostSaleCurrentOrders', catchAsync(managerController.getLostSaleCurrentOrders.bind(managerController)));
 
 router.get('/inventoryLogHistory', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getInventoryLogHistory.bind(managerController)));
+
+router.get('/salesInvoiceReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getSalesInvoiceReport.bind(managerController)));
 
 export default router;  
