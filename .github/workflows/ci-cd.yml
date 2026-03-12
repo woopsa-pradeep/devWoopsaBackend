@@ -54,11 +54,12 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            echo "🚀 DEV SERVER DEPLOY STARTED"
+            echo "🚀 QA STAGE DEPLOY STARTED"
 
             cd /var/www/myapp/devWoopsaBackend
 
             echo "📥 Pulling latest code"
+            git remote set-url origin https://${{ secrets.GIT_TOKEN }}@github.com/woopsa-pradeep/devWoopsaBackend.git
             git pull origin dev
 
             echo "📦 Installing dependencies"
