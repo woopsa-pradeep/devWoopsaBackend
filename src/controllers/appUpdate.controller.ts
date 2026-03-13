@@ -139,7 +139,7 @@ export const checkVersionInfo = async (req: Request, res: Response) => {
     }
 
     return res.status(200).json({
-      success: true,
+      success: false,
       message: "Latest app version fetched successfully",
       data: dummyAppUpdate,
     });
