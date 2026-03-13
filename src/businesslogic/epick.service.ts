@@ -1186,6 +1186,9 @@ export class EpickService {
     if (usePickRightFilter) {
       inventoryAttributes.push("PickArea");
     }
+    // Read distributor ePick setting to determine if we should cap qty by inventory on hand
+    const epickSettingRow = await EpickSetting.findOne({ raw: true }) as { capOrderQtyByInventory?: boolean } | null;
+    const capOrderQtyByInventory = epickSettingRow?.capOrderQtyByInventory === true;
 
     const data = await OrderDetail.findAll({
       where: {
@@ -1269,7 +1272,14 @@ export class EpickService {
         },
       });
 
-      const inventoryOnHand = await getInventoryOnHand(item.Item_Number)
+      const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
+
+      // Optionally cap Quantity_Ordered by inventory on hand (display only; DB unchanged)
+      let quantityOrdered = Number(item.Quantity_Ordered) || 0;
+      if (capOrderQtyByInventory) {
+        const available = inventoryOnHand ?? 0;
+        quantityOrdered = Math.min(quantityOrdered, Math.max(0, available));
+      }
 
       // Check if item has a substitute product
       let substituteProduct = null;
@@ -1449,6 +1459,7 @@ export class EpickService {
 
       return {
         ...item,
+        Quantity_Ordered: quantityOrdered,
         inventoryOnHand: inventoryOnHand,
         masterImage: `${process.env.AZUREIMAGESERVER}${primaryUPCForImage}.jpg`,
         isDistributorImageShow: productImage?.isAllow ?? false,
@@ -2820,7 +2831,35 @@ export class EpickService {
       group: ["OrderPick.id", "boxes.id"] // required for aggregate
     });
 
-    return data;
+    const epickSettingRow = await EpickSetting.findOne({ raw: true }) as { capOrderQtyByInventory?: boolean } | null;
+    const capOrderQtyByInventory = epickSettingRow?.capOrderQtyByInventory === true;
+
+    if (!capOrderQtyByInventory || !data) {
+      return data;
+    }
+
+    // When cap is on: totalLines and totalQty reflect visible items only (capped by inventory, 0-qty lines hidden)
+    const orderDetails = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: ['Item_Number', 'Quantity_Ordered'],
+      raw: true,
+    });
+
+    let visibleLines = 0;
+    let visibleQty = 0;
+    for (const d of orderDetails as any[]) {
+      const onHand = (await getInventoryOnHand(d.Item_Number)) ?? 0;
+      const capped = Math.min(Number(d.Quantity_Ordered) || 0, Math.max(0, onHand));
+      if (capped > 0) {
+        visibleLines += 1;
+        visibleQty += capped;
+      }
+    }
+
+    const result = data.get({ plain: true }) as any;
+    result.totalLines = visibleLines;
+    result.totalQty = String(visibleQty);
+    return result;
   }
 
 
@@ -4903,6 +4942,9 @@ export class EpickService {
       throw new AppError('Invalid order number', 400);
     }
 
+    const epickSettingRow = await EpickSetting.findOne({ raw: true }) as { capOrderQtyByInventory?: boolean } | null;
+    const capOrderQtyByInventory = epickSettingRow?.capOrderQtyByInventory === true;
+
     // Get ALL pickers who worked on this order (from EpickConfirmation)
     const confirmations = await EpickConfirmation.findAll({
       where: {
@@ -4991,6 +5033,28 @@ export class EpickService {
         return pickerCategories.length === 0 || pickerCategories.includes(salesCategory);
       });
 
+      const pickerItemsWithQty = await Promise.all(pickerItems.map(async (item: any) => {
+        let quantityOrdered = Number(item.Quantity_Ordered) || 0;
+        if (capOrderQtyByInventory) {
+          const onHand = (await getInventoryOnHand(item.Item_Number)) ?? 0;
+          quantityOrdered = Math.min(quantityOrdered, Math.max(0, onHand));
+        }
+        return {
+          itemNumber: item.Item_Number,
+          description: item.inventory?.Description,
+          section: item.inventory?.Section,
+          location: item.inventory?.Location,
+          salesCategory: item.inventory?.Sales_Category,
+          quantityOrdered,
+          quantityShipped: item.Quantity_Shipped,
+          confirmed: item.Confirmed
+        };
+      }));
+
+      const visiblePickerItems = capOrderQtyByInventory
+        ? pickerItemsWithQty.filter((pi: any) => (Number(pi.quantityOrdered) || 0) > 0)
+        : pickerItemsWithQty;
+
       result.push({
         pickerUserId: pickerId,
         pickerUserNumber: picker.userNumber || confirmation.pickerUserNumber || null,
@@ -5009,16 +5073,7 @@ export class EpickService {
           createdAt: req.createdAt,
           updatedAt: req.updatedAt,
         })),
-        pickerItems: pickerItems.map((item: any) => ({
-          itemNumber: item.Item_Number,
-          description: item.inventory?.Description,
-          section: item.inventory?.Section,
-          location: item.inventory?.Location,
-          salesCategory: item.inventory?.Sales_Category,
-          quantityOrdered: item.Quantity_Ordered,
-          quantityShipped: item.Quantity_Shipped,
-          confirmed: item.Confirmed
-        }))
+        pickerItems: visiblePickerItems
       });
     }
 

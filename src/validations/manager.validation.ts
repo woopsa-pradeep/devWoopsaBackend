@@ -1680,6 +1680,9 @@ export const createEpickSettingSchema = Joi.object({
   allowSingleScan: Joi.boolean().required().messages({
     'boolean.base': 'Allow single scan must be a boolean',
     'any.required': 'Allow single scan is required'
+  }),
+  capOrderQtyByInventory: Joi.boolean().optional().messages({
+    'boolean.base': 'Cap order qty by inventory must be a boolean'
   })
 });
 
@@ -1689,6 +1692,9 @@ export const updateEpickSettingSchema = Joi.object({
   }),
   allowSingleScan: Joi.boolean().optional().messages({
     'boolean.base': 'Allow single scan must be a boolean'
+  }),
+  capOrderQtyByInventory: Joi.boolean().optional().messages({
+    'boolean.base': 'Cap order qty by inventory must be a boolean'
   })
 });
 

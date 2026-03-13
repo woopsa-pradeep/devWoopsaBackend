@@ -7046,7 +7046,7 @@ export class ManagerService {
   }
 
   // EpickSetting CRUD methods
-  async createEpickSetting(body: { pin: string; allowSingleScan: boolean }) {
+  async createEpickSetting(body: { pin: string; allowSingleScan: boolean; capOrderQtyByInventory?: boolean }) {
     const epickSetting = await EpickSetting.create(body);
     return epickSetting;
   }
@@ -7138,7 +7138,7 @@ export class ManagerService {
     return item ? true : false;
   }
 
-  async updateEpickSetting(id: number, body: { pin?: string; allowSingleScan?: boolean }) {
+  async updateEpickSetting(id: number, body: { pin?: string; allowSingleScan?: boolean; capOrderQtyByInventory?: boolean }) {
     const epickSetting = await EpickSetting.findByPk(id);
     if (!epickSetting) {
       throw new AppError('Epick setting not found', 404);
@@ -9085,6 +9085,7 @@ export class ManagerService {
         'Delivered',
         'Credit_ReturnToStock',
         'Price',
+        'Sales_Category',
 
         [col('Inventory.Price1'), 'Price1'],
         'Price_Reference',
@@ -9125,6 +9126,13 @@ export class ManagerService {
         [col('Inventory.Cig_Pack'), 'Cig_Pack'],
         [col('Inventory.Price_Class'), 'Price_Class'],
         [col('Inventory.PriceClass.Class_Desc'), 'Class_Desc'],
+        [col('Inventory.Primary_Vendor'), 'Primary_Vendor'],
+        [col('Inventory.Section'), 'Section'],
+        [col('Inventory.Location'), 'Location'],
+        [col('Inventory.PickArea'), 'PickArea'],
+        [col('Inventory.OTP_Number'), 'OTP_Number'],
+
+
 
         [col('orderHeader.customer.C_Name'), 'C_Name'],
         [col('orderHeader.customer.c_address'), 'c_address'],
@@ -9133,6 +9141,11 @@ export class ManagerService {
         [col('orderHeader.customer.c_zip'), 'c_zip'],
         [col('orderHeader.customer.c_phone'), 'c_phone'],
         [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+        [col('orderHeader.customer.C_ClassOfTrade'), 'C_ClassOfTrade'],
+        [col('orderHeader.customer.Jurisdiction_State'), 'Jurisdiction_State'],
+        [col('orderHeader.customer.Jurisdiction_County'), 'Jurisdiction_County'],
+        [col('orderHeader.customer.Jurisdiction_City'), 'Jurisdiction_City'],
+
       ],
 
       include: [
@@ -9172,6 +9185,276 @@ export class ManagerService {
               attributes: []
             }
           ]
+        }
+      ],
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC']
+      ],
+
+      raw: true
+    });
+
+    return invoices;
+  }
+
+  async getCustomerVelocityReportPoints(data: any) {
+    const { startDate, endDate } = data;
+
+    const invoices = await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+          IIF(orderHeader.Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), orderHeader.Invoice_Number_Legacy),
+            IIF(orderHeader.Invoice_Number > 1,
+              CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+              CONVERT(VARCHAR(10), orderHeader.Order_Number)
+            )
+          )
+        `),
+          'Document_Number'
+        ],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+        [col('orderHeader.salesRep.S_Desc'), 'S_Desc'],
+
+        'Order_Number',
+        'Promo_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'Sales_Category',
+
+        [col('inventory.Price1'), 'Price1'],
+        'Price_Reference',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+
+        [
+          literal(`
+          (OrderDetail.Price +
+           OrderDetail.OTP_Amount_State +
+           OrderDetail.OTP_Amount_County +
+           OrderDetail.OTP_Amount_City)
+        `),
+          'TotalPrice'
+        ],
+
+        [
+          literal(`
+          (OrderDetail.Price_Reference +
+           OrderDetail.OTP_Amount_State +
+           OrderDetail.OTP_Amount_County +
+           OrderDetail.OTP_Amount_City)
+        `),
+          'TotalPriceRef'
+        ],
+
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.UOM'), 'UOM'],
+        [col('inventory.Pack'), 'Pack'],
+        [col('inventory.UnitOunces'), 'UnitOunces'],
+        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('inventory.Points'), 'Points'],
+        [col('inventory.Cig_Pack'), 'Cig_Pack'],
+        [col('inventory.Price_Class'), 'Price_Class'],
+        [col('inventory.PriceClass.Class_Desc'), 'Class_Desc'],
+        [col('Inventory.Primary_Vendor'), 'Primary_Vendor'],
+        [col('Inventory.Primary_Vendor'), 'Primary_Vendor'],
+        [col('Inventory.Section'), 'Section'],
+        [col('Inventory.Location'), 'Location'],
+        [col('Inventory.PickArea'), 'PickArea'],
+        [col('Inventory.OTP_Number'), 'OTP_Number'],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+        [col('orderHeader.customer.C_ClassOfTrade'), 'C_ClassOfTrade'],
+        [col('orderHeader.customer.Jurisdiction_State'), 'Jurisdiction_State'],
+        [col('orderHeader.customer.Jurisdiction_County'), 'Jurisdiction_County'],
+        [col('orderHeader.customer.Jurisdiction_City'), 'Jurisdiction_City'],
+        [
+          literal(`( OrderDetail.Points * OrderDetail.Quantity_Shipped ) `),
+          'ExtPoints'
+        ],
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'True',
+            Order_Deleted: 'False',
+            Invoice_Date: {
+              [Op.between]: [startDate, endDate]
+            }
+          },
+          include: [
+            {
+              model: SalesRep,
+              as: 'salesRep',
+              attributes: []
+            },
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: []
+            }
+          ]
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          include: [
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: []
+            }
+          ]
+        }
+      ],
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC']
+      ],
+
+      raw: true
+    });
+
+    return invoices;
+  }
+
+  async getCustomerVelocityReportPointsItem(data: any) {
+    const { startDate, endDate } = data;
+
+    const invoices = await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+          IIF(orderHeader.Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), orderHeader.Invoice_Number_Legacy),
+            IIF(orderHeader.Invoice_Number > 1,
+              CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+              CONVERT(VARCHAR(10), orderHeader.Order_Number)
+            )
+          )
+        `),
+          'Document_Number'
+        ],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+        'Order_Number',
+        'Promo_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+        [literal('OrderDetail.Points'), 'Points'],
+
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.UOM'), 'UOM'],
+        [col('inventory.Pack'), 'Pack'],
+        [col('inventory.UnitOunces'), 'UnitOunces'],
+        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('inventory.Cig_Pack'), 'Cig_Pack'],
+        [col('Inventory.Primary_Vendor'), 'Primary_Vendor'],
+        [col('Inventory.Sales_Category'), 'Sales_Category'],
+        [col('Inventory.Section'), 'Section'],
+        [col('Inventory.Location'), 'Location'],
+        [col('Inventory.PickArea'), 'PickArea'],
+        [col('Inventory.OTP_Number'), 'OTP_Number'],
+        [
+          literal(`( inventory.Points * Quantity_Shipped ) `),
+          'ExtPoints'
+        ],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+        [col('orderHeader.customer.C_ClassOfTrade'), 'C_ClassOfTrade'],
+        [col('orderHeader.customer.Jurisdiction_State'), 'Jurisdiction_State'],
+        [col('orderHeader.customer.Jurisdiction_County'), 'Jurisdiction_County'],
+        [col('orderHeader.customer.Jurisdiction_City'), 'Jurisdiction_City'],
+      ],
+
+      where: {
+        Points: {
+          [Op.ne]: 0
+        }
+      },
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'True',
+            Order_Deleted: 'False',
+            Invoice_Date: {
+              [Op.between]: [startDate, endDate]
+            }
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: []
+            }
+          ]
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: []
         }
       ],
 
@@ -15260,6 +15543,11 @@ export class ManagerService {
         'C_State',
         'C_Zip',
         'C_Phone',
+        'Jurisdiction_State',
+        'Jurisdiction_County',
+        'Jurisdiction_City',
+        'C_ClassOfTrade',
+        'C_Inactive',
       ],
       include: [
         {
@@ -15271,6 +15559,8 @@ export class ManagerService {
             'Invoice_Number',
             'Invoice_Date',
             'Invoice_Total',
+            'S_Number',
+            'Route_Number',
             [fn('ISNULL', col('orderHeaders.Order_Number'), -1), 'Document_Number'],
           ],
           where: {
@@ -15314,10 +15604,19 @@ export class ManagerService {
         'C_State',
         'C_Zip',
         'C_Phone',
+        'Jurisdiction_State',
+        'Jurisdiction_County',
+        'Jurisdiction_City',
+        'C_ClassOfTrade',
+        'C_Inactive',
+
 
         // Invoice_Date from join
         [col('orderHeaders.Invoice_Date'), 'Invoice_Date'],
         [col('orderHeaders.Invoice_Total'), 'Invoice_Total'],
+        [col('orderHeaders.Order_Number'), 'Order_Number'],
+        [col('orderHeaders.S_Number'), 'S_Number'],
+        [col('orderHeaders.Route_Number'), 'Route_Number'],
 
         // Subquery Count
         [
@@ -15434,7 +15733,11 @@ export class ManagerService {
         {
           model: Customer,
           as: 'customer',
-          attributes: ['C_Name', 'C_CoName', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country', 'C_Phone'],
+          attributes: ['C_Name', 'C_CoName', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Country', 'C_Phone', 'Jurisdiction_State',
+            'Jurisdiction_County',
+            'Jurisdiction_City',
+            'C_ClassOfTrade',
+            'C_Inactive',],
           required: false
         },
         {
@@ -15563,6 +15866,8 @@ export class ManagerService {
       },
       attributes: [
         'C_Number',
+        'Route_Number',
+        'S_Number',
 
         // Sales Monthly
         [Sequelize.literal('SUM(Sales01+Taxes01)'), 'tSales01'],
@@ -15656,6 +15961,11 @@ export class ManagerService {
             'C_State',
             'C_Zip',
             'C_Phone',
+            'Jurisdiction_State',
+            'Jurisdiction_County',
+            'Jurisdiction_City',
+            'C_ClassOfTrade',
+            'C_Inactive',
           ],
           as: 'customer',
           required: false,
@@ -15673,13 +15983,20 @@ export class ManagerService {
 
       group: [
         'OrderHeader.C_Number',
+        'OrderHeader.Route_Number',
+        'OrderHeader.S_Number',
         'customer.C_Number',
         'customer.C_Name',
         'customer.C_Address',
         'customer.C_City',
         'customer.C_State',
         'customer.C_Zip',
-        'customer.C_Phone'
+        'customer.C_Phone',
+        'customer.Jurisdiction_State',
+        'customer.Jurisdiction_County',
+        'customer.Jurisdiction_City',
+        'customer.C_ClassOfTrade',
+        'customer.C_Inactive'
       ],
 
       raw: true,
@@ -15693,6 +16010,12 @@ export class ManagerService {
 
     const orders = await OrderHeader.findAll({
       attributes: [
+        'Invoice_Deposit',
+        'Delivery_Charge',
+        'Other_Charge',
+        'S_Number',
+        'Route_Number',
+        'PrepaidTax_Amount',
 
         // Document_Number
         [
@@ -15756,7 +16079,11 @@ export class ManagerService {
             'c_zip',
             'c_phone',
             'c_Salesman',
-            'C_ClassOfTrade'
+            'C_ClassOfTrade',
+            'Jurisdiction_State',
+            'Jurisdiction_County',
+            'Jurisdiction_City',
+            'C_Inactive',
           ],
           as: 'customer',
           required: false // LEFT JOIN
@@ -16193,6 +16520,245 @@ export class ManagerService {
 
 
 
+  }
+
+  async getPriceClassRebatesReport(data: any) {
+    const { startDate, endDate } = data;
+
+    const result = await OrderDetail.findAll({
+      attributes: [
+        'Order_Number',
+        'Line_Number',
+        'Quantity_Shipped',
+        'Unit_Code',
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+
+        [
+          literal(`
+            IIF(orderHeader.Invoice_Number_Legacy <> 0,
+              CONVERT(VARCHAR(10), orderHeader.Invoice_Number_Legacy),
+              IIF(orderHeader.Invoice_Number > 1,
+                CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+                CONVERT(VARCHAR(10), orderHeader.Order_Number)
+              )
+            )
+          `),
+          'Document_Number'
+        ],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.C_address'), 'C_address'],
+        [col('orderHeader.customer.C_City'), 'C_City'],
+        [col('orderHeader.customer.C_State'), 'C_State'],
+        [col('orderHeader.customer.C_Zip'), 'C_Zip'],
+
+        [col('inventory.Price_Class'), 'Price_Class'],
+        [col('inventory.Description'), 'Description'],
+
+        [
+          literal(`
+            ISNULL((
+              SELECT TOP 1 Rebate_Amount
+              FROM Cust_PriceClassRebates
+              WHERE Cust_PriceClassRebates.Price_Class = [inventory].[Price_Class]
+                AND Cust_PriceClassRebates.C_Number = [orderHeader].[C_Number]
+            ), 0)
+          `),
+          'RebateAmount'
+        ],
+
+        [
+          literal(`
+            (SELECT Class_Desc FROM Price_Classes WHERE Price_Classes.Price_Class = [inventory].[Price_Class])
+          `),
+          'ClassDesc'
+        ],
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'True',
+            Order_Deleted: 'False',
+            Invoice_Date: {
+              [Op.between]: [startDate, endDate]
+            }
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+            }
+          ]
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+        }
+      ],
+
+      where: literal(`
+        EXISTS (
+          SELECT 1 FROM Cust_PriceClassRebates
+          WHERE Cust_PriceClassRebates.Price_Class = [inventory].[Price_Class]
+            AND Cust_PriceClassRebates.C_Number = [orderHeader].[C_Number]
+        )
+      `),
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
+
+      raw: true,
+    });
+
+    return result;
+  }
+
+  async getPriceClassGroupRebatesReport(data: any) {
+    const { startDate, endDate } = data;
+
+    const result = await OrderDetail.findAll({
+      attributes: [
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+        [
+          literal(`
+            IIF(orderHeader.Invoice_Number_Legacy <> 0,
+              CONVERT(VARCHAR(10), orderHeader.Invoice_Number_Legacy),
+              IIF(orderHeader.Invoice_Number > 1,
+                CONCAT(orderHeader.Order_Number, '-', orderHeader.Invoice_Number),
+                CONVERT(VARCHAR(10), orderHeader.Order_Number)
+              )
+            )
+          `),
+          'Document_Number'
+        ],
+
+        'Order_Number',
+        'Promo_Number',
+        [literal('OrderDetail.OTP_Number'), 'OTP_NumberDetail'],
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+        'Inventory_QtyDeductRegular',
+        'Inventory_QtyDeductPrepaid',
+
+        [col('inventory.I_PrepaidStatus'), 'I_PrepaidStatus'],
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.UOM'), 'UOM'],
+        [col('inventory.Pack'), 'Pack'],
+        [col('inventory.Price_Class'), 'Price_Class'],
+        [col('inventory.OTP_Number'), 'OTP_Number'],
+        [col('inventory.UnitOunces'), 'UnitOunces'],
+        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('inventory.Cig_Pack'), 'Cig_Pack'],
+        [col('inventory.Sales_Category'), 'Sales_Category'],
+
+        [col('inventory.PriceClass.Class_Desc'), 'Class_Desc'],
+        [col('inventory.SalesCategory.Category_Desc'), 'Cat_Desc'],
+
+        [
+          literal(`
+            (SELECT OTP_Description FROM OtherTaxes WHERE OtherTaxes.OTP_Number = [inventory].[OTP_Number])
+          `),
+          'OTP_Desc'
+        ],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+        [col('orderHeader.customer.C_ClassOfTrade'), 'C_ClassOfTrade'],
+        [col('orderHeader.customer.Jurisdiction_State'), 'Jurisdiction_State'],
+        [col('orderHeader.customer.Jurisdiction_County'), 'Jurisdiction_County'],
+        [col('orderHeader.customer.Jurisdiction_City'), 'Jurisdiction_City'],
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'True',
+            Order_Deleted: 'False',
+            Invoice_Date: {
+              [Op.between]: [startDate, endDate]
+            }
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+            }
+          ]
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          include: [
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: [],
+            },
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: [],
+            }
+          ]
+        }
+      ],
+
+      where: {
+        Quantity_Shipped: {
+          [Op.ne]: 0
+        }
+      },
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
+
+      raw: true,
+    });
+
+    return result;
   }
 }
 

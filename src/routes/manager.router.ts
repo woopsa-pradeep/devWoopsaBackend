@@ -35,26 +35,26 @@ router.get('/product/:itemNumber', verifyRole(ROLES.MANAGER, ROLES.SALES), catch
 router.get('/retailerSignUp', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getRetailerSignUp.bind(managerController)));
 router.put('/updateRetailerSignUp/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.updateRetailerSignUp.bind(managerController)));
 
-router.get('/userList', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getUserList.bind(managerController)));
-router.post('/createUser', verifyRole(ROLES.MANAGER,ROLES.SALES),validateRequest(createUserSchema), catchAsync(managerController.createUser.bind(managerController)));
-router.post('/createEpickUser', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(createEpickUserSchema), catchAsync(managerController.createEpickUser.bind(managerController)));
-router.put('/updateUser/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.updateUser.bind(managerController)));
-router.put('/updateEpickUser/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.updateEpickUser.bind(managerController)));
-router.delete('/deleteUser/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteUser.bind(managerController)));
-router.get('/epickUsers', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getEpickUserDetails.bind(managerController)));
-router.get('/pickRightAreasForEpick', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getPickRightAreasForEpick.bind(managerController)));
-router.put('/epickUsers/:userId/preferences', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateEpickUserPreferencesSchema), catchAsync(managerController.updateEpickUserPreferences.bind(managerController)));
-router.put('/epickUsers/:userId/categories', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateEpickUserCategoriesSchema), catchAsync(managerController.updateEpickUserCategories.bind(managerController)));
-router.put('/epickUsers/:userId/itemSort', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(updateEpickUserItemSortSchema), catchAsync(managerController.updateEpickUserItemSort.bind(managerController)));
-router.get('/epickReports', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getEpickReports.bind(managerController)));
-router.delete('/deleteEpickUser/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.deleteEpickUser.bind(managerController)));
-router.post('/createRolePermissions', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(rolePermissionRequestSchema), catchAsync(managerController.createRolePermissions.bind(managerController)));
-router.put('/updateRolePermissions', verifyRole(ROLES.MANAGER,ROLES.SALES), validateRequest(roleUdatePermissionRequestSchema), catchAsync(managerController.updateRolePermissions.bind(managerController)));
-router.get('/getUserRolePermissions/:id', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getUserRolePermissions.bind(managerController)));
-router.post('/uploadWarehouseImage',verifyRole(ROLES.MANAGER,ROLES.SALES),multerUpload.single('image'),catchAsync(managerController.uploadWarehouseImage.bind(managerController)));
-router.get('/summary',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(managerController.getAccountReceivableTotals.bind(managerController)));
-router.get('/warehouseContactDetails', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getWarehouseContactDetails.bind(managerController)));
-router.get('/orderHistory', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.getOrderHistory.bind(managerController)));
+router.get('/userList', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getUserList.bind(managerController)));
+router.post('/createUser', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(createUserSchema), catchAsync(managerController.createUser.bind(managerController)));
+router.post('/createEpickUser', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(createEpickUserSchema), catchAsync(managerController.createEpickUser.bind(managerController)));
+router.put('/updateUser/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.updateUser.bind(managerController)));
+router.put('/updateEpickUser/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.updateEpickUser.bind(managerController)));
+router.delete('/deleteUser/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.deleteUser.bind(managerController)));
+router.get('/epickUsers', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getEpickUserDetails.bind(managerController)));
+router.get('/pickRightAreasForEpick', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getPickRightAreasForEpick.bind(managerController)));
+router.put('/epickUsers/:userId/preferences', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(updateEpickUserPreferencesSchema), catchAsync(managerController.updateEpickUserPreferences.bind(managerController)));
+router.put('/epickUsers/:userId/categories', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(updateEpickUserCategoriesSchema), catchAsync(managerController.updateEpickUserCategories.bind(managerController)));
+router.put('/epickUsers/:userId/itemSort', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(updateEpickUserItemSortSchema), catchAsync(managerController.updateEpickUserItemSort.bind(managerController)));
+router.get('/epickReports', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getEpickReports.bind(managerController)));
+router.delete('/deleteEpickUser/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.deleteEpickUser.bind(managerController)));
+router.post('/createRolePermissions', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(rolePermissionRequestSchema), catchAsync(managerController.createRolePermissions.bind(managerController)));
+router.put('/updateRolePermissions', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(roleUdatePermissionRequestSchema), catchAsync(managerController.updateRolePermissions.bind(managerController)));
+router.get('/getUserRolePermissions/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getUserRolePermissions.bind(managerController)));
+router.post('/uploadWarehouseImage', verifyRole(ROLES.MANAGER, ROLES.SALES), multerUpload.single('image'), catchAsync(managerController.uploadWarehouseImage.bind(managerController)));
+router.get('/summary', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getAccountReceivableTotals.bind(managerController)));
+router.get('/warehouseContactDetails', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getWarehouseContactDetails.bind(managerController)));
+router.get('/orderHistory', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getOrderHistory.bind(managerController)));
 
 
 router.get('/orderForPickListConfirmation', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getOrderForPickListConfirmation.bind(managerController)));
@@ -413,6 +413,8 @@ router.delete('/retailer-location/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), 
 router.get('/getShortShipmentReport', catchAsync(managerController.getShortShipmentReport.bind(managerController)));
 router.get('/getVelocityReportCustomer', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getVelocityReportCustomer.bind(managerController)));
 router.get('/getVelocityReportSalesRep', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getVelocityReportSalesRep.bind(managerController)));
+router.get('/getCustomerVelocityReportPoints', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerVelocityReportPoints.bind(managerController)));
+router.get('/getCustomerVelocityReportPointsItem', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerVelocityReportPointsItem.bind(managerController)));
 
 // Retailer Location routes
 router.post('/setRetailerLocation', verifyToken, catchAsync(managerController.setRetailerLocation.bind(managerController)));
@@ -556,6 +558,8 @@ router.get('/customerRankingSales', verifyRole(ROLES.MANAGER, ROLES.SALES), catc
 router.get('/dailySalesReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getDailySalesReport.bind(managerController)));
 router.get('/customerPrepaidSalesTax', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerPrepaidSalesTax.bind(managerController)));
 router.get('/deletedOrders', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getDeletedOrders.bind(managerController)));
+router.get('/priceClassRebatesReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getPriceClassRebatesReport.bind(managerController)));
+router.get('/priceClassGroupRebatesReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getPriceClassGroupRebatesReport.bind(managerController)));
 router.get('/lostSaleCurrentOrders', catchAsync(managerController.getLostSaleCurrentOrders.bind(managerController)));
 
 router.get('/inventoryLogHistory', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getInventoryLogHistory.bind(managerController)));

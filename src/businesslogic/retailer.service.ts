@@ -276,13 +276,12 @@ export class RetailerService {
   async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
     let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
 
-    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+    if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
       salesCategoryId = salesCategoryId.map(id => Number(id));
     }
 
-    console.log(salesCategory, 'salesCategory--->')
 
-    if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+    if (Array.isArray(priceClassId) && priceClassId?.length > 0) {
       priceClassId = priceClassId.map(id => Number(id));
     }
 
@@ -313,7 +312,7 @@ export class RetailerService {
 
 
     let searchInUPC = false;
-     let orderClause: Order = [['Date_Created', 'DESC'] as const];
+    let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
     if (masterSearch && typeof masterSearch === 'string') {
       const masterArray = masterSearch.split(',').map(i => i.trim());
@@ -324,22 +323,22 @@ export class RetailerService {
       }
     } else {
 
-      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+      if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0 && Array.isArray(priceClassId) && priceClassId?.length > 0) {
         // Both filters exist → use OR condition
 
         // if (Array.isArray(salesCategory) && salesCategory.length > 0) {
         //   whereClause.Sales_Category = { [Op.in]: salesCategory };
         // }
         whereClause = {
-          Sales_Category: { [Op.in]: salesCategoryId},
+          Sales_Category: { [Op.in]: salesCategoryId },
           Price_Class: { [Op.in]: priceClassId }
         };
 
         console.log(salesCategoryId, 'salesCategoryId', priceClassId, 'priceClassId', 'both filters exist')
-      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+      } else if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
         // Only Sales_Category filter
         whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      } else if (Array.isArray(priceClassId) && priceClassId?.length > 0) {
         // Only Price_Class filter
         whereClause.Price_Class = { [Op.in]: priceClassId };
       }
@@ -350,15 +349,15 @@ export class RetailerService {
         } else {
           let globalSearch: any = await Setting.findOne({});
           globalSearch = globalSearch?.dataValues || null;
-      
+
           const term = search.toLowerCase().trim();
           const anywhere = `%${term}%`;
           const starts = `${term}%`;
-      
-           if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
-        whereClause.Sales_Category = { [Op.in]: [salesCategoryId,...salesCategory] };
-      }
-      
+
+          if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+            whereClause.Sales_Category = { [Op.in]: [salesCategoryId, ...salesCategory] };
+          }
+
           // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: anywhere }),
@@ -366,39 +365,39 @@ export class RetailerService {
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: anywhere }),
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: anywhere }),
           ];
-      
+
           // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
           const esc = (s: string) => s.replace(/'/g, "''");
-const startsEsc = esc(starts);
-const anywhereEsc = esc(anywhere);
-      console.log(globalSearch?.splitSearchOption, 'globalSearch?.globalSearchOption')
+          const startsEsc = esc(starts);
+          const anywhereEsc = esc(anywhere);
+          console.log(globalSearch?.splitSearchOption, 'globalSearch?.globalSearchOption')
           // If globalSearchOption = true => rank matches across all fields
-          if ( globalSearch?.splitSearchOption === true) {
+          if (globalSearch?.splitSearchOption === true) {
             const term = search.toLowerCase().trim();
             const tokens = term.split(/\s+/).filter(Boolean);
-          
+
             // remove the "full-term" OR, otherwise it kills split search results
             delete whereClause[Op.or];
-          
+
             // Each token must match the start of ANY word in ANY of these fields
             whereClause[Op.and] = tokens.map((tok) => {
               const startsWord = `${tok}%`;
               const insideWord = `% ${tok}%`;
-          
+
               return {
                 [Op.or]: [
                   // Description
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: insideWord }),
-          
+
                   // AltDesc
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: insideWord }),
-          
+
                   // ALT_Description2
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: insideWord }),
-          
+
                   // Item_Number (no spaces usually, but keep it)
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: insideWord }),
@@ -406,49 +405,49 @@ const anywhereEsc = esc(anywhere);
               };
             });
 
-       
 
-// build rank across ALL tokens (sum). lower total = better match.
-const rankSql = tokens
-  .map((tok) => {
-    const startsWord = `%${tok}%`;     // 'mar%'
-    const insideWord = `% ${tok}%`;   // '% mar%'
-    const anywhere   = `%${tok}%`;    // '%mar%'
 
-    // Put your searchable fields here (same as whereClause)
-    const fields = ["Description", "AltDesc", "ALT_Description2", "Item_Number"];
+            // build rank across ALL tokens (sum). lower total = better match.
+            const rankSql = tokens
+              .map((tok) => {
+                const startsWord = `%${tok}%`;     // 'mar%'
+                const insideWord = `% ${tok}%`;   // '% mar%'
+                const anywhere = `%${tok}%`;    // '%mar%'
 
-    const startsAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
-      .join(" OR ");
+                // Put your searchable fields here (same as whereClause)
+                const fields = ["Description", "AltDesc", "ALT_Description2", "Item_Number"];
 
-    const wordStartAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
-      .join(" OR ");
+                const startsAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
+                  .join(" OR ");
 
-    const containsAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
-      .join(" OR ");
+                const wordStartAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
+                  .join(" OR ");
 
-    return `(CASE
+                const containsAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
+                  .join(" OR ");
+
+                return `(CASE
       WHEN (${startsAny}) THEN 0
       WHEN (${wordStartAny}) THEN 1
       WHEN (${containsAny}) THEN 2
       ELSE 3
     END)`;
-  })
-  .join(" + ");
+              })
+              .join(" + ");
 
-// order: best rank first, then Description
-orderClause = [
-  [literal(rankSql), "ASC"],
-  [col("Description"), "ASC"],
-] as Order;
-          
+            // order: best rank first, then Description
+            orderClause = [
+              [literal(rankSql), "ASC"],
+              [col("Description"), "ASC"],
+            ] as Order;
+
             // optional: order by Description
           }
-          
-          
+
+
           {
             // Your existing rule (Description-first)
             orderClause = [
@@ -467,14 +466,20 @@ orderClause = [
           }
         }
       }
-      
-      
+
+
 
     }
 
     if (searchInUPC) {
-      if (Array.isArray(salesCategory) && salesCategory.length > 0) {
-        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      if (salesCategoryId && salesCategoryId?.length > 0) {
+        if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
+          whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+        }
+      } else {
+        if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+          whereClause.Sales_Category = { [Op.in]: salesCategory };
+        }
       }
     }
 
@@ -492,29 +497,31 @@ orderClause = [
     };
 
 
-    
-
-    if(!search){
-     if (Number(shortBy) === 1) {
-      orderClause = [[col('Description'), 'ASC']] as Order;
-    } else if (Number(shortBy) === 2) {
-      orderClause = [[col('Description'), 'DESC']] as Order;
-    } 
-  }
 
 
-    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
-      whereClause.Sales_Category = { [Op.in]: salesCategory };
+    if (!search) {
+      if (Number(shortBy) === 1) {
+        orderClause = [[col('Description'), 'ASC']] as Order;
+      } else if (Number(shortBy) === 2) {
+        orderClause = [[col('Description'), 'DESC']] as Order;
+      }
     }
-  
 
-  if ( salesCategoryId && !salesCategoryId.length) {
-    if (Array.isArray(salesCategory) && salesCategory.length > 0) {
-      whereClause.Sales_Category = { [Op.in]: salesCategory };
+
+
+
+
+    if (salesCategoryId && salesCategoryId?.length > 0) {
+      if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+      }
+    } else {
+      if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
     }
-  }
 
-  console.log(whereClause, 'whereClause--->')
+    console.log(whereClause, 'whereClause--->')
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
 
     // if (shortBy && Number(shortBy) === 1) {
@@ -545,7 +552,7 @@ orderClause = [
       totalCount = counted.length;
     } else {
       totalCount = await Inventory.count({
-        where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
+        where: { ...whereClause, I_Inactive: false, ShortOrderForm: true },
         logging: false
       });
     }
@@ -557,9 +564,9 @@ orderClause = [
         "CasesPerPallet",
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'Unit_Price',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
-        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT','Cig_Pack','Cig_Sticks'
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT', 'Cig_Pack', 'Cig_Sticks'
       ],
-      where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
+      where: { ...whereClause, I_Inactive: false, ShortOrderForm: true },
       include: [
         {
           model: SalesCategory,
@@ -597,7 +604,7 @@ orderClause = [
       }
     });
 
-   
+
 
     let userId = user.id;
     // if(customer){
@@ -629,9 +636,7 @@ orderClause = [
 
       let prepaidTaxRate = 0
       if (userJurisdiction != null && e.SalesCategory) {
-
-        console.log(e?.SalesCategory, 'e.Sales_Category')
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category,e,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
       }
 
       const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
@@ -693,7 +698,7 @@ orderClause = [
   }
 
   async getTradeShowItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] ,tradeShowId} = query;
+    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [], tradeShowId } = query;
 
     if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
       salesCategoryId = salesCategoryId.map(id => Number(id));
@@ -712,7 +717,7 @@ orderClause = [
     limit = Number(limit);
 
     let whereClause: any = {
-      
+
     };
 
     const excludeItem = await excludeItemByUserInTradeShow(user.id);
@@ -727,10 +732,10 @@ orderClause = [
 
 
     let searchInUPC = false;
-     let orderClause: Order = [['createdAt', 'DESC'] as const];
+    let orderClause: Order = [['createdAt', 'DESC'] as const];
 
     if (masterSearch && typeof masterSearch === 'string') {
-      let  masterArray = masterSearch.split(',').map(i => i.trim());
+      let masterArray = masterSearch.split(',').map(i => i.trim());
       masterArray = masterArray.map(i => String(i));
       whereClause.itemNumber = { [Op.in]: masterArray };
 
@@ -762,46 +767,46 @@ orderClause = [
         } else {
           let globalSearch: any = await Setting.findOne({});
           globalSearch = globalSearch?.dataValues || null;
-      
+
           const term = search.toLowerCase().trim();
           const anywhere = `%${term}%`;
           const starts = `${term}%`;
-      
+
           if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
             whereClause.salesCategory = { [Op.in]: salesCategory };
           }
-      
+
           // WHERE stays same (your "global" WHERE is already global across these fields)
           whereClause[Op.or] = [
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: anywhere }),
             Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: anywhere }),
-            
+
           ];
-      
+
           // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
           const esc = (s: string) => s.replace(/'/g, "''");
-const startsEsc = esc(starts);
-const anywhereEsc = esc(anywhere);
-      console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
+          const startsEsc = esc(starts);
+          const anywhereEsc = esc(anywhere);
+          console.log(globalSearch?.globalSearchOption, 'globalSearch?.globalSearchOption')
           // If globalSearchOption = true => rank matches across all fields
-          if ( globalSearch?.splitSearchOption === true) {
+          if (globalSearch?.splitSearchOption === true) {
             const term = search.toLowerCase().trim();
             const tokens = term.split(/\s+/).filter(Boolean);
-          
+
             // remove the "full-term" OR, otherwise it kills split search results
             delete whereClause[Op.or];
-          
+
             // Each token must match the start of ANY word in ANY of these fields
             whereClause[Op.and] = tokens.map((tok) => {
               const startsWord = `${tok}%`;
               const insideWord = `% ${tok}%`;
-          
+
               return {
                 [Op.or]: [
                   // Description
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("description")), { [Op.like]: insideWord }),
-          
+
                   // Item_Number (no spaces usually, but keep it)
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: startsWord }),
                   Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("itemNumber")), { [Op.like]: insideWord }),
@@ -809,48 +814,48 @@ const anywhereEsc = esc(anywhere);
               };
             });
 
-       
 
-// build rank across ALL tokens (sum). lower total = better match.
-const rankSql = tokens
-  .map((tok) => {
-    const startsWord = `%${tok}%`;     // 'mar%'
-    const insideWord = `% ${tok}%`;   // '% mar%'
-    const anywhere   = `%${tok}%`;    // '%mar%'
 
-    // Put your searchable fields here (same as whereClause)
-    const fields = ["description", "itemNumber"];
+            // build rank across ALL tokens (sum). lower total = better match.
+            const rankSql = tokens
+              .map((tok) => {
+                const startsWord = `%${tok}%`;     // 'mar%'
+                const insideWord = `% ${tok}%`;   // '% mar%'
+                const anywhere = `%${tok}%`;    // '%mar%'
 
-    const startsAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
-      .join(" OR ");
+                // Put your searchable fields here (same as whereClause)
+                const fields = ["description", "itemNumber"];
 
-    const wordStartAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
-      .join(" OR ");
+                const startsAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
+                  .join(" OR ");
 
-    const containsAny = fields
-      .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
-      .join(" OR ");
+                const wordStartAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
+                  .join(" OR ");
 
-    return `(CASE
+                const containsAny = fields
+                  .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
+                  .join(" OR ");
+
+                return `(CASE
       WHEN (${startsAny}) THEN 0
       WHEN (${wordStartAny}) THEN 1
       WHEN (${containsAny}) THEN 2
       ELSE 3
     END)`;
-  })
-  .join(" + ");
+              })
+              .join(" + ");
 
-// order: best rank first, then Description
-orderClause = [
-  [literal(rankSql), "ASC"],
-  [col("description"), "ASC"],
-] as Order;
-          
+            // order: best rank first, then Description
+            orderClause = [
+              [literal(rankSql), "ASC"],
+              [col("description"), "ASC"],
+            ] as Order;
+
             // optional: order by Description
           }
-          
+
           else {
             // Your existing rule (Description-first)
             orderClause = [
@@ -895,15 +900,15 @@ orderClause = [
     // };
 
 
-    
 
-    if(!search){
-     if (Number(shortBy) === 1) {
-      orderClause = [[col('description'), 'ASC']] as Order;
-    } else if (Number(shortBy) === 2) {
-      orderClause = [[col('description'), 'DESC']] as Order;
-    } 
-  }
+
+    if (!search) {
+      if (Number(shortBy) === 1) {
+        orderClause = [[col('description'), 'ASC']] as Order;
+      } else if (Number(shortBy) === 2) {
+        orderClause = [[col('description'), 'DESC']] as Order;
+      }
+    }
 
 
     // let orderClause: Order = [['Date_Created', 'DESC'] as const];
@@ -937,7 +942,7 @@ orderClause = [
     } else {
       totalCount = await TradeShowItem.count({
 
-        where: {...whereClause,tradeShowId:tradeShowId},
+        where: { ...whereClause, tradeShowId: tradeShowId },
         logging: false
       });
     }
@@ -945,8 +950,8 @@ orderClause = [
       attributes: [
         'description', 'itemNumber', 'discount', 'minQuantity', 'maxQuantity', 'disType'
       ],
-      where: {...whereClause, tradeShowId:tradeShowId},
-    
+      where: { ...whereClause, tradeShowId: tradeShowId },
+
       order: orderClause,
       limit,
       offset: (page - 1) * limit,
@@ -967,11 +972,11 @@ orderClause = [
       where: {
         C_Number: user.id
       },
-      attributes:['C_PricingAccount']
+      attributes: ['C_PricingAccount']
     });
 
     let userId = user.id;
-    if(customer){
+    if (customer) {
       userId = customer?.dataValues.C_PricingAccount || user.id;
     }
     const imageMap = new Map(productImages.map(img => [img.product_number, img]));
@@ -1022,24 +1027,24 @@ orderClause = [
         ]
       });
 
-console.log(e,'trade show item')
-let tradeShowItem = e.dataValues
+      console.log(e, 'trade show item')
+      let tradeShowItem = e.dataValues
 
-      if(!findProduct){
+      if (!findProduct) {
         throw new AppError("Product not found", 404);
       }
-findProduct = findProduct?.dataValues || null;
+      findProduct = findProduct?.dataValues || null;
       const itemStr = e.itemNumber.toString();
       const productImage = imageMap.get(itemStr) || null;
       const inventoryOnHand = await getInventoryOnHand(Number(e.itemNumber)) || 0;
 
       let price = discountMap[Number(e.itemNumber)] ?? await getFirstValidPrice(findProduct as any);
       const isDiscounted = false;
-      let priceWitoutTradeShow=  price || 0;
+      let priceWitoutTradeShow = price || 0;
       // price = Math.ceil(price * 100) / 100;
       price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
       const productLimit = await getProductLimit(Number(e.itemNumber));
-      
+
       let taxRate = await getTaxRateV1(Number(findProduct?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
       taxRate = Math.ceil(taxRate * 100) / 100;
 
@@ -1047,29 +1052,29 @@ findProduct = findProduct?.dataValues || null;
       if (userJurisdiction != null && findProduct?.Sales_Category) {
 
         console.log(findProduct?.Sales_Category, 'findProduct?.Sales_Category')
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category),findProduct,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, Number(findProduct?.Sales_Category), findProduct, price + taxRate);
       }
 
 
 
       return {
-       
+
         isDiscounted,
         ...findProduct,
-       ...tradeShowItem,
+        ...tradeShowItem,
         Tax_Rate: taxRate,
-        priceWitoutTradeShow:priceWitoutTradeShow + taxRate,
+        priceWitoutTradeShow: priceWitoutTradeShow + taxRate,
         price,
-        Inventory_OnHand:inventoryOnHand,
+        Inventory_OnHand: inventoryOnHand,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
         prepaidTaxRate: prepaidTaxRate,
         priceWithTax: price + taxRate,
-       
+
         hasProductLimit: productLimit ? true : false,
         productLimit,
-       
-        
-      
+
+
+
         showDistributorImage: productImage?.isAllow ?? false,
         distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
@@ -1342,19 +1347,19 @@ findProduct = findProduct?.dataValues || null;
         const data = await Inventory.findByPk(e.Item_Number)
         price = await getFirstValidPrice(data?.dataValues)
       }
-let tradeShowItem: any = await TradeShowItem.findOne({
-  where: {
-    itemNumber: String(e.Item_Number),
-    tradeShowId: tradeShowId
-  }
-})
-tradeShowItem = tradeShowItem?.dataValues || null;
-if(tradeShowItem){
-  price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
-}
+      let tradeShowItem: any = await TradeShowItem.findOne({
+        where: {
+          itemNumber: String(e.Item_Number),
+          tradeShowId: tradeShowId
+        }
+      })
+      tradeShowItem = tradeShowItem?.dataValues || null;
+      if (tradeShowItem) {
+        price = getDiscountedPrice(Number(price), Number(tradeShowItem.discount), tradeShowItem.disType as string);
+      }
 
 
-tradeShowItem = tradeShowItem?.dataValues || null;
+      tradeShowItem = tradeShowItem?.dataValues || null;
       let product: any = await Inventory.findOne({
         where: {
           Item_Number: e.Item_Number
@@ -1408,8 +1413,8 @@ tradeShowItem = tradeShowItem?.dataValues || null;
       let prepaidTaxRate = 0
       if (userJurisdiction != null && product.SalesCategory) {
         let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
-      taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category,product,price + taxRate);
+        taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category, product, price + taxRate);
       }
 
 
@@ -1418,9 +1423,9 @@ tradeShowItem = tradeShowItem?.dataValues || null;
       const p1 = Number(price.toFixed(2));
       const p2 = Number(Number(e?.originalPrice).toFixed(2));
 
-if (p1 !== p2) {
-  priceChange = true;
-}
+      if (p1 !== p2) {
+        priceChange = true;
+      }
 
 
       return {
@@ -1491,7 +1496,7 @@ if (p1 !== p2) {
 
     }
 
-    
+
     if (findTheLimit) {
       findTheLimit = findTheLimit?.dataValues || null;
       if (!findTheLimit?.minOrderAmount || findTheLimit?.minOrderAmount == 0) {
@@ -1545,7 +1550,7 @@ if (p1 !== p2) {
   }
 
 
-  
+
   async removeFromTradeShowCart(cartItemId: number): Promise<CartResponse> {
     const cartItem = await CustomerCart.findByPk(cartItemId);
 
@@ -1586,7 +1591,7 @@ if (p1 !== p2) {
         Customer_Number: cartData.Customer_Number,
         Item_Number: cartData.Item_Number,
         isActive: true,
-        type:'order'
+        type: 'order'
       },
 
     });
@@ -1800,19 +1805,19 @@ if (p1 !== p2) {
       let prepaidTaxRate = 0
       if (userJurisdiction != null && product.SalesCategory) {
         let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
-      taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category,product,price + taxRate);
+        taxRate = Math.ceil(taxRate * 100) / 100;
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category, product, price + taxRate);
       }
 
       let priceChange = false;
       const p1 = Number(price.toFixed(2));
       const p2 = Number(Number(e?.originalPrice).toFixed(2));
 
-if (p1 !== p2) {
-  priceChange = true;
-}
+      if (p1 !== p2) {
+        priceChange = true;
+      }
 
-const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
+      const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
 
       return {
         isDiscounted,
@@ -1853,12 +1858,12 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
         isPriceChanged: priceChange,
         UPCList: product.UPCList,
         oldPrice: Number(e?.originalPrice),
-        newPrice: price,
+        newPrice: price.toFixed(2),
         showDistributorImage: productImage?.isAllow ?? false,
         distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
         Product: e,
-        hasQtyDiscount:discount? false : hasQtyDiscount.allowToDiscount,
+        hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
         qtyDiscount: hasQtyDiscount,
       }
     }))
@@ -1882,7 +1887,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
 
     }
 
-    
+
     if (findTheLimit) {
       findTheLimit = findTheLimit?.dataValues || null;
       if (!findTheLimit?.minOrderAmount || findTheLimit?.minOrderAmount == 0) {
@@ -2047,7 +2052,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
     }
 
 
-   const { orderPlayload, Delivery_Charge } = orderData;
+    const { orderPlayload, Delivery_Charge } = orderData;
 
 
     // Get customer and route info
@@ -2283,7 +2288,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
   }
 
   async placeTradeShowOrder(orderData: PlaceOrder, req: any) {
-    const { shippingDetails,tradeShowId } = orderData;
+    const { shippingDetails, tradeShowId } = orderData;
 
 
 
@@ -2358,7 +2363,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
       Route_Number: customerRoutes?.Route_Number || 0,
       Stop_Number: customerRoutes?.Stop_Number || 0,
       Delivery_ID: deliveryId,
-      Order_Type:7,
+      Order_Type: 7,
       User_ID: 0,
       Reference: `CUS-${customer.C_Number}`,
       Invoice_Type: customer.C_InvoiceFormat || 0,
@@ -2556,13 +2561,13 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
       isActive: true
     });
 
-    try{
+    try {
       await TradeShowOrderHistory.create({
         tradeShowId: tradeShowId || 0,
         orderNumber: orderHeaderCreated.Order_Number,
         orderDate: new Date(),
       });
-    }catch(error){
+    } catch (error) {
       console.log(error, 'error--> in trade show order history')
     }
 
@@ -2634,7 +2639,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
         }
       ],
 
-      order: [['Order_Number', 'DESC']],
+      order: [['Order_Date', 'ASC']],
       limit: 30,
     });
 
@@ -3414,7 +3419,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
       const userJurisdiction = await getJurisdiction(user.id);
       let prepaidTaxRate = 0
       if (userJurisdiction != null && e.SalesCategory) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category,e,price );
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price);
       }
 
       return {
@@ -3736,7 +3741,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
       let prepaidTaxRate = 0
       // console.log(detail?.inventory,'detail?.inventory?.Sales_Category')
       if (userJurisdiction != null && detail?.inventory?.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category,detail.inventory,price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, detail.inventory?.Sales_Category, detail.inventory, price + taxRate);
       }
 
       const discount = await getProductDiscountFromRedis(Number(detail.Item_Number));
@@ -4144,7 +4149,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
 
     let prepaidTaxRate = 0
     if (userJurisdiction != null && item.SalesCategory) {
-      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category,item,price + taxRate);
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category, item, price + taxRate);
     }
 
 
@@ -4278,7 +4283,7 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
         if (userJurisdiction != null && findItem?.SalesCategory) {
 
           console.log(e, 'e.Sales_Category')
-          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category,findItem,price + taxRate);
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, findItem?.SalesCategory?.Sales_Category, findItem, price + taxRate);
         }
 
 
@@ -4993,14 +4998,14 @@ const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
               [Op.in]: storeId
             }
           },
-          attributes: ['C_Number','C_Name' ,'C_CoName', 'C_Number']
+          attributes: ['C_Number', 'C_Name', 'C_CoName', 'C_Number']
         })
-let storesData = stores.map((e: any) => {
-  return {
-    ...e.dataValues,
-    C_CoName: e.C_Name || e.C_CoName
-  }
-})
+        let storesData = stores.map((e: any) => {
+          return {
+            ...e.dataValues,
+            C_CoName: e.C_Name || e.C_CoName
+          }
+        })
         return {
           hasMultipleStore: true,
           stores: storesData
@@ -5088,8 +5093,8 @@ let storesData = stores.map((e: any) => {
       retailerId: storeId,
 
     })
-console.log(storeDetail, 'storeDetail')
-storeDetail.C_CoName = storeDetail.C_Name || "";
+    console.log(storeDetail, 'storeDetail')
+    storeDetail.C_CoName = storeDetail.C_Name || "";
     return {
       wareHouseDetail,
       storeDetail,
@@ -5153,7 +5158,7 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
     return retailerDocuments;
   }
 
-  async getTradeShow(){
+  async getTradeShow() {
     const tradeShow = await TradeShow.findOne({
       where: {
         status: 'active',
@@ -5177,55 +5182,57 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
   }
 
 
- async getRetailerSuggestedItems(body:any) {
-   const { customerNumber, itemNumber } = body;
-   
-   if (!customerNumber) {
-     throw new AppError('Customer number is required', 400);
-   }
+  async getRetailerSuggestedItems(body: any) {
+    const { customerNumber, itemNumber } = body;
 
-   // Normalize itemNumber to always be an array (handle single value, array, or undefined)
-   let itemNumbersToExclude: number[] = [];
-   if (itemNumber != null) {
-     if (Array.isArray(itemNumber)) {
-       itemNumbersToExclude = itemNumber.filter((num: any) => num != null && num !== '').map((num: any) => Number(num));
-     } else {
-       itemNumbersToExclude = [Number(itemNumber)];
-     }
-   }
+    if (!customerNumber) {
+      throw new AppError('Customer number is required', 400);
+    }
 
-   // Calculate date 12 weeks ago from today
-   const currentDate = new Date();
-   const twelveWeeksAgo = new Date(currentDate.getTime() - 84 * 24 * 60 * 60 * 1000); // 12 weeks = 84 days
+    // Calculate date 12 weeks ago from today
+    const currentDate = new Date();
+    const twelveWeeksAgo = new Date(currentDate.getTime() - 84 * 24 * 60 * 60 * 1000); // 12 weeks = 84 days
 
-   // First, get all order numbers from OrderHeader for this customer from last 12 weeks
-   const orderHeaders = await OrderHeader.findAll({
-     where: {
-       C_Number: customerNumber,
-       Order_Deleted: false,
-       Order_Date: {
-         [Op.gte]: twelveWeeksAgo // Only include orders from last 12 weeks
-       }
-     },
-     attributes: ['Order_Number'],
-     raw: true
-   });
+    // First, get all order numbers from OrderHeader for this customer from last 12 weeks
+    const orderHeaders = await OrderHeader.findAll({
+      where: {
+        C_Number: customerNumber,
+        Order_Deleted: false,
+        Order_Date: {
+          [Op.gte]: twelveWeeksAgo // Only include orders from last 12 weeks
+        }
+      },
+      attributes: ['Order_Number'],
+      raw: true
+    });
 
-   const orderNumbers = orderHeaders.map((header: any) => header.Order_Number);
+    const orderNumbers = orderHeaders.map((header: any) => header.Order_Number);
 
-   if (orderNumbers.length === 0) {
-     return [];
-   }
+    if (orderNumbers.length === 0) {
+      return [];
+    }
 
-   // Build SQL query to get top 10 most purchased items
-   const orderNumbersList = orderNumbers.join(',');
-   
-   // Build condition to exclude item numbers
-   const itemNumberCondition = itemNumbersToExclude.length > 0
-     ? `AND od.Item_Number NOT IN (${itemNumbersToExclude.join(',')})` 
-     : '';
-   
-   const query = `
+    // Build where clause to exclude the provided itemNumber
+    const whereClause: any = {
+      Order_Number: { [Op.in]: orderNumbers },
+      Quantity_Ordered: {
+        [Op.gt]: 0 // Only include items that were actually ordered
+      }
+    };
+    if (itemNumber) {
+      whereClause.Item_Number = { [Op.ne]: itemNumber };
+    }
+
+    // Build SQL query to get top 10 most purchased items
+    const orderNumbersList = orderNumbers.join(',');
+    // Check if itemNumber is provided (including 0 as a valid value)
+    const parsedItemNumber = Number(itemNumber);
+    const hasItemNumber = itemNumber != null && itemNumber !== '' && itemNumber !== undefined && !isNaN(parsedItemNumber);
+    const itemNumberCondition = hasItemNumber
+      ? `AND od.Item_Number != ${parsedItemNumber}`
+      : '';
+
+    const query = `
      SELECT TOP 10
        od.Item_Number,
        SUM(od.Quantity_Ordered) AS totalQuantityOrdered,
@@ -5241,122 +5248,163 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
      ORDER BY SUM(od.Quantity_Ordered) DESC
    `;
 
-   const mostPurchasedItems = await sequelize.query(query, {
-     type: QueryTypes.SELECT,
-     raw: true
-   }) as any[];
+    const mostPurchasedItems = await sequelize.query(query, {
+      type: QueryTypes.SELECT,
+      raw: true
+    }) as any[];
 
-   if (mostPurchasedItems.length === 0) {
-     return [];
-   }
+    if (mostPurchasedItems.length === 0) {
+      return [];
+    }
 
-   // Get item numbers for product images query
-   const itemNumbers = mostPurchasedItems.map((item: any) => item.Item_Number);
+    // Get item numbers for product images query
+    const itemNumbers = mostPurchasedItems.map((item: any) => item.Item_Number);
 
-   // Get product images
-   const productImages = await ProductImage.findAll({
-     where: {
-       product_number: { [Op.in]: itemNumbers.map(String) },
-       isAllow: true
-     }
-   });
-   const imageMap = new Map(productImages.map(img => [img.product_number, img]));
-
-   // Enrich items with inventory data and other information
-   const enrichedItems = await Promise.all(
-     mostPurchasedItems.map(async (item: any) => {
-       const itemNumber = item.Item_Number;
-       const itemStr = itemNumber.toString();
-       const productImage = imageMap.get(itemStr) || null;
-       
-       // Get inventory details
-       const inventoryData = await getInventoryFullItemNumber(itemNumber);
-       const inventoryOnHand = await getInventoryOnHand(itemNumber) || 0;
-      
-       let price = await getDiscount(itemNumber, customerNumber);
-       if (!price) {
-         const tempDetail: any = await Inventory.findOne({
-           where: { Item_Number: itemNumber }
-         });
-         price = await getFirstValidPrice(tempDetail);
-       }
-
-       const userJurisdiction = await getJurisdiction(customerNumber);
-       const taxRate = await getTaxRateV1(
-         inventoryData?.OTP_Number, 
-         userJurisdiction as number, 
-         itemNumber, 
-         price
-       );
-
-      const isDiscounted = inventoryData?.Price_Subclass 
-        ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass) 
-        : false;
-
-      let prepaidTaxRate = 0;
-      if (userJurisdiction != null && inventoryData?.Sales_Category?.Sales_Category != null) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category.Sales_Category as number, inventoryData, price + taxRate);
+    // Get product images
+    const productImages = await ProductImage.findAll({
+      where: {
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
       }
+    });
+    const imageMap = new Map(productImages.map(img => [img.product_number, img]));
 
-      return {
-        Item_Number: itemNumber,
-        Description: inventoryData?.Description || null,
-        totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
-        totalOrders: Number(item.totalOrders || 0),
-         price,
-         priceWithTax: price + taxRate,
-         Tax_Rate: taxRate,
-         isDiscounted,
-         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
-         prepaidTaxRate: prepaidTaxRate,
-         Inventory_OnHand: inventoryOnHand,
-         showDistributorImage: productImage?.isAllow ?? false,
-         distributorImage: productImage?.img_url || null,
-         masterImage: inventoryData?.UPCList?.[0]?.UPC_Number 
-           ? `${process.env.AZUREIMAGESERVER}${inventoryData.UPCList[0].UPC_Number}.jpg`
-           : null,
-         SalesCategory: inventoryData?.SalesCategory?.Category_Desc || null,
-         PriceClass: inventoryData?.PriceClass?.Class_Desc || null,
-         Pack: inventoryData?.Pack || null,
-         CaseCount: inventoryData?.CaseCount || null,
-         UOM: inventoryData?.UOM || null
-       };
-     })
-   );
+    let wareHouseSetting: any = await Setting.findOne({});
+    wareHouseSetting = wareHouseSetting?.dataValues || null;
+    const topLatestItems = await getTopLatestItems();
 
-   return enrichedItems;
- }
+    // Enrich items with inventory data and other information
+    const enrichedItems = await Promise.all(
+      mostPurchasedItems.map(async (item: any) => {
+        const itemNumber = item.Item_Number;
+        const itemStr = itemNumber.toString();
+        const productImage = imageMap.get(itemStr) || null;
+
+        // Get inventory details
+        const inventoryData = await getInventoryFullItemNumber(itemNumber);
+        const inventoryOnHand = await getInventoryOnHand(itemNumber) || 0;
+
+        const tempDetail: any = await Inventory.findOne({
+          where: { Item_Number: itemNumber },
+          attributes: ['Retail1', 'Retail2', 'Retail3', 'CasesPerPallet', 'Unit_Price', 'EBT', 'Price1']
+        });
+
+        let price = await getDiscount(itemNumber, customerNumber);
+        if (!price) {
+          price = await getFirstValidPrice(tempDetail);
+        }
+
+        const userJurisdiction = await getJurisdiction(customerNumber);
+        let taxRate = await getTaxRateV1(
+          inventoryData?.OTP_Number,
+          userJurisdiction as number,
+          itemNumber,
+          price
+        );
+        taxRate = Math.ceil(taxRate * 100) / 100;
+
+        const isDiscounted = inventoryData?.Price_Subclass
+          ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass)
+          : false;
+
+        let prepaidTaxRate = 0;
+        if (userJurisdiction != null && inventoryData?.Sales_Category) {
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category as number, inventoryData, price + taxRate);
+        }
+
+        const productLimit = await getProductLimit(itemNumber);
+        const discount = await getProductDiscountFromRedis(Number(itemNumber));
+        const hasQtyDiscount = await checkQtyDiscount(itemNumber, customerNumber, price + taxRate);
+        const isNewItem = topLatestItems.some((latestItem: any) => latestItem.Item_Number === itemNumber);
+
+        let allowToOrder = true;
+        if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+          allowToOrder = false;
+        }
+
+        return {
+          Pack: inventoryData?.Pack || null,
+          Description: inventoryData?.Description || null,
+          Item_Number: itemNumber,
+          CaseCount: inventoryData?.CaseCount || null,
+          UOM: inventoryData?.UOM || null,
+          isDiscounted,
+          Price1: tempDetail?.Price1 || inventoryData?.Price1 || null,
+          Tax_Rate: taxRate,
+          OTP_Number: inventoryData?.OTP_Number || null,
+          Unit_Price: tempDetail?.Unit_Price || null,
+          productDiscount: discount ?? null,
+          price,
+          isNewItem,
+          hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+          prepaidTaxRate: prepaidTaxRate,
+          priceWithTax: price + taxRate,
+          BaseCost: inventoryData?.BaseCost || null,
+          Invoice_Cost: inventoryData?.Invoice_Cost || null,
+          AvgCost: inventoryData?.AvgCost || null,
+          NetCost: inventoryData?.NetCost || null,
+          hasProductLimit: productLimit ? true : false,
+          productLimit,
+          Retail1: tempDetail?.Retail1 || null,
+          Retail2: tempDetail?.Retail2 || null,
+          Retail3: tempDetail?.Retail3 || null,
+          CasesPerPallet: tempDetail?.CasesPerPallet || null,
+          EBT: tempDetail?.EBT || null,
+          UPCList: inventoryData?.UPCList || null,
+          Inventory_OnHand: inventoryOnHand,
+          UnitOunces: inventoryData?.UnitOunces || null,
+          allowToOrder,
+          salesCategory: inventoryData?.SalesCategory || null,
+          hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
+          qtyDiscount: hasQtyDiscount,
+          showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
+          showLowStock: wareHouseSetting?.retailer?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+          showWithOutPrice: wareHouseSetting?.retailer?.showWithOutPrice || false,
+          PriceClass: inventoryData?.PriceClass?.Class_Desc || null,
+          showDistributorImage: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url || null,
+          masterImage: inventoryData?.UPCList?.[0]?.UPC_Number
+            ? `${process.env.AZUREIMAGESERVER}${inventoryData.UPCList[0].UPC_Number}.jpg`
+            : null,
+          totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
+          totalOrders: Number(item.totalOrders || 0),
+        };
+      })
+    );
+
+    return enrichedItems;
+  }
 
 
- async getRetailerSuggestedItemsByCustomer(customerNumber: number) {
-   if (!customerNumber) {
-     throw new AppError('Customer number is required', 400);
-   }
+  async getRetailerSuggestedItemsByCustomer(customerNumber: number) {
+    if (!customerNumber) {
+      throw new AppError('Customer number is required', 400);
+    }
 
-   // Calculate date 12 weeks ago from today
-   const currentDate = new Date();
-   const twelveWeeksAgo = new Date(currentDate.getTime() - 84 * 24 * 60 * 60 * 1000); // 12 weeks = 84 days
+    // Calculate date 12 weeks ago from today
+    const currentDate = new Date();
+    const twelveWeeksAgo = new Date(currentDate.getTime() - 84 * 24 * 60 * 60 * 1000); // 12 weeks = 84 days
 
-   // Query 1: Get top 10 products that this customer buys most
-   const customerOrderHeaders = await OrderHeader.findAll({
-     where: {
-       C_Number: customerNumber,
-       Order_Deleted: false,
-       Order_Date: {
-         [Op.gte]: twelveWeeksAgo
-       }
-     },
-     attributes: ['Order_Number'],
-     raw: true
-   });
+    // Query 1: Get top 10 products that this customer buys most
+    const customerOrderHeaders = await OrderHeader.findAll({
+      where: {
+        C_Number: customerNumber,
+        Order_Deleted: false,
+        Order_Date: {
+          [Op.gte]: twelveWeeksAgo
+        }
+      },
+      attributes: ['Order_Number'],
+      raw: true
+    });
 
-   const customerOrderNumbers = customerOrderHeaders.map((header: any) => header.Order_Number);
-   
-   // Step 1: Get top 10 products that this customer buys most
-   let customerMostPurchasedItems: any[] = [];
-   if (customerOrderNumbers.length > 0) {
-     const customerOrderNumbersList = customerOrderNumbers.join(',');
-     const customerQuery = `
+    const customerOrderNumbers = customerOrderHeaders.map((header: any) => header.Order_Number);
+
+    // Step 1: Get top 10 products that this customer buys most
+    let customerMostPurchasedItems: any[] = [];
+    if (customerOrderNumbers.length > 0) {
+      const customerOrderNumbersList = customerOrderNumbers.join(',');
+      const customerQuery = `
        SELECT TOP 10
          od.Item_Number,
          SUM(od.Quantity_Ordered) AS totalQuantityOrdered,
@@ -5371,36 +5419,36 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
        ORDER BY SUM(od.Quantity_Ordered) DESC
      `;
 
-     customerMostPurchasedItems = await sequelize.query(customerQuery, {
-       type: QueryTypes.SELECT,
-       raw: true
-     }) as any[];
-   }
+      customerMostPurchasedItems = await sequelize.query(customerQuery, {
+        type: QueryTypes.SELECT,
+        raw: true
+      }) as any[];
+    }
 
-   // Step 2: Get the item numbers from customer's top 10 to exclude from overall query
-   const customerItemNumbers = customerMostPurchasedItems.map((item: any) => item.Item_Number);
-   const excludeItemNumbersCondition = customerItemNumbers.length > 0 
-     ? `AND od.Item_Number NOT IN (${customerItemNumbers.join(',')})`
-     : '';
+    // Step 2: Get the item numbers from customer's top 10 to exclude from overall query
+    const customerItemNumbers = customerMostPurchasedItems.map((item: any) => item.Item_Number);
+    const excludeItemNumbersCondition = customerItemNumbers.length > 0
+      ? `AND od.Item_Number NOT IN (${customerItemNumbers.join(',')})`
+      : '';
 
-   // Step 3: Get top 10 products that sell most overall (excluding customer's top 10 items)
-   const allOrderHeaders = await OrderHeader.findAll({
-     where: {
-       Order_Deleted: false,
-       Order_Date: {
-         [Op.gte]: twelveWeeksAgo
-       }
-     },
-     attributes: ['Order_Number'],
-     raw: true
-   });
+    // Step 3: Get top 10 products that sell most overall (excluding customer's top 10 items)
+    const allOrderHeaders = await OrderHeader.findAll({
+      where: {
+        Order_Deleted: false,
+        Order_Date: {
+          [Op.gte]: twelveWeeksAgo
+        }
+      },
+      attributes: ['Order_Number'],
+      raw: true
+    });
 
-   const allOrderNumbers = allOrderHeaders.map((header: any) => header.Order_Number);
-   
-   let overallMostSoldItems: any[] = [];
-   if (allOrderNumbers.length > 0) {
-     const allOrderNumbersList = allOrderNumbers.join(',');
-     const overallQuery = `
+    const allOrderNumbers = allOrderHeaders.map((header: any) => header.Order_Number);
+
+    let overallMostSoldItems: any[] = [];
+    if (allOrderNumbers.length > 0) {
+      const allOrderNumbersList = allOrderNumbers.join(',');
+      const overallQuery = `
        SELECT TOP 10
          od.Item_Number,
          SUM(od.Quantity_Ordered) AS totalQuantityOrdered,
@@ -5416,32 +5464,32 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
        ORDER BY SUM(od.Quantity_Ordered) DESC
      `;
 
-     overallMostSoldItems = await sequelize.query(overallQuery, {
-       type: QueryTypes.SELECT,
-       raw: true
-     }) as any[];
-   }
+      overallMostSoldItems = await sequelize.query(overallQuery, {
+        type: QueryTypes.SELECT,
+        raw: true
+      }) as any[];
+    }
 
-   // Step 4: Combine both sets (10 from customer + 10 from overall, no duplicates)
-   const combinedItems: any[] = [];
+    // Step 4: Combine both sets (10 from customer + 10 from overall, no duplicates)
+    const combinedItems: any[] = [];
 
-   // Add customer's most purchased items (up to 10)
-   customerMostPurchasedItems.slice(0, 10).forEach((item: any) => {
-     combinedItems.push({ ...item, source: 'customer' });
-   });
+    // Add customer's most purchased items (up to 10)
+    customerMostPurchasedItems.slice(0, 10).forEach((item: any) => {
+      combinedItems.push({ ...item, source: 'customer' });
+    });
 
-   // Add overall most sold items (up to 10) - already excluded customer items in query
-   overallMostSoldItems.slice(0, 10).forEach((item: any) => {
-     combinedItems.push({ ...item, source: 'overall' });
-   });
+    // Add overall most sold items (up to 10) - already excluded customer items in query
+    overallMostSoldItems.slice(0, 10).forEach((item: any) => {
+      combinedItems.push({ ...item, source: 'overall' });
+    });
 
-   // Step 5: Get top 10 products with highest profit percentage from Inventory
-   const existingItemNumbers = combinedItems.map((item: any) => item.Item_Number);
-   const excludeProfitItemsCondition = existingItemNumbers.length > 0 
-     ? `AND inv.Item_Number NOT IN (${existingItemNumbers.join(',')})`
-     : '';
+    // Step 5: Get top 10 products with highest profit percentage from Inventory
+    const existingItemNumbers = combinedItems.map((item: any) => item.Item_Number);
+    const excludeProfitItemsCondition = existingItemNumbers.length > 0
+      ? `AND inv.Item_Number NOT IN (${existingItemNumbers.join(',')})`
+      : '';
 
-   const profitQuery = `
+    const profitQuery = `
      SELECT TOP 10
        inv.Item_Number,
        inv.BaseCost,
@@ -5459,116 +5507,169 @@ storeDetail.C_CoName = storeDetail.C_Name || "";
      ORDER BY ((inv.Price1 - inv.BaseCost) / inv.BaseCost) * 100 DESC
    `;
 
-   const highProfitItems = await sequelize.query(profitQuery, {
-     type: QueryTypes.SELECT,
-     raw: true
-   }) as any[];
+    const highProfitItems = await sequelize.query(profitQuery, {
+      type: QueryTypes.SELECT,
+      raw: true
+    }) as any[];
 
-   // Add high profit items to combined items
-   highProfitItems.forEach((item: any) => {
-     combinedItems.push({ 
-       Item_Number: item.Item_Number,
-       totalQuantityOrdered: 0,
-       totalOrders: 0,
-       source: 'profit' 
-     });
-   });
+    // Add high profit items to combined items
+    highProfitItems.forEach((item: any) => {
+      combinedItems.push({
+        Item_Number: item.Item_Number,
+        totalQuantityOrdered: 0,
+        totalOrders: 0,
+        source: 'profit'
+      });
+    });
 
-   // Limit to 30 items (10 customer + 10 overall + 10 profit)
-   const finalItems = combinedItems.slice(0, 30);
+    // Limit to 30 items (10 customer + 10 overall + 10 profit)
+    const finalItems = combinedItems.slice(0, 30);
 
-   if (finalItems.length === 0) {
-     return [];
-   }
-
-   // Get item numbers for product images query
-   const itemNumbers = finalItems.map((item: any) => item.Item_Number);
-
-   // Get product images
-   const productImages = await ProductImage.findAll({
-     where: {
-       product_number: { [Op.in]: itemNumbers.map(String) },
-       isAllow: true
-     }
-   });
-   const imageMap = new Map(productImages.map(img => [img.product_number, img]));
-
-   // Enrich items with inventory data and other information
-   const enrichedItems = await Promise.all(
-     finalItems.map(async (item: any) => {
-       const itemNumber = item.Item_Number;
-       const itemStr = itemNumber.toString();
-       const productImage = imageMap.get(itemStr) || null;
-       
-       // Get inventory details
-       const inventoryData = await getInventoryFullItemNumber(itemNumber);
-       const inventoryOnHand = await getInventoryOnHand(itemNumber) || 0;
-      
-       let price = await getDiscount(itemNumber, customerNumber);
-       if (!price) {
-         const tempDetail: any = await Inventory.findOne({
-           where: { Item_Number: itemNumber }
-         });
-         price = await getFirstValidPrice(tempDetail);
-       }
-
-       const userJurisdiction = await getJurisdiction(customerNumber);
-       const taxRate = await getTaxRateV1(
-         inventoryData?.OTP_Number, 
-         userJurisdiction as number, 
-         itemNumber, 
-         price
-       );
-
-      const isDiscounted = inventoryData?.Price_Subclass 
-        ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass) 
-        : false;
-
-      let prepaidTaxRate = 0;
-      if (userJurisdiction != null && inventoryData?.Sales_Category != null) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category as number, inventoryData, price + taxRate);
-      }
-
-      console.log(inventoryData?.Sales_Category, 'inventoryData?.Sales_Category?.Sales_Category')
-      return {
-        Item_Number: itemNumber,
-        Description: inventoryData?.Description || null,
-        totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
-        totalOrders: Number(item.totalOrders || 0),
-        price,
-        priceWithTax: price + taxRate,
-        Tax_Rate: taxRate,
-        isDiscounted,
-        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
-        prepaidTaxRate: prepaidTaxRate,
-        Inventory_OnHand: inventoryOnHand,
-        showDistributorImage: productImage?.isAllow ?? false,
-        distributorImage: productImage?.img_url || null,
-        masterImage: inventoryData?.UPCList?.[0]?.UPC_Number 
-          ? `${process.env.AZUREIMAGESERVER}${inventoryData.UPCList[0].UPC_Number}.jpg`
-          : null,
-        SalesCategory: inventoryData?.SalesCategory?.Category_Desc || null,
-        PriceClass: inventoryData?.PriceClass?.Class_Desc || null,
-        Pack: inventoryData?.Pack || null,
-        CaseCount: inventoryData?.CaseCount || null,
-        UOM: inventoryData?.UOM || null,
-        source: item.source // 'customer', 'overall', or 'profit'
-      };
-     })
-   );
-
-   return enrichedItems;
- }
-
- async getCustomerLastBalance(customerNumber: number) {
-  const lastBalance = await Customer.findOne({
-    attributes: ['LastBalance'],
-    where: {
-      C_Number: customerNumber
+    if (finalItems.length === 0) {
+      return [];
     }
-  });
-  return lastBalance
- }
- 
+
+    // Get item numbers for product images query
+    const itemNumbers = finalItems.map((item: any) => item.Item_Number);
+
+    // Get product images
+    const productImages = await ProductImage.findAll({
+      where: {
+        product_number: { [Op.in]: itemNumbers.map(String) },
+        isAllow: true
+      }
+    });
+    const imageMap = new Map(productImages.map(img => [img.product_number, img]));
+
+    let wareHouseSetting: any = await Setting.findOne({});
+    wareHouseSetting = wareHouseSetting?.dataValues || null;
+    const topLatestItems = await getTopLatestItems();
+
+    // Enrich items with inventory data and other information
+    const enrichedItems = await Promise.all(
+      finalItems.map(async (item: any) => {
+        const itemNumber = item.Item_Number;
+        const itemStr = itemNumber.toString();
+        const productImage = imageMap.get(itemStr) || null;
+
+        // Get inventory details
+        const inventoryData = await getInventoryFullItemNumber(itemNumber);
+        const inventoryOnHand = await getInventoryOnHand(itemNumber) || 0;
+
+        const tempDetail: any = await Inventory.findOne({
+          where: { Item_Number: itemNumber },
+          attributes: ['Retail1', 'Retail2', 'Retail3', 'CasesPerPallet', 'Unit_Price', 'EBT', 'Price1', 'Price2']
+        });
+
+        let price = await getDiscount(itemNumber, customerNumber);
+        if (!price) {
+          price = await getFirstValidPrice(tempDetail);
+        }
+
+        const userJurisdiction = await getJurisdiction(customerNumber);
+        let taxRate = await getTaxRateV1(
+          inventoryData?.OTP_Number,
+          userJurisdiction as number,
+          itemNumber,
+          price
+        );
+        taxRate = Math.ceil(taxRate * 100) / 100;
+
+        const isDiscounted = inventoryData?.Price_Subclass
+          ? await hasDiscountedItem(itemNumber, inventoryData.Price_Subclass)
+          : false;
+
+        let prepaidTaxRate = 0;
+        if (userJurisdiction != null && inventoryData?.Sales_Category) {
+          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, inventoryData.Sales_Category as number, inventoryData, price + taxRate);
+        }
+
+        const productLimit = await getProductLimit(itemNumber);
+        const discount = await getProductDiscountFromRedis(Number(itemNumber));
+        const hasQtyDiscount = await checkQtyDiscount(itemNumber, customerNumber, price + taxRate);
+        const isNewItem = topLatestItems.some((latestItem: any) => latestItem.Item_Number === itemNumber);
+
+        let allowToOrder = true;
+        if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+          allowToOrder = false;
+        }
+
+        let allowToOrderSalesRep = true;
+        if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+          allowToOrderSalesRep = false;
+        }
+
+        return {
+          Pack: inventoryData?.Pack || null,
+          Description: inventoryData?.Description || null,
+          Item_Number: itemNumber,
+          CaseCount: inventoryData?.CaseCount || null,
+          UOM: inventoryData?.UOM || null,
+          isDiscounted,
+          Price1: tempDetail?.Price1 || inventoryData?.Price1 || null,
+          Price2: tempDetail?.Price2 || inventoryData?.Price2 || null,
+          Tax_Rate: taxRate,
+          OTP_Number: inventoryData?.OTP_Number || null,
+          Unit_Price: tempDetail?.Unit_Price || null,
+          productDiscount: discount ?? null,
+          price,
+          isNewItem,
+          hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+          prepaidTaxRate: prepaidTaxRate,
+          priceWithTax: price + taxRate,
+          BaseCost: inventoryData?.BaseCost || null,
+          Invoice_Cost: inventoryData?.Invoice_Cost || null,
+          AvgCost: inventoryData?.AvgCost || null,
+          NetCost: inventoryData?.NetCost || null,
+          hasProductLimit: productLimit ? true : false,
+          productLimit,
+          Retail1: tempDetail?.Retail1 || null,
+          Retail2: tempDetail?.Retail2 || null,
+          Retail3: tempDetail?.Retail3 || null,
+          CasesPerPallet: tempDetail?.CasesPerPallet || null,
+          EBT: tempDetail?.EBT || null,
+          UPCList: inventoryData?.UPCList || null,
+          Inventory_OnHand: inventoryOnHand,
+          UnitOunces: inventoryData?.UnitOunces || null,
+          allowToOrder,
+          salesCategory: inventoryData?.SalesCategory || null,
+          SalesCategory: inventoryData?.SalesCategory?.Category_Desc || null,
+          hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
+          qtyDiscount: hasQtyDiscount,
+          showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
+          showLowStock: wareHouseSetting?.retailer?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+          showWithOutPrice: wareHouseSetting?.retailer?.showWithOutPrice || false,
+          showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
+          showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+          showPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+          allowToOrderSalesRep: allowToOrderSalesRep || null,
+          showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+          imageId: productImage?.id || null,
+          PriceClass: inventoryData?.PriceClass?.Class_Desc || null,
+          showDistributorImage: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url || null,
+          masterImage: inventoryData?.UPCList?.[0]?.UPC_Number
+            ? `${process.env.AZUREIMAGESERVER}${inventoryData.UPCList[0].UPC_Number}.jpg`
+            : null,
+          totalQuantityOrdered: Number(item.totalQuantityOrdered || 0),
+          totalOrders: Number(item.totalOrders || 0),
+          source: item.source // 'customer', 'overall', or 'profit'
+        };
+      })
+    );
+
+    return enrichedItems;
+  }
+
+  async getCustomerLastBalance(customerNumber: number) {
+    const lastBalance = await Customer.findOne({
+      attributes: ['LastBalance'],
+      where: {
+        C_Number: customerNumber
+      }
+    });
+    return lastBalance
+  }
+
 
 }

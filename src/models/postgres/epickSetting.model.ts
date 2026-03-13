@@ -23,6 +23,15 @@ EpickSetting.init(
       field: 'allowSingleScan', // Map to database column name
     },
 
+    // When true, order-item APIs return quantityOrdered capped by inventory on hand (display only; DB unchanged).
+    // Add column if missing: ALTER TABLE epick_settings ADD COLUMN "capOrderQtyByInventory" BOOLEAN DEFAULT false;
+    capOrderQtyByInventory: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+      field: 'capOrderQtyByInventory',
+    },
+
   },
   {
     sequelize: postgresSequelize,

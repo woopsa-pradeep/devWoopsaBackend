@@ -1227,11 +1227,11 @@ export class SalesService {
     let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
 
 
-    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+    if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
       salesCategoryId = salesCategoryId.map(id => Number(id));
     }
 
-    if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+    if (Array.isArray(priceClassId) && priceClassId?.length > 0) {
       priceClassId = priceClassId.map(id => Number(id));
     }
 
@@ -1268,16 +1268,16 @@ export class SalesService {
       }
 
     } else {
-      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId.length > 0) {
+      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId?.length > 0) {
         // Both filters exist → use OR condition
         whereClause = {
           Sales_Category: { [Op.in]: salesCategoryId },
           Price_Class: { [Op.in]: priceClassId }
         };
-      } else if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0) {
+      } else if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
         // Only Sales_Category filter
         whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-      } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      } else if (Array.isArray(priceClassId) && priceClassId?.length > 0) {
         // Only Price_Class filter
         whereClause.Price_Class = { [Op.in]: priceClassId };
       }
@@ -1423,18 +1423,29 @@ export class SalesService {
       },
       required: searchInUPC
     };
-    if (searchInUPC) {
-      if (salesCategory.length > 0) {
-        whereClause.Sales_Category = { [Op.in]: salesCategory };
-      }
 
+    if (searchInUPC) {
+      if (salesCategoryId && salesCategoryId.length > 0) {
+        if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
+          whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+        }
+      } else {
+        if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+          whereClause.Sales_Category = { [Op.in]: salesCategory };
+        }
+      }
     }
 
-  
-      if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+    if (salesCategoryId && salesCategoryId?.length > 0) {
+      if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+      }
+    } else {
+      if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
         whereClause.Sales_Category = { [Op.in]: salesCategory };
       }
-    
+    }
+
 
     // orderClause = [['Date_Created', 'DESC']] as Order;
 
@@ -1499,7 +1510,7 @@ export class SalesService {
         'Cig_Pack',
         'Cig_Sticks',
       ],
-      where: whereClause,
+      where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
       include: [
         {
           model: SalesCategory,
@@ -2524,7 +2535,7 @@ export class SalesService {
         isPriceChanged: priceChange,
         UPCList: product.UPCList,
         oldPrice: Number(e?.originalPrice),
-        newPrice: price,
+        newPrice: price.toFixed(2),
         showDistributorImage: productImage?.isAllow ?? false,
         distributorImage: productImage?.img_url || null,
         masterImage: `${process.env.AZUREIMAGESERVER}${product.UPCList?.[0]?.UPC_Number}.jpg`,
@@ -2796,7 +2807,7 @@ export class SalesService {
           ]
         }
       ],
-      order: [['Order_Number', 'DESC']],
+      order: [['Order_Date', 'ASC']],
       limit: 30
     });
 

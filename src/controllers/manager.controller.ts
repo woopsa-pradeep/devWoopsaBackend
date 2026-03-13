@@ -1525,6 +1525,16 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getCustomerVelocityReportPoints(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerVelocityReportPoints(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCustomerVelocityReportPointsItem(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerVelocityReportPointsItem(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async setRetailerLocation(req: AuthRequest, res: Response) {
     const data = await this.managerService.setRetailerLocation(req.body);
     sendResponse(res, 201, true, data, 'Retailer location set successfully');
@@ -2075,6 +2085,16 @@ export class ManagerController {
 
   async getDeletedOrders(req: AuthRequest, res: Response) {
     const data = await this.managerService.getDeletedOrders(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getPriceClassRebatesReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPriceClassRebatesReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getPriceClassGroupRebatesReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPriceClassGroupRebatesReport(req.query);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
