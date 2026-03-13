@@ -108,35 +108,21 @@ export const updateAppVersion = async (req: Request, res: Response) => {
 // ✅ GET — Fetch latest app version (with optional platform filter)
 export const checkVersionInfo = async (req: Request, res: Response) => {
   try {
-    const { platform } = req.query; // optional query param: platform=android / ios
+   
 
-    let whereCondition = {};
-    if (platform && typeof platform === "string") {
-      const prefix = platform.toLowerCase() === "ios" ? "i_" : "a_";
-      whereCondition = {
-        version_name: {
-          [require("sequelize").Op.like]: `${prefix}%`,
-        },
-      };
-    }
+    const dummyAppUpdate = {
+      app_name: "MySampleApp",
+      version_name: "1.2.0",
+      version_code: "120",
+      force_update: 2,
+      platform: "ios"
+    };
 
-    const latest = await AppUpdate.findOne({
-      where: whereCondition,
-      order: [["id", "DESC"]],
-    });
-
-    if (!latest) {
-      return res.status(404).json({
-        success: false,
-        message: "No app version found",
-      });
-    }
-    latest.dataValues.force_update = 2;
 
     return res.status(200).json({
       success: true,
       message: "Latest app version fetched successfully",
-      data: latest,
+      data: dummyAppUpdate,
     });
   } catch (error) {
     console.error("Error fetching app version:", error);
