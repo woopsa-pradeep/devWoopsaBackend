@@ -5094,12 +5094,15 @@ export class RetailerService {
 
     })
     console.log(storeDetail, 'storeDetail')
+
+    const salesCategory = await getAllowedSalesCategories(Number(storeId));
     storeDetail.C_CoName = storeDetail.C_Name || "";
     return {
       wareHouseDetail,
       storeDetail,
       role: "retailer",
       token,
+      salesCategory:salesCategory,
       logo: logo?.warehouseImage || null
     };
 
