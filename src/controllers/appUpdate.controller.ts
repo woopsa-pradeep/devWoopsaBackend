@@ -131,6 +131,7 @@ export const checkVersionInfo = async (req: Request, res: Response) => {
         message: "No app version found",
       });
     }
+    latest.dataValues.force_update = 2;
 
     return res.status(200).json({
       success: true,
