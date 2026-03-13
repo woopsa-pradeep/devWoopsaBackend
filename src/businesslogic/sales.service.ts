@@ -2738,6 +2738,7 @@ export class SalesService {
       showTradeShow = true;
     }
     store.dataValues.showTradeShow = showTradeShow;
+    store.dataValues.salesCategory = await getAllowedSalesCategories(Number(customerId));
     store.dataValues.discountLimit = userData?.dataValues?.setUserDiscountLimit || 0;
     store.dataValues.allowDiscount = userData?.dataValues?.allowDiscount || false;
     console.log(store, 'strore -->')
@@ -2745,91 +2746,185 @@ export class SalesService {
   }
 
 
-  async getOrderHistoryByProductNumber(productNumber: number, retailerId: number) {
-    // Find order details for the specific product with order header information
-    const orderDetails = await OrderDetail.findAll({
-      where: {
-        Item_Number: productNumber,
-      },
-      attributes: [
-        'Order_Number',
-        'Line_Number',
-        'Item_Number',
-        'Sales_Category',
-        'OTP_Number',
-        'Quantity_Ordered',
-        'Quantity_Shipped',
-        'Pack',
-        'Price',
-        'Price_Reference',
-        'Retail',
-        'NetCost',
-        'BaseCost',
-        'Invoice_Cost',
-        'AvgCost',
-        'OTP_Amount_State',
-        'OTP_Amount_County',
-        'OTP_Amount_City',
-        'DepositAmount',
-        'Price_Subclass',
-        'OffInvoice_Amount',
-        'Taxable',
-        'ItemDescription',
-        'CaseWeight',
-        'CaseCount',
+  // async getOrderHistoryByProductNumber(productNumber: number, retailerId: number) {
+  //   // Find order details for the specific product with order header information
+  //   const orderDetails = await OrderDetail.findAll({
+  //     where: {
+  //       Item_Number: productNumber,
+  //     },
+  //     attributes: [
+  //       'Order_Number',
+  //       'Line_Number',
+  //       'Item_Number',
+  //       'Sales_Category',
+  //       'OTP_Number',
+  //       'Quantity_Ordered',
+  //       'Quantity_Shipped',
+  //       'Pack',
+  //       'Price',
+  //       'Price_Reference',
+  //       'Retail',
+  //       'NetCost',
+  //       'BaseCost',
+  //       'Invoice_Cost',
+  //       'AvgCost',
+  //       'OTP_Amount_State',
+  //       'OTP_Amount_County',
+  //       'OTP_Amount_City',
+  //       'DepositAmount',
+  //       'Price_Subclass',
+  //       'OffInvoice_Amount',
+  //       'Taxable',
+  //       'ItemDescription',
+  //       'CaseWeight',
+  //       'CaseCount',
 
-      ],
+  //     ],
+  //     include: [
+  //       {
+  //         model: OrderHeader,
+  //         as: 'orderHeader',
+  //         where: { C_Number: retailerId },
+  //         attributes: ['Order_Number', 'Order_Date', 'C_Number'],
+  //         required: true
+  //       },
+  //       {
+  //         model: Inventory,
+  //         as: 'inventory',
+  //         attributes: [
+  //           'Item_Number',
+  //           'Description',
+  //         ],
+  //         include: [
+  //           {
+  //             model: InventoryUPC,
+  //             as: 'UPCList',
+  //             attributes: ['UPC_Number'],
+  //             where: {
+  //               Status: 0,
+  //             },
+  //             required: false
+  //           }
+  //         ]
+  //       }
+  //     ],
+  //     order: [[{ model: OrderHeader, as: 'orderHeader' }, 'Order_Date', 'ASC']],
+  //     limit: 30
+  //   });
+
+  //   // Add product image to each order detail
+  //   const result = await Promise.all(orderDetails.map(async (detail: any) => {
+  //     // Get product image
+  //     const productImage = await ProductImage.findOne({
+  //       where: {
+  //         product_number: detail.Item_Number.toString(),
+  //         isAllow: true
+  //       },
+  //     });
+
+  //     return {
+  //       ...detail.toJSON(),
+  //       isDistributorImageShow: productImage?.isAllow ?? false,
+  //       distributorImage: productImage?.img_url || null,
+  //       masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory.UPCList?.[0]?.UPC_Number}.jpg`,
+  //     };
+  //   }));
+
+  //   return result;
+  // }
+
+  async getOrderHistoryByProductNumber(productNumber: number, retailerId: number) {
+
+    const orderHeaders = await OrderHeader.findAll({
+      where: { C_Number: retailerId },
+      attributes: ['Order_Number', 'Order_Date', 'C_Number'],
+
       include: [
         {
-          model: OrderHeader,
-          as: 'orderHeader',
-          where: { C_Number: retailerId },
-          attributes: ['Order_Number', 'Order_Date', 'C_Number'],
-          required: true
-        },
-        {
-          model: Inventory,
-          as: 'inventory',
+          model: OrderDetail,
+          as: 'orderDetails',
+          where: { Item_Number: productNumber },
+          required: true,
           attributes: [
+            'Order_Number',
+            'Line_Number',
             'Item_Number',
-            'Description',
+            'Sales_Category',
+            'OTP_Number',
+            'Quantity_Ordered',
+            'Quantity_Shipped',
+            'Pack',
+            'Price',
+            'Price_Reference',
+            'Retail',
+            'NetCost',
+            'BaseCost',
+            'Invoice_Cost',
+            'AvgCost',
+            'OTP_Amount_State',
+            'OTP_Amount_County',
+            'OTP_Amount_City',
+            'DepositAmount',
+            'Price_Subclass',
+            'OffInvoice_Amount',
+            'Taxable',
+            'ItemDescription',
+            'CaseWeight',
+            'CaseCount',
           ],
           include: [
             {
-              model: InventoryUPC,
-              as: 'UPCList',
-              attributes: ['UPC_Number'],
-              where: {
-                Status: 0,
-              },
-              required: false
+              model: Inventory,
+              as: 'inventory',
+              attributes: ['Item_Number', 'Description'],
+              include: [
+                {
+                  model: InventoryUPC,
+                  as: 'UPCList',
+                  where: { Status: 0 },
+                  attributes: ['UPC_Number'],
+                  required: false
+                }
+              ]
             }
           ]
         }
       ],
+
       order: [['Order_Date', 'ASC']],
-      limit: 30
+      limit: 30,
     });
 
-    // Add product image to each order detail
-    const result = await Promise.all(orderDetails.map(async (detail: any) => {
-      // Get product image
-      const productImage = await ProductImage.findOne({
-        where: {
-          product_number: detail.Item_Number.toString(),
-          isAllow: true
-        },
-      });
+    // Build final normalised output
+    const response: any[] = [];
 
-      return {
-        ...detail.toJSON(),
-        isDistributorImageShow: productImage?.isAllow ?? false,
-        distributorImage: productImage?.img_url || null,
-        masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory.UPCList?.[0]?.UPC_Number}.jpg`,
-      };
-    }));
+    for (const header of orderHeaders) {
+      const details = (header as any).orderDetails;
 
-    return result;
+      for (const detail of details) {
+        const productImage = await ProductImage.findOne({
+          where: {
+            product_number: detail.Item_Number.toString(),
+            isAllow: true,
+          },
+        });
+
+        response.push({
+          ...detail.toJSON(),
+          orderHeader: {
+            Order_Number: header.Order_Number,
+            Order_Date: header.Order_Date,
+            C_Number: header.C_Number,
+          },
+
+          isDistributorImageShow: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url ?? null,
+          masterImage: `${process.env.AZUREIMAGESERVER}${detail.inventory?.UPCList?.[0]?.UPC_Number}.jpg`
+        });
+      }
+    }
+
+    return response;
   }
 
 

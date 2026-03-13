@@ -758,11 +758,14 @@ export class AuthService {
       }
     }
     const wholeStoreDetail = await Distributor.findOne({ attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"], });
-
-
+    let  salesCategory :any= []
+    if(isSessionActive){
+      salesCategory =   await getAllowedSalesCategories(Number(isSessionActive.currentCustomerId));
+    }
 
     return {
       token: token,
+      salesCategory:salesCategory,
       rolesPermission: filtered,
       logo: logo?.warehouseImage || null,
       role: 'sales',
@@ -867,10 +870,15 @@ export class AuthService {
       });
 
       const epickSetting = await EpickSetting.findOne({});
-  
+      let  salesCategory :any= []
+      if(isSessionActive){
+        salesCategory =   await getAllowedSalesCategories(Number(isSessionActive.currentCustomerId));
+      }
+     
       // 9️⃣ Final Response
       return {
         token: token,
+        salesCategory:salesCategory,
         rolesPermission: filtered,
         logo: logo?.warehouseImage || null,
         epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
