@@ -114,7 +114,7 @@ export const checkVersionInfo = async (req: Request, res: Response) => {
       app_name: "MySampleApp",
       version_name: "1.2.0",
       version_code: "120",
-      force_update: 2,
+      force_update: 0,
       platform: "ios"
     };
 
