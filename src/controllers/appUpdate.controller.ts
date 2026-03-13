@@ -108,19 +108,38 @@ export const updateAppVersion = async (req: Request, res: Response) => {
 // ✅ GET — Fetch latest app version (with optional platform filter)
 export const checkVersionInfo = async (req: Request, res: Response) => {
   try {
-   const {number} = req.query
+    const { platform } = req.query;
+    
+    if (!platform) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: platform",
+      });
+    }
 
-    const dummyAppUpdate = {
-      app_name: "MySampleApp",
-      version_name: "1.2.0",
-      version_code: "120",
-      force_update: 2,
-      platform: "ios"
-    };
+    // Validate and normalize platform value
+    const platformStr = typeof platform === 'string' ? platform.toLowerCase() : String(platform).toLowerCase();
+    
+    if (platformStr !== 'ios' && platformStr !== 'android') {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid platform. Must be 'ios' or 'android'",
+      });
+    }
 
+    const dummyAppUpdate = await AppUpdate.findOne({
+      where: { platform: platformStr as 'ios' | 'android' },
+    });
+
+    if (!dummyAppUpdate) {
+      return res.status(404).json({
+        success: false,
+        message: "No app version found",
+      });
+    }
 
     return res.status(200).json({
-      success: false,
+      success: true,
       message: "Latest app version fetched successfully",
       data: dummyAppUpdate,
     });

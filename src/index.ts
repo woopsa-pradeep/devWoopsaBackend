@@ -8,7 +8,7 @@ import { testConnections } from './db';
 import { syncPostgresModels } from './models/postgres';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting, seedInvoiceSetting } from './seeder/wareHouseSetting.seeder';
+import { seedEpickSetting, seedHomeSetting, seedPolicies, seedWarehouseSetting, seedInvoiceSetting, seedAppUpdate } from './seeder/wareHouseSetting.seeder';
 import { seedEmailModules } from './seeder/emailModule.seeder';
 import { seedCustomerBalanceSetting } from './seeder/customerBalance.seeder';
 import { seedInvoiceTemplates } from './seeder/invoiceTemplate.seeder';
@@ -190,6 +190,7 @@ testConnections()
     await seedWarehouseSetting();
     await seedHomeSetting();
     await seedEpickSetting();
+    await seedAppUpdate();
     await seedInvoiceSetting();
     await seedPolicies();
     console.log('✅ Policies seeded');

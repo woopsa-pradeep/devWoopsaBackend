@@ -105,17 +105,35 @@ export async function seedEpickSetting() {
 }
 
 export async function seedAppUpdate() {
-  const existing = await AppUpdate.findOne({});
-  if (!existing) {
+  // Seed Android entry
+  const existingAndroid = await AppUpdate.findOne({ where: { platform: 'android' } });
+  if (!existingAndroid) {
     await AppUpdate.create({
       app_name: 'Woopsa',
-      version_name: 'a_1.0.0',
-      version_code: 'a_1',
+      version_name: '1.0.1',
+      version_code: '38',
       force_update: 0,
       platform: 'android',
     });
+    console.log('✅ Seeded AppUpdate (Android)');
+  } else {
+    console.log('ℹ️ AppUpdate (Android) already exists, skipping seed');
   }
 
+  // Seed iOS entry
+  const existingIos = await AppUpdate.findOne({ where: { platform: 'ios' } });
+  if (!existingIos) {
+    await AppUpdate.create({
+      app_name: 'woopsa',
+      version_name: '1.2.7',
+      version_code: '1',
+      force_update: 0,
+      platform: 'ios',
+    });
+    console.log('✅ Seeded AppUpdate (iOS)');
+  } else {
+    console.log('ℹ️ AppUpdate (iOS) already exists, skipping seed');
+  }
 }
 
 export async function seedInvoiceSetting() {
