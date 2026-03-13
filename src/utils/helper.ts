@@ -1495,7 +1495,6 @@ export async function getJurisdiction(userId: number) {
   return user?.dataValues?.Jurisdiction_State || null;
 }
 export async function getInventoryOnHand(Item_Number: number) {
-
   const date = moment().format('YYYY-MM-DD');
   const result: any = await OrderHeader.findAll({
     attributes: [],
@@ -1519,14 +1518,11 @@ export async function getInventoryOnHand(Item_Number: number) {
     raw: true
   });
 
-
   const totalQty = result
     .map((r: any) => Number(r['orderDetails.totalQuantityOrdered'] || 0))
     .reduce((sum: any, qty: any) => sum + qty, 0);
 
   console.log(totalQty, 'totalQty----->'); // 13
-
-
 
   const inventoryOnHandSum: any = await InventoryStatus.findAll({
     attributes: [[fn("SUM", col("Inventory_OnHand")), "total_onhand"]],
@@ -1537,10 +1533,21 @@ export async function getInventoryOnHand(Item_Number: number) {
     raw: true,
   });
 
-
-
-
   return (inventoryOnHandSum[0].total_onhand || 0) - totalQty;
+}
+
+// Returns the raw warehouse Inventory_OnHand (no subtraction of today's orders)
+export async function getInventoryOnHandRaw(Item_Number: number) {
+  const inventoryOnHandSum: any = await InventoryStatus.findAll({
+    attributes: [[fn("SUM", col("Inventory_OnHand")), "total_onhand"]],
+    where: {
+      Item_Number: Item_Number,
+      Code: 0,
+    },
+    raw: true,
+  });
+
+  return inventoryOnHandSum[0]?.total_onhand || 0;
 }
 
 export async function checkRegisterCustomer(id: number) {

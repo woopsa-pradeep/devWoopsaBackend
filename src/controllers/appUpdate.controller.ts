@@ -108,19 +108,19 @@ export const updateAppVersion = async (req: Request, res: Response) => {
 // ✅ GET — Fetch latest app version (with optional platform filter)
 export const checkVersionInfo = async (req: Request, res: Response) => {
   try {
-   
+   const {number} = req.query
 
     const dummyAppUpdate = {
       app_name: "MySampleApp",
       version_name: "1.2.0",
       version_code: "120",
-      force_update: 0,
+      force_update: 2,
       platform: "ios"
     };
 
 
     return res.status(200).json({
-      success: true,
+      success: false,
       message: "Latest app version fetched successfully",
       data: dummyAppUpdate,
     });

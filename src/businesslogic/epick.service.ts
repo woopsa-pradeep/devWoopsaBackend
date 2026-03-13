@@ -8,7 +8,7 @@ import { Customer } from "../models/mmsql/customer.model";
 import { IOrderPick, IOrderPickBox } from "../interfaces/request.body.interface";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { generateBarcodeAndUpload } from "../utils/barCodeGenerate";
-import { checkQtyDiscount, generateBarcode, getDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, hasDiscountedItem } from "../utils/helper";
+import { checkQtyDiscount, generateBarcode, getDiscount, getFirstValidPrice, getInventoryOnHandRaw, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, hasDiscountedItem } from "../utils/helper";
 import { InventoryUPC } from "../models/mmsql/inventoryUpc.model";
 import { AppError } from "../utils/AppError";
 import { OrderPickScan } from "../models/postgres/epickOrderScan.model";
@@ -183,7 +183,13 @@ export class EpickService {
       this.getOrderPickRightAreas(orderNumber)
     ]);
 
+    console.log('areAllCategoriesCompleted - order', orderNumber, {
+      orderCategories,
+      orderAreas,
+    });
+
     if (orderCategories.length === 0 && orderAreas.length === 0) {
+      console.log('areAllCategoriesCompleted - no categories/areas found, returning false');
       return false;
     }
 
@@ -193,6 +199,8 @@ export class EpickService {
       raw: true
     });
 
+    console.log('areAllCategoriesCompleted - completed confirmations', completedConfirmations);
+
     const completedCategories = new Set<number>();
     const completedAreas = new Set<string>();
     completedConfirmations.forEach((c: any) => {
@@ -200,9 +208,39 @@ export class EpickService {
       (c.pickRightAreas || []).forEach((a: string) => completedAreas.add(String(a).trim()));
     });
 
-    const categoriesDone = orderCategories.length === 0 || orderCategories.every((cat: number) => completedCategories.has(cat));
-    const areasDone = orderAreas.length === 0 || orderAreas.every((a: string) => completedAreas.has(String(a).trim()));
-    return categoriesDone && areasDone;
+    // Determine which modes are actually used by completed confirmations
+    const hasCategoryMode = completedConfirmations.some((c: any) => (c.category || []).length > 0);
+    const hasPickAreaMode = completedConfirmations.some((c: any) => (c.pickRightAreas || []).length > 0);
+
+    // If we somehow have no completed confirmations, we can't mark the order as done
+    if (!hasCategoryMode && !hasPickAreaMode) {
+      console.log('areAllCategoriesCompleted - no completed confirmations with categories or pick areas, returning false');
+      return false;
+    }
+
+    // Only require categories if any picker works by category
+    const categoriesDone = !hasCategoryMode
+      ? true
+      : orderCategories.length === 0 || orderCategories.every((cat: number) => completedCategories.has(cat));
+
+    // Only require pick areas if any picker works by pick area
+    const areasDone = !hasPickAreaMode
+      ? true
+      : orderAreas.length === 0 || orderAreas.every((a: string) => completedAreas.has(String(a).trim()));
+
+    const allDone = categoriesDone && areasDone;
+    console.log('areAllCategoriesCompleted - result', {
+      orderNumber,
+      orderCategories,
+      orderAreas,
+      completedCategories: Array.from(completedCategories),
+      completedAreas: Array.from(completedAreas),
+      categoriesDone,
+      areasDone,
+      allDone,
+    });
+
+    return allDone;
   }
 
   // async  getOrder() {
@@ -1044,7 +1082,7 @@ export class EpickService {
         attributes: ['Item_Number']
       })
       for (const item of orderItem) {
-        const inventoryOnHand = await getInventoryOnHand(item.Item_Number)
+        const inventoryOnHand = await getInventoryOnHandRaw(item.Item_Number)
         if (inventoryOnHand <= 0) {
           console.log(item.Item_Number, 'item.Item_Number')
           outOfStock++
@@ -1272,7 +1310,7 @@ export class EpickService {
         },
       });
 
-      const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
+      const inventoryOnHand = await getInventoryOnHandRaw(item.Item_Number);
 
       // Optionally cap Quantity_Ordered by inventory on hand (display only; DB unchanged)
       let quantityOrdered = Number(item.Quantity_Ordered) || 0;
@@ -1354,7 +1392,7 @@ export class EpickService {
               price = await getFirstValidPrice(e);
             }
 
-            const subInventoryOnHand = (await getInventoryOnHand(subItemNumber)) || 0;
+            const subInventoryOnHand = (await getInventoryOnHandRaw(subItemNumber)) || 0;
 
             let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
             taxRate = Math.ceil(taxRate * 100) / 100;
@@ -1568,7 +1606,7 @@ export class EpickService {
         },
       });
 
-      const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
+      const inventoryOnHand = await getInventoryOnHandRaw(item.Item_Number);
 
       // Check if item has a substitute product
       let substituteProduct = null;
@@ -1643,7 +1681,7 @@ export class EpickService {
               price = await getFirstValidPrice(e);
             }
 
-            const subInventoryOnHand = (await getInventoryOnHand(subItemNumber)) || 0;
+            const subInventoryOnHand = (await getInventoryOnHandRaw(subItemNumber)) || 0;
 
             let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
             taxRate = Math.ceil(taxRate * 100) / 100;
@@ -2457,7 +2495,7 @@ export class EpickService {
       },
       {
         where: { id },
-      }
+      }                      
     );
   }
 
@@ -2469,7 +2507,7 @@ export class EpickService {
         orderNumber: orderNumber
       }
     })
-    if (!orderPick) {
+    if (!orderPick) {     
       throw new AppError("Order not found", 404);
     }
 
@@ -2761,7 +2799,7 @@ export class EpickService {
         });
 
         // Inventory on hand
-        const inventoryOnHand = await getInventoryOnHand(scanItem.itemNumber);
+        const inventoryOnHand = await getInventoryOnHandRaw(scanItem.itemNumber);
 
         // Inventory details
         const inventory = await Inventory.findOne({
@@ -2848,7 +2886,7 @@ export class EpickService {
     let visibleLines = 0;
     let visibleQty = 0;
     for (const d of orderDetails as any[]) {
-      const onHand = (await getInventoryOnHand(d.Item_Number)) ?? 0;
+      const onHand = (await getInventoryOnHandRaw(d.Item_Number)) ?? 0;
       const capped = Math.min(Number(d.Quantity_Ordered) || 0, Math.max(0, onHand));
       if (capped > 0) {
         visibleLines += 1;
@@ -3904,7 +3942,7 @@ export class EpickService {
       price = await getFirstValidPrice(e);
     }
 
-    const inventoryOnHand = (await getInventoryOnHand(subItemNumber)) || 0;
+    const inventoryOnHand = (await getInventoryOnHandRaw(subItemNumber)) || 0;
 
     let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
     taxRate = Math.ceil(taxRate * 100) / 100;
@@ -5036,7 +5074,7 @@ export class EpickService {
       const pickerItemsWithQty = await Promise.all(pickerItems.map(async (item: any) => {
         let quantityOrdered = Number(item.Quantity_Ordered) || 0;
         if (capOrderQtyByInventory) {
-          const onHand = (await getInventoryOnHand(item.Item_Number)) ?? 0;
+          const onHand = (await getInventoryOnHandRaw(item.Item_Number)) ?? 0;
           quantityOrdered = Math.min(quantityOrdered, Math.max(0, onHand));
         }
         return {
