@@ -38,6 +38,7 @@ import { RetailerDevice } from "../models/postgres/device.model";
 import { Notifications } from "../models/postgres/notification.model";
 import { RecordLock } from "../models/mmsql/recordLocks.model";
 import { ItemLimit } from "../models/postgres/itemLimit.model";
+import { CheckerActionLog } from "../models/postgres/checkerActionLog.model";
 
 
 export class EpickService {
@@ -1300,6 +1301,42 @@ export class EpickService {
       itemLimitMap[limit.Item_Number] = limit.markAsBundle || false;
     });
 
+    // When cap is enabled, allocate inventory across split lines of the same item.
+    // Allocation priority: Line_Number ascending.
+    const allocatedQtyByLineKey = new Map<string, number>(); // key: `${itemNumber}_${lineNumber}`
+    if (capOrderQtyByInventory) {
+      const linesByItem = new Map<number, Array<{ lineNumber: number; qtyOrdered: number }>>();
+
+      for (const row of data as any[]) {
+        const itemData = row.dataValues || row;
+        const itemNumber = Number(itemData.Item_Number);
+        const lineNumber = itemData.Line_Number === null || itemData.Line_Number === undefined ? 0 : Number(itemData.Line_Number);
+        const qtyOrdered = Number(itemData.Quantity_Ordered) || 0;
+
+        if (!linesByItem.has(itemNumber)) {
+          linesByItem.set(itemNumber, []);
+        }
+        linesByItem.get(itemNumber)!.push({ lineNumber, qtyOrdered });
+      }
+
+      for (const [itemNumber, lines] of linesByItem.entries()) {
+        lines.sort((a, b) => a.lineNumber - b.lineNumber);
+
+        const onHandRaw = await getInventoryOnHandRaw(itemNumber);
+        let remaining = Math.max(0, Number(onHandRaw) || 0);
+
+        for (const line of lines) {
+          if (remaining <= 0) {
+            allocatedQtyByLineKey.set(`${itemNumber}_${line.lineNumber}`, 0);
+            continue;
+          }
+          const allocated = Math.min(line.qtyOrdered, remaining);
+          allocatedQtyByLineKey.set(`${itemNumber}_${line.lineNumber}`, allocated);
+          remaining -= allocated;
+        }
+      }
+    }
+
     const finalData = await Promise.all(data.map(async (e: any) => {
       let item = e.dataValues || null;
 
@@ -1315,8 +1352,9 @@ export class EpickService {
       // Optionally cap Quantity_Ordered by inventory on hand (display only; DB unchanged)
       let quantityOrdered = Number(item.Quantity_Ordered) || 0;
       if (capOrderQtyByInventory) {
-        const available = inventoryOnHand ?? 0;
-        quantityOrdered = Math.min(quantityOrdered, Math.max(0, available));
+        const lineNumber = item.Line_Number === null || item.Line_Number === undefined ? 0 : Number(item.Line_Number);
+        const lineKey = `${Number(item.Item_Number)}_${lineNumber}`;
+        quantityOrdered = allocatedQtyByLineKey.get(lineKey) ?? 0;
       }
 
       // Check if item has a substitute product
@@ -2536,7 +2574,7 @@ export class EpickService {
         orderNumber: orderNumber,
         pickerUserNumber: pickerUserId,
         status: 'in_progress'
-      }
+      },
     });
 
     if (!currentConfirmation) {
@@ -2898,6 +2936,7 @@ export class EpickService {
     result.totalLines = visibleLines;
     result.totalQty = String(visibleQty);
     return result;
+     
   }
 
 
@@ -3286,6 +3325,48 @@ export class EpickService {
       orderItemsMap[orderNum].push(item.get({ plain: true }));
     });
 
+    // Get checker action logs for all orders in range
+    const checkerLogs = orderNumbers.length > 0 ? await CheckerActionLog.findAll({
+      where: {
+        orderNumber: { [Op.in]: orderNumbers }
+      },
+      attributes: [
+        "id",
+        "orderNumber",
+        "checkerUserId",
+        "actionType",
+        "itemNumber",
+        "lineNumber",
+        "boxId",
+        "deltaQty",
+        "deltaBundles",
+        "meta",
+        "createdAt",
+      ],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    }) : [];
+
+    const checkerActionLogsByOrder: { [key: number]: any[] } = {};
+    checkerLogs.forEach((log: any) => {
+      const orderNum = Number(log.orderNumber);
+      if (!checkerActionLogsByOrder[orderNum]) {
+        checkerActionLogsByOrder[orderNum] = [];
+      }
+      checkerActionLogsByOrder[orderNum].push({
+        id: Number(log.id),
+        checkerUserId: log.checkerUserId ?? null,
+        actionType: log.actionType,
+        itemNumber: log.itemNumber ?? null,
+        lineNumber: log.lineNumber ?? null,
+        boxId: log.boxId ?? null,
+        deltaQty: Number(log.deltaQty) || 0,
+        deltaBundles: Number(log.deltaBundles) || 0,
+        meta: log.meta ?? {},
+        createdAt: log.createdAt,
+      });
+    });
+
     // Get unique user IDs and customer numbers
     const userIds = Array.from(new Set(orders.map((o: any) => o.pickerUserNumber).filter((id: any) => id)));
     const customerNumbers = Array.from(new Set(orders.map((o: any) => o.customerNumber).filter((num: any) => num)));
@@ -3336,6 +3417,12 @@ export class EpickService {
     // Calculate picking times and totals
     let totalPickingTimeSeconds = 0;
     const orderPickingTimes: { [key: number]: number } = {};
+    let totalCheckerActions = 0;
+    let totalQtyDeltaByChecker = 0;
+    let totalBundlesDeltaByChecker = 0;
+    let totalPhotoActionsByChecker = 0;
+    const checkerUsersSet = new Set<number>();
+    let totalOrdersWithCheckerChanges = 0;
 
     // Build final response with picking time calculations, override requests, order items, and recalculated totals
     const finalData = orders.map((order: any) => {
@@ -3371,6 +3458,42 @@ export class EpickService {
       const seconds = pickingTimeSeconds % 60;
       const pickingTimeFormatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
+      const checkerActionLogs = checkerActionLogsByOrder[orderData.orderNumber] || [];
+      const checkerSummary = checkerActionLogs.reduce(
+        (acc: any, log: any) => {
+          acc.totalCheckerActions += 1;
+          acc.totalQtyDeltaByChecker += Number(log.deltaQty) || 0;
+          acc.totalBundlesDeltaByChecker += Number(log.deltaBundles) || 0;
+          if (log.actionType === "photo_add" || log.actionType === "photo_update") {
+            acc.photoActionsCount += 1;
+          }
+          if (log.checkerUserId && !acc.checkerUserIds.includes(log.checkerUserId)) {
+            acc.checkerUserIds.push(log.checkerUserId);
+          }
+          if (!acc.lastCheckerActionAt) {
+            acc.lastCheckerActionAt = log.createdAt;
+          }
+          return acc;
+        },
+        {
+          totalCheckerActions: 0,
+          totalQtyDeltaByChecker: 0,
+          totalBundlesDeltaByChecker: 0,
+          photoActionsCount: 0,
+          lastCheckerActionAt: null as Date | null,
+          checkerUserIds: [] as number[],
+        }
+      );
+
+      totalCheckerActions += checkerSummary.totalCheckerActions;
+      totalQtyDeltaByChecker += checkerSummary.totalQtyDeltaByChecker;
+      totalBundlesDeltaByChecker += checkerSummary.totalBundlesDeltaByChecker;
+      totalPhotoActionsByChecker += checkerSummary.photoActionsCount;
+      if (checkerSummary.totalCheckerActions > 0) {
+        totalOrdersWithCheckerChanges += 1;
+      }
+      checkerSummary.checkerUserIds.forEach((id: number) => checkerUsersSet.add(id));
+
       return {
         ...orderData,
         // Recalculated totals for this order
@@ -3384,6 +3507,8 @@ export class EpickService {
         overrideRequestCount: overrideCountMap[orderData.orderNumber] || 0,
         overrideRequests: overrideRequestsMap[orderData.orderNumber] || [],
         orderItems,
+        checkerSummary,
+        checkerActionLogs,
         pickingTimeSeconds,
         pickingTimeFormatted
       };
@@ -3402,7 +3527,13 @@ export class EpickService {
         totalOrders: finalData.length,
         totalPickingTimeSeconds: totalPickingTimeSeconds,
         totalPickingTimeFormatted: totalPickingTimeFormatted,
-        averagePickingTimeSeconds: finalData.length > 0 ? Math.round(totalPickingTimeSeconds / finalData.length) : 0
+        averagePickingTimeSeconds: finalData.length > 0 ? Math.round(totalPickingTimeSeconds / finalData.length) : 0,
+        totalCheckerActions,
+        totalQtyDeltaByChecker,
+        totalBundlesDeltaByChecker,
+        totalPhotoActionsByChecker,
+        totalOrdersWithCheckerChanges,
+        checkerUserIds: Array.from(checkerUsersSet)
       },
       distributor: distributor ? distributor.get({ plain: true }) : null,
       logo: getProfileImage?.dataValues ? getProfileImage.dataValues.warehouseImage : null
@@ -3730,6 +3861,62 @@ export class EpickService {
       };
     });
 
+    // Get checker action logs for this order (item/line-wise details + summary)
+    const checkerLogs = await CheckerActionLog.findAll({
+      where: { orderNumber },
+      attributes: [
+        "id",
+        "checkerUserId",
+        "actionType",
+        "itemNumber",
+        "lineNumber",
+        "boxId",
+        "deltaQty",
+        "deltaBundles",
+        "meta",
+        "createdAt",
+      ],
+      order: [["createdAt", "DESC"]],
+      raw: true,
+    });
+
+    const checkerActionLogs = checkerLogs.map((log: any) => ({
+      id: Number(log.id),
+      checkerUserId: log.checkerUserId ?? null,
+      actionType: log.actionType,
+      itemNumber: log.itemNumber ?? null,
+      lineNumber: log.lineNumber ?? null,
+      boxId: log.boxId ?? null,
+      deltaQty: Number(log.deltaQty) || 0,
+      deltaBundles: Number(log.deltaBundles) || 0,
+      meta: log.meta ?? {},
+      createdAt: log.createdAt,
+    }));
+
+    const checkerSummary = checkerActionLogs.reduce(
+      (acc: any, log: any) => {
+        acc.totalQtyDeltaByChecker += Number(log.deltaQty) || 0;
+        acc.totalBundlesDeltaByChecker += Number(log.deltaBundles) || 0;
+        if (log.actionType === "photo_add" || log.actionType === "photo_update") {
+          acc.photoActionsCount += 1;
+        }
+        if (log.checkerUserId && !acc.checkerUserIds.includes(log.checkerUserId)) {
+          acc.checkerUserIds.push(log.checkerUserId);
+        }
+        if (!acc.lastCheckerActionAt) {
+          acc.lastCheckerActionAt = log.createdAt;
+        }
+        return acc;
+      },
+      {
+        totalQtyDeltaByChecker: 0,
+        totalBundlesDeltaByChecker: 0,
+        photoActionsCount: 0,
+        lastCheckerActionAt: null as Date | null,
+        checkerUserIds: [] as number[],
+      }
+    );
+
     return {
       orderInfo: {
         orderNumber: orderHeaderData.Order_Number,
@@ -3764,6 +3951,8 @@ export class EpickService {
         totalLines: orderDetails.length,
         scannedLines: orderDetails.filter((detail: any) => (Number(detail.Quantity_Shipped) || 0) > 0).length
       },
+      checkerSummary,
+      checkerActionLogs,
       salesCategorySummary: await this.getSalesCategorySummary(orderNumber, orderDetails)
     };
   }

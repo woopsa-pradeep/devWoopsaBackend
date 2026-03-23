@@ -192,8 +192,8 @@ router.put('/web-locations/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), validat
 router.delete('/web-locations/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.deleteWebLocation.bind(managerController)));
 router.put('/setUserLimits/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.setUserDiscountLimit.bind(managerController)));
 router.post('/customerCalenderList', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerCalenderList.bind(managerController)));
-router.get('/getCustomerOrderByCalenderDate', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerOrderByCalenderDate.bind(managerController)));
-router.get('/getCustomerTotalOrderByCustomer', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerTotalOrderByCustomer.bind(managerController)));
+router.post('/getCustomerOrderByCalenderDate', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerOrderByCalenderDate.bind(managerController)));
+router.post('/getCustomerTotalOrderByCustomer', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerTotalOrderByCustomer.bind(managerController)));
 router.get('/customerOrderOfCurrentWeek/:customerId', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerOrderOfCurrentWeek.bind(managerController)));
 router.get('/customerByIdInfoInCalender/:customerId', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerByIdInfoInCalender.bind(managerController)));
 
@@ -506,6 +506,8 @@ router.get('/currentOrderDetailStatus/:orderNumber', verifyRole(ROLES.MANAGER, R
 router.get('/poReceivingHistoryReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.poReceivingHistoryReport.bind(managerController)));
 router.get('/poTransferAdjustmentReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.poTransferAdjustmentReport.bind(managerController)));
 router.get('/poCigOtpReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.poCigOtpReport.bind(managerController)));
+router.get('/poAdjustItemGroupReport',  catchAsync(managerController.getPOAdjustItemGroupReport.bind(managerController)));
+router.get('/poPendingOrdersReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getPOOpenOrdersReport.bind(managerController)));
 
 //Invoice Creation 
 router.get('/createInvoice/:orderNumber', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.createInvoice.bind(managerController)));
@@ -566,4 +568,33 @@ router.get('/inventoryLogHistory', verifyRole(ROLES.MANAGER, ROLES.SALES), catch
 
 router.get('/salesInvoiceReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getSalesInvoiceReport.bind(managerController)));
 
-export default router;  
+// Delivery Route routes
+router.put('/delivery-route/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.updateDeliveryRoute.bind(managerController)));
+
+// all three reports are in 'inventoryValuationOtpTotals' one report (OTP Total,Price Class Total, CIgarette w/stamp Totals)
+router.get('/inventoryValuationOtpTotals',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getInventoryWithStatusAndTax.bind(managerController)));
+router.get('/inventoryValuationExpirationDateReport',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getExpirationDateReport.bind(managerController)));
+router.get('/buyerGuideInventoryHistory',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.buyerGuideInventoryHistory.bind(managerController)));
+
+router.get('/velocityReportVendorGroup', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getVelocityReportVendorGroup.bind(managerController)));
+
+router.get('/velocityReportOtpPrice', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getVelocityReportOtpPrice.bind(managerController)));
+
+router.get('/velocityReportOtpCigSticks', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getVelocityReportOtpCigSticks.bind(managerController)));
+
+router.get('/salesTaxOtpTaxReports', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getSalesTaxOtpTaxReports.bind(managerController)));
+
+router.get('/outstandingOrderOrderEntry', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCurrentOrderStatusReport.bind(managerController)));
+
+router.get('/invoiceRegisterCostReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getInvoiceRegisterCostReport.bind(managerController)));
+
+router.get('/orderFileItemSummary', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getPicklistOrderDetail.bind(managerController)));
+router.get('/orderDeletedHistory', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getDeletedOrdersHistory.bind(managerController)));
+
+router.get('/lostSaleCurrentOrder', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getShortShippedOrders.bind(managerController)));
+
+router.get('/customerPricing',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerPricing.bind(managerController)));
+
+router.get('/itemGroupPromotionMaintenanceReport',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getItemGroupPromotionMaintenanceReport.bind(managerController)));
+
+export default router;

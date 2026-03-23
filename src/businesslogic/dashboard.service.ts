@@ -1073,8 +1073,8 @@ export class DashboardService {
                 }
             ],
             order: [
-                // ['Item_Number', 'DESC'],
-                ['Description', 'ASC']
+                 ['Item_Number', 'DESC'],
+                // ['Description', 'ASC']
             ],
             limit,
             offset: (page - 1) * limit,
@@ -1148,7 +1148,7 @@ export class DashboardService {
                 allowToOrder = false;
             }
 
-            let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, price + taxRate);
+            let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerNumber || 0, price + taxRate);
 
             const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
 
@@ -1821,6 +1821,7 @@ export class DashboardService {
         wareHouseSetting = wareHouseSetting?.dataValues || null;
         let customerGroup: any = null;
 
+        customerId =customerNumber || 0;
         console.log(customerNumber, 'customerNumber')
         // Get current date
         const today = new Date();

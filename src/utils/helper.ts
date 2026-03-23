@@ -989,7 +989,7 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     // }
 
     //check with query
-
+let tempC_Number = C_Number;
 
     let customerPricingAccount: any = await Customer.findOne({
       where: {
@@ -1000,14 +1000,12 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     customerPricingAccount = customerPricingAccount?.dataValues;
 
 
-    console.log(customerPricingAccount, 'customerPricingAccount')
     if (customerPricingAccount.C_PricingAccount) {
       C_Number = customerPricingAccount.C_PricingAccount;
     }
 
 
 
-    console.log('GOES ELSE-->')
     let InventoryItem: any = await Inventory.findOne({
       where: {
         Item_Number: Item_Number
@@ -1035,10 +1033,14 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
 
     const tempCustomerGroupData: any = await CustomerSpecialGroup.findOne({
       where: {
-        C_Number: C_Number
+        C_Number: tempC_Number
       }
     });
+
+  
     const tempCustomerGroup = tempCustomerGroupData?.dataValues;
+
+    console.log(tempCustomerGroup, 'tempCustomerGroup?.Special_GroupID--->>')
 
     if (!findCustomerPricing) {
       let tempSalesCategory = InventoryItem.Sales_Category;
@@ -1066,7 +1068,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
 
     findCustomerPricing = findCustomerPricing?.dataValues;
     findCustomerAuthorization = findCustomerAuthorization?.dataValues;
-    console.log(findCustomerPricing, 'c')
     // check is Customer has Authorization Price or not
     if (findCustomerAuthorization) {
       hasCustomerAuthorization = true;
@@ -1094,6 +1095,8 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     let isInventorySubclass: any = await InventorySubclass.findOne({
       where: {
         Price_Subclass: InventoryItem.Price_Subclass,
+       
+
       }
     })
 
@@ -1115,7 +1118,6 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     }
 
     if (isInventorySpecials) {
-      console.log(isInventorySpecials, 'isInventorySpecials---->')
 
       let tempAllow = isInventorySpecials.dataValues;
       if (tempAllow.Perpetual) {
@@ -1174,14 +1176,13 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
         Item_Number,
         Order_Source: { [Op.in]: [0, 1, 12, 13] },
         Special_GroupID: { [Op.in]: [0, tempCustomerGroup?.Special_GroupID || 0] },
-      },
+      }, 
       order: [['myKey', 'DESC']], // or createdAt
     });
 
     findAllowance = findAllowance?.dataValues;
     if (!hasSpecailPriceApply) {
       if (findAllowance) {
-        console.log(findAllowance, 'findAllowance---->')
         if (findAllowance.Perpetual) {
           if (findAllowance.AllowanceType === '$') {
             discountPrice += findAllowance.Allowance;
@@ -1207,13 +1208,9 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
           const endDate = new Date(findAllowance.End_Date);
           endDate.setHours(0, 0, 0, 0);
 
-          console.log(currentDate, 'currentDate')
-          console.log(startDate, 'startDate')
-          console.log(endDate, 'endDate')
           // Check if current date is between start and end date (inclusive)
           if (currentDate >= startDate && currentDate <= endDate) {
 
-            console.log('GOES IN DISCOUNT ALLOWANCE', findAllowance)
             if (findAllowance.AllowanceType === '$') {
               discountPrice += findAllowance.Allowance;
             } else if (findAllowance.AllowanceType === '%') {
@@ -1230,6 +1227,7 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     isInventorySubclass = isInventorySubclass?.dataValues;
     // check subclass discount
     if (!hasSpecailPriceApply) {
+
       if (isInventorySubclass) {
         const currentDate = new Date();
         currentDate.setHours(0, 0, 0, 0); // Normalize to date-only
@@ -1240,32 +1238,107 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
         const endDate = new Date(isInventorySubclass.Cutoff_Date);
         endDate.setHours(0, 0, 0, 0);
 
-        // Apply discount
-        if (isInventorySubclass.UnlimitedFlag) {
-          discountPrice += isInventorySubclass.Discount;
-        } else if (startDate <= currentDate && currentDate <= endDate) {
-          discountPrice += isInventorySubclass.Discount;
+        // Apply subclass discount logic, explicitly covering scenario:
+        // State_Abbrev = RI, Jurisdiction_State = 0, Special_GroupID = 0
+
+        // 1. State-level subclass (matches customer's state, all jurisdictions, no group)
+        if (
+          isInventorySubclass.State_Abbrev?.toLowerCase() === customerPricingAccount.C_State?.toLowerCase() &&
+          (isInventorySubclass.Jurisdiction_State === 0 || isInventorySubclass.Jurisdiction_State == null) &&
+          (isInventorySubclass.Special_GroupID === 0 || isInventorySubclass.Special_GroupID == null)
+        ) {
+          if (isInventorySubclass.UnlimitedFlag) {
+            discountPrice += isInventorySubclass.Discount;
+          } else if (startDate <= currentDate && currentDate <= endDate) {
+            discountPrice += isInventorySubclass.Discount;
+          }
         }
+        // 2. National subclass (all states, all jurisdictions, no group)
+        else if (
+          (isInventorySubclass.State_Abbrev === '--' || isInventorySubclass.State_Abbrev?.toLowerCase() === '--') &&
+          (isInventorySubclass.Jurisdiction_State === 0 || isInventorySubclass.Jurisdiction_State == null) &&
+          (isInventorySubclass.Special_GroupID === 0 || isInventorySubclass.Special_GroupID == null)
+        ) {
+          if (isInventorySubclass.UnlimitedFlag) {
+            discountPrice += isInventorySubclass.Discount;
+          } else if (startDate <= currentDate && currentDate <= endDate) {
+            discountPrice += isInventorySubclass.Discount;
+          }
+        }
+        // 3. State is national, jurisdiction matches and group matches
+        else if (
+          (isInventorySubclass.State_Abbrev === '--' || isInventorySubclass.State_Abbrev?.toLowerCase() === '--') &&
+          isInventorySubclass.Jurisdiction_State == customerPricingAccount.Jurisdiction_State &&
+          isInventorySubclass.Special_GroupID == tempCustomerGroup?.Special_GroupID
+        ) {
+          if (isInventorySubclass.UnlimitedFlag) {
+            discountPrice += isInventorySubclass.Discount;
+          } else if (startDate <= currentDate && currentDate <= endDate) {
+            discountPrice += isInventorySubclass.Discount;
+          }
+        }
+        // 4. State matches, jurisdiction matches, and group is zero (specific state & jurisdiction, no group)
+        else if (
+          isInventorySubclass.State_Abbrev?.toLowerCase() === customerPricingAccount.C_State?.toLowerCase() &&
+          isInventorySubclass.Jurisdiction_State == customerPricingAccount.Jurisdiction_State &&
+          (isInventorySubclass.Special_GroupID === 0 || isInventorySubclass.Special_GroupID == null)
+        ) {
+          if (isInventorySubclass.UnlimitedFlag) {
+            discountPrice += isInventorySubclass.Discount;
+          } else if (startDate <= currentDate && currentDate <= endDate) {
+            discountPrice += isInventorySubclass.Discount;
+          }
+        }
+        // 5. State matches, jurisdiction matches, group matches (highest specificity)
+        else if (
+          isInventorySubclass.State_Abbrev?.toLowerCase() === customerPricingAccount.C_State?.toLowerCase() &&
+          isInventorySubclass.Jurisdiction_State == customerPricingAccount.Jurisdiction_State &&
+          isInventorySubclass.Special_GroupID == tempCustomerGroup?.Special_GroupID
+        ) {
+          if (isInventorySubclass.UnlimitedFlag) {
+            discountPrice += isInventorySubclass.Discount;
+          } else if (startDate <= currentDate && currentDate <= endDate) {
+            discountPrice += isInventorySubclass.Discount;
+          }
+        }
+        // 6. State is national, jurisdiction matches, no group
+        else if (
+          (isInventorySubclass.State_Abbrev === '--' || isInventorySubclass.State_Abbrev?.toLowerCase() === '--') &&
+          isInventorySubclass.Jurisdiction_State == customerPricingAccount.Jurisdiction_State &&
+          (isInventorySubclass.Special_GroupID === 0 || isInventorySubclass.Special_GroupID == null)
+        ) {
+          if (isInventorySubclass.UnlimitedFlag) {
+            discountPrice += isInventorySubclass.Discount;
+          } else if (startDate <= currentDate && currentDate <= endDate) {
+            discountPrice += isInventorySubclass.Discount;
+          }
+        }
+        // 7. State matches, jurisdiction is 0, group matches
+        else if (
+          isInventorySubclass.State_Abbrev?.toLowerCase() === customerPricingAccount.C_State?.toLowerCase() &&
+          (isInventorySubclass.Jurisdiction_State === 0 || isInventorySubclass.Jurisdiction_State == null) &&
+          isInventorySubclass.Special_GroupID == tempCustomerGroup?.Special_GroupID
+        ) {
+         
+          if (isInventorySubclass.UnlimitedFlag) {
+            discountPrice += isInventorySubclass.Discount;
+          } else if (startDate <= currentDate && currentDate <= endDate) {
+            discountPrice += isInventorySubclass.Discount;
+          }
+        }
+        // Add additional specific combination matching here as needed
+        // fallback/expand as per your business logic
       }
     }
 
 
 
-    console.log(allowancePrice, 'allowancePrice')
-    console.log(allowancePriceType, 'allowancePriceType')
-    console.log(letSpecailPrice, 'myFinalPrice')
-    console.log(productPrice, 'productPrice')
-    console.log(myFinalPrice, 'myFinalPrice')
-    console.log(letSpecailPrice, 'letSpecailPrice')
-    console.log(hasSpecailPriceApply, 'hasSpecailPriceApply')
-    console.log(discountPrice, 'discountPrice')
 
     // dicount 
     return productPrice - discountPrice
 
 
   } catch (error) {
-    console.log(error)
     return null
   }
 }
@@ -1341,6 +1414,7 @@ export async function getTaxRateV1(
   });
   item = item?.dataValues;
 
+  console.log(item,'the item--->>>')
   let rate = taxRate?.dataValues?.OTP_Rate || 0;
   let value = taxRate?.dataValues?.OTP_Option || 0;
 
@@ -1352,7 +1426,7 @@ export async function getTaxRateV1(
       break;
 
     case 1: // $ Rate / Ounce
-      taxAmount = rate * (item?.UnitOunces || 0); // replace NetCost with weight field if available
+      taxAmount = rate * ((item?.UnitOunces ?? 0) * (item?.Pack ?? 0)); // replace NetCost with weight field if available
       break;
 
     case 2: // % Rate on Net Cost (0.10 = 10%)
@@ -2607,4 +2681,97 @@ export function getDiscountedPrice(price: number, discount: number, disType: str
 
   // Avoid negative values & return 2 decimals
   return Number(Math.max(finalPrice, 0).toFixed(2));
+}
+
+
+export async function getBatchInventoryOnHand(itemNumbers: number[]): Promise<Record<number, number>> {
+  if (itemNumbers.length === 0) return {};
+
+  const date = moment().format('YYYY-MM-DD');
+
+  // ─── Batch: total ordered today per item ─────────────────────────────────
+  const orderedResults: any = await OrderHeader.findAll({
+    attributes: [],
+    where: {
+      Order_Updated: false,
+      Order_Date: date,
+    },
+    include: [
+      {
+        model: OrderDetail,
+        as: 'orderDetails',
+        attributes: [
+          'Item_Number',
+          [Sequelize.fn('SUM', Sequelize.col('orderDetails.Quantity_Ordered')), 'totalQuantityOrdered'],
+        ],
+        where: {
+          Item_Number: { [Op.in]: itemNumbers },
+        },
+      },
+    ],
+    group: ['orderDetails.Item_Number'],
+    raw: true,
+  });
+
+  // Build a map: itemNumber → total qty ordered today
+  const orderedMap: Record<number, number> = {};
+  for (const r of orderedResults) {
+    const itemNo = Number(r['orderDetails.Item_Number']);
+    const qty    = Number(r['orderDetails.totalQuantityOrdered'] || 0);
+    orderedMap[itemNo] = (orderedMap[itemNo] ?? 0) + qty;
+  }
+
+  // ─── Batch: on-hand sum per item ──────────────────────────────────────────
+  const onHandResults: any = await InventoryStatus.findAll({
+    attributes: [
+      'Item_Number',
+      [fn('SUM', col('Inventory_OnHand')), 'total_onhand'],
+    ],
+    where: {
+      Item_Number: { [Op.in]: itemNumbers },
+      Code: 0,
+    },
+    group: ['Item_Number'],
+    raw: true,
+  });
+
+  // ─── Merge into final map ─────────────────────────────────────────────────
+  const result: Record<number, number> = {};
+  for (const r of onHandResults) {
+    const itemNo  = Number(r.Item_Number);
+    const onHand  = Number(r.total_onhand || 0);
+    const ordered = orderedMap[itemNo] ?? 0;
+    result[itemNo] = onHand - ordered;
+  }
+
+  // Ensure every requested item has an entry (default 0 if missing from DB)
+  for (const itemNo of itemNumbers) {
+    if (!(itemNo in result)) result[itemNo] = 0;
+  }
+
+  return result;
+}
+
+
+export async function getBatchProductLimits(itemNumbers: number[]): Promise<Record<number, number | null>> {
+  if (itemNumbers.length === 0) return {};
+
+  const limits = await ItemLimit.findAll({
+    where: {
+      Item_Number: { [Op.in]: itemNumbers },
+    },
+    raw: true,
+  });
+
+  // Build map — items not found get null (no limit)
+  const result: Record<number, number | null> = {};
+  for (const row of limits) {
+    result[Number(row.Item_Number)] = row.QtyLimit ?? null;
+  }
+
+  for (const itemNo of itemNumbers) {
+    if (!(itemNo in result)) result[itemNo] = null;
+  }
+
+  return result;
 }

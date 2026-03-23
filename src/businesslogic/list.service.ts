@@ -40,6 +40,9 @@ import Sequelize from "sequelize";
 import { ARDeposits } from "../models/mmsql/arDeposits.model";
 import { InventoryLogHistory } from "../models/mmsql/InventoryLogHistory.model"
 import { custom } from "joi";
+import { Order_Source } from "../models/mmsql/orderSource.model";
+import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model";
+import { OrderHeader } from "../models/mmsql/orderHeader.model";
 
 export class ListService {
 
@@ -805,6 +808,47 @@ export class ListService {
       "Price17",
       "Price18",
       "Price19"]
+  }
+
+  async getListOfOrderReports(){
+    const routes = await Route.findAll({
+      attributes: ['Route_Number'],
+      order: [['Route_Number', 'ASC']]
+    });
+
+    const salesRep = await SalesRep.findAll({
+      attributes: ['S_Number', 'S_Desc'],
+      order: [['S_Desc', 'ASC']]
+    })
+
+    const orderSource = await Order_Source.findAll({
+      attributes: ['Order_Source','Source_Description'],
+      order: [['Order_Source', 'ASC']]
+    })
+
+    const priceClass = await PriceClass.findAll({
+      attributes: ['Price_Class', 'Class_Desc'],
+      order: [['Class_Desc', 'ASC']]
+    })
+
+    const otherTaxes = await OtherTaxes.findAll({
+      attributes: ['OTP_Number', 'OTP_Description'],
+      order: [['OTP_Description', 'ASC']]
+    })
+
+    const vendor = await Vendor.findAll({
+      attributes: ['Primary_Vendor', 'V_Description'],
+      order: [['V_Description', 'ASC']]
+    })
+
+    return {
+      routes,
+      salesRep,
+      orderSource,
+      priceClass,
+      otherTaxes,
+      vendor
+    }
   }
 
 }

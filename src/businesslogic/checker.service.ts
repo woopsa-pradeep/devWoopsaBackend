@@ -25,8 +25,37 @@ import puppeteer from 'puppeteer';
 import moment from 'moment';
 import { sequelize } from "../db";
 import { EpickUser } from "../models/postgres/epickUser.model";
+import { CheckerActionLog } from "../models/postgres/checkerActionLog.model";
 
 export class CheckerService {
+  private async logCheckerAction(params: {
+    orderNumber: number;
+    checkerUserId?: number | null;
+    actionType: string;
+    itemNumber?: number | null;
+    lineNumber?: number | null;
+    boxId?: number | null;
+    deltaQty?: number | null;
+    deltaBundles?: number | null;
+    meta?: Record<string, any> | null;
+  }) {
+    try {
+      await CheckerActionLog.create({
+        orderNumber: params.orderNumber,
+        checkerUserId: params.checkerUserId ?? null,
+        actionType: params.actionType,
+        itemNumber: params.itemNumber ?? null,
+        lineNumber: params.lineNumber ?? null,
+        boxId: params.boxId ?? null,
+        deltaQty: params.deltaQty ?? null,
+        deltaBundles: params.deltaBundles ?? null,
+        meta: params.meta ?? {},
+      });
+    } catch (error) {
+      // Non-blocking audit logging
+      console.error("Checker action log failed:", error);
+    }
+  }
 
   /**
    * Get complete checker orders (ready for delivery)
@@ -1140,8 +1169,9 @@ export class CheckerService {
     destinationBoxId: number;
     itemNumber: number;
     qty: number;
+    checkerUserId?: number;
   }) {
-    const { sourceBoxId, destinationBoxId, itemNumber, qty } = data;
+    const { sourceBoxId, destinationBoxId, itemNumber, qty, checkerUserId } = data;
 
     // Validate inputs
     if (!sourceBoxId || !destinationBoxId || !itemNumber || !qty || qty <= 0) {
@@ -1280,6 +1310,21 @@ export class CheckerService {
       }
     }
 
+    await this.logCheckerAction({
+      orderNumber,
+      checkerUserId: checkerUserId ?? null,
+      actionType: "move_item",
+      itemNumber,
+      boxId: destinationBoxId,
+      deltaQty: totalMovedQty,
+      meta: {
+        sourceBoxId,
+        destinationBoxId,
+        sourceBoxType: sourceBox.type,
+        destinationBoxType: destinationBox.type,
+      },
+    });
+
     return {
       success: true,
       message: `Successfully moved ${totalMovedQty} quantity of item ${itemNumber} from ${sourceBox.type} ${sourceBoxId} to ${destinationBox.type} ${destinationBoxId}`,
@@ -1372,6 +1417,20 @@ export class CheckerService {
 
     // Reload to get current status from database
     await orderPick.reload();
+
+    const checkerUserId = (req as any)?.user?.id ? Number((req as any).user.id) : null;
+    await this.logCheckerAction({
+      orderNumber,
+      checkerUserId,
+      actionType: "photo_add",
+      deltaQty: null,
+      deltaBundles: null,
+      meta: {
+        existingImages: existingImages.length,
+        newImages: uploadedImages.length,
+        totalImages: combinedImages.length,
+      },
+    });
 
     return {
       success: true,
@@ -3429,8 +3488,9 @@ export class CheckerService {
     itemNumber: number;
     boxId: number;
     qty: number;
+    checkerUserId?: number;
   }) {
-    const { orderNumber, itemNumber, boxId, qty } = data;
+    const { orderNumber, itemNumber, boxId, qty, checkerUserId } = data;
 
     // Validate inputs (allow qty to be 0)
     if (!orderNumber || !itemNumber || !boxId || qty === undefined || qty === null || qty < 0) {
@@ -3467,6 +3527,8 @@ export class CheckerService {
       throw new AppError("Item not found in the specified box", 404);
     }
 
+    const previousQty = Number(scan.qty) || 0;
+
     // Update the scan quantity
     await scan.update({
       qty: qty
@@ -3494,6 +3556,21 @@ export class CheckerService {
       }
     );
 
+    const deltaQty = qty - previousQty;
+    await this.logCheckerAction({
+      orderNumber,
+      checkerUserId: checkerUserId ?? null,
+      actionType: "qty_update",
+      itemNumber,
+      boxId,
+      deltaQty,
+      meta: {
+        previousQty,
+        newQty: qty,
+        totalQtyShipped,
+      },
+    });
+
     return {
       success: true,
       message: `Successfully updated quantity for item ${itemNumber} in box ${boxId} to ${qty}`,
@@ -3510,8 +3587,9 @@ export class CheckerService {
   async createContainer(data: {
     orderNumber: number;
     containerType: 'box' | 'tote' | 'drink';
+    checkerUserId?: number;
   }) {
-    const { orderNumber, containerType } = data;
+    const { orderNumber, containerType, checkerUserId } = data;
 
     // Generate barcode value
     const barcodeValue = generateBarcode(orderNumber);
@@ -3540,6 +3618,18 @@ export class CheckerService {
       value: barcodeValue
     });
 
+    const bundleDelta = containerType === "box" || containerType === "drink" ? 1 : 0;
+    await this.logCheckerAction({
+      orderNumber,
+      checkerUserId: checkerUserId ?? null,
+      actionType: "container_create",
+      boxId: container.id,
+      deltaBundles: bundleDelta,
+      meta: {
+        containerType,
+      },
+    });
+
     return container;
   }
   /**
@@ -3551,8 +3641,9 @@ export class CheckerService {
     containerType: 'box' | 'tote' | 'drink';
     sourceBoxId: number;
     items: Array<{ itemNumber: number; qty: number }>;
+    checkerUserId?: number;
   }) {
-    const { orderNumber, containerType, sourceBoxId, items } = data;
+    const { orderNumber, containerType, sourceBoxId, items, checkerUserId } = data;
 
     // Validate inputs
     if (!orderNumber || !containerType || !sourceBoxId || !items || items.length === 0) {
@@ -3601,6 +3692,14 @@ export class CheckerService {
         throw new AppError(`Insufficient quantity for item ${item.itemNumber}. Available: ${totalSourceQty}, Requested: ${item.qty}`, 400);
       }
     }
+    const previousBoxes = await OrderPickBox.findAll({
+      where: { orderNumber },
+      attributes: ['type']
+    });
+    const previousBundlesCount = previousBoxes.filter(
+      (box: any) => box.type === 'box' || box.type === 'drink'
+    ).length;
+
     // Generate barcode value
     const barcodeValue = generateBarcode(orderNumber);
 
@@ -3754,6 +3853,21 @@ export class CheckerService {
         }
       }
     );
+
+    const movedQty = items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+    await this.logCheckerAction({
+      orderNumber,
+      checkerUserId: checkerUserId ?? null,
+      actionType: "container_create_and_move",
+      boxId: newContainerId,
+      deltaQty: movedQty,
+      deltaBundles: bundlesCount - previousBundlesCount,
+      meta: {
+        containerType,
+        sourceBoxId,
+        items,
+      },
+    });
 
     return {
       success: true,
@@ -3977,6 +4091,18 @@ export class CheckerService {
     // Reload to get updated status from database
     await orderPick.reload();
 
+    await this.logCheckerAction({
+      orderNumber,
+      checkerUserId: userId,
+      actionType: "ready_for_delivery",
+      deltaQty: null,
+      deltaBundles: null,
+      meta: {
+        status: orderPick.status,
+        checkerCompletedAt: orderPick.checkerCompletedAt,
+      },
+    });
+
     return {
       success: true,
       message: `Order ${orderNumber} marked as ready for delivery`,
@@ -4041,6 +4167,8 @@ export class CheckerService {
       throw new AppError("Order not found", 404);
     }
 
+    const previousImages = orderPick.images || [];
+
     // Upload new images
     let uploadedImages: string[] = [];
 
@@ -4081,6 +4209,19 @@ export class CheckerService {
     await orderPick.update({
       images: uploadedImages,
       notes: req.body.notes || orderPick.notes || " "
+    });
+
+    const checkerUserId = (req as any)?.user?.id ? Number((req as any).user.id) : null;
+    await this.logCheckerAction({
+      orderNumber,
+      checkerUserId,
+      actionType: "photo_update",
+      deltaQty: null,
+      deltaBundles: null,
+      meta: {
+        previousImages: Array.isArray(previousImages) ? previousImages.length : 0,
+        newImages: uploadedImages.length,
+      },
     });
 
     return {

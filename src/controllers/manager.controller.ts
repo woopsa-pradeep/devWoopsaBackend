@@ -776,12 +776,12 @@ export class ManagerController {
   }
 
   async getCustomerOrderByCalenderDate(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getCustomerOrderByCalenderDate(req.query as PaginationOptions);
+    const data = await this.managerService.getCustomerOrderByCalenderDate(req.body);
     sendResponse(res, 200, true, data, 'Customer calender list fetched successfully');
   }
 
   async getCustomerTotalOrderByCustomer(req: AuthRequest, res: Response) {
-    const data = await this.managerService.getCustomerTotalOrderByCustomer(req.query as PaginationOptions);
+    const data = await this.managerService.getCustomerTotalOrderByCustomer(req.body);
     sendResponse(res, 200, true, data, 'Customer total order by customer fetched successfully');
   }
 
@@ -2108,5 +2108,84 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getInventoryWithStatusAndTax(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInventoryWithStatusAndTax(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getExpirationDateReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getExpirationDateReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async buyerGuideInventoryHistory(req: AuthRequest, res: Response) {
+    const data = await this.managerService.buyerGuideInventoryHistory(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getVelocityReportVendorGroup(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getVelocityReportVendorGroup(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getVelocityReportOtpPrice(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getVelocityReportOtpPrice(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getVelocityReportOtpCigSticks(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getVelocityReportOtpCigSticks(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getSalesTaxOtpTaxReports(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getSalesTaxOtpTaxReports(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getPOAdjustItemGroupReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPOAdjustItemGroupReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getPOOpenOrdersReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPOOpenOrdersReport();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCurrentOrderStatusReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCurrentOrderStatusReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getInvoiceRegisterCostReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInvoiceRegisterCostReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getPicklistOrderDetail(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPicklistOrderDetail(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getDeletedOrdersHistory(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getDeletedOrdersHistory(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getShortShippedOrders(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getShortShippedOrders();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCustomerPricing(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCustomerPricing(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getItemGroupPromotionMaintenanceReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getItemGroupPromotionMaintenanceReport(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
 }

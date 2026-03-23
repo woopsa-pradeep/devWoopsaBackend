@@ -3,7 +3,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// MSSQL Configuration
 const dbServer = process.env.DB_SERVER;
 
 if (!dbServer) {
@@ -12,6 +11,15 @@ if (!dbServer) {
 
 const [host, instanceName] = dbServer.split('\\');
 
+// ✅ Shared pool config
+const poolConfig = {
+  max: 60,       // max connections in pool
+  min: 5,        // keep 5 connections alive always
+  acquire: 30000, // max ms to wait for a connection before throwing error
+  idle: 10000,    // close connection if unused for 10s
+};
+
+// MSSQL
 export const mssqlSequelize = new Sequelize(process.env.DB_NAME!, process.env.DB_USER!, process.env.DB_PASSWORD!, {
   dialect: "mssql",
   host,
@@ -23,10 +31,11 @@ export const mssqlSequelize = new Sequelize(process.env.DB_NAME!, process.env.DB
       trustServerCertificate: true,
     },
   },
+  pool: poolConfig, // ✅ added
   logging: false,
 });
 
-// PostgreSQL Configuration
+// PostgreSQL
 export const postgresSequelize = new Sequelize(
   process.env.POSTGRES_DB_NAME!,
   process.env.POSTGRES_DB_USER!,
@@ -35,17 +44,16 @@ export const postgresSequelize = new Sequelize(
     dialect: "postgres",
     host: process.env.POSTGRES_DB_HOST || "localhost",
     port: parseInt(process.env.POSTGRES_DB_PORT || "5432"),
-   
+    pool: poolConfig, // ✅ added
     logging: false,
   }
 );
 
-// Test connections
 export const testConnections = async () => {
   try {
     await mssqlSequelize.authenticate();
     console.log('MSSQL Database connection has been established successfully.');
-    
+
     await postgresSequelize.authenticate();
     console.log('PostgreSQL Database connection has been established successfully.');
   } catch (error) {
@@ -53,5 +61,4 @@ export const testConnections = async () => {
   }
 };
 
-// Export both connections
-export { mssqlSequelize as sequelize }; // Keep backward compatibility
+export { mssqlSequelize as sequelize };

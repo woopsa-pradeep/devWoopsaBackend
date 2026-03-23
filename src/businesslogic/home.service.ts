@@ -30,6 +30,9 @@ export class HomeService {
                 isActive: true,
                 status: true,
                 hasForWeb: true,
+                startDate: {
+                    [Op.lte]: new Date()
+                },
                 endDate: {
                     [Op.gt]: new Date()
                 }

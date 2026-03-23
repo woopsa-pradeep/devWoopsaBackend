@@ -35,5 +35,6 @@ router.get('/listOfVendorForTradeShow', verifyToken, catchAsync(listController.g
 router.get('/listOfCustomersForOrderNumbers', catchAsync(listController.getListOfCustomersByOrderNumbers.bind(listController)));
 router.get('/listOfClassOfTrade', verifyToken, catchAsync(listController.getClassOfTradeList.bind(listController)));
 router.get('/listOfInventoryLogHistory', verifyToken, catchAsync(listController.getListOfInventoryLogHistory.bind(listController)));
+router.get('/listOfOrderReports' ,verifyToken, catchAsync(listController.getListOfOrderReports.bind(listController)));
 
 export default router;

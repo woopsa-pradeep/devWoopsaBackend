@@ -2,7 +2,7 @@ import { IChangePassword } from "../interfaces/request.body.interface";
 import { SalesRep } from "../models/mmsql/salesrep.model"
 import { WebUsers } from "../models/postgres/users.model"
 import { AppError } from "../utils/AppError";
-import { checkQtyDiscount, comparePassword, excludeItemByUser, excludeItemByUserInTradeShow, generatePDFFromHTML, getAllowedSalesCategories, getAllowedSalesCategoriesAndPriceClasses, getCustomerExcludeItem, getCustomerExcludeItemForTradeShow, getDiscount, getDiscountedPrice, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP, toNum } from "../utils/helper";
+import { checkQtyDiscount, comparePassword, excludeItemByUser, excludeItemByUserInTradeShow, generatePDFFromHTML, getAllowedSalesCategories, getAllowedSalesCategoriesAndPriceClasses, getBatchInventoryOnHand, getBatchProductLimits, getCustomerExcludeItem, getCustomerExcludeItemForTradeShow, getDiscount, getDiscountedPrice, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryFullItemNumber, getInventoryOnHand, getJurisdiction, getPrepaidTaxRate, getProductLimit, getTaxRateV1, getTopLatestItems, hasDiscountedItem, hashPassword, isItemInActive, pgArrayToJsArray, renderOrderTableFromERP, toNum } from "../utils/helper";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { col, literal, Op, Order, Sequelize } from "sequelize";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
@@ -1223,433 +1223,739 @@ export class SalesService {
   //   };
   // }
 
-  async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
-    let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
+  // async getInventoryItems(query: PaginationOptions & { search?: string, masterSearch?: string }, customerId: number) {
+  //   let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query;
 
 
-    if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
-      salesCategoryId = salesCategoryId.map(id => Number(id));
-    }
+  //   if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
+  //     salesCategoryId = salesCategoryId.map(id => Number(id));
+  //   }
 
-    if (Array.isArray(priceClassId) && priceClassId?.length > 0) {
-      priceClassId = priceClassId.map(id => Number(id));
-    }
+  //   if (Array.isArray(priceClassId) && priceClassId?.length > 0) {
+  //     priceClassId = priceClassId.map(id => Number(id));
+  //   }
 
-    let wareHouseSetting: any = await Setting.findOne({});
-    wareHouseSetting = wareHouseSetting?.dataValues || null;
+  //   let wareHouseSetting: any = await Setting.findOne({});
+  //   wareHouseSetting = wareHouseSetting?.dataValues || null;
 
-    page = Number(page);
+  //   page = Number(page);
+  //   limit = Number(limit);
+
+  //   let whereClause: any = {
+  //     I_Inactive: false,
+  //     ShortOrderForm: true,
+  //   };
+
+  //   const excludeItem = await excludeItemByUser(customerId);
+  //   if (excludeItem.length > 0) {
+  //     whereClause.Item_Number = { [Op.notIn]: excludeItem };
+  //   }
+
+  //   if (state || zip || jurisdiction) {
+  //     const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+  //     whereClause.Item_Number = { [Op.notIn]: excludeItem };
+  //   }
+
+  //   let searchInUPC = false;
+  //   let orderClause: any = [['Date_Created', 'DESC'] as const];
+
+
+  //   if (masterSearch && typeof masterSearch === 'string') {
+  //     const masterArray = masterSearch.split(',').map(i => i.trim());
+  //     whereClause.Item_Number = { [Op.in]: masterArray };
+  //     if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+  //       whereClause.Sales_Category = { [Op.in]: salesCategory };
+  //     }
+
+  //   } else {
+  //     if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId?.length > 0) {
+  //       // Both filters exist → use OR condition
+  //       whereClause = {
+  //         Sales_Category: { [Op.in]: salesCategoryId },
+  //         Price_Class: { [Op.in]: priceClassId }
+  //       };
+  //     } else if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
+  //       // Only Sales_Category filter
+  //       whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+  //     } else if (Array.isArray(priceClassId) && priceClassId?.length > 0) {
+  //       // Only Price_Class filter
+  //       whereClause.Price_Class = { [Op.in]: priceClassId };
+  //     }
+
+  //     if (search) {
+  //       if (/^\d{8,}$/.test(search)) {
+  //         searchInUPC = true;
+  //       } else {
+  //         let globalSearch: any = await Setting.findOne({});
+  //         globalSearch = globalSearch?.dataValues || null;
+
+  //         const term = search.toLowerCase().trim();
+  //         const anywhere = `%${term}%`;
+  //         const starts = `${term}%`;
+
+  //         if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+  //           whereClause.Sales_Category = { [Op.in]: [salesCategoryId, ...salesCategory] };
+  //         }
+
+  //         // WHERE stays same (your "global" WHERE is already global across these fields)
+  //         whereClause[Op.or] = [
+  //           Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: anywhere }),
+  //           Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: anywhere }),
+  //           Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: anywhere }),
+  //           Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: anywhere }),
+  //         ];
+
+  //         // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
+  //         const esc = (s: string) => s.replace(/'/g, "''");
+  //         const startsEsc = esc(starts);
+  //         const anywhereEsc = esc(anywhere);
+  //         // If globalSearchOption = true => rank matches across all fields
+  //         if (globalSearch?.splitSearchOption === true) {
+  //           const term = search.toLowerCase().trim();
+  //           const tokens = term.split(/\s+/).filter(Boolean);
+
+  //           // remove the "full-term" OR, otherwise it kills split search results
+  //           delete whereClause[Op.or];
+
+  //           // Each token must match the start of ANY word in ANY of these fields
+  //           whereClause[Op.and] = tokens.map((tok) => {
+  //             const startsWord = `${tok}%`;
+  //             const insideWord = `% ${tok}%`;
+
+  //             return {
+  //               [Op.or]: [
+  //                 // Description
+  //                 Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: startsWord }),
+  //                 Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: insideWord }),
+
+  //                 // AltDesc
+  //                 Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: startsWord }),
+  //                 Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: insideWord }),
+
+  //                 // ALT_Description2
+  //                 Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: startsWord }),
+  //                 Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: insideWord }),
+
+  //                 // Item_Number (no spaces usually, but keep it)
+  //                 Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: startsWord }),
+  //                 Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: insideWord }),
+  //               ],
+  //             };
+  //           });
+
+
+
+  //           // build rank across ALL tokens (sum). lower total = better match.
+  //           const rankSql = tokens
+  //             .map((tok) => {
+  //               const startsWord = `%${tok}%`;     // 'mar%'
+  //               const insideWord = `% ${tok}%`;   // '% mar%'
+  //               const anywhere = `%${tok}%`;    // '%mar%'
+
+  //               // Put your searchable fields here (same as whereClause)
+  //               const fields = ["Description", "AltDesc", "ALT_Description2", "Item_Number"];
+
+  //               const startsAny = fields
+  //                 .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
+  //                 .join(" OR ");
+
+  //               const wordStartAny = fields
+  //                 .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
+  //                 .join(" OR ");
+
+  //               const containsAny = fields
+  //                 .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
+  //                 .join(" OR ");
+
+  //               return `(CASE
+  //     WHEN (${startsAny}) THEN 0
+  //     WHEN (${wordStartAny}) THEN 1
+  //     WHEN (${containsAny}) THEN 2
+  //     ELSE 3
+  //   END)`;
+  //             })
+  //             .join(" + ");
+
+  //           // order: best rank first, then Description
+  //           orderClause = [
+  //             [literal(rankSql), "ASC"],
+  //             [col("Description"), "ASC"],
+  //           ] as Order;
+
+  //           // optional: order by Description
+  //         }
+
+
+  //         {
+  //           // Your existing rule (Description-first)
+  //           orderClause = [
+  //             [
+  //               Sequelize.literal(`
+  //                 CASE 
+  //                   WHEN LOWER("Description") LIKE '${startsEsc}' THEN 0
+  //                   WHEN LOWER("Description") LIKE '${anywhereEsc}' THEN 1
+  //                   ELSE 2
+  //                 END
+  //               `),
+  //               "ASC",
+  //             ],
+  //             ["Description", "ASC"],
+  //           ];
+  //         }
+  //       }
+  //     }
+
+
+
+
+
+  //   }
+
+  //   // === UPC JOIN logic ===
+  //   const includeUPC = {
+  //     model: InventoryUPC,
+  //     as: 'UPCList',
+  //     attributes: ['UPC_Number'],
+  //     where: {
+  //       Status: 0,
+  //       ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {})
+  //     },
+  //     required: searchInUPC
+  //   };
+
+  //   if (searchInUPC) {
+  //     if (salesCategoryId && salesCategoryId.length > 0) {
+  //       if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
+  //         whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+  //       }
+  //     } else {
+  //       if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+  //         whereClause.Sales_Category = { [Op.in]: salesCategory };
+  //       }
+  //     }
+  //   }
+
+  //   if (salesCategoryId && salesCategoryId?.length > 0) {
+  //     if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
+  //       whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+  //     }
+  //   } else {
+  //     if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+  //       whereClause.Sales_Category = { [Op.in]: salesCategory };
+  //     }
+  //   }
+
+
+  //   // orderClause = [['Date_Created', 'DESC']] as Order;
+
+  //   // if (search && !searchInUPC && !masterSearch) {
+  //   //   orderClause = [[col('Description'), 'ASC']] as Order;
+  //   // } else
+  //   // 
+  //   if (!search) {
+  //     if (Number(shortBy) === 1) {
+  //       orderClause = [[col('Description'), 'ASC']] as Order;
+  //     } else if (Number(shortBy) === 2) {
+  //       orderClause = [[col('Description'), 'DESC']] as Order;
+  //     }
+  //   }
+
+
+
+  //   //  orderClause = [['Date_Created', 'DESC']] as Order;
+
+  //   // if (search && !searchInUPC && !masterSearch) {
+  //   //   // When searching, sort by description alphabetically to get alphabetical order after common part
+  //   //   orderClause = [[col('Description'), 'DESC']] as Order;
+  //   // } else if (shortBy && Number(shortBy) === 1) {
+  //   //   orderClause = [[col('Description'), 'ASC']] as Order;
+  //   // } else if (shortBy && Number(shortBy) === 2) {
+  //   //   orderClause = [[col('Description'), 'DESC']] as Order;
+  //   // }
+  //   let totalCount = 0;
+  //   if (searchInUPC) {
+  //     const counted = await Inventory.findAll({
+  //       attributes: ['Item_Number'],
+  //       where: { ...whereClause, I_Inactive: false, ShortOrderForm: true },
+  //       include: [
+  //         {
+  //           ...includeUPC,
+  //           attributes: []
+  //         }
+  //       ],
+  //       group: ['Inventory.Item_Number'],
+  //       raw: true,
+  //       logging: false
+  //     });
+
+  //     totalCount = counted.length;
+  //   } else {
+  //     totalCount = await Inventory.count({
+  //       where: { ...whereClause, I_Inactive: false, ShortOrderForm: true },
+  //       logging: false
+  //     });
+  //   }
+
+  //   const productList = await Inventory.findAll({
+  //     attributes: [
+  //       'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+  //       'Retail1', 'Retail2', 'Retail3',
+  //       'CasesPerPallet',
+  //       'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'Unit_Price',
+  //       'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
+  //       'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category', 'EBT',
+  //       'Cig_Pack',
+  //       'Cig_Sticks',
+  //     ],
+  //     where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
+  //     include: [
+  //       {
+  //         model: SalesCategory,
+  //         as: 'SalesCategory',
+  //         attributes: ['Category_Desc', 'Sales_Category'],
+  //         required: false
+  //       },
+  //       {
+  //         model: PriceClass,
+  //         as: 'PriceClass',
+  //         attributes: ['Class_Desc'],
+  //         required: false
+  //       },
+  //       {
+  //         model: InventoryStatus,
+  //         as: 'inventoryStatus',
+  //         attributes: ['Inventory_OnHand'],
+  //         required: false
+  //       },
+  //       includeUPC
+  //     ],
+  //     order: orderClause,
+  //     limit,
+  //     offset: (page - 1) * limit,
+  //     logging: false
+  //   });
+
+  //   const itemNumbers = productList.map(e => e.Item_Number);
+  //   const otpNumbers = productList.map(e => e.OTP_Number);
+
+  //   const productImages = await ProductImage.findAll({
+  //     where: {
+  //       product_number: { [Op.in]: itemNumbers.map(String) },
+  //       isAllow: true
+  //     }
+  //   });
+  //   const imageMap = new Map(productImages.map(img => [img.product_number, img]));
+
+  //   // const discountMap = await getDiscountsForItemNumbers(itemNumbers, customerId);
+
+  //   const userJurisdiction = await getJurisdiction(customerId);
+
+  //   const topLatestItems = await getTopLatestItems();
+  //   // === Final mapping ===
+  //   const finalProductList = await Promise.all(productList.map(async (e: any) => {
+  //     const itemStr = e.Item_Number.toString();
+  //     const productImage = imageMap.get(itemStr) || null;
+  //     const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
+
+  //     // const customer = await Customer.findOne({
+  //     //   where: {
+  //     //     C_Number: customerId
+  //     //   },
+  //     //   attributes: ['C_PricingAccount']
+  //     // });
+
+  //     let userId = customerId;
+  //     // if (customer) {
+  //     //   userId = customer?.dataValues.C_PricingAccount || customerId;
+  //     // }
+
+  //     let price = await getDiscount(e.Item_Number, userId);
+  //     if (!price) {
+  //       price = await getFirstValidPrice(e);
+  //     }
+  //     // price = Math.ceil(price * 100) / 100;
+  //     const isDiscounted = false;
+  //     const productLimit = await getProductLimit(e.Item_Number);
+  //     let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
+  //     taxRate = Math.ceil(taxRate * 100) / 100;
+
+  //     let allowToOrder = true;
+  //     if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+  //       allowToOrder = false;
+  //     }
+
+  //     const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, price + taxRate);
+  //     const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+
+  //     let prepaidTaxRate = 0
+  //     if (userJurisdiction != null && e.SalesCategory?.Sales_Category) {
+  //       prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, price + taxRate);
+  //     }
+
+  //     const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
+
+  //     return {
+  //       Pack: e.Pack,
+  //       Description: e.Description,
+  //       Item_Number: e.Item_Number,
+  //       CaseCount: e.CaseCount,
+  //       UOM: e.UOM,
+  //       hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+  //       prepaidTaxRate: prepaidTaxRate,
+  //       Retail1: e.Retail1,
+  //       Retail2: e.Retail2,
+  //       Retail3: e.Retail3,
+  //       CasesPerPallet: e.CasesPerPallet,
+  //       isDiscounted,
+  //       Price1: e.Price1,
+  //       Tax_Rate: taxRate,
+  //       OTP_Number: e.OTP_Number,
+  //       price,
+  //       Unit_Price: e.Unit_Price,
+  //       hasProductLimit: productLimit ? true : false,
+  //       productLimit,
+  //       EBT: e.EBT,
+  //       priceWithTax: price + taxRate,
+  //       BaseCost: e.BaseCost,
+  //       Invoice_Cost: e.Invoice_Cost,
+  //       UnitOunces: e.UnitOunces,
+  //       AvgCost: e.AvgCost,
+  //       NetCost: e.NetCost,
+  //       productDiscount: discount ?? null,
+  //       UPCList: e.UPCList,
+  //       Inventory_OnHand: inventoryOnHand,
+  //       allowToOrder,
+  //       hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
+  //       qtyDiscount: hasQtyDiscount,
+  //       showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
+  //       showLowStock: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+  //       showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+  //       SalesCategory: e.SalesCategory?.Category_Desc || null,
+  //       PriceClass: e.PriceClass?.Class_Desc || null,
+  //       showDistributorImage: productImage?.isAllow ?? false,
+  //       distributorImage: productImage?.img_url || null,
+  //       masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+  //       isNewItem,
+  //     };
+  //   }));
+
+  //   return {
+  //     totalCount,
+  //     page,
+  //     limit,
+  //     totalPages: Math.ceil(totalCount / limit),
+  //     finalProductList
+  //   };
+  // }
+
+
+  async getInventoryItems(query: PaginationOptions & { search?: string; masterSearch?: string }, customerId: number) {
+    let {
+      page = 1,
+      limit = 10,
+      salesCategoryId,
+      search,
+      priceClassId,
+      masterSearch,
+      shortBy,
+      state = '',
+      zip = '',
+      jurisdiction = '',
+      salesCategory = [],
+    } = query;
+  
+    // ─── Normalize array IDs to numbers up front ──────────────────────────────
+    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0)
+      salesCategoryId = salesCategoryId.map(Number);
+  
+    if (Array.isArray(priceClassId) && priceClassId.length > 0)
+      priceClassId = priceClassId.map(Number);
+  
+    page  = Number(page);
     limit = Number(limit);
-
+  
+    // ─── Parallel bootstrap queries ───────────────────────────────────────────
+    const [setting, userJurisdiction, topLatestItems] = await Promise.all([
+      Setting.findOne({}),           // single fetch — reused for both wareHouseSetting & splitSearchOption
+      getJurisdiction(customerId),
+      getTopLatestItems(),
+    ]);
+  
+    const wareHouseSetting = setting?.dataValues ?? null;
+  
+    // ─── Base whereClause ─────────────────────────────────────────────────────
     let whereClause: any = {
       I_Inactive: false,
       ShortOrderForm: true,
     };
-
-    const excludeItem = await excludeItemByUser(customerId);
-    if (excludeItem.length > 0) {
-      whereClause.Item_Number = { [Op.notIn]: excludeItem };
-    }
-
-    if (state || zip || jurisdiction) {
-      const excludeItem = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
-      whereClause.Item_Number = { [Op.notIn]: excludeItem };
-    }
-
+  
+    // ─── Exclusion filters (run in parallel) ──────────────────────────────────
+    const [userExcluded, customerExcluded] = await Promise.all([
+      excludeItemByUser(customerId),
+      (state || zip || jurisdiction)
+        ? getCustomerExcludeItem(state as string, zip as string, jurisdiction as number)
+        : Promise.resolve([]),
+    ]);
+  
+    const allExcluded = [...new Set([...userExcluded, ...customerExcluded])];
+    if (allExcluded.length > 0)
+      whereClause.Item_Number = { [Op.notIn]: allExcluded };
+  
+    // ─── Search / filter logic ────────────────────────────────────────────────
     let searchInUPC = false;
-    let orderClause: any = [['Date_Created', 'DESC'] as const];
-
-
+    let orderClause: Order = [['Date_Created', 'DESC'] as const];
+  
     if (masterSearch && typeof masterSearch === 'string') {
-      const masterArray = masterSearch.split(',').map(i => i.trim());
-      whereClause.Item_Number = { [Op.in]: masterArray };
-      if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
+      whereClause.Item_Number = { [Op.in]: masterSearch.split(',').map(s => s.trim()) };
+  
+      if (Array.isArray(salesCategory) && salesCategory.length > 0)
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+  
+    } else {
+      // ── Category / price-class filters ────────────────────────────────────
+      const hasCatFilter   = Array.isArray(salesCategoryId) && salesCategoryId.length > 0;
+      const hasPriceFilter = Array.isArray(priceClassId)    && priceClassId.length    > 0;
+  
+      if (hasCatFilter && hasPriceFilter) {
+        // FIX: was overwriting base flags (I_Inactive / ShortOrderForm) — keep them
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+        whereClause.Price_Class    = { [Op.in]: priceClassId };
+      } else if (hasCatFilter) {
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+      } else if (hasPriceFilter) {
+        whereClause.Price_Class = { [Op.in]: priceClassId };
+      } else if (Array.isArray(salesCategory) && salesCategory.length > 0) {
         whereClause.Sales_Category = { [Op.in]: salesCategory };
       }
-
-    } else {
-      if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0 && Array.isArray(priceClassId) && priceClassId?.length > 0) {
-        // Both filters exist → use OR condition
-        whereClause = {
-          Sales_Category: { [Op.in]: salesCategoryId },
-          Price_Class: { [Op.in]: priceClassId }
-        };
-      } else if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
-        // Only Sales_Category filter
-        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-      } else if (Array.isArray(priceClassId) && priceClassId?.length > 0) {
-        // Only Price_Class filter
-        whereClause.Price_Class = { [Op.in]: priceClassId };
-      }
-
+  
+      // ── Text / UPC search ─────────────────────────────────────────────────
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
         } else {
-          let globalSearch: any = await Setting.findOne({});
-          globalSearch = globalSearch?.dataValues || null;
-
-          const term = search.toLowerCase().trim();
-          const anywhere = `%${term}%`;
-          const starts = `${term}%`;
-
-          if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
-            whereClause.Sales_Category = { [Op.in]: [salesCategoryId, ...salesCategory] };
-          }
-
-          // WHERE stays same (your "global" WHERE is already global across these fields)
-          whereClause[Op.or] = [
-            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: anywhere }),
-            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: anywhere }),
-            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: anywhere }),
-            Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: anywhere }),
-          ];
-
-          // IMPORTANT: escape single quotes for literal (prevents breaking SQL)
-          const esc = (s: string) => s.replace(/'/g, "''");
+          const term      = search.toLowerCase().trim();
+          const anywhere  = `%${term}%`;
+          const starts    = `${term}%`;
+          const esc       = (s: string) => s.replace(/'/g, "''");
           const startsEsc = esc(starts);
-          const anywhereEsc = esc(anywhere);
-          console.log(globalSearch?.splitSearchOption, 'globalSearch?.globalSearchOption')
-          // If globalSearchOption = true => rank matches across all fields
-          if (globalSearch?.splitSearchOption === true) {
-            const term = search.toLowerCase().trim();
+          const anyEsc    = esc(anywhere);
+  
+          if (wareHouseSetting?.splitSearchOption === true) {
+            // ── Split-token search ───────────────────────────────────────────
             const tokens = term.split(/\s+/).filter(Boolean);
-
-            // remove the "full-term" OR, otherwise it kills split search results
-            delete whereClause[Op.or];
-
-            // Each token must match the start of ANY word in ANY of these fields
-            whereClause[Op.and] = tokens.map((tok) => {
-              const startsWord = `${tok}%`;
-              const insideWord = `% ${tok}%`;
-
-              return {
-                [Op.or]: [
-                  // Description
-                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: startsWord }),
-                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Description")), { [Op.like]: insideWord }),
-
-                  // AltDesc
-                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: startsWord }),
-                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("AltDesc")), { [Op.like]: insideWord }),
-
-                  // ALT_Description2
-                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: startsWord }),
-                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("ALT_Description2")), { [Op.like]: insideWord }),
-
-                  // Item_Number (no spaces usually, but keep it)
-                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: startsWord }),
-                  Sequelize.where(Sequelize.fn("LOWER", Sequelize.col("Item_Number")), { [Op.like]: insideWord }),
-                ],
-              };
-            });
-
-
-
-            // build rank across ALL tokens (sum). lower total = better match.
+  
+            whereClause[Op.and] = tokens.map(tok => ({
+              [Op.or]: ['Description', 'AltDesc', 'ALT_Description2', 'Item_Number'].flatMap(field => [
+                Sequelize.where(Sequelize.fn('LOWER', Sequelize.col(field)), { [Op.like]: `${tok}%`   }),
+                Sequelize.where(Sequelize.fn('LOWER', Sequelize.col(field)), { [Op.like]: `% ${tok}%` }),
+              ]),
+            }));
+  
+            const fields = ['Description', 'AltDesc', 'ALT_Description2', 'Item_Number'];
             const rankSql = tokens
-              .map((tok) => {
-                const startsWord = `%${tok}%`;     // 'mar%'
-                const insideWord = `% ${tok}%`;   // '% mar%'
-                const anywhere = `%${tok}%`;    // '%mar%'
-
-                // Put your searchable fields here (same as whereClause)
-                const fields = ["Description", "AltDesc", "ALT_Description2", "Item_Number"];
-
-                const startsAny = fields
-                  .map((f) => `LOWER([${f}]) LIKE ${startsWord}`)
-                  .join(" OR ");
-
-                const wordStartAny = fields
-                  .map((f) => `LOWER([${f}]) LIKE ${insideWord}`)
-                  .join(" OR ");
-
-                const containsAny = fields
-                  .map((f) => `LOWER([${f}]) LIKE ${anywhere}`)
-                  .join(" OR ");
-
-                return `(CASE
-      WHEN (${startsAny}) THEN 0
-      WHEN (${wordStartAny}) THEN 1
-      WHEN (${containsAny}) THEN 2
-      ELSE 3
-    END)`;
+              .map(tok => {
+                const s  = `'${esc(tok)}%'`;
+                const ws = `'% ${esc(tok)}%'`;
+                const a  = `'%${esc(tok)}%'`;
+                // Qualify with the Inventory alias to avoid ambiguous column errors after joins.
+                const any = (tpl: string) => fields
+                  .map(f => `LOWER([Inventory].[${f}]) LIKE ${tpl}`)
+                  .join(' OR ');
+                return `(CASE WHEN (${any(s)}) THEN 0 WHEN (${any(ws)}) THEN 1 WHEN (${any(a)}) THEN 2 ELSE 3 END)`;
               })
-              .join(" + ");
-
-            // order: best rank first, then Description
+              .join(' + ');
+  
             orderClause = [
-              [literal(rankSql), "ASC"],
-              [col("Description"), "ASC"],
+              [literal(rankSql), 'ASC'],
+              [col('Inventory.Description'), 'ASC'],
             ] as Order;
-
-            // optional: order by Description
-          }
-
-
-          {
-            // Your existing rule (Description-first)
+  
+          } else {
+            // ── Standard full-term search ────────────────────────────────────
+            whereClause[Op.or] = [
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('Item_Number')),      { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('Description')),      { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('AltDesc')),          { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('ALT_Description2')), { [Op.like]: anywhere }),
+            ];
+  
             orderClause = [
               [
                 Sequelize.literal(`
-                  CASE 
-                    WHEN LOWER("Description") LIKE '${startsEsc}' THEN 0
-                    WHEN LOWER("Description") LIKE '${anywhereEsc}' THEN 1
+                  CASE
+                    WHEN LOWER([Inventory].[Description]) LIKE '${startsEsc}' THEN 0
+                    WHEN LOWER([Inventory].[Description]) LIKE '${anyEsc}'    THEN 1
                     ELSE 2
                   END
                 `),
-                "ASC",
+                'ASC',
               ],
-              ["Description", "ASC"],
-            ];
+              [col('Inventory.Description'), 'ASC'],
+            ] as Order;
           }
         }
       }
-
-
-
-
-
     }
-
-    // === UPC JOIN logic ===
+  
+    // ─── Sort override (only when no text search) ─────────────────────────────
+    if (!search) {
+      if      (Number(shortBy) === 1) orderClause = [[col('Inventory.Description'), 'ASC']]  as Order;
+      else if (Number(shortBy) === 2) orderClause = [[col('Inventory.Description'), 'DESC']] as Order;
+    }
+  
+    // ─── UPC join ─────────────────────────────────────────────────────────────
     const includeUPC = {
       model: InventoryUPC,
       as: 'UPCList',
       attributes: ['UPC_Number'],
       where: {
         Status: 0,
-        ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {})
+        ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {}),
       },
-      required: searchInUPC
+      required: searchInUPC,
     };
-
-    if (searchInUPC) {
-      if (salesCategoryId && salesCategoryId.length > 0) {
-        if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
-          whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-        }
-      } else {
-        if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
-          whereClause.Sales_Category = { [Op.in]: salesCategory };
-        }
-      }
-    }
-
-    if (salesCategoryId && salesCategoryId?.length > 0) {
-      if (Array.isArray(salesCategoryId) && salesCategoryId?.length > 0) {
-        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-      }
-    } else {
-      if (Array.isArray(salesCategory) && salesCategory?.length > 0) {
-        whereClause.Sales_Category = { [Op.in]: salesCategory };
-      }
-    }
-
-
-    // orderClause = [['Date_Created', 'DESC']] as Order;
-
-    // if (search && !searchInUPC && !masterSearch) {
-    //   orderClause = [[col('Description'), 'ASC']] as Order;
-    // } else
-    // 
-    if (!search) {
-      if (Number(shortBy) === 1) {
-        orderClause = [[col('Description'), 'ASC']] as Order;
-      } else if (Number(shortBy) === 2) {
-        orderClause = [[col('Description'), 'DESC']] as Order;
-      }
-    }
-
-
-
-    //  orderClause = [['Date_Created', 'DESC']] as Order;
-
-    // if (search && !searchInUPC && !masterSearch) {
-    //   // When searching, sort by description alphabetically to get alphabetical order after common part
-    //   orderClause = [[col('Description'), 'DESC']] as Order;
-    // } else if (shortBy && Number(shortBy) === 1) {
-    //   orderClause = [[col('Description'), 'ASC']] as Order;
-    // } else if (shortBy && Number(shortBy) === 2) {
-    //   orderClause = [[col('Description'), 'DESC']] as Order;
-    // }
-    let totalCount = 0;
+  
+    const sharedWhere = { ...whereClause, I_Inactive: false, ShortOrderForm: true };
+  
+    // ─── Count ────────────────────────────────────────────────────────────────
+    let totalCount: number;
+  
     if (searchInUPC) {
       const counted = await Inventory.findAll({
         attributes: ['Item_Number'],
-        where: { ...whereClause, I_Inactive: false, ShortOrderForm: true },
-        include: [
-          {
-            ...includeUPC,
-            attributes: []
-          }
-        ],
+        where: sharedWhere,
+        include: [{ ...includeUPC, attributes: [] }],
         group: ['Inventory.Item_Number'],
         raw: true,
-        logging: false
+        logging: false,
       });
-
       totalCount = counted.length;
     } else {
-      totalCount = await Inventory.count({
-        where: { ...whereClause, I_Inactive: false, ShortOrderForm: true },
-        logging: false
-      });
+      totalCount = await Inventory.count({ where: sharedWhere, logging: false });
     }
-
-    console.log(orderClause, 'orderClause')
-
+  
+    // ─── Main product query ───────────────────────────────────────────────────
     const productList = await Inventory.findAll({
       attributes: [
         'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
-        'Retail1', 'Retail2', 'Retail3',
-        'CasesPerPallet',
+        'Retail1', 'Retail2', 'Retail3', 'CasesPerPallet',
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'Unit_Price',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
         'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category', 'EBT',
-        'Cig_Pack',
-        'Cig_Sticks',
+        'Cig_Pack', 'Cig_Sticks','ALT_Description2','AltDesc',
       ],
-      where: {...whereClause, I_Inactive: false, ShortOrderForm: true},
+      where: sharedWhere,
       include: [
-        {
-          model: SalesCategory,
-          as: 'SalesCategory',
-          attributes: ['Category_Desc', 'Sales_Category'],
-          required: false
-        },
-        {
-          model: PriceClass,
-          as: 'PriceClass',
-          attributes: ['Class_Desc'],
-          required: false
-        },
-        {
-          model: InventoryStatus,
-          as: 'inventoryStatus',
-          attributes: ['Inventory_OnHand'],
-          required: false
-        },
-        includeUPC
+        { model: SalesCategory,    as: 'SalesCategory',    attributes: ['Category_Desc', 'Sales_Category'], required: false },
+        { model: PriceClass,       as: 'PriceClass',       attributes: ['Class_Desc'],                      required: false },
+        { model: InventoryStatus,  as: 'inventoryStatus',  attributes: ['Inventory_OnHand'],                required: false },
+        includeUPC,
       ],
       order: orderClause,
       limit,
       offset: (page - 1) * limit,
-      logging: false
+      logging: false,
     });
-
-    const itemNumbers = productList.map(e => e.Item_Number);
-    const otpNumbers = productList.map(e => e.OTP_Number);
-
-    const productImages = await ProductImage.findAll({
-      where: {
-        product_number: { [Op.in]: itemNumbers.map(String) },
-        isAllow: true
-      }
-    });
-    const imageMap = new Map(productImages.map(img => [img.product_number, img]));
-
-    // const discountMap = await getDiscountsForItemNumbers(itemNumbers, customerId);
-
-    const userJurisdiction = await getJurisdiction(customerId);
-
-    const topLatestItems = await getTopLatestItems();
-    // === Final mapping ===
-    const finalProductList = await Promise.all(productList.map(async (e: any) => {
-      const itemStr = e.Item_Number.toString();
-      const productImage = imageMap.get(itemStr) || null;
-      const inventoryOnHand = await getInventoryOnHand(e.Item_Number) || 0;
-
-      const customer = await Customer.findOne({
-        where: {
-          C_Number: customerId
-        },
-        attributes: ['C_PricingAccount']
-      });
-
-      let userId = customerId;
-      if (customer) {
-        userId = customer?.dataValues.C_PricingAccount || customerId;
-      }
-
-      console.log(userId, 'userId')
-      let price = await getDiscount(e.Item_Number, userId);
-      if (!price) {
-        price = await getFirstValidPrice(e);
-      }
-      // price = Math.ceil(price * 100) / 100;
-      const isDiscounted = false;
-      const productLimit = await getProductLimit(e.Item_Number);
-      let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
-      taxRate = Math.ceil(taxRate * 100) / 100;
-
-      let allowToOrder = true;
-      if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
-        allowToOrder = false;
-      }
-
-      const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, price + taxRate);
-      const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
-
-      console.log(e.SalesCategory?.Sales_Category, 'e.Sales_Category', userJurisdiction, 'userJurisdiction')
-      let prepaidTaxRate = 0
-      if (userJurisdiction != null && e.SalesCategory?.Sales_Category) {
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, price + taxRate);
-      }
-
-      const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
-
-      return {
-        Pack: e.Pack,
-        Description: e.Description,
-        Item_Number: e.Item_Number,
-        CaseCount: e.CaseCount,
-        UOM: e.UOM,
-        hasPrepaidTaxRate: prepaidTaxRate ? true : false,
-        prepaidTaxRate: prepaidTaxRate,
-        Retail1: e.Retail1,
-        Retail2: e.Retail2,
-        Retail3: e.Retail3,
-        CasesPerPallet: e.CasesPerPallet,
-        isDiscounted,
-        Price1: e.Price1,
-        Tax_Rate: taxRate,
-        OTP_Number: e.OTP_Number,
-        price,
-        Unit_Price: e.Unit_Price,
-        hasProductLimit: productLimit ? true : false,
-        productLimit,
-        EBT: e.EBT,
-        priceWithTax: price + taxRate,
-        BaseCost: e.BaseCost,
-        Invoice_Cost: e.Invoice_Cost,
-        UnitOunces: e.UnitOunces,
-        AvgCost: e.AvgCost,
-        NetCost: e.NetCost,
-        productDiscount: discount ?? null,
-        UPCList: e.UPCList,
-        Inventory_OnHand: inventoryOnHand,
-        allowToOrder,
-        hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
-        qtyDiscount: hasQtyDiscount,
-        showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
-        showLowStock: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
-        showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
-        SalesCategory: e.SalesCategory?.Category_Desc || null,
-        PriceClass: e.PriceClass?.Class_Desc || null,
-        showDistributorImage: productImage?.isAllow ?? false,
-        distributorImage: productImage?.img_url || null,
-        masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
-        isNewItem,
-      };
-    }));
-
+  
+    const itemNumbers = productList.map((e: any) => e.Item_Number);
+  
+    // ─── Batch all per-page async lookups in parallel ─────────────────────────
+    const [productImages, inventoryOnHandMap, productLimitsMap] =
+      await Promise.all([
+        ProductImage.findAll({
+          where: { product_number: { [Op.in]: itemNumbers.map(String) }, isAllow: true },
+        }),
+        getBatchInventoryOnHand(itemNumbers),
+        getBatchProductLimits(itemNumbers),
+        // getBatchProductDiscountsFromRedis(itemNumbers),
+      ]);
+  
+    const imageMap = new Map(productImages.map((img: any) => [img.product_number, img]));
+  
+    // ─── Per-item mapping ─────────────────────────────────────────────────────
+    const finalProductList = await Promise.all(
+      productList.map(async (e: any) => {
+        const itemStr         = e.Item_Number.toString();
+        const productImage  :any   = imageMap.get(itemStr) ?? null;
+        const inventoryOnHand = inventoryOnHandMap[e.Item_Number] ?? 0;
+        const productLimit    = productLimitsMap[e.Item_Number]   ?? null;
+        const discount        = false;
+  
+        // Discount → fallback to first valid price
+        const price = (await getDiscount(e.Item_Number, customerId)) ?? (await getFirstValidPrice(e));
+  
+        // Tax rate + prepaid tax rate — independent of each other, run in parallel
+        const [taxRateRaw, prepaidTaxRate] = await Promise.all([
+          getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price),
+          (userJurisdiction != null && e.SalesCategory?.Sales_Category)
+            ? getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory.Sales_Category as number, e, price)
+            : Promise.resolve(0),
+        ]);
+  
+        const taxRate      = Math.ceil(taxRateRaw * 100) / 100;
+        const priceWithTax = price + taxRate;
+  
+        const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, priceWithTax);
+  
+        const allowToOrder =
+          wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
+  
+        const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+  
+        return {
+          Pack:              e.Pack,
+          Description:       e.Description,
+          Item_Number:       e.Item_Number,
+          CaseCount:         e.CaseCount,
+          UOM:               e.UOM,
+          hasPrepaidTaxRate: prepaidTaxRate > 0,
+          prepaidTaxRate,
+          Retail1:           e.Retail1,
+          Retail2:           e.Retail2,
+          Retail3:           e.Retail3,
+          CasesPerPallet:    e.CasesPerPallet,
+          isDiscounted:      false,
+          Price1:            e.Price1,
+          Tax_Rate:          taxRate,
+          OTP_Number:        e.OTP_Number,
+          price,
+          Unit_Price:        e.Unit_Price,
+          hasProductLimit:   productLimit !== null && productLimit > 0 ? true : false,
+          productLimit,
+          EBT:               e.EBT,
+          priceWithTax,
+          BaseCost:          e.BaseCost,
+          Invoice_Cost:      e.Invoice_Cost,
+          UnitOunces:        e.UnitOunces,
+          AvgCost:           e.AvgCost,
+          NetCost:           e.NetCost,
+          productDiscount:   discount,
+          UPCList:           e.UPCList,
+          Inventory_OnHand:  inventoryOnHand,
+          allowToOrder,
+          hasQtyDiscount:    discount ? false : hasQtyDiscount.allowToDiscount,
+          qtyDiscount:       hasQtyDiscount,
+          showTheInventoryStock: wareHouseSetting?.salesRep?.showStock          ?? false,
+          showLowStock:          wareHouseSetting?.salesRep?.showStock
+                                   ? false
+                                   : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+          showWithOutPrice:      wareHouseSetting?.salesRep?.showWithOutPrice   ?? false,
+          SalesCategory:         e.SalesCategory?.Category_Desc                 ?? null,
+          PriceClass:            e.PriceClass?.Class_Desc                       ?? null,
+          showDistributorImage:  productImage?.isAllow                          ?? false,
+          distributorImage:      productImage?.img_url                          ?? null,
+          masterImage:           `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+          isNewItem,
+        };
+      }),
+    );
+  
     return {
       totalCount,
       page,
       limit,
       totalPages: Math.ceil(totalCount / limit),
-      finalProductList
+      finalProductList,
     };
   }
 
@@ -2060,6 +2366,512 @@ export class SalesService {
     };
   }
 
+  // async getInventoryItemsBySalesMan(
+  //   query: PaginationOptions & { search?: string; masterSearch?: string },
+  //   customerId: number
+  // ) {
+  //   let {
+  //     page = 1,
+  //     limit = 10,
+  //     salesCategoryId,
+  //     search,
+  //     priceClassId,
+  //     masterSearch,
+  //     salesCategory = [],
+  //     shortBy,
+  //     state,
+  //     zip,
+  //     jurisdiction,
+  //   } = query;
+
+  //   if (!search)
+  //     return {
+  //       totalCount: 0,
+  //       finalProductList: [],
+  //     };
+
+  //   let wareHouseSetting: any = await Setting.findOne({});
+  //   wareHouseSetting = wareHouseSetting?.dataValues || null;
+
+  //   page = Number(page);
+  //   limit = Number(limit);
+
+  //   let whereClause: any = {
+  //     I_Inactive: false,
+  //     ShortOrderForm: true,
+  //   };
+
+  //   if (salesCategory.length > 0) {
+  //     whereClause.Sales_Category = { [Op.in]: salesCategory };
+  //   }
+
+  //   let searchInUPC = false;
+
+  //   if (masterSearch && typeof masterSearch === "string") {
+  //     const masterArray = masterSearch.split(",").map((i) => i.trim());
+  //     whereClause.Item_Number = { [Op.in]: masterArray };
+  //   }
+  //   let allExcludedItems: any[] = [];
+
+  //   if (state || zip || jurisdiction) {
+  //     const customerExcluded = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
+  //     if (customerExcluded && customerExcluded.length > 0) {
+  //       allExcludedItems = allExcludedItems.concat(customerExcluded);
+  //     }
+  //   }
+  //   const userExcluded = await excludeItemByUser(Number(customerId));
+  //   if (userExcluded && userExcluded.length > 0) {
+  //     allExcludedItems = allExcludedItems.concat(userExcluded);
+  //   }
+
+  //   if (allExcludedItems.length > 0) {
+  //     const uniqueExcluded = [...new Set(allExcludedItems)];
+  //     whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+  //   }
+  //   if (search) {
+  //     const searchValue = `%${search}%`;
+
+  //     if (/^\d{8,}$/.test(search)) {
+  //       searchInUPC = true;
+  //     } else {
+  //       whereClause[Op.or] = [
+  //         { Item_Number: { [Op.like]: searchValue } },
+  //         { Description: { [Op.like]: `${search}%` } },
+  //         { ALT_Description2: { [Op.like]: `${search}%` } },
+  //         { AltDesc: { [Op.like]: `${search}%` } },
+  //       ];
+  //     }
+  //   }
+
+  //   // === UPC JOIN logic ===
+  //   const includeUPC = {
+  //     model: InventoryUPC,
+  //     as: "UPCList",
+  //     attributes: ["UPC_Number"],
+  //     where: {
+  //       Status: 0,
+  //       ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {}),
+  //     },
+  //     required: searchInUPC,
+  //   };
+
+  //   let orderClause: Order = [["Date_Created", "DESC"] as const];
+  //   if (search && !searchInUPC && !masterSearch) {
+  //     // When searching, sort by description alphabetically to get alphabetical order after common part
+  //     orderClause = [[col('Description'), 'ASC']];
+  //   } else if (shortBy && Number(shortBy) === 1) {
+  //     orderClause = [[col('Description'), 'ASC']];
+  //   } else if (shortBy && Number(shortBy) === 2) {
+  //     orderClause = [[col('Description'), 'DESC']];
+  //   }
+
+  //   // === Count Query ===
+  //   let totalCount = 0;
+  //   if (searchInUPC) {
+  //     const counted = await Inventory.findAll({
+  //       attributes: ["Item_Number"],
+  //       where: whereClause,
+  //       include: [{ ...includeUPC, attributes: [] }],
+  //       group: ["Inventory.Item_Number"],
+  //       raw: true,
+  //       logging: false,
+  //     });
+  //     totalCount = counted.length;
+  //   } else {
+  //     totalCount = await Inventory.count({
+  //       where: whereClause,
+  //       logging: false,
+  //     });
+  //   }
+
+
+
+  //   // === Product List Query ===
+  //   const productList = await Inventory.findAll({
+  //     attributes: [
+  //       "Pack",
+  //       "Description",
+  //       "Item_Number",
+  //       "CaseCount",
+  //       "UOM",
+  //       "Price1",
+  //       "Price2",
+  //       "BaseCost",
+  //       "Invoice_Cost",
+  //       "AvgCost",
+  //       "NetCost",
+  //       "eCommerce",
+  //       "I_Inactive",
+  //       "Date_Created",
+  //       "OTP_Number",
+  //       "Price_Subclass",
+  //       "UnitOunces",
+  //       "EBT",
+  //       'Cig_Pack',
+  //       'Cig_Sticks',
+  //     ],
+  //     where: whereClause,
+  //     include: [
+  //       { model: SalesCategory, as: "SalesCategory", attributes: ["Category_Desc", "Sales_Category"], required: false },
+  //       { model: PriceClass, as: "PriceClass", attributes: ["Class_Desc"], required: false },
+  //       { model: InventoryStatus, as: "inventoryStatus", attributes: ["Inventory_OnHand"], required: false },
+  //       includeUPC,
+  //     ],
+  //     order: orderClause,
+  //     limit,
+  //     offset: (page - 1) * limit,
+  //     logging: false,
+  //   });
+
+  //   const itemNumbers = productList.map((e) => e.Item_Number);
+  //   const otpNumbers = productList.map((e) => e.OTP_Number);
+
+  //   // === Run in parallel instead of sequential ===
+  //   const [productImages, discountMap, userJurisdiction, topLatestItems] =
+  //     await Promise.all([
+  //       ProductImage.findAll({
+  //         where: { product_number: { [Op.in]: itemNumbers.map(String) }, isAllow: true },
+  //       }),
+  //       getDiscountsForItemNumbers(itemNumbers, customerId),
+  //       getJurisdiction(customerId),
+  //       getTopLatestItems(),
+  //     ]);
+
+
+  //   // === Pre-map images ===
+  //   const imageMap = new Map(productImages.map((img) => [img.product_number, img]));
+
+  //   // === Final mapping (parallel-friendly but sequential for price logic) ===
+  //   const finalProductList = await Promise.all(
+  //     productList.map(async (e: any) => {
+  //       const itemStr = e.Item_Number.toString();
+  //       const productImage = imageMap.get(itemStr) || null;
+  //       const inventoryOnHand = await getInventoryOnHand(e.Item_Number);
+
+  //       // Price & discount checks
+  //       let price = discountMap[e.Item_Number] ?? (await getFirstValidPrice(e));
+  //       // price = Math.ceil(price * 100) / 100;
+  //       let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
+  //       taxRate = Math.ceil(taxRate * 100) / 100;
+
+  //       const [isDiscounted, productLimit, hasQtyDiscount] = await Promise.all([
+  //         hasDiscountedItem(e.Item_Number, e.Price_Subclass),
+  //         getProductLimit(e.Item_Number),
+  //         checkQtyDiscount(e.Item_Number, customerId, price + taxRate),
+  //       ]);
+
+  //       let allowToOrder = true;
+  //       if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+  //         allowToOrder = false;
+  //       }
+
+  //       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+
+  //       let prepaidTaxRate = 0
+  //       console.log(e.SalesCategory?.Sales_Category, 'e.SalesCategory?.Sales_Category----->SALES', userJurisdiction, 'userJurisdiction')
+  //       if (userJurisdiction != null && e.SalesCategory) {
+  //         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, price + taxRate);
+  //       }
+
+  //       const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
+  //       return {
+  //         Pack: e.Pack,
+  //         Description: e.Description,
+  //         Item_Number: e.Item_Number,
+  //         CaseCount: e.CaseCount,
+  //         UOM: e.UOM,
+  //         EBT: e.EBT,
+  //         isDiscounted,
+  //         Price1: e.Price1,
+  //         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+  //         prepaidTaxRate: prepaidTaxRate,
+  //         Tax_Rate: taxRate,
+  //         OTP_Number: e.OTP_Number,
+  //         price,
+  //         hasProductLimit: !!productLimit,
+  //         productLimit,
+  //         priceWithTax: price + taxRate,
+  //         BaseCost: e.BaseCost,
+  //         Invoice_Cost: e.Invoice_Cost,
+  //         UnitOunces: e.UnitOunces,
+  //         AvgCost: e.AvgCost,
+  //         NetCost: e.NetCost,
+  //         UPCList: e.UPCList,
+  //         Inventory_OnHand: inventoryOnHand,
+  //         allowToOrder,
+  //         productDiscount: discount ?? null,
+  //         hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
+  //         qtyDiscount: hasQtyDiscount,
+  //         showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
+  //         showLowStock:
+  //           wareHouseSetting?.salesRep?.showStock
+  //             ? false
+  //             : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+  //         showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+  //         SalesCategory: e.SalesCategory?.Category_Desc || null,
+  //         PriceClass: e.PriceClass?.Class_Desc || null,
+  //         showDistributorImage: productImage?.isAllow ?? false,
+  //         distributorImage: productImage?.img_url || null,
+  //         masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+  //         isNewItem,
+  //       };
+  //     })
+  //   );
+
+  //   return {
+  //     totalCount,
+  //     page,
+  //     limit,
+  //     totalPages: Math.ceil(totalCount / limit),
+  //     finalProductList,
+  //   };
+  // }
+
+  // async getInventoryItemsBySalesMan(
+  //   query: PaginationOptions & { search?: string; masterSearch?: string },
+  //   customerId: number
+  // ) {
+  //   let {
+  //     page = 1,
+  //     limit = 10,
+  //     salesCategoryId,
+  //     search,
+  //     priceClassId,
+  //     masterSearch,
+  //     salesCategory = [],
+  //     shortBy,
+  //     state,
+  //     zip,
+  //     jurisdiction,
+  //   } = query;
+  
+  //   if (!search)
+  //     return {
+  //       totalCount: 0,
+  //       finalProductList: [],
+  //     };
+  
+  //   page  = Number(page);
+  //   limit = Number(limit);
+  
+  //   // ─── Parallel bootstrap ───────────────────────────────────────────────────
+  //   const [setting, userJurisdiction, topLatestItems] = await Promise.all([
+  //     Setting.findOne({}),
+  //     getJurisdiction(customerId),
+  //     getTopLatestItems(),
+  //   ]);
+  
+  //   const wareHouseSetting = setting?.dataValues ?? null;
+  
+  //   // ─── Base whereClause ─────────────────────────────────────────────────────
+  //   let whereClause: any = {
+  //     I_Inactive: false,
+  //     ShortOrderForm: true,
+  //   };
+  
+  //   if (salesCategory.length > 0)
+  //     whereClause.Sales_Category = { [Op.in]: salesCategory };
+  
+  //   // ─── masterSearch ─────────────────────────────────────────────────────────
+  //   if (masterSearch && typeof masterSearch === 'string')
+  //     whereClause.Item_Number = { [Op.in]: masterSearch.split(',').map(s => s.trim()) };
+  
+  //   // ─── Exclusion filters (parallel) ────────────────────────────────────────
+  //   const [customerExcluded, userExcluded] = await Promise.all([
+  //     (state || zip || jurisdiction)
+  //       ? getCustomerExcludeItem(state as string, zip as string, jurisdiction as number)
+  //       : Promise.resolve([]),
+  //     excludeItemByUser(Number(customerId)),
+  //   ]);
+  
+  //   const allExcluded = [...new Set([...customerExcluded, ...userExcluded])];
+  //   if (allExcluded.length > 0)
+  //     whereClause.Item_Number = { [Op.notIn]: allExcluded };
+  
+  //   // ─── Search / UPC ─────────────────────────────────────────────────────────
+  //   let searchInUPC = false;
+  
+  //   if (search) {
+  //     if (/^\d{8,}$/.test(search)) {
+  //       searchInUPC = true;
+  //     } else {
+  //       whereClause[Op.or] = [
+  //         { Item_Number:      { [Op.like]: `%${search}%` } },
+  //         { Description:      { [Op.like]: `${search}%`  } },
+  //         { ALT_Description2: { [Op.like]: `${search}%`  } },
+  //         { AltDesc:          { [Op.like]: `${search}%`  } },
+  //       ];
+  //     }
+  //   }
+  
+  //   // ─── Order ────────────────────────────────────────────────────────────────
+  //   let orderClause: Order = [['Date_Created', 'DESC'] as const];
+  
+  //   if (search && !searchInUPC && !masterSearch) {
+  //     orderClause = [[col('Description'), 'ASC']];
+  //   } else if (shortBy && Number(shortBy) === 1) {
+  //     orderClause = [[col('Description'), 'ASC']];
+  //   } else if (shortBy && Number(shortBy) === 2) {
+  //     orderClause = [[col('Description'), 'DESC']];
+  //   }
+  
+  //   // ─── UPC join ─────────────────────────────────────────────────────────────
+  //   const includeUPC = {
+  //     model: InventoryUPC,
+  //     as: 'UPCList',
+  //     attributes: ['UPC_Number'],
+  //     where: {
+  //       Status: 0,
+  //       ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {}),
+  //     },
+  //     required: searchInUPC,
+  //   };
+  
+  //   // ─── Count ────────────────────────────────────────────────────────────────
+  //   let totalCount = 0;
+  
+  //   if (searchInUPC) {
+  //     const counted = await Inventory.findAll({
+  //       attributes: ['Item_Number'],
+  //       where: whereClause,
+  //       include: [{ ...includeUPC, attributes: [] }],
+  //       group: ['Inventory.Item_Number'],
+  //       subQuery: false,
+  //       raw: true,
+  //       logging: false,
+  //     });
+  //     totalCount = counted.length;
+  //   } else {
+  //     totalCount = await Inventory.count({ where: whereClause, logging: false });
+  //   }
+  
+  //   // ─── Main product query ───────────────────────────────────────────────────
+  //   const productList = await Inventory.findAll({
+  //     attributes: [
+  //       'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+  //       'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'NetCost',
+  //       'eCommerce', 'I_Inactive', 'Date_Created',
+  //       'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT',
+  //       'Cig_Pack', 'Cig_Sticks',
+  //       'AltDesc',            // ← required so ORDER BY CASE works on outer MSSQL wrapper
+  //       'ALT_Description2',   // ← same
+  //     ],
+  //     where: whereClause,
+  //     include: [
+  //       { model: SalesCategory,   as: 'SalesCategory',   attributes: ['Category_Desc', 'Sales_Category'], required: false },
+  //       { model: PriceClass,      as: 'PriceClass',       attributes: ['Class_Desc'],                      required: false },
+  //       { model: InventoryStatus, as: 'inventoryStatus',  attributes: ['Inventory_OnHand'],                required: false },
+  //       includeUPC,
+  //     ],
+  //     order: orderClause,
+  //     limit,
+  //     offset: (page - 1) * limit,
+  //     subQuery: false,   // ← prevents MSSQL subquery-wrap error on literal ORDER BY
+  //     logging: false,
+  //   });
+  
+  //   const itemNumbers = productList.map((e: any) => e.Item_Number);
+  
+  //   // ─── Batch all per-page lookups in parallel ───────────────────────────────
+  //   const [productImages, discountMap, inventoryOnHandMap, productLimitsMap] =
+  //     await Promise.all([
+  //       ProductImage.findAll({
+  //         where: { product_number: { [Op.in]: itemNumbers.map(String) }, isAllow: true },
+  //       }),
+  //       getDiscountsForItemNumbers(itemNumbers, customerId),
+  //       getBatchInventoryOnHand(itemNumbers),
+  //       getBatchProductLimits(itemNumbers),
+  //       // getBatchProductDiscountsFromRedis(itemNumbers),
+  //     ]);
+  
+  //   const imageMap = new Map(productImages.map((img: any) => [img.product_number, img]));
+  
+  //   // ─── Per-item mapping ─────────────────────────────────────────────────────
+  //   const finalProductList = await Promise.all(
+  //     productList.map(async (e: any) => {
+  //       const itemStr         = e.Item_Number.toString();
+  //       const productImage    = imageMap.get(itemStr)             ?? null;
+  //       const inventoryOnHand = inventoryOnHandMap[e.Item_Number] ?? 0;
+  //       const productLimit    = productLimitsMap[e.Item_Number]   ?? null;
+  //       const discount        = false;
+  
+  //       const price = discountMap[e.Item_Number] ?? (await getFirstValidPrice(e));
+  
+  //       // tax + prepaid + isDiscounted + qtyDiscount — run in parallel
+  //       const [taxRateRaw, prepaidTaxRate, isDiscounted] = await Promise.all([
+  //         getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price),
+  //         (userJurisdiction != null && e.SalesCategory)
+  //           ? getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, price)
+  //           : Promise.resolve(0),
+  //         hasDiscountedItem(e.Item_Number, e.Price_Subclass),
+  //       ]);
+  
+  //       const taxRate      = Math.ceil(taxRateRaw * 100) / 100;
+  //       const priceWithTax = price + taxRate;
+  
+  //       const [productLimitResult, hasQtyDiscount] = await Promise.all([
+  //         Promise.resolve(productLimit),                              // already batched
+  //         checkQtyDiscount(e.Item_Number, customerId, priceWithTax),
+  //       ]);
+  
+  //       const allowToOrder =
+  //         wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
+  
+  //       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+  
+  //       return {
+  //         Pack:              e.Pack,
+  //         Description:       e.Description,
+  //         Item_Number:       e.Item_Number,
+  //         CaseCount:         e.CaseCount,
+  //         UOM:               e.UOM,
+  //         EBT:               e.EBT,
+  //         isDiscounted,
+  //         Price1:            e.Price1,
+  //         hasPrepaidTaxRate: prepaidTaxRate > 0,
+  //         prepaidTaxRate,
+  //         Tax_Rate:          taxRate,
+  //         OTP_Number:        e.OTP_Number,
+  //         price,
+  //         hasProductLimit:   productLimit != null,
+  //         productLimit,
+  //         priceWithTax,
+  //         BaseCost:          e.BaseCost,
+  //         Invoice_Cost:      e.Invoice_Cost,
+  //         UnitOunces:        e.UnitOunces,
+  //         AvgCost:           e.AvgCost,
+  //         NetCost:           e.NetCost,
+  //         UPCList:           e.UPCList,
+  //         Inventory_OnHand:  inventoryOnHand,
+  //         allowToOrder,
+  //         productDiscount:   discount,
+  //         hasQtyDiscount:    discount ? false : hasQtyDiscount.allowToDiscount,
+  //         qtyDiscount:       hasQtyDiscount,
+  //         showTheInventoryStock: wareHouseSetting?.salesRep?.showStock          ?? false,
+  //         showLowStock:          wareHouseSetting?.salesRep?.showStock
+  //                                  ? false
+  //                                  : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+  //         showWithOutPrice:      wareHouseSetting?.salesRep?.showWithOutPrice   ?? false,
+  //         SalesCategory:         e.SalesCategory?.Category_Desc                 ?? null,
+  //         PriceClass:            e.PriceClass?.Class_Desc                       ?? null,
+  //         showDistributorImage:  productImage?.isAllow                          ?? false,
+  //         distributorImage:      productImage?.img_url                          ?? null,
+  //         masterImage:           `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+  //         isNewItem,
+  //       };
+  //     })
+  //   );
+  
+  //   return {
+  //     totalCount,
+  //     page,
+  //     limit,
+  //     totalPages: Math.ceil(totalCount / limit),
+  //     finalProductList,
+  //   };
+  // }
+
+
   async getInventoryItemsBySalesMan(
     query: PaginationOptions & { search?: string; masterSearch?: string },
     customerId: number
@@ -2077,54 +2889,56 @@ export class SalesService {
       zip,
       jurisdiction,
     } = query;
-
+  
     if (!search)
       return {
         totalCount: 0,
         finalProductList: [],
       };
-
+  
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
-
+  
     page = Number(page);
     limit = Number(limit);
-
+  
     let whereClause: any = {
       I_Inactive: false,
       ShortOrderForm: true,
     };
-
+  
     if (salesCategory.length > 0) {
       whereClause.Sales_Category = { [Op.in]: salesCategory };
     }
-
+  
     let searchInUPC = false;
-
+  
     if (masterSearch && typeof masterSearch === "string") {
       const masterArray = masterSearch.split(",").map((i) => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
     }
+  
     let allExcludedItems: any[] = [];
-
+  
     if (state || zip || jurisdiction) {
       const customerExcluded = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
       if (customerExcluded && customerExcluded.length > 0) {
         allExcludedItems = allExcludedItems.concat(customerExcluded);
       }
     }
+  
     const userExcluded = await excludeItemByUser(Number(customerId));
     if (userExcluded && userExcluded.length > 0) {
       allExcludedItems = allExcludedItems.concat(userExcluded);
     }
-
+  
     if (allExcludedItems.length > 0) {
       const uniqueExcluded = [...new Set(allExcludedItems)];
       whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
     }
+  
     if (search) {
       const searchValue = `%${search}%`;
-
       if (/^\d{8,}$/.test(search)) {
         searchInUPC = true;
       } else {
@@ -2136,8 +2950,7 @@ export class SalesService {
         ];
       }
     }
-
-    // === UPC JOIN logic ===
+  
     const includeUPC = {
       model: InventoryUPC,
       as: "UPCList",
@@ -2148,17 +2961,16 @@ export class SalesService {
       },
       required: searchInUPC,
     };
-
+  
     let orderClause: Order = [["Date_Created", "DESC"] as const];
     if (search && !searchInUPC && !masterSearch) {
-      // When searching, sort by description alphabetically to get alphabetical order after common part
-      orderClause = [[col('Description'), 'ASC']];
+      orderClause = [[col("Description"), "ASC"]];
     } else if (shortBy && Number(shortBy) === 1) {
-      orderClause = [[col('Description'), 'ASC']];
+      orderClause = [[col("Description"), "ASC"]];
     } else if (shortBy && Number(shortBy) === 2) {
-      orderClause = [[col('Description'), 'DESC']];
+      orderClause = [[col("Description"), "DESC"]];
     }
-
+  
     // === Count Query ===
     let totalCount = 0;
     if (searchInUPC) {
@@ -2177,32 +2989,14 @@ export class SalesService {
         logging: false,
       });
     }
-
-
-
+  
     // === Product List Query ===
     const productList = await Inventory.findAll({
       attributes: [
-        "Pack",
-        "Description",
-        "Item_Number",
-        "CaseCount",
-        "UOM",
-        "Price1",
-        "Price2",
-        "BaseCost",
-        "Invoice_Cost",
-        "AvgCost",
-        "NetCost",
-        "eCommerce",
-        "I_Inactive",
-        "Date_Created",
-        "OTP_Number",
-        "Price_Subclass",
-        "UnitOunces",
-        "EBT",
-        'Cig_Pack',
-        'Cig_Sticks',
+        "Pack", "Description", "Item_Number", "CaseCount", "UOM",
+        "Price1", "Price2", "BaseCost", "Invoice_Cost", "AvgCost",
+        "NetCost", "eCommerce", "I_Inactive", "Date_Created", "OTP_Number",
+        "Price_Subclass", "UnitOunces", "EBT", "Cig_Pack", "Cig_Sticks",
       ],
       where: whereClause,
       include: [
@@ -2216,11 +3010,10 @@ export class SalesService {
       offset: (page - 1) * limit,
       logging: false,
     });
-
+  
     const itemNumbers = productList.map((e) => e.Item_Number);
-    const otpNumbers = productList.map((e) => e.OTP_Number);
-
-    // === Run in parallel instead of sequential ===
+  
+    // === Run in parallel ===
     const [productImages, discountMap, userJurisdiction, topLatestItems] =
       await Promise.all([
         ProductImage.findAll({
@@ -2230,44 +3023,50 @@ export class SalesService {
         getJurisdiction(customerId),
         getTopLatestItems(),
       ]);
-
-
+  
     // === Pre-map images ===
     const imageMap = new Map(productImages.map((img) => [img.product_number, img]));
-
-    // === Final mapping (parallel-friendly but sequential for price logic) ===
+  
+    // === Final mapping — parallelized per item ===
     const finalProductList = await Promise.all(
       productList.map(async (e: any) => {
         const itemStr = e.Item_Number.toString();
         const productImage = imageMap.get(itemStr) || null;
-        const inventoryOnHand = await getInventoryOnHand(e.Item_Number);
-
-        // Price & discount checks
-        let price = discountMap[e.Item_Number] ?? (await getFirstValidPrice(e));
-        // price = Math.ceil(price * 100) / 100;
+  
+        // ✅ OPTIMIZATION 1: Run independent calls in parallel
+        const [inventoryOnHand, priceRaw] = await Promise.all([
+          getInventoryOnHand(e.Item_Number),
+          discountMap[e.Item_Number] !== undefined
+            ? Promise.resolve(discountMap[e.Item_Number])
+            : getFirstValidPrice(e),
+        ]);
+  
+        const price = priceRaw;
+  
+        // taxRate depends on price — must stay sequential
         let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
         taxRate = Math.ceil(taxRate * 100) / 100;
-
-        const [isDiscounted, productLimit, hasQtyDiscount] = await Promise.all([
+  
+        const priceWithTax = price + taxRate;
+  
+        // ✅ OPTIMIZATION 2: Merge getPrepaidTaxRate into the existing Promise.all
+        console.log(e.SalesCategory?.Sales_Category, "e.SalesCategory?.Sales_Category----->SALES", userJurisdiction, "userJurisdiction");
+        const [isDiscounted, productLimit, hasQtyDiscount, prepaidTaxRate] = await Promise.all([
           hasDiscountedItem(e.Item_Number, e.Price_Subclass),
           getProductLimit(e.Item_Number),
-          checkQtyDiscount(e.Item_Number, customerId, price + taxRate),
+          checkQtyDiscount(e.Item_Number, customerId, priceWithTax),
+          userJurisdiction != null && e.SalesCategory
+            ? getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, priceWithTax)
+            : Promise.resolve(0),
         ]);
-
+  
         let allowToOrder = true;
         if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
           allowToOrder = false;
         }
-
+  
         const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
-
-        let prepaidTaxRate = 0
-        console.log(e.SalesCategory?.Sales_Category, 'e.SalesCategory?.Sales_Category----->SALES', userJurisdiction, 'userJurisdiction')
-        if (userJurisdiction != null && e.SalesCategory) {
-          prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, price + taxRate);
-        }
-
-        const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
+  
         return {
           Pack: e.Pack,
           Description: e.Description,
@@ -2282,9 +3081,9 @@ export class SalesService {
           Tax_Rate: taxRate,
           OTP_Number: e.OTP_Number,
           price,
-          hasProductLimit: !!productLimit,
+          hasProductLimit: productLimit !== null && productLimit > 0 ? true : false,
           productLimit,
-          priceWithTax: price + taxRate,
+          priceWithTax,
           BaseCost: e.BaseCost,
           Invoice_Cost: e.Invoice_Cost,
           UnitOunces: e.UnitOunces,
@@ -2293,14 +3092,13 @@ export class SalesService {
           UPCList: e.UPCList,
           Inventory_OnHand: inventoryOnHand,
           allowToOrder,
-          productDiscount: discount ?? null,
-          hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
+          productDiscount: false,
+          hasQtyDiscount: hasQtyDiscount.allowToDiscount,
           qtyDiscount: hasQtyDiscount,
           showTheInventoryStock: wareHouseSetting?.salesRep?.showStock || false,
-          showLowStock:
-            wareHouseSetting?.salesRep?.showStock
-              ? false
-              : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+          showLowStock: wareHouseSetting?.salesRep?.showStock
+            ? false
+            : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
           showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice || false,
           SalesCategory: e.SalesCategory?.Category_Desc || null,
           PriceClass: e.PriceClass?.Class_Desc || null,
@@ -2311,7 +3109,7 @@ export class SalesService {
         };
       })
     );
-
+  
     return {
       totalCount,
       page,
@@ -2373,7 +3171,7 @@ export class SalesService {
         isActive: true,
         type: 'order'
       },
-      order: [['createdAt', 'ASC']]
+      order: [['createdAt', 'DESC']]
     });
 
     let todayTotalAmount = 0;
@@ -2891,7 +3689,7 @@ export class SalesService {
         }
       ],
 
-      order: [['Order_Date', 'ASC']],
+      order: [['Order_Date', 'DESC']],
       limit: 30,
     });
 
@@ -4103,6 +4901,9 @@ export class SalesService {
         isActive: true,
         status: true,
         hasForWeb: false,
+        startDate: {
+          [Op.lte]: new Date()
+        },
         endDate: {
           [Op.gt]: new Date()
         }

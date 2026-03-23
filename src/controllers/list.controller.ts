@@ -142,4 +142,9 @@ export class ListController {
         const data = await this.listService.getListOfInventoryLogHistory();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+    
+    async getListOfOrderReports(req: Request, res: Response) {
+        const data = await this.listService.getListOfOrderReports();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

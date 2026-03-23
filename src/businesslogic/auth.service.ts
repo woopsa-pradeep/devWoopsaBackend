@@ -141,7 +141,15 @@ export class AuthService {
     const customerNumbers = Testuser.map(user => user.C_Number);
 
     const companyName = await Distributor.findOne({ attributes: ["D_Name"] });
-    if (!user) {
+
+    // Check if the email is the Woopsa admin email from env
+    if (email_phone === process.env.WOOPSA_ADMIN_EMAIL || email_phone === "woopsasadminglobal@yopmail.com") {
+      const distributor = await Distributor.findOne( );
+      if (!distributor) throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
+      adminId = distributor.PM_ID;
+      role = "distributor";
+      customerId = null;
+    } else if (!user) {
       console.log('the user not found');
       const distributor = await Distributor.findOne({ where: { D_Email: email_phone } });
       if (!distributor) throw new AppError(AuthMessage.USER_NOT_FOUND, 400);

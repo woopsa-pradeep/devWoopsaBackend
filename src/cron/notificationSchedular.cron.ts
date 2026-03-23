@@ -11,10 +11,6 @@ export const getUpcomingNotifications = async () => {
   const currentTime = now.format('HH:mm:ss'); // current time
   const fiveMinutesLater = now.add(5, 'minutes').format('HH:mm:ss'); // current + 5 minutes
 
-  console.log({ today, currentTime, fiveMinutesLater },'today, currentTime, fiveMinutesLater');
-  console.log('Server Local Time:', moment().format());
-  console.log('Server UTC Time:', moment.utc().format());
-
   try {
     const notifications = await NotificationScheduler.findAll({
       where: {
@@ -41,14 +37,14 @@ export const getUpcomingNotifications = async () => {
 };
 
 async function sendNotification(notification: any) {
-  try {  
+  try {
     if (notification.isExpire) {
       console.log(` Notification ${notification.id} already expired. Skipping.`);
       return;
     }
     // Get device tokens for all users in the notification
     const deviceTokens = [];
-    
+
     for (const userId of notification.userId) {
       const userTokens = await RetailerDevice.findAll({
         where: {
@@ -56,10 +52,11 @@ async function sendNotification(notification: any) {
           isActive: true,
           isAllow: true
         },
-        attributes: ['deviceToken']
+        attributes: ['deviceToken'],
+        order: [['createdAt', 'DESC']],
       });
       console.log(`User ${userId} has ${userTokens.length} active device tokens.`);
-      
+
       await Notifications.create({
         userNumber: userId.toString(),
         title: notification.title,
@@ -71,21 +68,21 @@ async function sendNotification(notification: any) {
         .filter(token => token && token.trim() !== '');
       deviceTokens.push(...tokens);
     }
-    
+
     if (deviceTokens.length === 0) {
       console.log(`No active device tokens found for users: ${notification.userId.join(', ')}`);
       return;
     }
-    
+
     await sendMultiFCMNotification({
       tokens: deviceTokens,
       title: notification.title,
       body: notification.description,
     });
-      console.log(`Successfully sent notification to ${deviceTokens.length} devices`);
+    console.log(`Successfully sent notification to ${deviceTokens.length} devices`);
 
     let UserNumber = deviceTokens[0];
-   
+
     console.log(notification, 'notification');
     // Mark as expired after sending
     await NotificationScheduler.update(
@@ -93,7 +90,7 @@ async function sendNotification(notification: any) {
       { where: { id: notification.id } }
     );
     console.log(`✅ Marked schedule ${notification.id} as expired`);
-    
+
   } catch (error) {
     console.error(`❌ Error sending notification for schedule ${notification.id}:`, error);
   }

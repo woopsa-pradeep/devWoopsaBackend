@@ -52,6 +52,7 @@ export class CheckerController {
 
     async moveItemsToBox(req: Request, res: Response) {
         const { sourceBoxId, destinationBoxId, itemNumber, qty } = req.body;
+        const checkerUserId = (req as any)?.user?.id ? Number((req as any).user.id) : undefined;
         
         // Validate required fields
         if (!sourceBoxId || !destinationBoxId || !itemNumber || !qty) {
@@ -72,7 +73,8 @@ export class CheckerController {
             sourceBoxId,
             destinationBoxId,
             itemNumber,
-            qty
+            qty,
+            checkerUserId
         });
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
@@ -119,6 +121,7 @@ export class CheckerController {
 
     async updateItemQty(req: Request, res: Response) {
         const { orderNumber, itemNumber, boxId, qty } = req.body;
+        const checkerUserId = (req as any)?.user?.id ? Number((req as any).user.id) : undefined;
 
         // Validate required fields (allow qty to be 0)
         if (!orderNumber || !itemNumber || !boxId || qty === undefined || qty === null) {
@@ -134,13 +137,15 @@ export class CheckerController {
             orderNumber,
             itemNumber,
             boxId,
-            qty
+            qty,
+            checkerUserId
         });
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
     async createContainer(req: Request, res: Response) {
         const { orderNumber, containerType } = req.body;
+        const checkerUserId = (req as any)?.user?.id ? Number((req as any).user.id) : undefined;
 
         // Validate required fields
         if (!orderNumber || !containerType) {
@@ -158,13 +163,15 @@ export class CheckerController {
 
         const data = await this.checkerService.createContainer({
             orderNumber,
-            containerType
+            containerType,
+            checkerUserId
         });
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
     async createContainerAndMoveItems(req: Request, res: Response) {
         const { orderNumber, containerType, sourceBoxId, items } = req.body;
+        const checkerUserId = (req as any)?.user?.id ? Number((req as any).user.id) : undefined;
 
         // Validate required fields
         if (!orderNumber || !containerType || !sourceBoxId || !items) {
@@ -198,7 +205,8 @@ export class CheckerController {
             orderNumber,
             containerType,
             sourceBoxId,
-            items
+            items,
+            checkerUserId
         });
         sendResponse(res, 200, true, data, General.SUCCESS);
     }

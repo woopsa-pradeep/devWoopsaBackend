@@ -27,14 +27,14 @@ const router = Router();
 router.get('/getUserCurrentOrder',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getUserCurrentOrder.bind(epickController)));
 router.get('/getItemAsPerBox/:boxId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getIntemDataAsPerBox.bind(epickController)));
 router.get('/getOrderSummary/:orderNumber',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getOrderSummary.bind(epickController)));
-router.get('/getCompleteOrder',verifyRole(ROLES.MANAGER),catchAsync(epickController.getCompleteOrder.bind(epickController)));
-router.get('/getCompleteOrderDetails/:orderNumber',verifyRole(ROLES.MANAGER),catchAsync(epickController.getCompleteOrderDetails.bind(epickController)));
+router.get('/getCompleteOrder',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(epickController.getCompleteOrder.bind(epickController)));
+router.get('/getCompleteOrderDetails/:orderNumber',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(epickController.getCompleteOrderDetails.bind(epickController)));
 
 
 //reports 
  router.get('/getReportDate',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getReportDate.bind(epickController)));
  router.get('/getReportById/:id',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getReportById.bind(epickController)));
- router.get('/getUserReportWithDateRange',verifyRole(ROLES.MANAGER),catchAsync(epickController.getUserReportWithDateRange.bind(epickController)));
+ router.get('/getUserReportWithDateRange',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(epickController.getUserReportWithDateRange.bind(epickController)));
  router.post('/getSubsituteProduct',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getSubsituteProduct.bind(epickController)));
  router.post('/addSubsituteProduct',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.addSubsituteProduct.bind(epickController)));
  router.post('/putPassScanItem',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.putPassScanItem.bind(epickController)));
@@ -49,7 +49,7 @@ router.get('/getAllOverrideRequests/:orderNumber',verifyRole(ROLES.EPIK, ROLES.S
 router.get('/getAllOverrideRequestsForEpick/:orderNumber',verifyRole(ROLES.EPIK),catchAsync(epickController.getAllOverrideRequestsForEpick.bind(epickController)));
 router.post('/cancelOverrideRequest/:requestId',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.cancelOverrideRequest.bind(epickController)));
 
-router.put('/requestAllStatusOverride/:orderNumber',verifyRole(ROLES.MANAGER),catchAsync(epickController.requestAllStatusOverride.bind(epickController)));
+router.put('/requestAllStatusOverride/:orderNumber',verifyRole(ROLES.MANAGER,ROLES.SALES),catchAsync(epickController.requestAllStatusOverride.bind(epickController)));
 
 
 export default router;

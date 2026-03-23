@@ -21,7 +21,7 @@ import { Users } from "../models/mmsql/user.model"
 import { CustReceivables } from "../models/mmsql/custReceivables.model";
 import { Token } from "../models/postgres/token.model";
 import { Retailer } from "../models/postgres/retailer.model";
-import { checkRegisterCustomer, generateRandomString, getDiscount, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getTaxRateV1, hasDiscountedItem, hashPassword, hasPriceChange, pgArrayToJsArray, sendEmailToMarketing, toNum } from "../utils/helper";
+import { checkRegisterCustomer, generateRandomString, getDiscount, getDiscountsForItemNumbers, getFirstValidPrice, getInventoryOnHand, getJurisdiction, getTaxRateV1, hasDiscountedItem, hashPassword, hasPriceChange, pgArrayToJsArray, sendEmailToMarketing, toNum } from "../utils/helper";
 import { generateNewCredentialsEmail, generateSupportTicketEmail, generateSupportTicketForDistributor } from "../view/emails";
 import { sendDistributorEmail, sendEmail, sendEmailMarketing, sendTestEmail } from "../utils/sendMail";
 import { WebUsers } from "../models/postgres/users.model";
@@ -77,6 +77,7 @@ import OrderDiscount from "../models/postgres/orderDiscount.model";
 import { getDefaultVendorValues, getNextVendorNumber } from "../utils/vendor";
 import { getDefaultErpUserValues, getNextUserNumber } from "../utils/erpUsers";
 import settings from "../models/postgres/setting.model"
+import InventorySpecials from "../models/mmsql/inventorySpecail.model";
 import { emailNotificationQueue } from "../configuration/config";
 import { markAsUntransferable } from "worker_threads";
 import { PriceSubclass_Defs } from "../models/mmsql/priceSubClassDefs.model";
@@ -118,6 +119,7 @@ import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
 import { TradeShowVendor } from "../models/postgres/tradeShowVendor";
 import { TradeShowDeliveryProduct } from "../models/postgres/tradeShowDeliveryProduct.model";
 import { CustomerAssignInvoiceTemplate } from "../models/postgres/customerAssingInvoiceTemplate.model";
+import { CheckerActionLog } from "../models/postgres/checkerActionLog.model";
 import { CustFinanceCharges } from "../models/mmsql/custFinanceCharges.model"
 import { ARDeletes } from "../models/mmsql/arDeletes.mode";
 import { InventorySavedDetail } from "../models/mmsql/inventorySavedDetail.model"
@@ -190,16 +192,23 @@ export class ManagerService {
           })
         );
 
-        // Update all devices for this customer to inactive session
+        //updated all device destroyed in RetailerDevice table
         updateOperations.push(
-          RetailerDevice.update(
-            { sessionActive: false, isAllow: false },
-            {
-              where: { customerNumber },
-              transaction
-            }
-          )
-        );
+          RetailerDevice.destroy({
+            where: { customerNumber: customerNumber }
+          })
+        )
+
+        // Update all devices for this customer to inactive session
+        // updateOperations.push(
+        //   RetailerDevice.update(
+        //     { sessionActive: false, isAllow: false },
+        //     {
+        //       where: { customerNumber },
+        //       transaction
+        //     }
+        //   )
+        // );
       }
 
       // Handle device access revocation
@@ -1151,11 +1160,14 @@ export class ManagerService {
 
   async uploadProductImage(body: IUploadProductImage, req: AuthRequest) {
     const file = req.file;
-    const { wareHouseName } = req.user;
+    const wareHouseDetail = await Distributor.findAll({
+      attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID", "D_Logo"],
+    });
+    const wareHouseName = wareHouseDetail[0].D_Name;
     if (!file) {
       throw new AppError(AuthMessage.FILE_NOT_FOUND, 400);
     }
-    const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, wareHouseName);
+    const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, wareHouseName || 'Woopsa');
 
     if (!result.success) {
       throw new AppError(result.error || AuthMessage.FILE_NOT_FOUND, 500);
@@ -1170,10 +1182,13 @@ export class ManagerService {
 
   async updateProductImage(body: IUpdateUploadProductImage, req: AuthRequest, id: number) {
     const file = req.file;
-    const { wareHouseName } = req.user;
+    
+    const wareHouseDetail = await Distributor.findAll({
+      attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID", "D_Logo"],
+    });
+    const wareHouseName = wareHouseDetail[0].D_Name;
     if (file) {
-
-      const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, wareHouseName);
+      const result = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, wareHouseName || 'Woopsa');
       if (!result.success) {
         throw new AppError(result.error || AuthMessage.FILE_NOT_FOUND, 500);
       }
@@ -1620,9 +1635,8 @@ export class ManagerService {
       return {};
     });
 
-    // 8) Current Due calculation (kept same logic as yours)
+    // 8) Current Due = net balance across ALL AR types for this customer
     const dueWhereCondition: any = {
-      AR_Type: whereCondition.AR_Type,
       C_Number: selectedCustomer.C_Number,
     };
 
@@ -2359,8 +2373,9 @@ export class ManagerService {
     const offset = (page - 1) * limit;
 
     // Build where condition
+
     const whereCondition: any = {
-      status: 'completed'
+      status: { [Op.in]: ['completed', 'ready_for_delivery'] }
     };
 
     // If userId is provided, filter by that user
@@ -2440,8 +2455,112 @@ export class ManagerService {
       };
     });
 
+    const orderNumbers = finalData.map((d: any) => d.orderNumber).filter(Boolean);
+    let checkerLogMap: Record<number, {
+      totalQtyDeltaByChecker: number;
+      totalBundlesDeltaByChecker: number;
+      photoActionsCount: number;
+      lastCheckerActionAt: Date | null;
+      checkerUserIds: number[];
+      checkerActionLogs: Array<{
+        id: number;
+        checkerUserId: number | null;
+        actionType: string;
+        itemNumber: number | null;
+        lineNumber: number | null;
+        boxId: number | null;
+        deltaQty: number;
+        deltaBundles: number;
+        meta: any;
+        createdAt: Date;
+      }>;
+    }> = {};
+
+    if (orderNumbers.length > 0) {
+      const checkerLogs = await CheckerActionLog.findAll({
+        where: {
+          orderNumber: { [Op.in]: orderNumbers }
+        },
+        attributes: [
+          "id",
+          "orderNumber",
+          "checkerUserId",
+          "actionType",
+          "itemNumber",
+          "lineNumber",
+          "boxId",
+          "deltaQty",
+          "deltaBundles",
+          "meta",
+          "createdAt",
+        ],
+        order: [["createdAt", "DESC"]],
+        raw: true,
+      });
+
+      checkerLogMap = checkerLogs.reduce((acc: any, log: any) => {
+        const orderNo = Number(log.orderNumber);
+        if (!acc[orderNo]) {
+          acc[orderNo] = {
+            totalQtyDeltaByChecker: 0,
+            totalBundlesDeltaByChecker: 0,
+            photoActionsCount: 0,
+            lastCheckerActionAt: null,
+            checkerUserIds: [],
+            checkerActionLogs: [],
+          };
+        }
+
+        const qtyDelta = Number(log.deltaQty) || 0;
+        const bundleDelta = Number(log.deltaBundles) || 0;
+        acc[orderNo].totalQtyDeltaByChecker += qtyDelta;
+        acc[orderNo].totalBundlesDeltaByChecker += bundleDelta;
+
+        if (log.actionType === "photo_add" || log.actionType === "photo_update") {
+          acc[orderNo].photoActionsCount += 1;
+        }
+
+        if (log.createdAt && (!acc[orderNo].lastCheckerActionAt || new Date(log.createdAt) > new Date(acc[orderNo].lastCheckerActionAt))) {
+          acc[orderNo].lastCheckerActionAt = log.createdAt;
+        }
+
+        if (log.checkerUserId && !acc[orderNo].checkerUserIds.includes(log.checkerUserId)) {
+          acc[orderNo].checkerUserIds.push(log.checkerUserId);
+        }
+
+        acc[orderNo].checkerActionLogs.push({
+          id: Number(log.id),
+          checkerUserId: log.checkerUserId ?? null,
+          actionType: log.actionType,
+          itemNumber: log.itemNumber ?? null,
+          lineNumber: log.lineNumber ?? null,
+          boxId: log.boxId ?? null,
+          deltaQty: qtyDelta,
+          deltaBundles: bundleDelta,
+          meta: log.meta ?? {},
+          createdAt: log.createdAt,
+        });
+
+        return acc;
+      }, {});
+    }
+
+    const finalDataWithChecker = finalData.map((row: any) => {
+      const checkerSummary = checkerLogMap[row.orderNumber];
+      if (!checkerSummary) return row;
+      return {
+        ...row,
+        totalQtyDeltaByChecker: checkerSummary.totalQtyDeltaByChecker,
+        totalBundlesDeltaByChecker: checkerSummary.totalBundlesDeltaByChecker,
+        photoActionsCount: checkerSummary.photoActionsCount,
+        lastCheckerActionAt: checkerSummary.lastCheckerActionAt,
+        checkerUserIds: checkerSummary.checkerUserIds,
+        checkerActionLogs: checkerSummary.checkerActionLogs,
+      };
+    });
+
     return {
-      data: finalData,
+      data: finalDataWithChecker,
       totalCount: totalCount,
       page: page,
       limit: limit
@@ -2508,6 +2627,8 @@ export class ManagerService {
 
     const whereCondition: any = {
       isActive: true,
+      firstName: { [Op.ne]: 'woopsaSales' },
+      lastName: { [Op.ne]: 'woopsaSales' },
     };
 
     if (search) {
@@ -4405,6 +4526,7 @@ export class ManagerService {
     }
 
     await notification.update(body);
+    console.log(body, 'tetetetetetetetetet')
     return notification;
   }
 
@@ -5848,8 +5970,8 @@ export class ManagerService {
   }
 
 
-  async getCustomerOrderByCalenderDate(query: PaginationOptions) {
-    let { orderDate, orderDay, page = 1, limit = 10, routeNumber, salesRepNumber } = query;
+  async getCustomerOrderByCalenderDate(body: any) {
+    let { orderDate, orderDay, page = 1, limit = 10, routeNumber, salesRepNumber } = body;
     page = Number(page);
     limit = Number(limit);
     const offset = (page - 1) * limit;
@@ -5865,13 +5987,13 @@ export class ManagerService {
       C_OrderDay: dayNum,
     };
 
-    if (salesRepNumber) {
-      customerWhere.C_Salesman = salesRepNumber;
+    if (salesRepNumber && salesRepNumber.length > 0) {
+      customerWhere.C_Salesman = { [Op.in]: salesRepNumber };
     }
 
     const routeWhere: any = {};
-    if (routeNumber) {
-      routeWhere.Route_Number = routeNumber;
+    if (routeNumber && routeNumber.length > 0) {
+      routeWhere.Route_Number = { [Op.in]: routeNumber };
     }
 
     // 1) Customers for that day with filters + count for pagination
@@ -5938,8 +6060,8 @@ export class ManagerService {
     };
   }
 
-  async getCustomerTotalOrderByCustomer(query: PaginationOptions) {
-    let { orderDate, orderDay, routeNumber, salesRepNumber } = query;
+  async getCustomerTotalOrderByCustomer(body: any) {
+    const { orderDate, orderDay, salesRepNumber, routeNumber } = body;
 
     const dayNum = Number(orderDay);
     if (Number.isNaN(dayNum)) throw new AppError("Invalid orderDay", 400);
@@ -5952,13 +6074,13 @@ export class ManagerService {
       C_OrderDay: dayNum,
     };
 
-    if (salesRepNumber) {
-      customerWhere.C_Salesman = salesRepNumber;
+    if (salesRepNumber && salesRepNumber.length > 0) {
+      customerWhere.C_Salesman = { [Op.in]: salesRepNumber };
     }
 
     const routeWhere: any = {};
-    if (routeNumber) {
-      routeWhere.Route_Number = routeNumber;
+    if (routeNumber && routeNumber.length > 0) {
+      routeWhere.Route_Number = { [Op.in]: routeNumber };
     }
 
     // 1️⃣ Customers for that day
@@ -9662,51 +9784,14 @@ export class ManagerService {
         return { parentRoute: newRoute, children: [] };
       }
 
-      // CASE B: split route (parent + children)
-      if (body.parentDeliveryRoute && Array.isArray(body.children) && body.children.length) {
-        const parentPayload = body.parentDeliveryRoute;
-
-        parentPayload.hasChildren = true;
-        parentPayload.parentRouteId = null;
-        parentPayload.splitIndex = 0;
-        parentPayload.routeGroupKey = parentPayload.routeGroupKey || parentPayload.routeNumber;
-
-        // 1) create parent
-        const parentRoute = await DeliveryRoute.create(parentPayload, { transaction: t });
-
-        // 2) create children and their stops
-        const createdChildren: any[] = [];
-
-        for (const child of body.children) {
-          if (!child.deliveryRoute || !Array.isArray(child.deliveryRouteStops)) {
-            throw new Error("Each child must contain deliveryRoute and deliveryRouteStops");
-          }
-
-          const childRoutePayload = child.deliveryRoute;
-
-          // enforce child linkage
-          childRoutePayload.parentRouteId = parentRoute.id;
-          childRoutePayload.routeGroupKey = parentRoute.routeGroupKey;
-          childRoutePayload.hasChildren = false;
-
-          const childRoute = await DeliveryRoute.create(childRoutePayload, { transaction: t });
-
-          const childStops = child.deliveryRouteStops.map((stop: any) => ({
-            ...stop,
-            routeId: childRoute.id,
-          }));
-
-          await DeliveryRouteStop.bulkCreate(childStops, { transaction: t });
-
-          createdChildren.push(childRoute);
-        }
-
-        return { parentRoute, children: createdChildren };
-      }
+    
 
       throw new Error("Invalid payload. Send either {deliveryRoute, deliveryRouteStops} OR {parentDeliveryRoute, children[]}");
     });
   }
+
+
+
 
   async getDeliveryRoutes(query: PaginationOptions & {
     routeId?: number;
@@ -16760,7 +16845,1505 @@ export class ManagerService {
 
     return result;
   }
+
+
+  async updateDeliveryRoute(id: number, body: any) {
+    const deliveryRoute = await DeliveryRoute.findByPk(id);
+    if (!deliveryRoute) {
+      throw new AppError('Delivery route not found', 404);
+    }
+    await deliveryRoute.update(body);
+    return deliveryRoute;  
+  }
+  async getInventoryWithStatusAndTax(data: any) {
+    const {costCode, limit = 50000 } = data
+    return await Inventory.findAll({
+      attributes: [
+        'Item_Number',
+        'Sales_Category',
+        'Price_Class',
+        'OTP_Number',
+        'Description',
+        'Pack',
+        'UOM',
+        'Price1',
+        'Sequence',
+        'Cig_Sticks',
+        'UnitOunces',
+        'Cig_Pack',
+
+        // UPC_Number subquery (Status=0, Priority=1)
+        [
+          Sequelize.literal(`
+          (
+            SELECT UPC_Number
+            FROM Inventory_UPC
+            WHERE Inventory.Item_Number = Inventory_UPC.Item_Number
+              AND Status = 0
+              AND Priority = 1
+          )
+        `),
+          'UPC_Number'
+        ],
+
+        'Basecost',
+        'NetCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'Retail1',
+        'HeadingFlag',
+
+        // classDesc
+        [
+          Sequelize.literal(`
+          (
+            SELECT Class_Desc
+            FROM Price_Classes
+            WHERE Inventory.Price_Class = Price_Classes.Price_Class
+          )
+        `),
+          'classDesc'
+        ],
+
+        // categoryDesc
+        [
+          Sequelize.literal(`
+          (
+            SELECT Category_Desc
+            FROM Sales_Categories
+            WHERE Inventory.Sales_Category = Sales_Categories.Sales_Category
+          )
+        `),
+          'categoryDesc'
+        ],
+
+        // otpDesc
+        [
+          Sequelize.literal(`
+          (
+            SELECT OTP_Description
+            FROM OtherTaxes
+            WHERE Inventory.OTP_Number = OtherTaxes.OTP_Number
+          )
+        `),
+          'otpDesc'
+        ],
+
+        // TaxValue
+        [
+          Sequelize.literal(`
+          ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0)
+        `),
+          'TaxValue'
+        ],
+        [
+          Sequelize.literal(`
+          ( ISNULL(Inventory.AvgCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
+        `),
+          'ext_AvgCost'
+        ],
+        [
+          Sequelize.literal(`
+          ( ISNULL(Inventory.BaseCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
+        `),
+          'ext_BaseCost'
+        ],
+        [
+          Sequelize.literal(`
+          ( ISNULL(Inventory.NetCost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
+        `),
+          'ext_NetCost'
+        ],
+        [
+          Sequelize.literal(`
+          ( ISNULL(Inventory.Invoice_Cost, 0) + ISNULL(dbo.fn_InventoryTaxValue(Inventory.Item_Number), 0) )
+        `),
+          'ext_Invoice_Cost'
+        ],
+
+      ],
+
+      include: [
+        {
+          model: InventoryStatus,
+          required: false,
+          where: { Code: costCode },
+          attributes: {
+            include: [
+              // State Tax
+              [
+                Sequelize.literal(`
+                (
+                  SELECT TaxDescription
+                  FROM TaxRates
+                  WHERE TaxRates.Jurisdiction_State = [inventoryStatus].Jurisdiction_State
+                )
+              `),
+                'tState'
+              ],
+
+              // County Tax
+              [
+                Sequelize.literal(`
+                (
+                  SELECT TaxDescription
+                  FROM TaxRates_County
+                  WHERE TaxRates_County.Jurisdiction_County = [inventoryStatus].Jurisdiction_County
+                )
+              `),
+                'tCounty'
+              ],
+
+              // City Tax
+              [
+                Sequelize.literal(`
+                (
+                  SELECT TaxDescription
+                  FROM TaxRates_City
+                  WHERE TaxRates_City.Jurisdiction_City = [inventoryStatus].Jurisdiction_City
+                )
+              `),
+                'tCity'
+              ],
+              [
+                Sequelize.literal(`
+                (
+                  SELECT STMP_VALUE20
+                  FROM TaxRates
+                  WHERE TaxRates.Jurisdiction_State = [inventoryStatus].Jurisdiction_State
+                )
+              `),
+                'STMP_VALUE20'
+              ],
+              [
+                Sequelize.literal(`
+                (
+                  SELECT STMP_VALUE25
+                  FROM TaxRates
+                  WHERE TaxRates.Jurisdiction_State = [inventoryStatus].Jurisdiction_State
+                )
+              `),
+                'STMP_VALUE25'
+              ],
+             
+            ],
+             
+            
+          }
+        },
+      ],
+
+      order: [['Description', 'ASC']],
+      limit: Number(limit),
+    });
+  }
+
+  async getExpirationDateReport(data: any) {
+    const { startDate, endDate } = data;
+    return await InventoryStatus.findAll({
+      attributes: [
+        'Item_Number',
+        'LocationID',
+        'Inventory_OnHand',
+        'Inventory_UnitsOnHand',
+        'InventoryGroupID',
+
+        // InventoryLocation from LocationDefs
+        [
+          Sequelize.literal(`
+          (
+            SELECT InventoryLocation
+            FROM LocationDefs
+            WHERE LocationDefs.LocationID = [InventoryStatus].LocationID
+          )
+        `),
+          'InventoryLocation'
+        ],
+
+        'Date_Received',
+
+        // Inventory_ExpDate from PO_Detail
+        [
+          Sequelize.literal(`
+          ISNULL(
+            (SELECT Inventory_ExpDate FROM PO_Detail WHERE PO_Detail.InventoryGroupID = [InventoryStatus].InventoryGroupID),
+            CONVERT(DateTime, '1/1/2000', 102)
+          )
+        `),
+          'Inventory_ExpDate'
+        ],
+
+        // PO_Number from PO_Detail
+        [
+          Sequelize.literal(`
+          ISNULL(
+            (SELECT PO_Number FROM PO_Detail WHERE PO_Detail.InventoryGroupID = [InventoryStatus].InventoryGroupID),
+            0
+          )
+        `),
+          'PO_Number'
+        ],
+      ],
+
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          required: true,
+          attributes: ['Description', 'Sales_Category', 'Price_Class', 'OTP_Number','Primary_Vendor','Location','Section','PickArea'],
+          where: {
+            Track_ExpirationDate: true,
+          },
+        },
+      ],
+
+      where: {
+        InventoryGroupID: { [Op.ne]: 0 },
+        [Op.or]: [
+          { Inventory_OnHand: { [Op.gt]: 0 } },
+          { Inventory_UnitsOnHand: { [Op.gt]: 0 } },
+        ],
+        [Op.and]: [
+          Sequelize.literal(`
+            ISNULL(
+              (SELECT TOP 1 Inventory_ExpDate FROM PO_Detail WHERE PO_Detail.InventoryGroupID = [InventoryStatus].InventoryGroupID),
+              CONVERT(DateTime, '1/1/2000', 102)
+            ) >= '${startDate}'
+          `),
+          Sequelize.literal(`
+            ISNULL(
+              (SELECT TOP 1 Inventory_ExpDate FROM PO_Detail WHERE PO_Detail.InventoryGroupID = [InventoryStatus].InventoryGroupID),
+              CONVERT(DateTime, '1/1/2000', 102)
+            ) <= '${endDate}'
+          `),
+        ],
+      },
+
+      order: [[Sequelize.col('Inventory.Description'), 'ASC']],
+    });
+  }
+
+  async buyerGuideInventoryHistory(query: any) {
+    const { startDate, endDate } = query
+    return await Inventory.findAll({
+       where: {
+            Date_LastChange: {
+              [Op.between]: [startDate, endDate],
+            },
+          },
+      attributes: {
+        include: [
+          // classDesc
+          [
+            Sequelize.literal(`
+            (
+              SELECT Class_Desc
+              FROM Price_Classes
+              WHERE [Inventory].Price_Class = Price_Classes.Price_Class
+            )
+          `),
+            'classDesc'
+          ],
+          // categoryDesc
+          [
+            Sequelize.literal(`
+            (
+              SELECT Category_Desc
+              FROM Sales_Categories
+              WHERE [Inventory].Sales_Category = Sales_Categories.Sales_Category
+            )
+          `),
+            'categoryDesc'
+          ],
+          // vendDesc
+          [
+            Sequelize.literal(`
+            (
+              SELECT V_Description
+              FROM Vendor
+              WHERE [Inventory].Primary_Vendor = Vendor.Primary_Vendor
+            )
+          `),
+            'vendDesc'
+          ],
+          // iOnHand
+          [
+            Sequelize.literal(`
+            ISNULL(
+              (SELECT Sum(Inventory_OnHand)
+               FROM Inventory_Status
+               WHERE Inventory_Status.Code = 0
+                 AND Inventory_Status.Item_Number = [Inventory].Item_Number),
+              0
+            )
+          `),
+            'iOnHand'
+          ],
+          // iPend
+          [
+            Sequelize.literal(`
+            ISNULL(
+              (SELECT Sum(Order_Detail.Quantity_Ordered)
+               FROM Order_Detail
+               WHERE Order_Detail.Item_Number = [Inventory].Item_Number
+                 AND DetailUpdated = 'False'),
+              0
+            )
+          `),
+            'iPend'
+          ],
+          // iOnOrder
+          [
+            Sequelize.literal(`
+            ISNULL(
+              (SELECT Sum(PO_Detail.Quantity_Ordered * PO_Detail.Pack)
+               FROM PO_Detail
+               WHERE PO_Detail.Item_Number = [Inventory].Item_Number
+                 AND DetailPosted = 'False'),
+              0
+            )
+          `),
+            'iOnOrder'
+          ],
+          // upcNumber
+          [
+            Sequelize.literal(`
+            (
+              SELECT UPC_Number
+              FROM Inventory_UPC
+              WHERE [Inventory].Item_Number = Inventory_UPC.Item_Number
+                AND Status = 0
+                AND Priority = 1
+            )
+          `),
+            'upcNumber'
+          ],
+          // availableQty = iOnHand - iPend
+          [
+            Sequelize.literal(`
+            ISNULL(
+              (SELECT Sum(Inventory_OnHand)
+               FROM Inventory_Status
+               WHERE Inventory_Status.Code = 0
+                 AND Inventory_Status.Item_Number = [Inventory].Item_Number),
+              0
+            )
+            -
+            ISNULL(
+              (SELECT Sum(Order_Detail.Quantity_Ordered)
+               FROM Order_Detail
+               WHERE Order_Detail.Item_Number = [Inventory].Item_Number
+                 AND DetailUpdated = 'False'),
+              0
+            )
+          `),
+            'availableQty'
+          ],
+        ],
+      },
+
+      include: [
+        {
+          model: InventoryHistory,
+          as: 'InventoryHistory',
+          required: true,
+          attributes: {
+            include: [
+              [
+                Sequelize.literal(`
+                (ISNULL([InventoryHistory].Week02, 0) + ISNULL([InventoryHistory].Week03, 0) + ISNULL([InventoryHistory].Week04, 0) + ISNULL([InventoryHistory].Week05, 0)) / 4.0
+              `),
+                'AvgWeeklySales'
+              ],
+            ],
+          },
+        },
+      ],
+
+      order: [
+        ['Sales_Category', 'ASC'],
+        ['Description', 'ASC'],
+      ],
+      // limit: 100
+    });
+  }
+
+  async getVelocityReportVendorGroup(data: any) {
+    const { startDate , endDate } = data;
+
+    return await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+          IIF([orderHeader].Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), [orderHeader].Invoice_Number_Legacy),
+            IIF([orderHeader].Invoice_Number > 1,
+              CONCAT([orderHeader].Order_Number, '-', [orderHeader].Invoice_Number),
+              CONVERT(VARCHAR(10), [orderHeader].Order_Number)
+            )
+          )
+        `),
+          'Document_Number'
+        ],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+        'Order_Number',
+        'Promo_Number',
+        [col('OrderDetail.OTP_Number'), 'OTP_NumberDetail'],
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+        'Inventory_QtyDeductRegular',
+        'Inventory_QtyDeductPrepaid',
+
+        [literal(`(ISNULL([OrderDetail].AvgCost, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_AvgCost'],
+        [literal(`(ISNULL([OrderDetail].NetCost, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_NetCost'],
+        [literal(`(ISNULL([OrderDetail].Invoice_Cost, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_InvoiceCost'],
+        [literal(`(ISNULL([OrderDetail].BaseCost, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_BaseCost'],
+
+        [literal(`(ISNULL([OrderDetail].Price, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_Price'],
+       
+        [col('inventory.I_PrepaidStatus'), 'I_PrepaidStatus'],
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.UOM'), 'UOM'],
+        [col('inventory.Pack'), 'Pack'],
+        [col('inventory.OTP_Number'), 'OTP_Number'],
+        [col('inventory.Primary_Vendor'), 'Primary_Vendor'],
+        [col('inventory.Manufacturer'), 'Manufacturer'],
+
+        [
+          literal(`
+          (SELECT V_Description FROM Vendor WHERE [inventory].Primary_Vendor = Vendor.Primary_Vendor)
+        `),
+          'V_Description'
+        ],
+        [
+          literal(`
+          (SELECT V_Description FROM Vendor WHERE [inventory].Manufacturer = Vendor.Primary_Vendor)
+        `),
+          'Manuf_Description'
+        ],
+
+        [col('inventory.UnitOunces'), 'UnitOunces'],
+        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('inventory.Cig_Pack'), 'Cig_Pack'],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'True',
+            Order_Deleted: 'False',
+            Invoice_Date: {
+              [Op.between]: [startDate, endDate],
+            },
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      where: {
+        Quantity_Shipped: { [Op.ne]: 0 },
+      },
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
+
+      raw: true,
+    });
+  }
+
+  async getVelocityReportOtpPrice(data: any) {
+    const { startDate, endDate } = data;
+
+    return await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+          IIF([orderHeader].Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), [orderHeader].Invoice_Number_Legacy),
+            IIF([orderHeader].Invoice_Number > 1,
+              CONCAT([orderHeader].Order_Number, '-', [orderHeader].Invoice_Number),
+              CONVERT(VARCHAR(10), [orderHeader].Order_Number)
+            )
+          )
+        `),
+          'Document_Number'
+        ],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+        [col('orderHeader.Jurisdiction_State'), 'Jurisdiction_State'],
+        [col('orderHeader.Jurisdiction_County'), 'Jurisdiction_County'],
+        [col('orderHeader.Jurisdiction_City'), 'Jurisdiction_City'],
+
+        'Order_Number',
+        'Promo_Number',
+        [col('OrderDetail.OTP_Number'), 'OTP_NumberDetail'],
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+        'Inventory_QtyDeductRegular',
+        'Inventory_QtyDeductPrepaid',
+
+        [col('inventory.I_PrepaidStatus'), 'I_PrepaidStatus'],
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.UOM'), 'UOM'],
+        [col('inventory.Pack'), 'Pack'],
+        [col('inventory.Price_Class'), 'Price_Class'],
+        [col('inventory.OTP_Number'), 'OTP_Number'],
+
+        [literal(`ISNULL([OrderDetail].Price, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_Price'],
+         [literal(`ISNULL([OrderDetail].Price, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)`), 'Ext_InvoicePrice'],
+        [literal(`ISNULL([OrderDetail].OTP_Amount_State, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_StateTax'],
+        [literal(`ISNULL([OrderDetail].OTP_Amount_County, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_CountyTax'],
+        [literal(`ISNULL([OrderDetail].OTP_Amount_City, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_CityTax'],
+        [literal(`ISNULL([OrderDetail].AvgCost, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_AvgCost'],
+        [literal(`ISNULL([OrderDetail].NetCost, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_NetCost'],
+        [literal(`ISNULL([OrderDetail].Invoice_Cost, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_InvoiceCost'],
+        [literal(`ISNULL([OrderDetail].BaseCost, 0)  * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_BaseCost'],
+        [literal(`ISNULL([inventory].Cig_Sticks, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_Sticks'],
+
+
+        [
+          literal(`
+          (SELECT OTP_Description FROM OtherTaxes WHERE [inventory].OTP_Number = OtherTaxes.OTP_Number)
+        `),
+          'OTP_Desc'
+        ],
+        [
+          literal(`
+          (SELECT Class_Desc FROM Price_Classes WHERE [inventory].Price_Class = Price_Classes.Price_Class)
+        `),
+          'Class_Desc'
+        ],
+        [
+          literal(`
+          (SELECT Category_Desc FROM Sales_Categories WHERE [inventory].Sales_Category = Sales_Categories.Sales_Category)
+        `),
+          'Cat_Desc'
+        ],
+
+        [col('inventory.UnitOunces'), 'UnitOunces'],
+        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('inventory.Cig_Pack'), 'Cig_Pack'],
+        [col('inventory.Sales_Category'), 'Sales_Category'],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'True',
+            Order_Deleted: 'False',
+            Invoice_Date: {
+              [Op.between]: [startDate, endDate],
+            },
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      where: {
+        Quantity_Shipped: { [Op.ne]: 0 },
+      },
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
+      limit:50,
+
+      raw: true,
+    });
+  }
+
+  async getVelocityReportOtpCigSticks(data: any) {
+    const { startDate, endDate } = data;
+
+    return await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+          IIF([orderHeader].Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), [orderHeader].Invoice_Number_Legacy),
+            IIF([orderHeader].Invoice_Number > 1,
+              CONCAT([orderHeader].Order_Number, '-', [orderHeader].Invoice_Number),
+              CONVERT(VARCHAR(10), [orderHeader].Order_Number)
+            )
+          )
+        `),
+          'Document_Number'
+        ],
+
+        'Order_Number',
+        'Promo_Number',
+        [col('OrderDetail.OTP_Number'), 'OTP_NumberDetail'],
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+        'Inventory_QtyDeductRegular',
+        'Inventory_QtyDeductPrepaid',
+
+        [col('inventory.I_PrepaidStatus'), 'I_PrepaidStatus'],
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.UOM'), 'UOM'],
+        [col('inventory.Pack'), 'Pack'],
+        [col('inventory.Price_Class'), 'Price_Class'],
+        [col('inventory.OTP_Number'), 'OTP_Number'],
+
+        [
+          literal(`
+          (SELECT OTP_Description FROM OtherTaxes WHERE [inventory].OTP_Number = OtherTaxes.OTP_Number)
+        `),
+          'OTP_Desc'
+        ],
+        [
+          literal(`
+          (SELECT Class_Desc FROM Price_Classes WHERE [inventory].Price_Class = Price_Classes.Price_Class)
+        `),
+          'Class_Desc'
+        ],
+
+        [col('inventory.UnitOunces'), 'UnitOunces'],
+        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('inventory.Cig_Pack'), 'Cig_Pack'],
+
+        [col('orderHeader.customer.C_Name'), 'C_Name'],
+        [col('orderHeader.customer.c_address'), 'c_address'],
+        [col('orderHeader.customer.c_city'), 'c_city'],
+        [col('orderHeader.customer.c_state'), 'c_state'],
+        [col('orderHeader.customer.c_zip'), 'c_zip'],
+        [col('orderHeader.customer.c_phone'), 'c_phone'],
+        [col('orderHeader.customer.c_Salesman'), 'c_Salesman'],
+        [col('orderHeader.customer.Jurisdiction_State'), 'Jurisdiction_State'],
+        [col('orderHeader.customer.Jurisdiction_County'), 'Jurisdiction_County'],
+        [col('orderHeader.customer.Jurisdiction_City'), 'Jurisdiction_City'],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+        [
+          literal(`
+          (SELECT TaxDescription FROM TaxRates WHERE [orderHeader->customer].Jurisdiction_State = TaxRates.Jurisdiction_State)
+        `),
+          'TaxDesc_State'
+        ],
+        [
+          literal(`
+          (SELECT TaxDescription FROM TaxRates_County WHERE [orderHeader->customer].Jurisdiction_County = TaxRates_County.Jurisdiction_County)
+        `),
+          'TaxDesc_County'
+        ],
+        [
+          literal(`
+          (SELECT TaxDescription FROM TaxRates_City WHERE [orderHeader->customer].Jurisdiction_City = TaxRates_City.Jurisdiction_City)
+        `),
+          'TaxDesc_City'
+        ],
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'True',
+            Order_Deleted: 'False',
+            Invoice_Date: {
+              [Op.between]: [startDate, endDate],
+            },
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      order: [
+        [col('orderHeader.Invoice_Date'), 'ASC'],
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
+      limit: 50,
+
+      raw: true,
+    });
+  }
+
+  async getSalesTaxOtpTaxReports(data: any) {
+    const { startDate, endDate } = data;
+
+    return await OrderHeader.findAll({
+      attributes: {
+        include: [
+          [
+            literal(`
+            IIF([OrderHeader].Invoice_Number_Legacy <> 0,
+              CONVERT(VARCHAR(10), [OrderHeader].Invoice_Number_Legacy),
+              IIF([OrderHeader].Invoice_Number > 1,
+                CONCAT([OrderHeader].Order_Number, '-', [OrderHeader].Invoice_Number),
+                CONVERT(VARCHAR(10), [OrderHeader].Order_Number)
+              )
+            )
+          `),
+            'Document_Number'
+          ],
+          [
+            literal(`(SELECT TaxDescription FROM TaxRates WHERE TaxRates.Jurisdiction_State = [OrderHeader].Jurisdiction_State)`),
+            'jStateDesc'
+          ],
+          [
+            literal(`(SELECT TaxDescription FROM TaxRates_County WHERE TaxRates_County.Jurisdiction_County = [OrderHeader].Jurisdiction_County)`),
+            'jCountyDesc'
+          ],
+          [
+            literal(`(SELECT TaxDescription FROM TaxRates_City WHERE TaxRates_City.Jurisdiction_City = [OrderHeader].Jurisdiction_City)`),
+            'jCityDesc'
+          ],
+          [col('customer.C_Name'), 'C_Name'],
+          [col('customer.c_address'), 'c_address'],
+          [col('customer.c_city'), 'c_city'],
+          [col('customer.c_state'), 'c_state'],
+          [col('customer.c_zip'), 'c_zip'],
+          [col('customer.c_phone'), 'c_phone'],
+          [col('customer.c_Salesman'), 'c_Salesman'],
+          [col('customer.C_Email'), 'C_Email'],
+        ],
+      },
+
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      where: {
+        Order_Updated: 'True',
+        Order_Deleted: 'False',
+        Invoice_Date: {
+          [Op.between]: [startDate, endDate],
+        },
+      },
+
+      order: [
+        ['Invoice_Date', 'ASC'],
+        ['Order_Number', 'ASC'],
+      ],
+
+      raw: true,
+    });
+  }
+
+  async getPOAdjustItemGroupReport(data: any) {
+    const { startDate, endDate } = data;
+
+    return await PODetail.findAll({
+      attributes: {
+        include: [
+          [
+            literal(`(SELECT State_Abbrev FROM TaxRates WHERE TaxRates.Jurisdiction_State = [POHeader].TransferTo_Jurisdiction_State)`),
+            'jState'
+          ],
+        ],
+      },
+
+      include: [
+        {
+          model: POHeader,
+          as: 'POHeader',
+          required: true,
+          where: {
+            PO_Posted: 'True',
+            PO_Deleted: 'False',
+            Receiving_Code: 'T',
+            Date_Received: {
+              [Op.between]: [startDate, endDate],
+            },
+          },
+          include: [
+            {
+              model: Vendor,
+              required: false,
+              attributes: [
+                'V_Description',
+                'V_Addr1',
+                'V_City',
+                'V_State',
+                'V_Zip',
+                'V_Phone',
+              ],
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          required: false,
+          attributes: [
+            'Description',
+            'UOM',
+            ['Pack', 'iPack'],
+          ],
+        },
+      ],
+
+      order: [
+        [{ model: POHeader, as: 'POHeader' }, 'Date_Received', 'ASC'],
+        ['PO_Number', 'ASC'],
+      ],
+
+      raw: true,
+    });
+  }
+
+  async getPOOpenOrdersReport() {
+    return await PODetail.findAll({
+      attributes: {
+        include: [
+          [col('POHeader.PO_Number'), 'PO_Number'],
+          [col('POHeader.Primary_Vendor'), 'Primary_Vendor'],
+          [col('POHeader.PO_Posted'), 'PO_Posted'],
+          [col('POHeader.PO_Deleted'), 'PO_Deleted'],
+          [col('POHeader.Receiving_Code'), 'Receiving_Code'],
+          [col('POHeader.Date_Received'), 'Date_Received'],
+          [col('POHeader.Invoice_Number'), 'PO_Invoice_Number'],
+          [col('POHeader.Invoice_Date'), 'PO_Invoice_Date'],
+
+          [col('POHeader->Vendor.V_Description'), 'V_Description'],
+          [col('POHeader->Vendor.V_Addr1'), 'V_Addr1'],
+          [col('POHeader->Vendor.V_Addr2'), 'V_Addr2'],
+          [col('POHeader->Vendor.V_City'), 'V_City'],
+          [col('POHeader->Vendor.V_State'), 'V_State'],
+          [col('POHeader->Vendor.V_Zip'), 'V_Zip'],
+          [col('POHeader->Vendor.V_Phone'), 'V_Phone'],
+          [col('POHeader->Vendor.V_Fax'), 'V_Fax'],
+
+          [col('inventory.Sales_Category'), 'Sales_Category'],
+          [col('inventory.Description'), 'Description'],
+          [col('inventory.CaseWeight'), 'CaseWeight'],
+          [col('inventory.UOM'), 'UOM'],
+          [col('inventory.Section'), 'Section'],
+          [col('inventory.Location'), 'Location'],
+          [col('inventory.Pack'), 'iPack'],
+          [col('inventory.CaseCount'), 'CaseCount'],
+
+          [
+            literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [inventory].Item_Number = Inventory_UPC.Item_Number AND Status = 0 AND Priority = 1)`),
+            'UPC_Number'
+          ],
+          [
+            literal(`IIF([POHeader].Primary_Vendor = [inventory].Primary_Vendor, [inventory].Vendor_ItemNumberAlpha, '')`),
+            'VIN'
+          ],
+          [
+            literal(`ISNULL((SELECT Vendor_Item FROM Inventory_Xref WHERE Inventory_Xref.Item_Number = [PO_Detail].Item_Number AND Vendor = [POHeader].Primary_Vendor), '')`),
+            'VINA'
+          ],
+          [
+            literal(`ISNULL([PO_Detail].Cost, 0) * ISNULL([PO_Detail].Quantity_Ordered, 0)`),
+            'ExtOrderQtyCost'
+          ],
+        ],
+      },
+
+      include: [
+        {
+          model: POHeader,
+          as: 'POHeader',
+          required: true,
+          attributes: [],
+          where: {
+            PO_Posted: 'False',
+            PO_Deleted: 'False',
+            Receiving_Code: 'P',
+          },
+          include: [
+            {
+              model: Vendor,
+              required: false,
+              attributes: [],
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          required: false,
+          attributes: [],
+        },
+      ],
+
+      order: [
+        [col('POHeader.PO_Number'), 'ASC'],
+      ],
+
+      raw: true,
+    });
+  }
+
+  async getCurrentOrderStatusReport(data: any) {
+    const { startDate, endDate } = data
+    return await OrderDetail.findAll({
+      attributes: {
+        include: [
+          [col('orderHeader.Order_Number'), 'OH_Order_Number'],
+          [col('orderHeader.C_Number'), 'C_Number'],
+          [col('orderHeader.S_Number'), 'S_Number'],
+          [col('orderHeader.Route_Number'), 'Route_Number'],
+          [col('orderHeader.Order_Updated'), 'Order_Updated'],
+          [col('orderHeader.Order_Deleted'), 'Order_Deleted'],
+          [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+          [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+          [col('orderHeader.Order_Date'), 'Order_Date'],
+          [literal(`FORMAT([orderHeader].Order_Date, 'MM/dd/yyyy')`), 'Order_Date_Text'],
+          [literal(`FORMAT([orderHeader].Invoice_Date, 'MM/dd/yyyy')`), 'Invoice_Date_Text'],
+
+          [col('orderHeader->customer.C_Name'), 'C_Name'],
+
+          [col('inventory.Sales_Category'), 'Sales_Category'],
+          [col('inventory.Description'), 'Description'],
+
+          [
+            literal(`(SELECT Order_OptionValue FROM Order_Header_Ext WHERE Order_Header_Ext.Order_Number = [orderHeader].Order_Number)`),
+            'Order_OptionValue'
+          ],
+        ],
+      },
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'False',
+            Order_Deleted: 'False',
+            Order_Date: {
+              [Op.gte]: startDate,
+              [Op.lte]: endDate,
+            },
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+              required: false,
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      order: [
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
+
+      raw: true,
+    });
+  }
+
+  async getInvoiceRegisterCostReport(data: any) {
+    const { startDate, endDate } = data
+    const ohc = (field: string) =>
+      `(SELECT ${field} FROM Order_Header_Costs WHERE Order_Header_Costs.Order_Number = [OrderHeader].Order_Number AND Value_Code = 0)`;
+
+    return await OrderHeader.findAll({
+      attributes: {
+        include: [
+          // Document_Number
+          [
+            literal(`
+            IIF([OrderHeader].Invoice_Number_Legacy <> 0,
+              CONVERT(VARCHAR(10), [OrderHeader].Invoice_Number_Legacy),
+              IIF([OrderHeader].Invoice_Number > 1,
+                CONCAT([OrderHeader].Order_Number, '-', [OrderHeader].Invoice_Number),
+                CONVERT(VARCHAR(10), [OrderHeader].Order_Number)
+              )
+            )
+          `),
+            'Document_Number'
+          ],
+
+          // Order_Header_Costs fields via subqueries to avoid column ambiguity
+          ...[1,2,3,4,5,6,7,8,9,10,11,12].map(i => {
+            const pad = String(i).padStart(2, '0');
+            return [
+              [literal(`ISNULL(${ohc(`Sales${pad}`)},0) + ISNULL(${ohc(`Taxes${pad}`)},0)`), `totalSales${pad}`],
+              [literal(`ISNULL(${ohc(`Value${pad}`)},0) + ISNULL(${ohc(`Taxes${pad}`)},0)`), `totalCost${pad}`],
+              [literal(`(ISNULL(${ohc(`Sales${pad}`)},0) + ISNULL(${ohc(`Taxes${pad}`)},0)) - (ISNULL(${ohc(`Value${pad}`)},0) + ISNULL(${ohc(`Taxes${pad}`)},0))`), `ProfitCategSales${pad}`],
+              [literal(`CASE WHEN ISNULL([OrderHeader].[Sales_NonTaxable],0) = 0 THEN 0 ELSE ((ISNULL(${ohc(`Sales${pad}`)},0) + ISNULL(${ohc(`Taxes${pad}`)},0)) - (ISNULL(${ohc(`Value${pad}`)},0) + ISNULL(${ohc(`Taxes${pad}`)},0))) * 100.0 / ISNULL([OrderHeader].[Sales_NonTaxable],0) END`), `ProfitPercent${pad}`],
+              [literal(`(SELECT ISNULL(SUM(Quantity_Shipped),0) FROM Order_Detail WHERE Sales_Category = ${i} AND Order_Detail.Order_Number = [OrderHeader].Order_Number)`), `totalQuantity_Shipped${pad}`],
+            ];
+          }).flat() as any,
+
+          // totalSalesTax
+          [literal(`ISNULL([OrderHeader].[stax_State],0) + ISNULL([OrderHeader].[stax_County],0) + ISNULL([OrderHeader].[stax_City],0)`), 'totalSalesTax'],
+
+          // Customer fields
+          [col('customer.C_Name'), 'C_Name'],
+          [col('customer.c_address'), 'c_address'],
+          [col('customer.c_city'), 'c_city'],
+          [col('customer.c_state'), 'c_state'],
+          [col('customer.c_zip'), 'c_zip'],
+          [col('customer.c_phone'), 'c_phone'],
+          [col('customer.c_Salesman'), 'c_Salesman'],
+
+          // S_Desc
+          [literal(`(SELECT S_Desc FROM SalesRep WHERE [OrderHeader].S_Number = SalesRep.S_Number)`), 'S_Desc'],
+        ],
+      },
+
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      where: {
+        Order_Deleted: 'False',
+        Invoice_Number: { [Op.ne]: 0 },
+        Order_Updated: 'False',
+        [Op.and]: [
+          literal(`EXISTS (SELECT 1 FROM Order_Header_Costs WHERE Order_Header_Costs.Order_Number = [OrderHeader].Order_Number AND Value_Code = 0)`),
+        ],
+        Order_Date: {
+              [Op.gte]: startDate,
+              [Op.lte]: endDate,
+            },
+      },
+
+      order: [['Order_Number', 'ASC']],
+
+      raw: true,
+    });
+  }
+
+  async getPicklistOrderDetail(data: any) {
+    const { startDate, endDate } = data
+    return await OrderDetail.findAll({
+      attributes: {
+        include: [
+          [col('orderHeader.Order_Number'), 'OH_Order_Number'],
+          [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+          [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+          [col('orderHeader.Picklist_Printed'), 'Picklist_Printed'],
+          [col('orderHeader.Order_Date'), 'Order_Date'],
+          [col('orderHeader.Delivery_Date'), 'Delivery_Date'],
+          [col('orderHeader.Order_Source'), 'Order_Source'],
+          [col('orderHeader.C_Number'), 'C_Number'],
+          [col('orderHeader.S_Number'), 'S_Number'],
+          [col('orderHeader.Route_Number'), 'Route_Number'],
+          [col('orderHeader.Stop_Number'), 'Stop_Number'],
+
+          [
+            literal(`
+            IIF([orderHeader].Invoice_Number_Legacy <> 0,
+              CONVERT(VARCHAR(10), [orderHeader].Invoice_Number_Legacy),
+              IIF([orderHeader].Invoice_Number > 1,
+                CONCAT([orderHeader].Order_Number, '-', [orderHeader].Invoice_Number),
+                CONVERT(VARCHAR(10), [orderHeader].Order_Number)
+              )
+            )
+          `),
+            'Document_Number'
+          ],
+
+          [literal(`(SELECT S_Desc FROM SalesRep WHERE SalesRep.S_Number = [orderHeader].S_Number)`), 'repName'],
+          [literal(`(SELECT Route_Description FROM Routes WHERE Routes.Route_Number = [orderHeader].Route_Number)`), 'routeName'],
+          [literal(`(SELECT Source_Description FROM Order_Source WHERE Order_Source.Order_Source = [orderHeader].Order_Source)`), 'sourceName'],
+
+          [literal(`ISNULL([OrderDetail].Price,0) + ISNULL([OrderDetail].OTP_Amount_State,0) + ISNULL([OrderDetail].OTP_Amount_County,0) + ISNULL([OrderDetail].OTP_Amount_City,0)`), 'TotalPrice'],
+          [literal(`(ISNULL([OrderDetail].Price,0) + ISNULL([OrderDetail].OTP_Amount_State,0)) * ISNULL([OrderDetail].Quantity_Shipped,0)`), 'ExtPrice'],
+
+          [col('inventory.Description'), 'Description'],
+          [col('inventory.CaseCount'), 'CaseCount'],
+          [col('inventory.CaseWeight'), 'CaseWeight'],
+          [col('inventory.UOM'), 'UOM'],
+          [col('inventory.Section'), 'Section'],
+          [col('inventory.Location'), 'Location'],
+
+          [literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [OrderDetail].Item_Number = Inventory_UPC.Item_Number AND Status = 0 AND Priority = 1)`), 'upcNumber'],
+          [literal(`0`), 'OnHand'],
+
+          [col('orderHeader->customer.C_Name'), 'C_Name'],
+          [col('orderHeader->customer.C_CoName'), 'C_CoName'],
+          [col('orderHeader->customer.C_Address'), 'C_Address'],
+          [col('orderHeader->customer.C_City'), 'C_City'],
+          [col('orderHeader->customer.C_State'), 'C_State'],
+          [col('orderHeader->customer.C_PhoneMobile'), 'C_PhoneMobile'],
+          [col('orderHeader->customer.C_Zip'), 'C_Zip'],
+        ],
+      },
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'False',
+            Order_Deleted: 'False',
+            Order_Date: {
+              [Op.gte]: startDate,
+              [Op.lte]: endDate,
+            },
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+              required: false,
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      order: [
+        [col('orderHeader.Order_Number'), 'ASC'],
+      ],
+
+      raw: true,
+    });
+  }
+
+  async getDeletedOrdersHistory(data: any) {
+    const { startDate, endDate } = data
+    return await OrderHeader.findAll({
+      attributes: {
+        include: [
+          [col('customer.C_Name'), 'C_Name'],
+          [col('customer.C_Address'), 'C_Address'],
+          [col('customer.C_City'), 'C_City'],
+          [col('customer.C_State'), 'C_State'],
+          [col('customer.C_Zip'), 'C_Zip'],
+        ],
+      },
+
+      include: [
+        {
+          model: Customer,
+          as: 'customer',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      where: {
+        Order_Deleted: 'True',
+        Order_Date: {
+              [Op.gte]: startDate,
+              [Op.lte]: endDate,
+            }, 
+      },
+
+      order: [['Order_Number', 'ASC']],
+
+      raw: true,
+    });
+  }
+
+  async getShortShippedOrders() {
+    return await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+          IIF([orderHeader].Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), [orderHeader].Invoice_Number_Legacy),
+            IIF([orderHeader].Invoice_Number > 1,
+              CONCAT([orderHeader].Order_Number, '-', [orderHeader].Invoice_Number),
+              CONVERT(VARCHAR(10), [orderHeader].Order_Number)
+            )
+          )
+        `),
+          'Document_Number'
+        ],
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader.S_Number'), 'S_Number'],
+        [col('orderHeader.Route_Number'), 'Route_Number'],
+
+        'Order_Number',
+        'Promo_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'OrderDetail_Code',
+        'Delivered',
+        'Credit_ReturnToStock',
+        'Price',
+        'NetCost',
+        'BaseCost',
+        'AvgCost',
+        'Invoice_Cost',
+        'OTP_Amount_State',
+        'OTP_Amount_County',
+        'OTP_Amount_City',
+
+        [col('inventory.Description'), 'Description'],
+        [col('inventory.UOM'), 'UOM'],
+        [col('inventory.Pack'), 'Pack'],
+        [col('inventory.UnitOunces'), 'UnitOunces'],
+        [col('inventory.Cig_Sticks'), 'Cig_Sticks'],
+        [col('inventory.Cig_Pack'), 'Cig_Pack'],
+
+        [literal(`ISNULL((SELECT SUM(Inventory_OnHand) FROM Inventory_Status WHERE Inventory_Status.Code = 0 AND Inventory_Status.Item_Number = [OrderDetail].Item_Number), 0)`), 'OnHand'],
+
+        [col('orderHeader->customer.C_Name'), 'C_Name'],
+        [col('orderHeader->customer.c_address'), 'c_address'],
+        [col('orderHeader->customer.c_city'), 'c_city'],
+        [col('orderHeader->customer.c_state'), 'c_state'],
+        [col('orderHeader->customer.c_zip'), 'c_zip'],
+        [col('orderHeader->customer.c_phone'), 'c_phone'],
+        [col('orderHeader->customer.c_Salesman'), 'c_Salesman'],
+      ],
+
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: {
+            Order_Updated: 'False',
+            Order_Deleted: 'False',
+          },
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+              required: false,
+            },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [],
+          required: false,
+        },
+      ],
+
+      where: {
+        Quantity_Shipped: { [Op.gte]: 0 },
+        [Op.and]: [
+          literal(`[OrderDetail].[Quantity_Shipped] < [OrderDetail].[Quantity_Ordered]`),
+        ],
+      },
+
+      raw: true,
+    });
+  }
+
+  async getCustomerPricing(data: any) {
+    const { C_Number, Sales_Category, Price_Class, Description, otpType, Vendor } = data;
+
+    const where: any = {};
+    if (Sales_Category) where.Sales_Category = Number(Sales_Category);
+    if (Price_Class) where.Price_Class = Number(Price_Class);
+    if (Description) where.Description = { [Op.like]: `%${Description}%` };
+    if (otpType) where.OTP_Number = Number(otpType);
+    if (Vendor) where.Primary_Vendor = Number(Vendor);
+
+    const items: any[] = await Inventory.findAll({
+      where,
+      attributes: {
+        include: [
+          [literal(`(SELECT Category_Desc FROM Sales_Categories WHERE [Inventory].Sales_Category = Sales_Categories.Sales_Category)`), 'Category_Desc'],
+          [literal(`(SELECT Class_Desc FROM Price_Classes WHERE [Inventory].Price_Class = Price_Classes.Price_Class)`), 'Class_Desc'],
+          [literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [Inventory].Item_Number = Inventory_UPC.Item_Number AND Status = 0 AND Priority = 1)`), 'UPC_Number'],
+          [literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [Inventory].Item_Number = Inventory_UPC.Item_Number AND Status = 1 AND Priority = 1)`), 'CaseUPC'],
+          [literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [Inventory].Item_Number = Inventory_UPC.Item_Number AND Status = 2 AND Priority = 1)`), 'RetailUPC'],
+          [literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [Inventory].Item_Number = Inventory_UPC.Item_Number AND Status = 4 AND Priority = 1)`), 'AltItem'],
+          [literal(`0.00`), 'Price'],
+          [literal(`0.00`), 'otpState'],
+          [literal(`0.00`), 'otpCounty'],
+          [literal(`0.00`), 'otpCity'],
+          [literal(`0.00`), 'TotalPrice'],
+          [literal(`0.00`), 'Retail'],
+          [literal(`0.00`), 'UnitPrice'],
+          [literal(`0.00`), 'subclassAmount'],
+          [literal(`(SELECT ISNULL(SUM(ISNULL(Inventory_OnHand, 0)), 0) FROM Inventory_Status WHERE Inventory_Status.Item_Number = [Inventory].Item_Number AND Code = 0)`), 'Inventory_OnHand'],
+        ],
+      },
+      raw: true,
+    });
+
+    if (C_Number) {
+      const customerNumber = Number(C_Number);
+      const itemNumbers = items.map((item: any) => item.Item_Number);
+      const discountMap = await getDiscountsForItemNumbers(itemNumbers, customerNumber);
+
+      for (const item of items) {
+        const discountedPrice = discountMap[item.Item_Number];
+        if (discountedPrice != null) {
+          item.Price = discountedPrice;
+        }
+      }
+    }
+
+    return items;
+  }
+
+  async getItemGroupPromotionMaintenanceReport(data: any) {
+    const { Sales_Category, Price_Class, Description, Brand_ID, Item_GroupID, Vendor } = data;
+
+    const where: any = {};
+    if (Sales_Category) where.Sales_Category = Number(Sales_Category);
+    if (Price_Class) where.Price_Class = Number(Price_Class);
+    if (Brand_ID) where.Brand_ID = Number(Brand_ID);
+    if (Item_GroupID) where.Item_GroupID = Number(Item_GroupID);
+
+    const items: any[] = await InventorySpecials.findAll({
+      where,
+      attributes: {
+        include: [
+          [literal(`(SELECT Description FROM Inventory WHERE Inventory.Item_Number = [InventorySpecials].Item_Number)`), 'Description'],
+          [literal(`IIF([InventorySpecials].Sales_Category = 0, 'N/A', (SELECT Category_Desc FROM Sales_Categories WHERE [InventorySpecials].Sales_Category = Sales_Categories.Sales_Category))`), 'scat'],
+          [literal(`IIF([InventorySpecials].Price_Class = 0, 'N/A', (SELECT Class_Desc FROM Price_Classes WHERE [InventorySpecials].Price_Class = Price_Classes.Price_Class))`), 'pcat'],
+          [literal(`IIF([InventorySpecials].Brand_ID = 0, 'N/A', (SELECT Brand_Family FROM Inventory_Brands WHERE Inventory_Brands.Brand_ID = [InventorySpecials].Brand_ID))`), 'brand'],
+          [literal(`IIF([InventorySpecials].Item_GroupID = 0, 'N/A', (SELECT Item_GroupDescription FROM Inventory_ItemGroups WHERE Inventory_ItemGroups.Item_GroupID = [InventorySpecials].Item_GroupID))`), 'igroup'],
+        ],
+      },
+      raw: true,
+    });
+
+    if (Description) {
+      const search = Description.toLowerCase();
+      return items.filter((item: any) => item.Description && item.Description.toLowerCase().includes(search));
+    }
+
+    return items;
+  }
 }
-
-
-

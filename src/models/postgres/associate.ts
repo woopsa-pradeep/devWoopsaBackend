@@ -31,6 +31,7 @@ import { TradeShow } from './tradeShow.model';
 import { TradeShowOrderHistory } from './tradeShowOrderHistory.model';
 import { EmailModule } from './emailModules.model';
 import { EmailModuleConfig } from './emailModuleConfig.model';
+import { CheckerActionLog } from './checkerActionLog.model';
 
 export function applyAssociations(): void {
 
@@ -224,6 +225,17 @@ export function applyAssociations(): void {
   EmailModuleConfig.belongsTo(EmailModule, {
     foreignKey: 'emailModuleId',
     as: 'emailModule',
+  });
+
+  // Checker action audit associations
+  WebUsers.hasMany(CheckerActionLog, {
+    foreignKey: 'checkerUserId',
+    as: 'checkerActionLogs',
+  });
+
+  CheckerActionLog.belongsTo(WebUsers, {
+    foreignKey: 'checkerUserId',
+    as: 'checker',
   });
 
   // Inventory.belongsTo(InventoryStatus, {
