@@ -36,5 +36,7 @@ router.get('/listOfCustomersForOrderNumbers', catchAsync(listController.getListO
 router.get('/listOfClassOfTrade', verifyToken, catchAsync(listController.getClassOfTradeList.bind(listController)));
 router.get('/listOfInventoryLogHistory', verifyToken, catchAsync(listController.getListOfInventoryLogHistory.bind(listController)));
 router.get('/listOfOrderReports' ,verifyToken, catchAsync(listController.getListOfOrderReports.bind(listController)));
+router.get('/listOfDrivers', verifyToken, catchAsync(listController.getDriverList.bind(listController)));
+router.get('/listOfVehicles', verifyToken, catchAsync(listController.getVehicleList.bind(listController)));
 
 export default router;

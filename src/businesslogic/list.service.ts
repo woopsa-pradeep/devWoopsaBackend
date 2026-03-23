@@ -43,6 +43,8 @@ import { custom } from "joi";
 import { Order_Source } from "../models/mmsql/orderSource.model";
 import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
+import { Driver } from "../models/postgres/driver.model";
+import { Vehicle } from "../models/postgres/vehicle.model";
 
 export class ListService {
 
@@ -849,6 +851,23 @@ export class ListService {
       otherTaxes,
       vendor
     }
+  }
+
+
+  async getDriverList(){
+    const drivers = await Driver.findAll({
+      attributes: ['id', 'firstName', 'lastName'],
+      order: [['firstName', 'ASC']]
+    })
+    return drivers;
+  }
+
+  async getVehicleList(){
+    const vehicles = await Vehicle.findAll({
+      attributes: ['id', 'description','vinNumber'],
+      order: [['description', 'ASC']]
+    })
+    return vehicles;
   }
 
 }

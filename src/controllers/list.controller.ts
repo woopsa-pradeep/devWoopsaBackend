@@ -147,4 +147,14 @@ export class ListController {
         const data = await this.listService.getListOfOrderReports();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getDriverList(req: Request, res: Response) {
+        const data = await this.listService.getDriverList();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getVehicleList(req: Request, res: Response) {
+        const data = await this.listService.getVehicleList();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }   
 }

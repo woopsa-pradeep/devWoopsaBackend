@@ -2187,5 +2187,9 @@ export class ManagerController {
     const data = await this.managerService.getItemGroupPromotionMaintenanceReport(req.query);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
+  async updateDeliveryRoute(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateDeliveryRoute(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 
 }
