@@ -936,14 +936,11 @@ export class RetailerService {
         const price = discountMap[e.Item_Number] ?? await getFirstValidPrice(e);
   
         // Tax rate calls are still per-item (depend on price); run them in parallel
-        const [taxRateRaw, prepaidTaxRate] = await Promise.all([
-          getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price),
-          (userJurisdiction != null && e.SalesCategory)
-            ? getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory.Sales_Category, e, price)
-            : Promise.resolve(0),
-        ]);
-  
+        const taxRateRaw = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
         const taxRate    = Math.ceil(taxRateRaw * 100) / 100;
+        const prepaidTaxRate = (userJurisdiction != null && e.SalesCategory)
+          ? await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory.Sales_Category, e, price + taxRate)
+          : 0;
         const priceWithTax = price + taxRate;
   
         const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, user.id, priceWithTax);
@@ -2112,9 +2109,9 @@ export class RetailerService {
       const userJurisdiction = await getJurisdiction(customerNumber);
       let prepaidTaxRate = 0
       if (userJurisdiction != null && product.SalesCategory) {
-        let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
+        let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price );
         taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category, product, price );
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category, product, price+taxRate );
       }
 
       let priceChange = false;
