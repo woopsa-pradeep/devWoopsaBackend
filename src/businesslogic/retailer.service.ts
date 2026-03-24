@@ -2114,7 +2114,7 @@ export class RetailerService {
       if (userJurisdiction != null && product.SalesCategory) {
         let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
         taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category, product, price + taxRate);
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.SalesCategory?.Sales_Category, product, price );
       }
 
       let priceChange = false;

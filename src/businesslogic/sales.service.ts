@@ -3281,7 +3281,9 @@ export class SalesService {
         let taxRate = await getTaxRateV1(Number(product?.OTP_Number), userJurisdiction as number, Number(e.Item_Number), price);
 
         taxRate = Math.ceil(taxRate * 100) / 100;
-        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category, product, price + taxRate);
+
+        
+        prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category, product, price);
       }
       let priceChange = false;
 
