@@ -22,6 +22,7 @@ import { EpickConfirmation } from './epickConfirmation.model';
 import { DeliveryRouteStop } from './deliveryRouteStop.model';
 import { DeliveryRoute } from './deliveryRoute.model';
 import { Driver } from './driver.model';
+import Vehicle from './vehicle.model';
 import { ReceivableUser } from './receivableUser.model';
 import { TradeShowItem } from './tradeShowItem.model';
 import { TradeShowRetailer } from './tradeShowRetailer.model';
@@ -32,6 +33,7 @@ import { TradeShowOrderHistory } from './tradeShowOrderHistory.model';
 import { EmailModule } from './emailModules.model';
 import { EmailModuleConfig } from './emailModuleConfig.model';
 import { CheckerActionLog } from './checkerActionLog.model';
+import DeliveryRouteGroup from './driverRoutesGroup.model';
 
 export function applyAssociations(): void {
 
@@ -148,6 +150,17 @@ export function applyAssociations(): void {
     as: 'route',
   });
 
+  DeliveryRoute.belongsTo(Vehicle, {
+    foreignKey: 'truckId',
+    as: 'vehicle',
+  });
+
+  Vehicle.hasMany(DeliveryRoute, {
+    foreignKey: 'truckId',
+    as: 'deliveryRoutes',
+  });
+  
+
   // TradeShow associations
   TradeShow.hasMany(TradeShowItem, {
     foreignKey: 'tradeShowId',
@@ -237,6 +250,24 @@ export function applyAssociations(): void {
     foreignKey: 'checkerUserId',
     as: 'checker',
   });
+
+  // associations.ts
+
+  // In your associations.ts or index.ts where all models are linked
+
+DeliveryRouteGroup.hasMany(DeliveryRoute, {
+  foreignKey: 'routeGroupId',
+  as: 'childRoutes',
+});
+
+DeliveryRoute.belongsTo(DeliveryRouteGroup, {
+  foreignKey: 'routeGroupId',
+  as: 'routeGroup',
+});
+
+
+
+
 
   // Inventory.belongsTo(InventoryStatus, {
   //   foreignKey: 'Item_Number',

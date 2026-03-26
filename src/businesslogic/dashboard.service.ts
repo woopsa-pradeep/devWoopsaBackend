@@ -1086,6 +1086,7 @@ export class DashboardService {
                     product_number: e.Item_Number.toString(),
                     isAllow: true
                 },
+                order: [['id', 'DESC']],
             });
 
             let taxRate = 0;

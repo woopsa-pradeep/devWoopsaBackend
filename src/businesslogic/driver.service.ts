@@ -1,49 +1,663 @@
 
 
 
-import { Op } from "sequelize";
-import { OrderHeader } from "../models/mmsql/orderHeader.model";
-import { Customer } from "../models/mmsql/customer.model";
-import { CustomerRoute } from "../models/mmsql/customerRoutes.model";
-import { dayFunctionObject } from "../utils/helper";
-import { AppError } from "../utils/AppError";
+import { Op, fn, col, literal } from "sequelize";
+import moment from "moment";
 import { Driver } from "../models/postgres/driver.model";
+import { AppError } from "../utils/AppError";
+import { AuthMessage, Manager } from "../constants";
+import { DeliveryRoute } from "../models/postgres/deliveryRoute.model";
+import {
+  DeliveryRouteStop,
+  DeliveryStopStatus,
+} from "../models/postgres/deliveryRouteStop.model";
+import Vehicle from "../models/postgres/vehicle.model";
+import { Customer } from "../models/mmsql/customer.model";
+import DeliveryRoutePOD, {
+  OrderPODStatus,
+  PaymentTerms,
+} from "../models/postgres/deliveryRoutePOD.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
-import { DriverPickupOrder } from "../models/postgres/driverPickerOrder.model";
-import { PaginationOptions } from "../interfaces/pagination.interface";
-import { IUploadProductImage } from "../interfaces/request.body.interface";
-import { AuthRequest } from "../middlewares/verifyToken.middleware";
-import { uploadFileToAzure } from "../utils/azureUploader";
-import { AuthMessage } from "../constants";
+import { clusterOrdersByLocation, getOptimizedDirections } from "../utils/map.utlis";
+import DeliveryRouteGroup from "../models/postgres/driverRoutesGroup.model";
+import { postgresSequelize } from "../db";
+import { OrderHeader } from "../models/mmsql/orderHeader.model";
+
+interface DriverAssignment {
+  driverId: number;
+  truckId: number;
+}
+
+interface OrderInput {
+  orderNumber: number;
+  C_Number: number;
+  lat: number;
+  lng: number;
+}
+
+interface PreviewMultiRouteBody {
+  day: string;
+  origin:      { lat: number; lng: number };
+  destination: { lat: number; lng: number };
+  drivers:     DriverAssignment[];
+  orders:      OrderInput[];
+}
+interface CreateMultiRouteBody {
+  day: string;
+  origin:      { lat: number; lng: number };
+  destination: { lat: number; lng: number };
+  drivers:     DriverAssignment[];
+  orders:      OrderInput[];
+}
+
+
 
 export class DriverService {
 
-async getDriverOrderList(){
-    const orders = await OrderHeader.findAll({
-        where: {
-            Driver_ID: { [Op.not]: 99 },
-            Invoice_Number: { [Op.gt]: 0 },
+  async getDriverOrderList() {
+    return [];
+  }
+
+  async updateDriverLatLong(driverId: number, body: any) {
+    const { currentLocation, currentLatitude, currentLongitude } = body;
+
+    if (
+      currentLocation === undefined ||
+      currentLatitude === undefined ||
+      currentLongitude === undefined
+    ) {
+      throw new AppError(AuthMessage.MISSING_DEVICE_FIELDS, 400);
+    }
+
+    const driver = await Driver.findOne({
+      where: { id: driverId, isActive: true },
+    });
+
+    if (!driver) {
+      throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
+    }
+
+    await driver.update({
+      currentLocation,
+      currentLatitude,
+      currentLongitude,
+    });
+
+    return {
+      driverId: driver.id,
+      currentLocation: driver.currentLocation,
+      currentLatitude: driver.currentLatitude,
+      currentLongitude: driver.currentLongitude,
+    };
+  }
+
+
+  async getTodayDriverOrders(driverId: number) {
+    const today = moment().format("YYYY-MM-DD");
+
+    // Fetch routes with vehicle + stops included via association (routeId FK)
+    const routes = await DeliveryRoute.findAll({
+      where: {
+        driverId,
+        isActive: true,
+        day: today,
+      },
+      include: [
+        {
+          model: Vehicle,
+          as: "vehicle",
+          attributes: ["id", "description", "vinNumber"],
         },
-        attributes: ['Order_Number', 'Order_Date', 'Invoice_Number', 'Driver_ID'],
-        include: [
-            {
-                model: Customer,
-                as: 'customer',
-                attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip','C_Phone'],
-                include: [
-                    {
-                        model: CustomerRoute,
-                        as: 'Routes',
-                        attributes: ['Route_Number', 'Stop_Number'],
-                    }
-                ]
-            }
+        {
+          model: DeliveryRouteStop,
+          as: "stops",
+          required: false,
+          where: { isActive: true },
+        },
+      ],
+      order: [
+        ["id", "ASC"],
+        [{ model: DeliveryRouteStop, as: "stops" }, "stopSequence", "ASC"],
+      ],
+    });
+
+    if (routes.length === 0) {
+      return [];
+    }
+
+    return routes.map((route) => {
+      const plain = route.get({ plain: true }) as any;
+      const stops: any[] = plain.stops ?? [];
+
+      const totalStops = stops.length;
+
+      const stopCountByStatus = {
+        not_delivered: 0,
+        in_progress: 0,
+        delivered: 0,
+        skipped: 0,
+        failed: 0,
+        returned: 0,
+      };
+
+      for (const s of stops) {
+        const status = s.status as keyof typeof stopCountByStatus;
+        if (status in stopCountByStatus) {
+          stopCountByStatus[status]++;
+        }
+      }
+
+      const completionPercentage =
+        totalStops === 0
+          ? 0
+          : Number(
+            ((stopCountByStatus.delivered * 100) / totalStops).toFixed(1)
+          );
+
+      return {
+        ...plain,
+        totalStops,
+        stopCountByStatus,
+        completionPercentage,
+      };
+    });
+  }
+
+
+  async startNavigation(routeId: number, driverId: number) {
+    const route = await DeliveryRoute.findOne({
+      where: { id: routeId, driverId, isActive: true },
+    });
+
+    if (!route) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+
+    const firstStop = await DeliveryRouteStop.findOne({
+      where: {
+        routeId,
+        status: DeliveryStopStatus.NOT_DELIVERED,
+        isActive: true,
+      },
+      order: [["stopSequence", "ASC"]],
+    });
+
+    if (!firstStop) {
+      throw new AppError("No pending delivery stop found for this route", 404);
+    }
+    let pod = await DeliveryRoutePOD.findOne({
+      where: {
+        routeId,
+        routeStopId: firstStop.id,
+        driverId,
+        isActive: true,
+      },
+    });
+
+    if (!pod) {
+      const epicBoxes = await OrderPickBox.findAll({
+        where: {
+          orderNumber: firstStop.orderNumber,
+        },
+      });
+
+      const boxBarCode: string[] = [];
+      const scanBarCode: string[] = [];
+      const expectedBundles = epicBoxes.length;
+
+      for (const box of epicBoxes) {
+        if (box.barcode) {
+          boxBarCode.push(box.barcode);
+        }
+      }
+
+      pod = await DeliveryRoutePOD.create({
+        routeId,
+        routeStopId: firstStop.id,
+        driverId,
+        orderNumber: firstStop.orderNumber,
+        C_Number: firstStop.C_Number,
+        boxBarCode,
+        scanBarCode,
+        expectedBundles,
+        scannedBundles: 0,
+        allBundlesScanned: false,
+        orderStatus: OrderPODStatus.IN_PROGRESS,
+        paymentTerms: PaymentTerms.CASH,
+        paymentInCheck: false,
+        photos: [],
+        podAt: new Date(),
+        isActive: true,
+      });
+    }
+
+    return {
+      pod: pod!.get({ plain: true }),
+      firstStop: firstStop.get({ plain: true }),
+    };
+  }
+
+  async getRouteFullDetails(routeId: number) {
+
+    const routeStopDetails = await DeliveryRouteStop.findAll({
+      where: { routeId, isActive: true },
+      order: [["stopSequence", "ASC"]],
+    });
+
+    const finalRouteDetails = Promise.all(routeStopDetails.map(async (stop) => {
+      const findCustomer = await Customer.findOne({
+        where: { C_Number: stop.C_Number },
+        attributes: [
+          'C_Number',
+          'C_Name',
+          'C_Address',
+          'C_City',
+          'C_State',
+          'C_Zip',
         ],
-        order: [['Order_Number', 'DESC']],
-    })
-    return orders
-}
+      });
+
+      if (!findCustomer) {
+        throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+      }
+
+      const stopDetails = {
+        ...stop.get({ plain: true }),
+        customer: findCustomer.get({ plain: true }),
+      };
+
+      return stopDetails;
+    }));
+
+    return finalRouteDetails;
+  }
 
 
-}
+  async dashboardDetails(driverId: number) {
+
+    const today = moment().format("YYYY-MM-DD");
+    const todayRoutes = await DeliveryRoute.findAll({
+      where: {
+        driverId: driverId,
+        isActive: true,
+        day: today,
+      },
+      attributes: ["id"],
+    });
+
+    const routeIds = todayRoutes.map((r: any) => r.id);
+    const todayStopsCount =
+      routeIds.length === 0
+        ? 0
+        : await DeliveryRouteStop.count({
+          where: {
+            isActive: true,
+            routeId: { [Op.in]: routeIds },
+          },
+        });
+
+
+    const totalStopsCompleted = await DeliveryRouteStop.count({
+      where: {
+        isActive: true,
+        status: DeliveryStopStatus.DELIVERED,
+      },
+      include: [
+        {
+          model: DeliveryRoute,
+          as: "route",
+          where: {
+            driverId: driverId,
+            isActive: true,
+            // day: today,
+          },
+          attributes: [],
+        },
+      ],
+    });
+
+    const totalStopsSkipped = await DeliveryRouteStop.count({
+      where: {
+        isActive: true,
+        status: DeliveryStopStatus.SKIPPED,
+      },
+      include: [
+        {
+          model: DeliveryRoute,
+          as: "route",
+          where: {
+            driverId: driverId,
+            isActive: true,
+            // day: today,
+          },
+          attributes: [],
+        },
+      ],
+    });
+
+    const totalPendingStops = await DeliveryRouteStop.count({
+      where: {
+        isActive: true,
+        status: DeliveryStopStatus.NOT_DELIVERED,
+      },
+      include: [
+        {
+          model: DeliveryRoute,
+          as: "route",
+          where: {
+            driverId: driverId,
+            isActive: true,
+            // day: today,
+          },
+          attributes: [],
+        },
+      ],
+    });
+
+
+
+    return { todayStopsCount, totalStopsCompleted, totalStopsSkipped, totalPendingStops };
+  }
+
  
+  async previewMultiDriverRoutes(body: PreviewMultiRouteBody) {
+    const { day, origin, destination, drivers, orders } = body;
+  
+    // ── Validations ──────────────────────────────────────
+    if (!day)                throw new AppError('day is required', 400);
+    if (!origin)             throw new AppError('origin is required', 400);
+    if (!destination)        throw new AppError('destination is required', 400);
+    if (!drivers?.length)    throw new AppError('At least 1 driver required', 400);
+    if (!orders?.length)     throw new AppError('At least 1 order required', 400);
+  
+    if (orders.length < drivers.length) {
+      throw new AppError(
+        `Cannot split ${orders.length} orders into ${drivers.length} routes`,
+        400
+      );
+    }
+  
+    // ── Step 1: Cluster orders by geography ──────────────
+    const clusters = clusterOrdersByLocation(orders, drivers.length);
+  
+    // ── Step 2: For each cluster get Google Maps preview ─
+    const previewRoutes: any[] = [];
+  
+    for (let i = 0; i < clusters.length; i++) {
+      const cluster = clusters[i];
+      const driver  = drivers[i];
+  
+      // Skip empty cluster (edge case)
+      if (!cluster.length) continue;
+  
+      // Google Maps optimize
+      const { waypointOrder, polyline, legs, totalKilometers } =
+        await getOptimizedDirections(
+          origin,
+          destination,
+          cluster.map(o => ({ lat: o.lat, lng: o.lng }))
+        );
+  
+      // Total duration
+      const totalDurationSeconds = legs.reduce(
+        (sum: number, leg: any) => sum + Number(leg?.duration?.value ?? 0),
+        0
+      );
+      const totalDurationInMinutes = Math.ceil(totalDurationSeconds / 60);
+      const totalMiles = Number((totalKilometers * 0.621371).toFixed(4));
+  
+      // Build optimized stops
+      const stops = waypointOrder.map((originalIndex: number, optimizedIndex: number) => {
+        const order = cluster[originalIndex];
+        const leg   = legs[optimizedIndex];
+  
+        const legKm = Number(
+          ((Number(leg?.distance?.value ?? 0)) / 1000).toFixed(3)
+        );
+  
+        // Cumulative distance up to this stop
+        const cumulativeKm = Number(
+          (legs
+            .slice(0, optimizedIndex + 1)
+            .reduce((sum: number, l: any) => sum + Number(l?.distance?.value ?? 0), 0) / 1000
+          ).toFixed(3)
+        );
+  
+        const stopLocation   = leg?.end_location   || { lat: order.lat, lng: order.lng };
+        const startLocation  = optimizedIndex === 0
+          ? origin
+          : legs[optimizedIndex - 1]?.end_location || origin;
+  
+        // ETA per stop (sum of durations up to this stop)
+        const etaSeconds = legs
+          .slice(0, optimizedIndex + 1)
+          .reduce((sum: number, l: any) => sum + Number(l?.duration?.value ?? 0), 0);
+        const etaMinutes = Math.ceil(etaSeconds / 60);
+  
+        return {
+          stopSequence:    optimizedIndex + 1,
+          orderNumber:     order.orderNumber,
+          C_Number:        order.C_Number,
+          latitude:        Number(stopLocation.lat),
+          longitude:       Number(stopLocation.lng),
+          startLatitude:   Number(startLocation.lat),
+          startLongitude:  Number(startLocation.lng),
+          distanceKm:      legKm,           // distance for this leg only
+          cumulativeKm,                      // total distance from origin to this stop
+          etaMinutes,                        // ETA from start to this stop
+          isLastStop:      optimizedIndex === cluster.length - 1,
+        };
+      });
+  
+      previewRoutes.push({
+        driverId:              driver.driverId,
+        truckId:               driver.truckId,
+        day,
+        totalStops:            cluster.length,
+        totalKilometers:       Number(totalKilometers.toFixed(2)),
+        totalMiles:            totalMiles,
+        totalDurationInMinutes,
+        polyline,              // encoded polyline for map drawing
+        stops,
+      });
+    }
+  
+    return {
+      totalOrders:  orders.length,
+      totalDrivers: drivers.length,
+      routes:       previewRoutes,
+    };
+  }
+  
+  async createMultiDriverRoutes(body: any) {
+    const { day, origin, destination, previewedRoutes } = body;
+  
+    // ── Validations ──────────────────────────────────────────────
+    if (!day)                    throw new AppError('day is required', 400);
+    if (!origin)                 throw new AppError('origin is required', 400);
+    if (!destination)            throw new AppError('destination is required', 400);
+    if (!previewedRoutes?.length) throw new AppError('previewedRoutes is required', 400);
+  
+    // ── Check duplicate driverIds ────────────────────────────────
+    const driverIds = previewedRoutes.map((r: any) => r.driverId);
+    if (new Set(driverIds).size !== driverIds.length) {
+      throw new AppError('Duplicate driverIds found in payload', 400);
+    }
+  
+    // ── Check duplicate truckIds ─────────────────────────────────
+    const truckIds = previewedRoutes.map((r: any) => r.truckId);
+    if (new Set(truckIds).size !== truckIds.length) {
+      throw new AppError('Duplicate truckIds found in payload', 400);
+    }
+  
+    // ── Check drivers not already assigned on this day ───────────
+    const alreadyAssignedDrivers = await DeliveryRoute.findAll({
+      where: { day, driverId: driverIds, isActive: true },
+    });
+  
+    if (alreadyAssignedDrivers.length) {
+      const conflictIds = [...new Set(alreadyAssignedDrivers.map((r: any) => r.driverId))];
+      throw new AppError(
+        `These drivers already have routes on ${day}: ${conflictIds.join(', ')}`,
+        400
+      );
+    }
+  
+    // ── Check trucks not already assigned on this day ────────────
+    const alreadyAssignedTrucks = await DeliveryRoute.findAll({
+      where: { day, truckId: truckIds, isActive: true },
+    });
+  
+    if (alreadyAssignedTrucks.length) {
+      const conflictIds = [...new Set(alreadyAssignedTrucks.map((r: any) => r.truckId))];
+      throw new AppError(
+        `These trucks already have routes on ${day}: ${conflictIds.join(', ')}`,
+        400
+      );
+    }
+  
+    // ── One transaction — create group + routes + stops ──────────
+    let finalResult: any = {};
+  
+    await postgresSequelize.transaction(async (t) => {
+  
+      // ── Create Route Group ────────────────────────────────────
+      const groupNumber = `GRP-${day}-${Date.now()}`;
+  
+      const totalOrders = previewedRoutes.reduce(
+        (sum: number, r: any) => sum + r.stops.length, 0
+      );
+  
+      const routeGroup = await DeliveryRouteGroup.create(
+        {
+          groupNumber,
+          day,
+          totalOrders,
+          totalRoutes:     previewedRoutes.length,
+          totalStops:      0,
+          totalKilometers: 0,
+          totalMiles:      0,
+          originLat:       origin.lat,
+          originLng:       origin.lng,
+          destinationLat:  destination.lat,
+          destinationLng:  destination.lng,
+          status:          'not_started',
+          isActive:        true,
+        },
+        { transaction: t }
+      );
+  
+      const createdRoutes: any[] = [];
+  
+      // ── Loop each previewed route ─────────────────────────────
+      for (const preview of previewedRoutes) {
+        const routeNumber = `R-${day}-D${preview.driverId}`;
+  
+        // ── Create DeliveryRoute ──────────────────────────────
+        const route = await DeliveryRoute.create(
+          {
+            routeGroupId:          routeGroup.id,
+            routeNumber,
+            routeGroupKey:         routeNumber,
+            day,
+            driverId:              preview.driverId,
+            truckId:               preview.truckId,
+            orderStartLat:         origin.lat,
+            orderStartLong:        origin.lng,
+            orderEndLat:           destination.lat,
+            orderEndLong:          destination.lng,
+            routeStatus:           'not_started',
+            totalStops:            preview.stops.length,
+            completedStops:        0,
+            totalKilometers:       preview.totalKilometers,
+            totalMiles:            preview.totalMiles,
+            totalDurationInMinutes: preview.totalDurationInMinutes,
+            hasChildren:           false,
+            parentRouteId:         0,
+            splitIndex:            0,
+            isActive:              true,
+          },
+          { transaction: t }
+        );
+  
+        
+        // ── Build Stops ───────────────────────────────────────
+        const stops = preview.stops.map((stop: any) => ({
+         
+          routeId:         route.id,
+          routeName:       routeNumber,
+          day,
+          orderNumber:     stop.orderNumber,
+          C_Number:        stop.C_Number,
+          stopSequence:    stop.stopSequence,
+          latitude:        stop.latitude,
+          longitude:       stop.longitude,
+          startLatitude:   stop.startLatitude,
+          startLongitude:  stop.startLongitude,
+          endLatitude:     stop.endLatitude,
+          endLongitude:    stop.endLongitude,
+          totalKilometers: stop.distanceKm,
+          status:          'not_delivered',
+          isLastStop:      stop.isLastStop,
+          isActive:        true,
+        }));
+
+  
+
+        await DeliveryRouteStop.bulkCreate(stops, { transaction: t });
+        let OrderNumberUpdate: number[] = preview.stops.map((stop: any) => stop.orderNumber);
+        if(OrderNumberUpdate.length > 0){
+          await OrderHeader.update({ route_created: true }, { where: { Order_Number: { [Op.in]: OrderNumberUpdate as unknown as any[] } } });
+        }
+  
+        createdRoutes.push({
+          routeId:               route.id,
+          routeNumber,
+          driverId:              preview.driverId,
+          truckId:               preview.truckId,
+          totalStops:            preview.stops.length,
+          totalKilometers:       preview.totalKilometers,
+          totalMiles:            preview.totalMiles,
+          totalDurationInMinutes: preview.totalDurationInMinutes,
+          polyline:              preview.polyline,
+        });
+      }
+  
+      // ── Update Route Group totals ─────────────────────────────
+      const sumKilometers = Number(
+        createdRoutes.reduce((sum, r) => sum + r.totalKilometers, 0).toFixed(2)
+      );
+      const sumMiles = Number(
+        createdRoutes.reduce((sum, r) => sum + r.totalMiles, 0).toFixed(4)
+      );
+      const sumStops = createdRoutes.reduce((sum, r) => sum + r.totalStops, 0);
+  
+      await DeliveryRouteGroup.update(
+        {
+          totalKilometers: sumKilometers,
+          totalMiles:      sumMiles,
+          totalStops:      sumStops,
+        },
+        { where: { id: routeGroup.id }, transaction: t }
+      );
+  
+      finalResult = {
+        message:    `${createdRoutes.length} routes created successfully`,
+        routeGroup: {
+          id:              routeGroup.id,
+          groupNumber:     routeGroup.groupNumber,
+          day,
+          totalOrders,
+          totalRoutes:     createdRoutes.length,
+          totalStops:      sumStops,
+          totalKilometers: sumKilometers,
+          totalMiles:      sumMiles,
+        },
+        childRoutes: createdRoutes,
+      };
+    });
+  
+    return finalResult;
+  }
+
+}

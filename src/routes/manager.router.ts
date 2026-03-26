@@ -6,7 +6,7 @@ import { ROLES } from '../interfaces/request.body.interface';
 import { multerUpload } from '../middlewares/upload.middleware';
 import { uploadProductImageSchema } from '../validations/test.validation';
 import { validateRequest } from '../middlewares/validation.middleware';
-import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, roleUdatePermissionRequestSchema, updateWarehouseSettingSchema, createItemLimitSchema, updateItemLimitSchema, createNotificationSchedulerSchema, updateNotificationSchedulerSchema, getNotificationSchedulerSchema, createLinkSchema, updateLinkSchema, getLinksQuerySchema, createStorySchema, updateStorySchema, getStoriesQuerySchema, createWebViewSchema, updateWebViewSchema, getWebViewsQuerySchema, createRetailerRequestSchema, createPoliciesSchema, updatePoliciesSchema, updateRefundPoliciesSchema, createWebCategorySchema, updateWebCategorySchema, createWebQuickLinkSchema, updateWebQuickLinkSchema, createWebLocationSchema, updateWebLocationSchema, getWebLocationsQuerySchema, createContactUsSchema, updateContactUsSchema, getContactUsQuerySchema, createEmailConfigSchema, updateEmailConfigSchema, createEmailMarketingSchema, getEmailMarketingQuerySchema, createInventoryUPCSchema, updateInventoryUPCSchema, createEpickSettingSchema, getEpickSettingsQuerySchema, updateEpickSettingSchema, createInvoiceSettingSchema, updateInvoiceSettingSchema, createErpUserSchema, updateErpUserSchema, createDriverSchema, updateDriverSchema, updateDriverLocationSchema, getDriversQuerySchema, createDriverRouteAssignmentSchema, updateDriverRouteAssignmentSchema, getDriverRouteAssignmentsQuerySchema, createEpickUserSchema, updateEpickUserSchema, updateEpickUserPreferencesSchema, updateEpickUserCategoriesSchema, updateEpickUserItemSortSchema, createPicklistSchema, updatePicklistSchema, createFuturePricingSchema, updateFuturePricingSchema, getFuturePricingQuerySchema, createRetailerDocumentsSchema, updateRetailerDocumentsSchema, getRetailerDocumentsQuerySchema, createRetailerLocationSchema, updateRetailerLocationSchema, getRetailerLocationQuerySchema, createPreBookSchema, updatePreBookSchema, getPreBooksQuerySchema, createTradeShowSchema, updateTradeShowSchema, getTradeShowsQuerySchema, createTradeShowItemSchema, updateTradeShowItemSchema, getTradeShowItemsQuerySchema, createBulkTradeShowItemsSchema, updateBulkTradeShowItemsSchema, createTradeShowRetailerSchema, updateTradeShowRetailerSchema, getTradeShowRetailersQuerySchema, createBulkTradeShowRetailersSchema, createTradeShowVendorSchema, updateTradeShowVendorSchema, getTradeShowVendorsQuerySchema, createBulkTradeShowVendorsSchema, createTradeShowDeliveryProductSchema, updateTradeShowDeliveryProductSchema, getTradeShowDeliveryProductsQuerySchema, createBulkTradeShowDeliveryProductsSchema, createEmailModuleSchema, updateEmailModuleSchema, getEmailModulesQuerySchema, createEmailModuleConfigSchema, updateEmailModuleConfigSchema, getEmailModuleConfigsQuerySchema, createCustomerAssignInvoiceTemplateSchema, updateCustomerAssignInvoiceTemplateSchema, getCustomerAssignInvoiceTemplatesQuerySchema, bulkAddCustomerAssignInvoiceTemplatesSchema, bulkRemoveCustomerAssignInvoiceTemplatesSchema, createInvoiceTemplateSchema, updateInvoiceTemplateSchema, getInvoiceTemplatesQuerySchema, createDeliveryRouteSchema, createVehicleSchema, getVehiclesQuerySchema, updateVehicleSchema, bulkUploadItemImagesSchema, createProductDiscountSchema, updateProductDiscountSchema, getProductDiscountsQuerySchema } from '../validations/manager.validation';
+import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, roleUdatePermissionRequestSchema, updateWarehouseSettingSchema, createItemLimitSchema, updateItemLimitSchema, createNotificationSchedulerSchema, updateNotificationSchedulerSchema, getNotificationSchedulerSchema, createLinkSchema, updateLinkSchema, getLinksQuerySchema, createStorySchema, updateStorySchema, getStoriesQuerySchema, createWebViewSchema, updateWebViewSchema, getWebViewsQuerySchema, createRetailerRequestSchema, createPoliciesSchema, updatePoliciesSchema, updateRefundPoliciesSchema, createWebCategorySchema, updateWebCategorySchema, createWebQuickLinkSchema, updateWebQuickLinkSchema, createWebLocationSchema, updateWebLocationSchema, getWebLocationsQuerySchema, createContactUsSchema, updateContactUsSchema, getContactUsQuerySchema, createEmailConfigSchema, updateEmailConfigSchema, createEmailMarketingSchema, getEmailMarketingQuerySchema, createInventoryUPCSchema, updateInventoryUPCSchema, createEpickSettingSchema, getEpickSettingsQuerySchema, updateEpickSettingSchema, createInvoiceSettingSchema, updateInvoiceSettingSchema, createErpUserSchema, updateErpUserSchema, createDriverSchema, updateDriverSchema, updateDriverLocationSchema, getDriversQuerySchema, createDriverRouteAssignmentSchema, updateDriverRouteAssignmentSchema, getDriverRouteAssignmentsQuerySchema, createEpickUserSchema, updateEpickUserSchema, updateEpickUserPreferencesSchema, updateEpickUserCategoriesSchema, updateEpickUserItemSortSchema, createPicklistSchema, updatePicklistSchema, createFuturePricingSchema, updateFuturePricingSchema, getFuturePricingQuerySchema, createRetailerDocumentsSchema, updateRetailerDocumentsSchema, getRetailerDocumentsQuerySchema, createRetailerLocationSchema, updateRetailerLocationSchema, getRetailerLocationQuerySchema, createPreBookSchema, updatePreBookSchema, getPreBooksQuerySchema, createTradeShowSchema, updateTradeShowSchema, getTradeShowsQuerySchema, createTradeShowItemSchema, updateTradeShowItemSchema, getTradeShowItemsQuerySchema, createBulkTradeShowItemsSchema, updateBulkTradeShowItemsSchema, createTradeShowRetailerSchema, updateTradeShowRetailerSchema, getTradeShowRetailersQuerySchema, createBulkTradeShowRetailersSchema, createTradeShowVendorSchema, updateTradeShowVendorSchema, getTradeShowVendorsQuerySchema, createBulkTradeShowVendorsSchema, createTradeShowDeliveryProductSchema, updateTradeShowDeliveryProductSchema, getTradeShowDeliveryProductsQuerySchema, createBulkTradeShowDeliveryProductsSchema, createEmailModuleSchema, updateEmailModuleSchema, getEmailModulesQuerySchema, createEmailModuleConfigSchema, updateEmailModuleConfigSchema, getEmailModuleConfigsQuerySchema, createCustomerAssignInvoiceTemplateSchema, updateCustomerAssignInvoiceTemplateSchema, getCustomerAssignInvoiceTemplatesQuerySchema, bulkAddCustomerAssignInvoiceTemplatesSchema, bulkRemoveCustomerAssignInvoiceTemplatesSchema, createInvoiceTemplateSchema, updateInvoiceTemplateSchema, getInvoiceTemplatesQuerySchema, createDeliveryRouteSchema, createVehicleSchema, getVehiclesQuerySchema, updateVehicleSchema, bulkUploadItemImagesSchema, createProductDiscountSchema, updateProductDiscountSchema, getProductDiscountsQuerySchema, createCustomerSchema } from '../validations/manager.validation';
 // import { createUserSchema, homeSettingsSchema, rolePermissionRequestSchema, roleUdatePermissionRequestSchema , updateWarehouseSettingSchema, createItemLimitSchema, updateItemLimitSchema, createNotificationSchedulerSchema, updateNotificationSchedulerSchema, getNotificationSchedulerSchema, createLinkSchema, updateLinkSchema, getLinksQuerySchema, createStorySchema, updateStorySchema, getStoriesQuerySchema, createWebViewSchema, updateWebViewSchema, getWebViewsQuerySchema, createRetailerRequestSchema, createPoliciesSchema, updatePoliciesSchema, updateRefundPoliciesSchema, createWebCategorySchema, updateWebCategorySchema, createWebQuickLinkSchema, updateWebQuickLinkSchema, createWebLocationSchema, updateWebLocationSchema, getWebLocationsQuerySchema, createContactUsSchema, updateContactUsSchema, getContactUsQuerySchema, createEmailConfigSchema, updateEmailConfigSchema, createEmailMarketingSchema, getEmailMarketingQuerySchema, createInventoryUPCSchema, updateInventoryUPCSchema, createEpickSettingSchema, getEpickSettingsQuerySchema, updateEpickSettingSchema, createErpUserSchema, updateErpUserSchema, createPOHeaderSchema } from '../validations/manager.validation';
 import { itemGlobalSchema, retailerSchema, salesRepSchema, warehouseProfileSchema } from '../validations/setting.validation';
 import { createRetailerProductCatalogSchema, updateRetailerProductCatalogSchema } from '../validations/retailer.validation';
@@ -314,7 +314,9 @@ router.delete('/epick-settings/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), cat
 router.post('/invoice-setting', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(createInvoiceSettingSchema), catchAsync(managerController.createInvoiceSetting.bind(managerController)));
 router.put('/invoice-setting/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(updateInvoiceSettingSchema), catchAsync(managerController.updateInvoiceSetting.bind(managerController)));
 // router.post('/pass-scan-items', verifyRole(ROLES.MANAGER,ROLES.SALES), catchAsync(managerController.putPassScanItem.bind(managerController)));
-router.post('/createCustomer', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.createCustomer.bind(managerController)));
+router.post('/createCustomer', verifyRole(ROLES.MANAGER, ROLES.SALES),
+  multerUpload.any(),
+  catchAsync(managerController.createCustomer.bind(managerController)));
 router.put('/updateUserAllowDiscount/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.updateUserAllowDiscount.bind(managerController)));
 
 // PO Header routes
@@ -334,7 +336,9 @@ router.post('/cancelOverrideRequest/:requestId', verifyRole(ROLES.MANAGER, ROLES
 // Ongoing Orders routes (Distributor/Admin)
 router.get('/ongoingOrders', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(epickController.getOngoingOrders.bind(epickController)));
 router.delete('/ongoingOrders/:orderNumber', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(epickController.removeOngoingOrder.bind(epickController)));
-router.put('/updateCustomer/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.updateCustomer.bind(managerController)));
+router.put('/updateCustomer/:id', verifyRole(ROLES.MANAGER, ROLES.SALES),
+  multerUpload.any(),
+  catchAsync(managerController.updateCustomer.bind(managerController)));
 
 // Driver CRUD routes
 router.post('/drivers', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(createDriverSchema), catchAsync(managerController.createDriver.bind(managerController)));
@@ -421,9 +425,10 @@ router.post('/setRetailerLocation', verifyToken, catchAsync(managerController.se
 
 //driver routes
 router.get('/getAllOrderForDriver', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getAllOrderForDriver.bind(managerController)));
-router.post('/getDeliverRouteByGoogleMap', validateRequest(createDeliveryRouteSchema), catchAsync(managerController.getDeliverRouteByGoogleMap.bind(managerController)));
-router.post('/createDeliveryRoute', catchAsync(managerController.createDeliveryRoute.bind(managerController)));
-router.post('/getDeliveryRoutes', catchAsync(managerController.getDeliveryRoutes.bind(managerController)));
+router.post('/getDeliverRouteByGoogleMap', verifyRole(ROLES.MANAGER, ROLES.SALES),validateRequest(createDeliveryRouteSchema), catchAsync(managerController.getDeliverRouteByGoogleMap.bind(managerController)));
+router.post('/createDeliveryRoute', verifyRole(ROLES.MANAGER, ROLES.SALES),catchAsync(managerController.createDeliveryRoute.bind(managerController)));
+router.post('/getDeliveryRoutes',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getDeliveryRoutes.bind(managerController)));
+router.get('/getRouteCreatedOrders',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getRouteCreatedOrders.bind(managerController)));
 
 router.get('/getARreports', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getARreports.bind(managerController)));
 router.get('/getARreportsHistory', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getARreportsHistory.bind(managerController)));
@@ -506,7 +511,7 @@ router.get('/currentOrderDetailStatus/:orderNumber', verifyRole(ROLES.MANAGER, R
 router.get('/poReceivingHistoryReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.poReceivingHistoryReport.bind(managerController)));
 router.get('/poTransferAdjustmentReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.poTransferAdjustmentReport.bind(managerController)));
 router.get('/poCigOtpReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.poCigOtpReport.bind(managerController)));
-router.get('/poAdjustItemGroupReport',  catchAsync(managerController.getPOAdjustItemGroupReport.bind(managerController)));
+router.get('/poAdjustItemGroupReport', catchAsync(managerController.getPOAdjustItemGroupReport.bind(managerController)));
 router.get('/poPendingOrdersReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getPOOpenOrdersReport.bind(managerController)));
 
 //Invoice Creation 
@@ -571,10 +576,14 @@ router.get('/salesInvoiceReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchA
 // Delivery Route routes
 router.put('/delivery-route/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.updateDeliveryRoute.bind(managerController)));
 
+// Setting routes
+router.put('/setting', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.updateSetting.bind(managerController)));
+router.get('/setting-delivery-address', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getSettingDeliveryAddress.bind(managerController)));
+
 // all three reports are in 'inventoryValuationOtpTotals' one report (OTP Total,Price Class Total, CIgarette w/stamp Totals)
-router.get('/inventoryValuationOtpTotals',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getInventoryWithStatusAndTax.bind(managerController)));
-router.get('/inventoryValuationExpirationDateReport',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getExpirationDateReport.bind(managerController)));
-router.get('/buyerGuideInventoryHistory',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.buyerGuideInventoryHistory.bind(managerController)));
+router.get('/inventoryValuationOtpTotals', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getInventoryWithStatusAndTax.bind(managerController)));
+router.get('/inventoryValuationExpirationDateReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getExpirationDateReport.bind(managerController)));
+router.get('/buyerGuideInventoryHistory', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.buyerGuideInventoryHistory.bind(managerController)));
 
 router.get('/velocityReportVendorGroup', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getVelocityReportVendorGroup.bind(managerController)));
 
@@ -593,8 +602,8 @@ router.get('/orderDeletedHistory', verifyRole(ROLES.MANAGER, ROLES.SALES), catch
 
 router.get('/lostSaleCurrentOrder', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getShortShippedOrders.bind(managerController)));
 
-router.get('/customerPricing',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerPricing.bind(managerController)));
+router.get('/customerPricing', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCustomerPricing.bind(managerController)));
 
-router.get('/itemGroupPromotionMaintenanceReport',verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getItemGroupPromotionMaintenanceReport.bind(managerController)));
+router.get('/itemGroupPromotionMaintenanceReport', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getItemGroupPromotionMaintenanceReport.bind(managerController)));
 
 export default router;

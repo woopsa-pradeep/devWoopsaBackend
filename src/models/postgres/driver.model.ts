@@ -10,6 +10,7 @@ interface DriverAttributes {
   isActive: boolean;
   currentLatitude: number | null;
   currentLongitude: number | null;
+  currentLocation: string | null;
 
   driverLicenseNo: string | null;
   licenseExpirationDate: Date | null;
@@ -26,6 +27,7 @@ type DriverCreation = Optional<
   | 'id'
   | 'currentLatitude'
   | 'currentLongitude'
+  | 'currentLocation'
   | 'driverLicenseNo'
   | 'licenseExpirationDate'
   | 'licenseClass'
@@ -47,6 +49,7 @@ export class Driver
   public isActive!: boolean;
   public currentLatitude!: number | null;
   public currentLongitude!: number | null;
+  public currentLocation!: string | null;
 
   public driverLicenseNo!: string | null;
   public licenseExpirationDate!: Date | null;
@@ -66,7 +69,10 @@ Driver.init(
       primaryKey: true,
     },
 
-   
+    currentLocation: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     firstName: {
       type: DataTypes.STRING,
       allowNull: false,

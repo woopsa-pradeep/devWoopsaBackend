@@ -16,10 +16,13 @@ interface DeliveryRouteAttributes {
   orderEndLong: number;
   totalKilometers: number;
   routeStatus: string;
-  routeGroupKey: string;  
+  routeGroupKey: string; 
+  totalMiles: number;
+  totalDurationInMinutes: number;
   splitIndex: number;
   totalStops: number;
   completedStops: number;
+  routeGroupId: number;
 
   isActive: boolean;
 }
@@ -58,10 +61,11 @@ export class DeliveryRoute
   public routeGroupKey!: string;
   public routeStatus!: string;
   public totalKilometers!: number;
-
+  public totalMiles!:number;
+  public totalDurationInMinutes!:number;
   public totalStops!: number;
   public completedStops!: number;
-
+  public routeGroupId!: number;
   public isActive!: boolean;
 }
 
@@ -78,6 +82,13 @@ DeliveryRoute.init(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    // Add this field in DeliveryRoute.init()
+
+routeGroupId: {
+  type: DataTypes.INTEGER,
+  allowNull: true,       // null for old routes, filled for new ones
+  defaultValue: null,
+},
 
     parentRouteId: {
       type: DataTypes.INTEGER,
@@ -166,6 +177,17 @@ DeliveryRoute.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+    },
+  
+    totalMiles: {
+      type: DataTypes.DECIMAL(10, 4),
+      allowNull: false,
+      defaultValue: 0,
+    },
+    totalDurationInMinutes: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
     },
   },
   {

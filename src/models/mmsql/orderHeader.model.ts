@@ -124,6 +124,7 @@ OrderHeader.init(
     EpickCompletedOn: { type: DataTypes.DATE, allowNull: true },
     OrderedOn: { type: DataTypes.DATE, allowNull: true },
     Order_Source: { type: DataTypes.INTEGER, allowNull: true },
+    route_created: { type: DataTypes.BOOLEAN, defaultValue: false },
   },
   {
     sequelize,

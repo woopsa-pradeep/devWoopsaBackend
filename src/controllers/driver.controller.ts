@@ -15,4 +15,41 @@ async getDriverOrderList(req: AuthRequest, res: Response) {
     sendResponse(res, 200, true, data, General.SUCCESS);
 }
 
+async updateDriverLatLong(req: AuthRequest, res: Response) {
+    const data = await this.driverService.updateDriverLatLong(req.user.id, req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async getTodayDriverOrders(req: AuthRequest, res: Response) {
+    const driverId = Number(req.user?.id);
+    const data = await this.driverService.getTodayDriverOrders(driverId);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async startNavigation(req: AuthRequest, res: Response) {
+    const data = await this.driverService.startNavigation(Number(req.params.routeId), req.user.id);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async getRouteFullDetails(req: AuthRequest, res: Response) {
+    const data = await this.driverService.getRouteFullDetails(Number(req.params.routeId));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async getDriverDashboardDetails(req: AuthRequest, res: Response) {
+    const driverId = Number(req.user?.id);
+    const data = await this.driverService.dashboardDetails(driverId);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async previewMultiDriverRoutes(req: AuthRequest, res: Response) {
+    const data = await this.driverService.previewMultiDriverRoutes(req.body );
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
+async createMultiDriverRoutes(req: AuthRequest, res: Response) {
+    const data = await this.driverService.createMultiDriverRoutes(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+}
+
 }

@@ -207,6 +207,7 @@ export class HomeService {
                     product_number: e.Item_Number.toString(),
                     isAllow: true
                 },
+                order: [['id', 'DESC']],
             });
 
             return {

@@ -1184,5 +1184,38 @@ export class AuthService {
     };
   }
 
+  async driverLogin(body: any) {
+    const { email, password } = body;
+
+    const isDriverExist = await Driver.findOne({
+      where: { email: email.toLowerCase(), isActive: true },
+    });
+
+    if (!isDriverExist) {
+      throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
+    }
+
+    const isPasswordMatch = await comparePassword(password, isDriverExist.password);
+    if (!isPasswordMatch) {
+      throw new AppError(AuthMessage.INVALID_PASS_EMAIL, 400);
+    }
+
+    const token = generateToken({
+      id: isDriverExist.id,
+      role: "driver",
+    });
+
+    return {
+      token,
+      role: "driver",
+      driverId: isDriverExist.id,
+      profile: {
+        id: isDriverExist.id,
+        firstName: isDriverExist.firstName,
+        lastName: isDriverExist.lastName,
+        email: isDriverExist.email,
+      },
+    };
+  }
 
 }

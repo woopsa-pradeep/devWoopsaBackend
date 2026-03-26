@@ -4798,7 +4798,11 @@ export class EpickService {
     // Get all completed orders from OrderPick (epick completed)
     const completedOrders = await OrderPick.findAll({
       where: {
-        status: 'completed' // Only get completed orders (already picked by epick)
+        // Only get completed or ready for delivery orders (already picked by epick)
+        [Op.or]: [
+          { status: 'completed' },
+          { status: 'ready_for_delivery' }
+        ]
       },
       attributes: ['orderNumber', 'startedAt', 'completedAt'],
       raw: false,
@@ -5016,7 +5020,11 @@ export class EpickService {
     const orderPick = await OrderPick.findOne({
       where: {
         orderNumber: orderNumber,
-        status: 'completed' // Epick must be completed
+       // Epick must be completed or ready for delivery    
+        [Op.or]: [
+          { status: 'completed' },
+          { status: 'ready_for_delivery' }
+        ]
       },
       attributes: ['orderNumber', 'status', 'startedAt', 'completedAt']
     });

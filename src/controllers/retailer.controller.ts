@@ -23,17 +23,17 @@ export class RetailerController {
   }
 
   async getInventoryItems(req: AuthRequest, res: Response) {
-    const data = await this.retailerService.getInventoryItems(req.body,req.user);
+    const data = await this.retailerService.getInventoryItems(req.body, req.user);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
   async getTradeShowItems(req: AuthRequest, res: Response) {
-    const data = await this.retailerService.getTradeShowItems(req.body,req.user);
+    const data = await this.retailerService.getTradeShowItems(req.body, req.user);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
   async getInventoryShowPrepaidTax(req: AuthRequest, res: Response) {
-  const data = await this.retailerService.getInventoryShowPrepaidTax(req.user);
+    const data = await this.retailerService.getInventoryShowPrepaidTax(req.user);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
@@ -148,7 +148,6 @@ export class RetailerController {
     const data = await this.retailerService.getCartItemById(Number(id));
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
-  
 
   async getCartSummary(req: AuthRequest, res: Response) {
     const data = await this.retailerService.getCartSummary(req.user.id);
@@ -179,10 +178,10 @@ export class RetailerController {
     const data = await this.retailerService.getOrderHistoryByOrderNumber(Number(req.params.id), req.query as PaginationOptions);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
-   async getAccountReceivablesList(req: AuthRequest, res: Response) {
-  const data = await this.retailerService.getAccountReceivablesList(req.query as PaginationOptions, req);
-  sendResponse(res, 200, true, data, Manager.FETCH_AR_LIST_SUCCESS);
-}
+  async getAccountReceivablesList(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.getAccountReceivablesList(req.query as PaginationOptions, req);
+    sendResponse(res, 200, true, data, Manager.FETCH_AR_LIST_SUCCESS);
+  }
 
   async getOrderedProducts(req: AuthRequest, res: Response) {
     const data = await this.retailerService.getOrderedProducts(req.user.id, req.body);
@@ -195,25 +194,25 @@ export class RetailerController {
   }
 
   async scanItemByBarcode(req: AuthRequest, res: Response) {
-    const data = await this.retailerService.scanItemByBarcode(req.params.id,req.user.id);
+    const data = await this.retailerService.scanItemByBarcode(req.params.id, req.user.id);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
   async addMultipleItems(req: AuthRequest, res: Response) {
-  try {
-    const data = await this.retailerService.addMultipleItems(req.user.id, req.body);
-    sendResponse(res, 200, true, data, "Items added successfully");
-  } catch (error: any) {
-    sendResponse(res, 500, false, null, error.message || "Something went wrong");
+    try {
+      const data = await this.retailerService.addMultipleItems(req.user.id, req.body);
+      sendResponse(res, 200, true, data, "Items added successfully");
+    } catch (error: any) {
+      sendResponse(res, 500, false, null, error.message || "Something went wrong");
+    }
   }
-}
 
   async addToCartByScanner(req: AuthRequest, res: Response) {
     const data = await this.retailerService.addToCartByScanner(req.params.id, req.user.id);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
-  
+
   async addToCartMultiScanner(req: AuthRequest, res: Response) {
     const data = await this.retailerService.addToCartMultiScanner(req.body, req.user.id);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -252,7 +251,7 @@ export class RetailerController {
   }
 
   async createSupportTicket(req: AuthRequest, res: Response) {
-    const data = await this.retailerService.createSupportTicket(req.body, req.user.id,req.file);
+    const data = await this.retailerService.createSupportTicket(req.body, req.user.id, req.file);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
@@ -263,8 +262,8 @@ export class RetailerController {
 
   async getPdfOfOrderDetails(req: AuthRequest, res: Response) {
     try {
-      const { orderNumber, hasPrice, orientation,invoiceGenerated } = req.query;
-      
+      const { orderNumber, hasPrice, orientation, invoiceGenerated } = req.query;
+
       if (!orderNumber) {
         return sendResponse(res, 400, false, null, "Order number is required");
       }
@@ -356,13 +355,13 @@ export class RetailerController {
   }
 
   async getSalesCategoryPriceClassByCustomer(req: AuthRequest, res: Response) {
-    const customerNumber = req.params.customerNumber ;
+    const customerNumber = req.params.customerNumber;
     const data = await this.retailerService.getSalesCategoryPriceClassByCustomer(Number(customerNumber));
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
   async getSalesCategoryByCustomer(req: AuthRequest, res: Response) {
-    const customerNumber = req.params.customerNumber ;
+    const customerNumber = req.params.customerNumber;
     const data = await this.retailerService.getSalesCategoryByCustomer(Number(customerNumber));
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
@@ -380,7 +379,7 @@ export class RetailerController {
   async createRetailerDocuments(req: AuthRequest, res: Response) {
     const data = await this.retailerService.createRetailerDocuments(req.body);
     sendResponse(res, 201, true, data, General.SUCCESS);
-  } 
+  }
 
   async getTradeShow(req: AuthRequest, res: Response) {
     const data = await this.retailerService.getTradeShow();

@@ -13,10 +13,15 @@ interface DeliveryRouteStopAttributes {
   longitude: number;
   notes?: string;
   status: string;
+  startLatitude: number;
+  startLongitude: number;
   routeName: string;
+  endLatitude: number;
+  endLongitude: number;
   arrivedAt?: Date | null;
+  isLastStop: boolean;
   deliveredAt?: Date | null;
-
+  day: Date;
   isActive: boolean;
 }
 
@@ -46,9 +51,15 @@ export class DeliveryRouteStop
   public routeName!: string;
   public longitude!: number;
   public totalKilometers!: number;
+  public day!: Date;
   public status!: string;
+  public startLatitude!: number;
+  public startLongitude!: number;
+  public endLatitude!: number;
+  public endLongitude!: number;
 
   public arrivedAt!: Date | null;
+  public isLastStop!: boolean;
   public deliveredAt!: Date | null;
 
   public isActive!: boolean;
@@ -58,6 +69,8 @@ export enum DeliveryStopStatus {
   DELIVERED = 'delivered',
   SKIPPED = 'skipped',
   FAILED = 'failed',
+  RETURNED = 'returned',
+  IN_PROGRESS = 'in_progress',
 }
   
 
@@ -68,6 +81,11 @@ DeliveryRouteStop.init(
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
+    },
+    day: {
+      type: DataTypes.DATEONLY,
+      allowNull: false,
+      defaultValue: new Date(),
     },
 
     routeName: {
@@ -105,6 +123,22 @@ DeliveryRouteStop.init(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    startLatitude: {
+      type: DataTypes.DECIMAL(9, 6),
+      allowNull: false,
+    },
+    startLongitude: {
+      type: DataTypes.DECIMAL(9, 6),
+      allowNull: false,
+    },
+    endLatitude: {
+      type: DataTypes.DECIMAL(9, 6),
+      allowNull: false,
+    },
+    endLongitude: {
+      type: DataTypes.DECIMAL(9, 6),
+      allowNull: false,
+    },
 
     latitude: {
       type: DataTypes.DECIMAL(9, 6),
@@ -115,13 +149,20 @@ DeliveryRouteStop.init(
       type: DataTypes.DECIMAL(9, 6),
       allowNull: false,
     },
+    isLastStop: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
 
     status: {
       type: DataTypes.ENUM(
         DeliveryStopStatus.NOT_DELIVERED,
         DeliveryStopStatus.DELIVERED,
         DeliveryStopStatus.SKIPPED,
-        DeliveryStopStatus.FAILED
+        DeliveryStopStatus.FAILED,
+        DeliveryStopStatus.RETURNED,
+        DeliveryStopStatus.IN_PROGRESS
       ),
       allowNull: false,
       defaultValue: DeliveryStopStatus.NOT_DELIVERED,

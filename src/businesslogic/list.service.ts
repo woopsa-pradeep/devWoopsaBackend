@@ -45,6 +45,7 @@ import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Driver } from "../models/postgres/driver.model";
 import { Vehicle } from "../models/postgres/vehicle.model";
+import { OrderType } from "../models/mmsql/orderType.model";
 
 export class ListService {
 
@@ -812,7 +813,7 @@ export class ListService {
       "Price19"]
   }
 
-  async getListOfOrderReports(){
+  async getListOfOrderReports() {
     const routes = await Route.findAll({
       attributes: ['Route_Number'],
       order: [['Route_Number', 'ASC']]
@@ -824,7 +825,7 @@ export class ListService {
     })
 
     const orderSource = await Order_Source.findAll({
-      attributes: ['Order_Source','Source_Description'],
+      attributes: ['Order_Source', 'Source_Description'],
       order: [['Order_Source', 'ASC']]
     })
 
@@ -843,18 +844,24 @@ export class ListService {
       order: [['V_Description', 'ASC']]
     })
 
+    const orderType = await OrderType.findAll({
+      attributes: ['Order_Type', 'Type_Description'],
+      order: [['Type_Description', 'ASC']]
+    })
+
     return {
       routes,
       salesRep,
       orderSource,
       priceClass,
       otherTaxes,
-      vendor
+      vendor,
+      orderType,
     }
   }
 
 
-  async getDriverList(){
+  async getDriverList() {
     const drivers = await Driver.findAll({
       attributes: ['id', 'firstName', 'lastName'],
       order: [['firstName', 'ASC']]
@@ -862,9 +869,9 @@ export class ListService {
     return drivers;
   }
 
-  async getVehicleList(){
+  async getVehicleList() {
     const vehicles = await Vehicle.findAll({
-      attributes: ['id', 'description','vinNumber'],
+      attributes: ['id', 'description', 'vinNumber'],
       order: [['description', 'ASC']]
     })
     return vehicles;

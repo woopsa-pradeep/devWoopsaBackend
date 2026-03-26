@@ -3846,3 +3846,12 @@ export const getProductDiscountsQuerySchema = Joi.object({
     'boolean.base': 'isActive must be a boolean',
   }),
 });
+
+// CreateCustomer validation schema
+export const createCustomerSchema = Joi.object({
+  C_Name: Joi.string().required().messages({
+    'string.base': 'Customer name must be a string',
+    'any.required': 'Customer name is required',
+    'string.empty': 'Customer name cannot be empty',
+  }),
+}).options({ allowUnknown: true });

@@ -125,3 +125,19 @@ export const signUpValidation = Joi.object({
       'any.required': 'Account number is required',
     }),
 });
+
+export const updateDriverLatLongSchema = Joi.object({
+  currentLocation: Joi.string().trim().required().messages({
+    "string.base": "Current location must be a string",
+    "string.empty": "Current location is required",
+    "any.required": "Current location is required",
+  }),
+  currentLatitude: Joi.number().required().messages({
+    "number.base": "Current latitude must be a number",
+    "any.required": "Current latitude is required",
+  }),
+  currentLongitude: Joi.number().required().messages({
+    "number.base": "Current longitude must be a number",
+    "any.required": "Current longitude is required",
+  }),
+});

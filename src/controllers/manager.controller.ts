@@ -1200,7 +1200,11 @@ export class ManagerController {
   }
 
   async createCustomer(req: AuthRequest, res: Response) {
-    const data = await this.managerService.createCustomer(req.body);
+    const body = req.body.jsonData ? JSON.parse(req.body.jsonData) : req.body;
+    if (!body.C_Name) {
+      throw new AppError('Customer name is required', 400);
+    }
+    const data = await this.managerService.createCustomer({ ...body, files: req.files });
     sendResponse(res, 201, true, data, 'Customer created successfully');
   }
 
@@ -1210,7 +1214,8 @@ export class ManagerController {
   }
 
   async updateCustomer(req: AuthRequest, res: Response) {
-    const data = await this.managerService.updateCustomer(req.body, Number(req.params.id));
+    const body = req.body.jsonData ? JSON.parse(req.body.jsonData) : req.body;
+    const data = await this.managerService.updateCustomer({ ...body, files: req.files }, Number(req.params.id));
     sendResponse(res, 200, true, data, 'Customer updated successfully');
   }
   async updateVendor(req: AuthRequest, res: Response) {
@@ -1548,6 +1553,11 @@ export class ManagerController {
   async getDeliverRouteByGoogleMap(req: AuthRequest, res: Response) {
     const data = await this.managerService.getDeliverRouteByGoogleMap(req.body);
     sendResponse(res, 200, true, data, 'Deliver route by google map fetched successfully');
+  }
+
+  async getRouteCreatedOrders(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getRouteCreatedOrders(req.query as PaginationOptions);
+    sendResponse(res, 200, true, data, 'Route created orders fetched successfully');
   }
 
   async createDeliveryRoute(req: AuthRequest, res: Response) {
@@ -2108,6 +2118,7 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  
   async getInventoryWithStatusAndTax(req: AuthRequest, res: Response) {
     const data = await this.managerService.getInventoryWithStatusAndTax(req.query);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -2189,6 +2200,17 @@ export class ManagerController {
   }
   async updateDeliveryRoute(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateDeliveryRoute(Number(req.params.id), req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+
+  async updateSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateSetting(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getSettingDeliveryAddress(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getSettingDeliveryAddress();
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 

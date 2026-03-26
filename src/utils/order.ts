@@ -156,7 +156,7 @@ export const getDefaultOrderDetailValues = (): OrderDetailDefaultValues => {
   // const now = dayjs().format("YYYY-MM-DD HH:mm:ss");
 
   const defaults: OrderDetailDefaultValues = {
-    
+
 
     Inventory_QtyDeductRegular: 0,
     Inventory_QtyDeductPrepaid: 0,
@@ -179,7 +179,7 @@ export const getDefaultOrderDetailValues = (): OrderDetailDefaultValues => {
     Tote_ID: 0,
     Special_ID: 0,
     Order_Number_Legacy: 0,
-  
+
     PPD_Packs: 0,
     Prebook_ID: 0,
     MergedFromOrder: 0,
@@ -206,8 +206,8 @@ export const sendEmailToOrder = async (
       orderHeaderCreated.Order_Source === 12
         ? 'App'
         : orderHeaderCreated.Order_Source === 13
-        ? 'Web'
-        : 'ERP';
+          ? 'Web'
+          : 'ERP';
 
     // 1️⃣ Generate PDF for customer
     const pdfPath = await PuppeteerPDFGenerator.generateOrderRequestPDF(
@@ -229,9 +229,9 @@ export const sendEmailToOrder = async (
     if (customer.C_Email) {
       const sendCustomer = process.env.SEND_CUSTOMER_EMAIL === 'true';
       let sendCustomerEmail = sendCustomer ? customer.C_Email : process.env.EMAIL_FROM || "WOOPSA TEAM";
-      console.log(sendCustomerEmail,'sendCustomerEmail');
+      console.log(sendCustomerEmail, 'sendCustomerEmail');
       await sendEmail({
-         to: sendCustomerEmail,
+        to: sendCustomerEmail,
         subject: `Order Confirmation #${orderHeaderCreated.Order_Number} - WOOPSA`,
         html: customerEmailHtml,
         attachments: [
@@ -296,15 +296,15 @@ export const sendEmailToReturnOrder = async (
   orderHeaderCreated: any,
   orderDetails: any[],
   customer: any,
-  Delivery_Charge: number
+  // Delivery_Charge: number
 ) => {
   try {
     const orderSource =
       orderHeaderCreated.Order_Source === 12
         ? 'App'
         : orderHeaderCreated.Order_Source === 13
-        ? 'Web'
-        : 'ERP';
+          ? 'Web'
+          : 'ERP';
 
     // 1️⃣ Generate PDF for customer
     const pdfPath = await PuppeteerPDFGenerator.generateOrderRequestPDF(
@@ -324,15 +324,15 @@ export const sendEmailToReturnOrder = async (
       orderSource,
       orderDetails
     );
-    
+
 
     // 3️⃣ Send email to customer (if email exists)
     if (customer.C_Email) {
       const sendCustomer = process.env.SEND_CUSTOMER_EMAIL === 'true';
       let sendCustomerEmail = sendCustomer ? customer.C_Email : process.env.EMAIL_FROM || "WOOPSA TEAM";
-      console.log(sendCustomerEmail,'sendCustomerEmail');
+      console.log(sendCustomerEmail, 'sendCustomerEmail');
       await sendEmail({
-         to: sendCustomerEmail,
+        to: sendCustomerEmail,
         subject: `Order Confirmation #${orderHeaderCreated.Order_Number} `,
         html: returnEmailHtml,
         attachments: [
@@ -367,7 +367,7 @@ export const sendEmailToReturnOrder = async (
       new Date(orderHeaderCreated.Order_Date).toLocaleDateString(),
       orderSource,
       orderDetails,
-      Delivery_Charge
+      // Delivery_Charge
     );
 
     const distributorEmail = distributor?.D_Email || 'distributor@yopmail.com';

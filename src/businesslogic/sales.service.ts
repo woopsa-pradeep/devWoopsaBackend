@@ -1663,32 +1663,32 @@ export class SalesService {
       jurisdiction = '',
       salesCategory = [],
     } = query;
-  
+
     // ─── Normalize array IDs to numbers up front ──────────────────────────────
     if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0)
       salesCategoryId = salesCategoryId.map(Number);
-  
+
     if (Array.isArray(priceClassId) && priceClassId.length > 0)
       priceClassId = priceClassId.map(Number);
-  
-    page  = Number(page);
+
+    page = Number(page);
     limit = Number(limit);
-  
+
     // ─── Parallel bootstrap queries ───────────────────────────────────────────
     const [setting, userJurisdiction, topLatestItems] = await Promise.all([
       Setting.findOne({}),           // single fetch — reused for both wareHouseSetting & splitSearchOption
       getJurisdiction(customerId),
       getTopLatestItems(),
     ]);
-  
+
     const wareHouseSetting = setting?.dataValues ?? null;
-  
+
     // ─── Base whereClause ─────────────────────────────────────────────────────
     let whereClause: any = {
       I_Inactive: false,
       ShortOrderForm: true,
     };
-  
+
     // ─── Exclusion filters (run in parallel) ──────────────────────────────────
     const [userExcluded, customerExcluded] = await Promise.all([
       excludeItemByUser(customerId),
@@ -1696,30 +1696,30 @@ export class SalesService {
         ? getCustomerExcludeItem(state as string, zip as string, jurisdiction as number)
         : Promise.resolve([]),
     ]);
-  
+
     const allExcluded = [...new Set([...userExcluded, ...customerExcluded])];
     if (allExcluded.length > 0)
       whereClause.Item_Number = { [Op.notIn]: allExcluded };
-  
+
     // ─── Search / filter logic ────────────────────────────────────────────────
     let searchInUPC = false;
-    let orderClause: Order = [['Date_Created', 'DESC'] as const];
-  
+    let orderClause: Order = [['Date_Created', 'DESC'] as const, ['Item_Number', 'ASC'] as const];
+
     if (masterSearch && typeof masterSearch === 'string') {
       whereClause.Item_Number = { [Op.in]: masterSearch.split(',').map(s => s.trim()) };
-  
+
       if (Array.isArray(salesCategory) && salesCategory.length > 0)
         whereClause.Sales_Category = { [Op.in]: salesCategory };
-  
+
     } else {
       // ── Category / price-class filters ────────────────────────────────────
-      const hasCatFilter   = Array.isArray(salesCategoryId) && salesCategoryId.length > 0;
-      const hasPriceFilter = Array.isArray(priceClassId)    && priceClassId.length    > 0;
-  
+      const hasCatFilter = Array.isArray(salesCategoryId) && salesCategoryId.length > 0;
+      const hasPriceFilter = Array.isArray(priceClassId) && priceClassId.length > 0;
+
       if (hasCatFilter && hasPriceFilter) {
         // FIX: was overwriting base flags (I_Inactive / ShortOrderForm) — keep them
         whereClause.Sales_Category = { [Op.in]: salesCategoryId };
-        whereClause.Price_Class    = { [Op.in]: priceClassId };
+        whereClause.Price_Class = { [Op.in]: priceClassId };
       } else if (hasCatFilter) {
         whereClause.Sales_Category = { [Op.in]: salesCategoryId };
       } else if (hasPriceFilter) {
@@ -1727,36 +1727,36 @@ export class SalesService {
       } else if (Array.isArray(salesCategory) && salesCategory.length > 0) {
         whereClause.Sales_Category = { [Op.in]: salesCategory };
       }
-  
+
       // ── Text / UPC search ─────────────────────────────────────────────────
       if (search) {
         if (/^\d{8,}$/.test(search)) {
           searchInUPC = true;
         } else {
-          const term      = search.toLowerCase().trim();
-          const anywhere  = `%${term}%`;
-          const starts    = `${term}%`;
-          const esc       = (s: string) => s.replace(/'/g, "''");
+          const term = search.toLowerCase().trim();
+          const anywhere = `%${term}%`;
+          const starts = `${term}%`;
+          const esc = (s: string) => s.replace(/'/g, "''");
           const startsEsc = esc(starts);
-          const anyEsc    = esc(anywhere);
-  
+          const anyEsc = esc(anywhere);
+
           if (wareHouseSetting?.splitSearchOption === true) {
             // ── Split-token search ───────────────────────────────────────────
             const tokens = term.split(/\s+/).filter(Boolean);
-  
+
             whereClause[Op.and] = tokens.map(tok => ({
               [Op.or]: ['Description', 'AltDesc', 'ALT_Description2', 'Item_Number'].flatMap(field => [
-                Sequelize.where(Sequelize.fn('LOWER', Sequelize.col(field)), { [Op.like]: `${tok}%`   }),
+                Sequelize.where(Sequelize.fn('LOWER', Sequelize.col(field)), { [Op.like]: `${tok}%` }),
                 Sequelize.where(Sequelize.fn('LOWER', Sequelize.col(field)), { [Op.like]: `% ${tok}%` }),
               ]),
             }));
-  
+
             const fields = ['Description', 'AltDesc', 'ALT_Description2', 'Item_Number'];
             const rankSql = tokens
               .map(tok => {
-                const s  = `'${esc(tok)}%'`;
+                const s = `'${esc(tok)}%'`;
                 const ws = `'% ${esc(tok)}%'`;
-                const a  = `'%${esc(tok)}%'`;
+                const a = `'%${esc(tok)}%'`;
                 // Qualify with the Inventory alias to avoid ambiguous column errors after joins.
                 const any = (tpl: string) => fields
                   .map(f => `LOWER([Inventory].[${f}]) LIKE ${tpl}`)
@@ -1764,21 +1764,22 @@ export class SalesService {
                 return `(CASE WHEN (${any(s)}) THEN 0 WHEN (${any(ws)}) THEN 1 WHEN (${any(a)}) THEN 2 ELSE 3 END)`;
               })
               .join(' + ');
-  
+
             orderClause = [
               [literal(rankSql), 'ASC'],
               [col('Inventory.Description'), 'ASC'],
+              ['Item_Number', 'ASC'],
             ] as Order;
-  
+
           } else {
             // ── Standard full-term search ────────────────────────────────────
             whereClause[Op.or] = [
-              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('Item_Number')),      { [Op.like]: anywhere }),
-              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('Description')),      { [Op.like]: anywhere }),
-              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('AltDesc')),          { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('Item_Number')), { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('Description')), { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('AltDesc')), { [Op.like]: anywhere }),
               Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('ALT_Description2')), { [Op.like]: anywhere }),
             ];
-  
+
             orderClause = [
               [
                 Sequelize.literal(`
@@ -1791,18 +1792,19 @@ export class SalesService {
                 'ASC',
               ],
               [col('Inventory.Description'), 'ASC'],
+              ['Item_Number', 'ASC'],
             ] as Order;
           }
         }
       }
     }
-  
+
     // ─── Sort override (only when no text search) ─────────────────────────────
     if (!search) {
-      if      (Number(shortBy) === 1) orderClause = [[col('Inventory.Description'), 'ASC']]  as Order;
-      else if (Number(shortBy) === 2) orderClause = [[col('Inventory.Description'), 'DESC']] as Order;
+      if (Number(shortBy) === 1) orderClause = [[col('Inventory.Description'), 'ASC'], ['Item_Number', 'ASC']] as Order;
+      else if (Number(shortBy) === 2) orderClause = [[col('Inventory.Description'), 'DESC'], ['Item_Number', 'ASC']] as Order;
     }
-  
+
     // ─── UPC join ─────────────────────────────────────────────────────────────
     const includeUPC = {
       model: InventoryUPC,
@@ -1814,12 +1816,12 @@ export class SalesService {
       },
       required: searchInUPC,
     };
-  
+
     const sharedWhere = { ...whereClause, I_Inactive: false, ShortOrderForm: true };
-  
+
     // ─── Count ────────────────────────────────────────────────────────────────
     let totalCount: number;
-  
+
     if (searchInUPC) {
       const counted = await Inventory.findAll({
         attributes: ['Item_Number'],
@@ -1833,7 +1835,7 @@ export class SalesService {
     } else {
       totalCount = await Inventory.count({ where: sharedWhere, logging: false });
     }
-  
+
     // ─── Main product query ───────────────────────────────────────────────────
     const productList = await Inventory.findAll({
       attributes: [
@@ -1842,13 +1844,13 @@ export class SalesService {
         'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'Unit_Price',
         'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
         'OTP_Number', 'Price_Subclass', 'UnitOunces', 'Sales_Category', 'EBT',
-        'Cig_Pack', 'Cig_Sticks','ALT_Description2','AltDesc',
+        'Cig_Pack', 'Cig_Sticks', 'ALT_Description2', 'AltDesc',
       ],
       where: sharedWhere,
       include: [
-        { model: SalesCategory,    as: 'SalesCategory',    attributes: ['Category_Desc', 'Sales_Category'], required: false },
-        { model: PriceClass,       as: 'PriceClass',       attributes: ['Class_Desc'],                      required: false },
-        { model: InventoryStatus,  as: 'inventoryStatus',  attributes: ['Inventory_OnHand'],                required: false },
+        { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc', 'Sales_Category'], required: false },
+        { model: PriceClass, as: 'PriceClass', attributes: ['Class_Desc'], required: false },
+        { model: InventoryStatus, as: 'inventoryStatus', attributes: ['Inventory_OnHand'], required: false },
         includeUPC,
       ],
       order: orderClause,
@@ -1856,9 +1858,9 @@ export class SalesService {
       offset: (page - 1) * limit,
       logging: false,
     });
-  
+
     const itemNumbers = productList.map((e: any) => e.Item_Number);
-  
+
     // ─── Batch all per-page async lookups in parallel ─────────────────────────
     const [productImages, inventoryOnHandMap, productLimitsMap] =
       await Promise.all([
@@ -1869,85 +1871,85 @@ export class SalesService {
         getBatchProductLimits(itemNumbers),
         // getBatchProductDiscountsFromRedis(itemNumbers),
       ]);
-  
+
     const imageMap = new Map(productImages.map((img: any) => [img.product_number, img]));
-  
+
     // ─── Per-item mapping ─────────────────────────────────────────────────────
     const finalProductList = await Promise.all(
       productList.map(async (e: any) => {
-        const itemStr         = e.Item_Number.toString();
-        const productImage  :any   = imageMap.get(itemStr) ?? null;
+        const itemStr = e.Item_Number.toString();
+        const productImage: any = imageMap.get(itemStr) ?? null;
         const inventoryOnHand = inventoryOnHandMap[e.Item_Number] ?? 0;
-        const productLimit    = productLimitsMap[e.Item_Number]   ?? null;
-        const discount        = false;
-  
+        const productLimit = productLimitsMap[e.Item_Number] ?? null;
+        const discount = false;
+
         // Discount → fallback to first valid price
         const price = (await getDiscount(e.Item_Number, customerId)) ?? (await getFirstValidPrice(e));
-  
+
         // Tax rate + prepaid tax rate — independent of each other, run in parallel
         const taxRateRaw = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
-        const taxRate    = Math.ceil(taxRateRaw * 100) / 100;
+        const taxRate = Math.ceil(taxRateRaw * 100) / 100;
         const prepaidTaxRate = (userJurisdiction != null && e.SalesCategory)
           ? await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory.Sales_Category, e, price + taxRate)
           : 0;
-  
+
         const priceWithTax = price + taxRate;
-  
+
         const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerId, priceWithTax);
-  
+
         const allowToOrder =
           wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
-  
+
         const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
-  
+
         return {
-          Pack:              e.Pack,
-          Description:       e.Description,
-          Item_Number:       e.Item_Number,
-          CaseCount:         e.CaseCount,
-          UOM:               e.UOM,
+          Pack: e.Pack,
+          Description: e.Description,
+          Item_Number: e.Item_Number,
+          CaseCount: e.CaseCount,
+          UOM: e.UOM,
           hasPrepaidTaxRate: prepaidTaxRate > 0,
           prepaidTaxRate,
-          Retail1:           e.Retail1,
-          Retail2:           e.Retail2,
-          Retail3:           e.Retail3,
-          CasesPerPallet:    e.CasesPerPallet,
-          isDiscounted:      false,
-          Price1:            e.Price1,
-          Tax_Rate:          taxRate,
-          OTP_Number:        e.OTP_Number,
+          Retail1: e.Retail1,
+          Retail2: e.Retail2,
+          Retail3: e.Retail3,
+          CasesPerPallet: e.CasesPerPallet,
+          isDiscounted: false,
+          Price1: e.Price1,
+          Tax_Rate: taxRate,
+          OTP_Number: e.OTP_Number,
           price,
-          Unit_Price:        e.Unit_Price,
-          hasProductLimit:   productLimit !== null && productLimit > 0 ? true : false,
+          Unit_Price: e.Unit_Price,
+          hasProductLimit: productLimit !== null && productLimit > 0 ? true : false,
           productLimit,
-          EBT:               e.EBT,
+          EBT: e.EBT,
           priceWithTax,
-          BaseCost:          e.BaseCost,
-          Invoice_Cost:      e.Invoice_Cost,
-          UnitOunces:        e.UnitOunces,
-          AvgCost:           e.AvgCost,
-          NetCost:           e.NetCost,
-          productDiscount:   discount,
-          UPCList:           e.UPCList,
-          Inventory_OnHand:  inventoryOnHand,
+          BaseCost: e.BaseCost,
+          Invoice_Cost: e.Invoice_Cost,
+          UnitOunces: e.UnitOunces,
+          AvgCost: e.AvgCost,
+          NetCost: e.NetCost,
+          productDiscount: discount,
+          UPCList: e.UPCList,
+          Inventory_OnHand: inventoryOnHand,
           allowToOrder,
-          hasQtyDiscount:    discount ? false : hasQtyDiscount.allowToDiscount,
-          qtyDiscount:       hasQtyDiscount,
-          showTheInventoryStock: wareHouseSetting?.salesRep?.showStock          ?? false,
-          showLowStock:          wareHouseSetting?.salesRep?.showStock
-                                   ? false
-                                   : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
-          showWithOutPrice:      wareHouseSetting?.salesRep?.showWithOutPrice   ?? false,
-          SalesCategory:         e.SalesCategory?.Category_Desc                 ?? null,
-          PriceClass:            e.PriceClass?.Class_Desc                       ?? null,
-          showDistributorImage:  productImage?.isAllow                          ?? false,
-          distributorImage:      productImage?.img_url                          ?? null,
-          masterImage:           `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+          hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
+          qtyDiscount: hasQtyDiscount,
+          showTheInventoryStock: wareHouseSetting?.salesRep?.showStock ?? false,
+          showLowStock: wareHouseSetting?.salesRep?.showStock
+            ? false
+            : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+          showWithOutPrice: wareHouseSetting?.salesRep?.showWithOutPrice ?? false,
+          SalesCategory: e.SalesCategory?.Category_Desc ?? null,
+          PriceClass: e.PriceClass?.Class_Desc ?? null,
+          showDistributorImage: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url ?? null,
+          masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
           isNewItem,
         };
       }),
     );
-  
+
     return {
       totalCount,
       page,
@@ -2642,38 +2644,38 @@ export class SalesService {
   //     zip,
   //     jurisdiction,
   //   } = query;
-  
+
   //   if (!search)
   //     return {
   //       totalCount: 0,
   //       finalProductList: [],
   //     };
-  
+
   //   page  = Number(page);
   //   limit = Number(limit);
-  
+
   //   // ─── Parallel bootstrap ───────────────────────────────────────────────────
   //   const [setting, userJurisdiction, topLatestItems] = await Promise.all([
   //     Setting.findOne({}),
   //     getJurisdiction(customerId),
   //     getTopLatestItems(),
   //   ]);
-  
+
   //   const wareHouseSetting = setting?.dataValues ?? null;
-  
+
   //   // ─── Base whereClause ─────────────────────────────────────────────────────
   //   let whereClause: any = {
   //     I_Inactive: false,
   //     ShortOrderForm: true,
   //   };
-  
+
   //   if (salesCategory.length > 0)
   //     whereClause.Sales_Category = { [Op.in]: salesCategory };
-  
+
   //   // ─── masterSearch ─────────────────────────────────────────────────────────
   //   if (masterSearch && typeof masterSearch === 'string')
   //     whereClause.Item_Number = { [Op.in]: masterSearch.split(',').map(s => s.trim()) };
-  
+
   //   // ─── Exclusion filters (parallel) ────────────────────────────────────────
   //   const [customerExcluded, userExcluded] = await Promise.all([
   //     (state || zip || jurisdiction)
@@ -2681,14 +2683,14 @@ export class SalesService {
   //       : Promise.resolve([]),
   //     excludeItemByUser(Number(customerId)),
   //   ]);
-  
+
   //   const allExcluded = [...new Set([...customerExcluded, ...userExcluded])];
   //   if (allExcluded.length > 0)
   //     whereClause.Item_Number = { [Op.notIn]: allExcluded };
-  
+
   //   // ─── Search / UPC ─────────────────────────────────────────────────────────
   //   let searchInUPC = false;
-  
+
   //   if (search) {
   //     if (/^\d{8,}$/.test(search)) {
   //       searchInUPC = true;
@@ -2701,10 +2703,10 @@ export class SalesService {
   //       ];
   //     }
   //   }
-  
+
   //   // ─── Order ────────────────────────────────────────────────────────────────
   //   let orderClause: Order = [['Date_Created', 'DESC'] as const];
-  
+
   //   if (search && !searchInUPC && !masterSearch) {
   //     orderClause = [[col('Description'), 'ASC']];
   //   } else if (shortBy && Number(shortBy) === 1) {
@@ -2712,7 +2714,7 @@ export class SalesService {
   //   } else if (shortBy && Number(shortBy) === 2) {
   //     orderClause = [[col('Description'), 'DESC']];
   //   }
-  
+
   //   // ─── UPC join ─────────────────────────────────────────────────────────────
   //   const includeUPC = {
   //     model: InventoryUPC,
@@ -2724,10 +2726,10 @@ export class SalesService {
   //     },
   //     required: searchInUPC,
   //   };
-  
+
   //   // ─── Count ────────────────────────────────────────────────────────────────
   //   let totalCount = 0;
-  
+
   //   if (searchInUPC) {
   //     const counted = await Inventory.findAll({
   //       attributes: ['Item_Number'],
@@ -2742,7 +2744,7 @@ export class SalesService {
   //   } else {
   //     totalCount = await Inventory.count({ where: whereClause, logging: false });
   //   }
-  
+
   //   // ─── Main product query ───────────────────────────────────────────────────
   //   const productList = await Inventory.findAll({
   //     attributes: [
@@ -2767,9 +2769,9 @@ export class SalesService {
   //     subQuery: false,   // ← prevents MSSQL subquery-wrap error on literal ORDER BY
   //     logging: false,
   //   });
-  
+
   //   const itemNumbers = productList.map((e: any) => e.Item_Number);
-  
+
   //   // ─── Batch all per-page lookups in parallel ───────────────────────────────
   //   const [productImages, discountMap, inventoryOnHandMap, productLimitsMap] =
   //     await Promise.all([
@@ -2781,9 +2783,9 @@ export class SalesService {
   //       getBatchProductLimits(itemNumbers),
   //       // getBatchProductDiscountsFromRedis(itemNumbers),
   //     ]);
-  
+
   //   const imageMap = new Map(productImages.map((img: any) => [img.product_number, img]));
-  
+
   //   // ─── Per-item mapping ─────────────────────────────────────────────────────
   //   const finalProductList = await Promise.all(
   //     productList.map(async (e: any) => {
@@ -2792,9 +2794,9 @@ export class SalesService {
   //       const inventoryOnHand = inventoryOnHandMap[e.Item_Number] ?? 0;
   //       const productLimit    = productLimitsMap[e.Item_Number]   ?? null;
   //       const discount        = false;
-  
+
   //       const price = discountMap[e.Item_Number] ?? (await getFirstValidPrice(e));
-  
+
   //       // tax + prepaid + isDiscounted + qtyDiscount — run in parallel
   //       const [taxRateRaw, prepaidTaxRate, isDiscounted] = await Promise.all([
   //         getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price),
@@ -2803,20 +2805,20 @@ export class SalesService {
   //           : Promise.resolve(0),
   //         hasDiscountedItem(e.Item_Number, e.Price_Subclass),
   //       ]);
-  
+
   //       const taxRate      = Math.ceil(taxRateRaw * 100) / 100;
   //       const priceWithTax = price + taxRate;
-  
+
   //       const [productLimitResult, hasQtyDiscount] = await Promise.all([
   //         Promise.resolve(productLimit),                              // already batched
   //         checkQtyDiscount(e.Item_Number, customerId, priceWithTax),
   //       ]);
-  
+
   //       const allowToOrder =
   //         wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
-  
+
   //       const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
-  
+
   //       return {
   //         Pack:              e.Pack,
   //         Description:       e.Description,
@@ -2859,7 +2861,7 @@ export class SalesService {
   //       };
   //     })
   //   );
-  
+
   //   return {
   //     totalCount,
   //     page,
@@ -2887,54 +2889,54 @@ export class SalesService {
       zip,
       jurisdiction,
     } = query;
-  
+
     if (!search)
       return {
         totalCount: 0,
         finalProductList: [],
       };
-  
+
     let wareHouseSetting: any = await Setting.findOne({});
     wareHouseSetting = wareHouseSetting?.dataValues || null;
-  
+
     page = Number(page);
     limit = Number(limit);
-  
+
     let whereClause: any = {
       I_Inactive: false,
       ShortOrderForm: true,
     };
-  
+
     if (salesCategory.length > 0) {
       whereClause.Sales_Category = { [Op.in]: salesCategory };
     }
-  
+
     let searchInUPC = false;
-  
+
     if (masterSearch && typeof masterSearch === "string") {
       const masterArray = masterSearch.split(",").map((i) => i.trim());
       whereClause.Item_Number = { [Op.in]: masterArray };
     }
-  
+
     let allExcludedItems: any[] = [];
-  
+
     if (state || zip || jurisdiction) {
       const customerExcluded = await getCustomerExcludeItem(state as string, zip as string, jurisdiction as number);
       if (customerExcluded && customerExcluded.length > 0) {
         allExcludedItems = allExcludedItems.concat(customerExcluded);
       }
     }
-  
+
     const userExcluded = await excludeItemByUser(Number(customerId));
     if (userExcluded && userExcluded.length > 0) {
       allExcludedItems = allExcludedItems.concat(userExcluded);
     }
-  
+
     if (allExcludedItems.length > 0) {
       const uniqueExcluded = [...new Set(allExcludedItems)];
       whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
     }
-  
+
     if (search) {
       const searchValue = `%${search}%`;
       if (/^\d{8,}$/.test(search)) {
@@ -2948,7 +2950,7 @@ export class SalesService {
         ];
       }
     }
-  
+
     const includeUPC = {
       model: InventoryUPC,
       as: "UPCList",
@@ -2959,7 +2961,7 @@ export class SalesService {
       },
       required: searchInUPC,
     };
-  
+
     let orderClause: Order = [["Date_Created", "DESC"] as const];
     if (search && !searchInUPC && !masterSearch) {
       orderClause = [[col("Description"), "ASC"]];
@@ -2968,7 +2970,7 @@ export class SalesService {
     } else if (shortBy && Number(shortBy) === 2) {
       orderClause = [[col("Description"), "DESC"]];
     }
-  
+
     // === Count Query ===
     let totalCount = 0;
     if (searchInUPC) {
@@ -2987,7 +2989,7 @@ export class SalesService {
         logging: false,
       });
     }
-  
+
     // === Product List Query ===
     const productList = await Inventory.findAll({
       attributes: [
@@ -3008,9 +3010,9 @@ export class SalesService {
       offset: (page - 1) * limit,
       logging: false,
     });
-  
+
     const itemNumbers = productList.map((e) => e.Item_Number);
-  
+
     // === Run in parallel ===
     const [productImages, discountMap, userJurisdiction, topLatestItems] =
       await Promise.all([
@@ -3021,16 +3023,16 @@ export class SalesService {
         getJurisdiction(customerId),
         getTopLatestItems(),
       ]);
-  
+
     // === Pre-map images ===
     const imageMap = new Map(productImages.map((img) => [img.product_number, img]));
-  
+
     // === Final mapping — parallelized per item ===
     const finalProductList = await Promise.all(
       productList.map(async (e: any) => {
         const itemStr = e.Item_Number.toString();
         const productImage = imageMap.get(itemStr) || null;
-  
+
         // ✅ OPTIMIZATION 1: Run independent calls in parallel
         const [inventoryOnHand, priceRaw] = await Promise.all([
           getInventoryOnHand(e.Item_Number),
@@ -3038,15 +3040,15 @@ export class SalesService {
             ? Promise.resolve(discountMap[e.Item_Number])
             : getFirstValidPrice(e),
         ]);
-  
+
         const price = priceRaw;
-  
+
         // taxRate depends on price — must stay sequential
         let taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
         taxRate = Math.ceil(taxRate * 100) / 100;
-  
+
         const priceWithTax = price + taxRate;
-  
+
         // ✅ OPTIMIZATION 2: Merge getPrepaidTaxRate into the existing Promise.all
         console.log(e.SalesCategory?.Sales_Category, "e.SalesCategory?.Sales_Category----->SALES", userJurisdiction, "userJurisdiction");
         const [isDiscounted, productLimit, hasQtyDiscount, prepaidTaxRate] = await Promise.all([
@@ -3057,14 +3059,14 @@ export class SalesService {
             ? getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory?.Sales_Category as number, e, priceWithTax)
             : Promise.resolve(0),
         ]);
-  
+
         let allowToOrder = true;
         if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
           allowToOrder = false;
         }
-  
+
         const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
-  
+
         return {
           Pack: e.Pack,
           Description: e.Description,
@@ -3107,7 +3109,7 @@ export class SalesService {
         };
       })
     );
-  
+
     return {
       totalCount,
       page,
@@ -3280,7 +3282,7 @@ export class SalesService {
 
         taxRate = Math.ceil(taxRate * 100) / 100;
 
-        
+
         prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, product?.Sales_Category, product, price + taxRate);
       }
       let priceChange = false;
@@ -6318,6 +6320,10 @@ export class SalesService {
   }
 
   async addUpc(body: any) {
+    const existing = await InventoryUPC.findOne({ where: { UPC_Number: body.UPC_Number } });
+    if (existing) {
+      throw new AppError('UPC number already exists', 400);
+    }
     const result = await InventoryUPC.create(body);
     return result;
   }
@@ -6431,7 +6437,9 @@ export class SalesService {
     const isWebOrder = req.headers['is-web-order'];
     const isWeb = isWebOrder === 'true' ? true : false;
 
-    const { orderPlayload, Delivery_Charge } = orderData;
+    const { orderPlayload
+      // Delivery_Charge 
+    } = orderData;
 
 
     // Get customer and route info
@@ -6461,7 +6469,7 @@ export class SalesService {
       Reference: `USER-${req.user.userNumber}`,
       Invoice_Type: customer.C_InvoiceFormat || 0,
       Invoice_Deposit: 0,
-      Delivery_Charge: Delivery_Charge || 0,
+      // Delivery_Charge: Delivery_Charge || 0,
       Other_Charge: customer.Other_Amount || 0,
       Invoice_Total: 0,
       Sales_Taxable: 0,
@@ -6474,7 +6482,7 @@ export class SalesService {
       Points: 0,
       Total_Weight: 0,
       Order_Type: 6, // return order
-      Delivery_Charge_Select: !!customer.Delivery_Charge,
+      // Delivery_Charge_Select: !!customer.Delivery_Charge,
       Other_Charge_Select: !!customer.Other_Amount,
     };
 
@@ -6551,6 +6559,7 @@ export class SalesService {
         OTP_Amount_State: Number(item.Tax_Rate ?? 0),
         OTP_Amount_County: 0,
         OTP_Amount_City: 0,
+        PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
         DepositAmount: product.DepositAmount,
         Price_Subclass: product.Price_Subclass,
         OffInvoice_Amount: 0,
@@ -6605,8 +6614,33 @@ export class SalesService {
       isActive: true
     });
 
+    // Totals calculation
+    let totalPrice = 0;
+    let totalDiscount = 0;
+    let totalDeposit = 0;
+    let totalPrepaidTax = 0;
+    for (const details of orderDetails) {
+      const d = details as any;
+
+      const basePrice = toNum(d.Price);
+      const otpState = toNum(d.OTP_Amount_State);
+      const prepaid = toNum(d.PrepaidTax_Amount);
+      const qty = toNum(d.Quantity_Shipped);
+
+      const quantity = qty > 0 ? qty : toNum(d.Quantity_Ordered);
+      totalPrepaidTax += prepaid * quantity;
+      const unitPrice = basePrice + otpState + prepaid;
+
+      totalPrice += unitPrice * quantity;
+
+      totalDiscount += toNum(d.OffInvoice_Amount);
+      totalDeposit += toNum(d.DepositAmount);
+
+
+    }
+
     try {
-      sendEmailToReturnOrder(orderHeaderCreated, orderDetails, customer, Delivery_Charge);
+      sendEmailToReturnOrder(orderHeaderCreated, orderDetails, customer);
     } catch (error) {
       console.log(error, 'error-->')
     }
@@ -6614,6 +6648,10 @@ export class SalesService {
     return {
       orderHeader: orderHeaderCreated,
       orderDetails,
+      totalPrice,
+      totalDiscount,
+      totalDeposit,
+      totalPrepaidTax,
       message: "Order placed successfully"
     };
   }

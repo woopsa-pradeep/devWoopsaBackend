@@ -1133,8 +1133,7 @@ export class ManagerService {
         {
           model: InventoryUPC,
           as: 'UPCList',
-          attributes: ['UPC_Number'],
-          where: { Status: 0 },
+          attributes: ['UPC_Number', 'Status'],
           required: false,
         },
         { model: Vendor, as: 'primaryVendor', attributes: ['V_Description'] },
@@ -1148,10 +1147,20 @@ export class ManagerService {
     product = product?.dataValues
     const productData = product as any
     let inventoryOnHand = await getInventoryOnHand(product?.Item_Number || 0) || 0;
+
+    // Build UPCList with all 3 slots (0=Primary, 1=Case, 2=Retail) in order
+    const upcMap = new Map((productData?.UPCList || []).map((u: any) => [u.Status, u.UPC_Number]));
+    const UPCList = [
+      { Status: 0, UPC_Number: upcMap.get(0) || null },
+      { Status: 1, UPC_Number: upcMap.get(1) || null },
+      { Status: 2, UPC_Number: upcMap.get(2) || null },
+    ];
+
     let object = {
       ...product,
+      UPCList,
       inventoryOnHand,
-      masterImage: `${process.env.AZUREIMAGESERVER}${productData?.UPCList?.[0]?.UPC_Number}.jpg`,
+      masterImage: `${process.env.AZUREIMAGESERVER}${upcMap.get(0) || ''}.jpg`,
     }
 
     return object;
@@ -1182,7 +1191,7 @@ export class ManagerService {
 
   async updateProductImage(body: IUpdateUploadProductImage, req: AuthRequest, id: number) {
     const file = req.file;
-    
+
     const wareHouseDetail = await Distributor.findAll({
       attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID", "D_Logo"],
     });
@@ -1263,8 +1272,8 @@ export class ManagerService {
             itemNumbers = [];
           }
 
-          // Filter out any invalid numbers
-          const validItemNumbers = itemNumbers.filter((num: number) => !isNaN(num));
+          // Filter out any invalid numbers and remove duplicates
+          const validItemNumbers = [...new Set(itemNumbers.filter((num: number) => !isNaN(num)))];
 
           if (validItemNumbers.length > 0) {
             console.log(validItemNumbers, 'validItemNumbers')
@@ -7310,21 +7319,77 @@ export class ManagerService {
   async createCustomer(data: any) {
 
     console.log(data, 'data----->');
-    const { documents, address } = data
+    const { documents, address, files, ...customerData } = data;
+
+    // Coerce string values from multipart form to proper types
+    const booleanFields = [
+      'NetCost_Flag', 'C_CaseDiscount', 'C_AuthorizedOnly', 'C_CashCustomer',
+      'Finance_Charge', 'C_Inactive', 'Delivery_Charge', 'No_Substitutes',
+      'Service_Charge', 'POS_CashC', 'POS_CheckC', 'POS_CreditC',
+      'POS_DebitC', 'POS_OtherC', 'POS_HouseC'
+    ];
+    for (const field of booleanFields) {
+      if (field in customerData) {
+        const val = customerData[field];
+        customerData[field] = val === true || val === 1 || val === '1' || val === 'true';
+      }
+    }
+
+    const numericFields = [
+      'C_OperationHours1', 'C_OperationHours2', 'C_OrderDaySequence',
+      'Credit_Limit', 'Delivery_Amount', 'Delivery_Charge', 'Service_Charge',
+      'Other_Amount', 'C_Salesman', 'TermsCode', 'EDI_Format',
+      'C_StatusCode', 'C_InvoiceFormat', 'C_PricingAccount', 'Delivery_ID',
+      'C_OrderDay', 'Address_Type', 'PriceLevel_Default',
+      'Category_Allow01', 'Category_Allow02', 'Category_Allow03',
+      'Category_Allow04', 'Category_Allow05', 'Category_Allow06',
+      'Category_Allow07', 'Category_Allow08', 'Category_Allow09',
+      'Category_Allow10', 'Category_Allow11', 'Category_Allow12',
+    ];
+    for (const field of numericFields) {
+      if (field in customerData) {
+        customerData[field] = Number(customerData[field]);
+      }
+    }
+
     const nextCustomerNumber = await getNextCustomerNumber();
 
     const finalData = {
       ...getDefaultCustomerValues(0),
       C_Number: nextCustomerNumber,
-      ...data
+      ...customerData
     }
     const customer = await Customer.create(finalData);
 
-    console.log(documents, 'documents');
-    if (documents) {
+    // Upload files to Azure and build documents object
+    const documentsData: any = {};
+    if (files && Array.isArray(files) && files.length > 0) {
+      for (const file of files) {
+        const uploaded = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, 'retailer-documents');
+        if (uploaded?.url) {
+          if (file.fieldname.includes('salesTaxDoc')) {
+            documentsData.salesTaxDoc = uploaded.url;
+          } else if (file.fieldname.includes('CigTaxDoc')) {
+            documentsData.CigTaxDoc = uploaded.url;
+          } else if (file.fieldname.includes('feinDocument')) {
+            documentsData.feinDocument = uploaded.url;
+          } else if (file.fieldname.includes('licenseAttachments')) {
+            if (!documentsData.licenseAttachments) documentsData.licenseAttachments = [];
+            documentsData.licenseAttachments.push(uploaded.url);
+          } else if (file.fieldname.includes('attachments')) {
+            if (!documentsData.attachments) documentsData.attachments = [];
+            documentsData.attachments.push(uploaded.url);
+          }
+        }
+      }
+    }
+
+    // Merge file URLs with any document data from JSON body
+    const finalDocuments = { ...documents, ...documentsData };
+    if (Object.keys(finalDocuments).length > 0) {
       await RetailerDocuments.create({
         customerNumber: nextCustomerNumber,
-        ...documents
+        ...finalDocuments
       });
     }
     if (address) {
@@ -7348,35 +7413,87 @@ export class ManagerService {
 
   async updateCustomer(data: any, id: number) {
 
-    const finalData = {
-      ...data
+    const { documents, address, files, ...customerData } = data;
+
+    // Coerce string values from multipart form to proper types
+    const booleanFields = [
+      'NetCost_Flag', 'C_CaseDiscount', 'C_AuthorizedOnly', 'C_CashCustomer',
+      'Finance_Charge', 'C_Inactive', 'Delivery_Charge', 'No_Substitutes',
+      'Service_Charge', 'POS_CashC', 'POS_CheckC', 'POS_CreditC',
+      'POS_DebitC', 'POS_OtherC', 'POS_HouseC'
+    ];
+    for (const field of booleanFields) {
+      if (field in customerData) {
+        const val = customerData[field];
+        customerData[field] = val === true || val === 1 || val === '1' || val === 'true';
+      }
     }
-    const customer = await Customer.update(finalData, { where: { C_Number: id } });
-    if (data.documents) {
+
+    const numericFields = [
+      'C_OperationHours1', 'C_OperationHours2', 'C_OrderDaySequence',
+      'Credit_Limit', 'Delivery_Amount', 'Delivery_Charge', 'Service_Charge',
+      'Other_Amount', 'C_Salesman', 'TermsCode', 'EDI_Format',
+      'C_StatusCode', 'C_InvoiceFormat', 'C_PricingAccount', 'Delivery_ID',
+      'C_OrderDay', 'Address_Type', 'PriceLevel_Default',
+      'Category_Allow01', 'Category_Allow02', 'Category_Allow03',
+      'Category_Allow04', 'Category_Allow05', 'Category_Allow06',
+      'Category_Allow07', 'Category_Allow08', 'Category_Allow09',
+      'Category_Allow10', 'Category_Allow11', 'Category_Allow12',
+    ];
+    for (const field of numericFields) {
+      if (field in customerData) {
+        customerData[field] = Number(customerData[field]);
+      }
+    }
+
+    const customer = await Customer.update(customerData, { where: { C_Number: id } });
+
+    // Upload files to Azure and build documents object
+    const documentsData: any = {};
+    if (files && Array.isArray(files) && files.length > 0) {
+      for (const file of files) {
+        const uploaded = await uploadFileToAzure(file.buffer, file.originalname, file.mimetype, 'retailer-documents');
+        if (uploaded?.url) {
+          if (file.fieldname.includes('salesTaxDoc')) {
+            documentsData.salesTaxDoc = uploaded.url;
+          } else if (file.fieldname.includes('CigTaxDoc')) {
+            documentsData.CigTaxDoc = uploaded.url;
+          } else if (file.fieldname.includes('feinDocument')) {
+            documentsData.feinDocument = uploaded.url;
+          } else if (file.fieldname.includes('licenseAttachments')) {
+            if (!documentsData.licenseAttachments) documentsData.licenseAttachments = [];
+            documentsData.licenseAttachments.push(uploaded.url);
+          } else if (file.fieldname.includes('attachments')) {
+            if (!documentsData.attachments) documentsData.attachments = [];
+            documentsData.attachments.push(uploaded.url);
+          }
+        }
+      }
+    }
+
+    const finalDocuments = { ...documents, ...documentsData };
+    if (Object.keys(finalDocuments).length > 0) {
       const retailerDocuments = await RetailerDocuments.findOne({ where: { customerNumber: id } });
       if (retailerDocuments) {
-        await RetailerDocuments.update({
-          ...data.documents
-        }, { where: { customerNumber: id } });
+        await RetailerDocuments.update(finalDocuments, { where: { customerNumber: id } });
       } else {
         await RetailerDocuments.create({
           customerNumber: id,
-          ...data.documents
+          ...finalDocuments
         });
       }
-
     }
 
-    if (data.address) {
+    if (address) {
       const retailerLocation = await RetailerLocation.findOne({ where: { C_Number: id } });
       if (retailerLocation) {
         await RetailerLocation.update({
-          ...data.address
+          ...address
         }, { where: { C_Number: id } });
       } else {
         await RetailerLocation.create({
           C_Number: id,
-          ...data.address
+          ...address
         });
       }
     }
@@ -9608,6 +9725,7 @@ export class ManagerService {
     const whereCondition: any = {
       Order_Date: {
         [Op.gte]: driverStartDate,
+
       },
       Delivery_ID: {
         [Op.not]: 99,
@@ -9618,6 +9736,99 @@ export class ManagerService {
       Invoice_Total: {
         [Op.gt]: 0,
       },
+      route_created: false,
+      Order_Deleted: false,
+      Suspend: false,
+    };
+
+    if (routeNumber) {
+      whereCondition.Route_Number = routeNumber;
+    }
+
+    const { rows: orders, count: totalRecords } =
+      await OrderHeader.findAndCountAll({
+        where: whereCondition,
+        attributes: [
+          'Order_Number',
+          'Order_Date',
+          'Invoice_Number',
+          'Invoice_Total',
+          'Delivery_ID',
+          'Route_Number',
+          'C_Number',
+          'Stop_Number',
+        ],
+        include: [
+          {
+            model: Customer,
+            as: 'customer',
+            attributes: [
+              'C_Number',
+              'C_Name',
+              'C_Address',
+              'C_City',
+              'C_State',
+              'C_Zip',
+              'C_Phone',
+              'C_PhoneMobile',
+            ],
+          },
+        ],
+        order: [
+          ['Order_Date', 'DESC'],
+          ['Order_Number', 'DESC'],
+        ],
+        limit,
+        offset,
+      });
+
+    const finalOrders = await Promise.all(orders.map(async (order: any) => {
+      let orderData = order.dataValues;
+      const customerLocation = await RetailerLocation.findOne({
+        where: {
+          C_Number: orderData.C_Number,
+        },
+      });
+      return {
+        ...orderData,
+        customerLocation: customerLocation ? customerLocation.dataValues : null,
+      };
+    }));
+
+    return {
+      data: finalOrders,
+      pagination: {
+        page,
+        limit,
+        totalRecords,
+        totalPages: Math.ceil(totalRecords / limit),
+      },
+    };
+  }
+
+  async getRouteCreatedOrders(query: PaginationOptions) {
+    let { page = 1, limit = 10, routeNumber } = query;
+
+    page = Number(page);
+    limit = Number(limit);
+    const offset = (page - 1) * limit;
+
+    const driverStartDate = process.env.DELIVERY_START_DATE;
+
+    const whereCondition: any = {
+      Order_Date: {
+        [Op.gte]: driverStartDate,
+      },
+      Delivery_ID: {
+        [Op.not]: 99,
+      },
+      Invoice_Number: {
+        [Op.gt]: 0,
+      },
+      Invoice_Total: {
+        [Op.gt]: 0,
+      },
+      route_created: true,
       Order_Deleted: false,
       Suspend: false,
     };
@@ -9694,6 +9905,14 @@ export class ManagerService {
       throw new AppError("origin, destination, and stops array are required", 400);
     }
 
+    const kmToMiles = (km: number) => Number((km * 0.621371).toFixed(3));
+    const formatDuration = (totalSeconds: number) => {
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.ceil((totalSeconds % 3600) / 60);
+      if (hours <= 0) return `${minutes} min`;
+      return `${hours}h ${minutes}m`;
+    };
+
     // Get optimized directions from Google Maps API
     const { waypointOrder, polyline, legs, totalKilometers } = await getOptimizedDirections(
       origin,
@@ -9701,16 +9920,11 @@ export class ManagerService {
       stops.map((s: any) => ({ lat: s.lat, lng: s.lng }))
     );
 
-    // Calculate per-stop distances and cumulative distances
-    // Note: legs array has N+1 elements (N stops + 1 leg to destination)
-    // legs[0] = origin -> first optimized stop
-    // legs[1] = first optimized stop -> second optimized stop
-    // legs[N] = last optimized stop -> destination
+
     const optimizedStops = waypointOrder.map((originalIndex: number, optimizedIndex: number) => {
       const stop = stops[originalIndex];
 
-      // Get the leg that ends at this stop (leg index = optimizedIndex)
-      // This leg goes from previous point (or origin) to this stop
+
       const leg = legs[optimizedIndex];
 
       if (!leg) {
@@ -9720,12 +9934,14 @@ export class ManagerService {
       // Per-stop distance (distance for this specific leg to reach this stop)
       const legDistanceMeters = Number(leg?.distance?.value ?? 0);
       const legDistanceKm = Number((legDistanceMeters / 1000).toFixed(3));
+      const legDistanceMiles = kmToMiles(legDistanceKm);
 
       // Cumulative distance (sum of all legs from origin up to and including this stop)
       const cumulativeMeters = legs
         .slice(0, optimizedIndex + 1)
         .reduce((sum, l) => sum + Number(l?.distance?.value ?? 0), 0);
       const cumulativeKm = Number((cumulativeMeters / 1000).toFixed(3));
+      const cumulativeMiles = kmToMiles(cumulativeKm);
 
       // Get coordinates from the leg's end location (where the stop is)
       // This is more accurate than the original coordinates as Google geocodes the exact route location
@@ -9738,7 +9954,9 @@ export class ManagerService {
         lat: Number(stopLocation.lat),
         lng: Number(stopLocation.lng),
         distanceKm: legDistanceKm, // Distance for this specific leg (to reach this stop)
+        distanceMiles: legDistanceMiles,
         cumulativeDistanceKm: cumulativeKm, // Total distance traveled from origin to this stop
+        cumulativeDistanceMiles: cumulativeMiles,
       };
     });
 
@@ -9747,12 +9965,31 @@ export class ManagerService {
     const lastStopToDestinationLeg = legs[stops.length];
     const lastStopToDestinationMeters = Number(lastStopToDestinationLeg?.distance?.value ?? 0);
     const lastStopToDestinationKm = Number((lastStopToDestinationMeters / 1000).toFixed(3));
+    const lastStopToDestinationMiles = kmToMiles(lastStopToDestinationKm);
+
+    const totalMiles = kmToMiles(totalKilometers);
+
+    // Expected travel time:
+    // Prefer Google duration from all legs; fallback with truck/small-truck avg speed.
+    const totalDurationSecondsFromGoogle = legs.reduce(
+      (sum, leg) => sum + Number(leg?.duration?.value ?? 0),
+      0
+    );
+    const fallbackTruckSeconds = Math.round((totalMiles / 30) * 3600); // avg 30 mph
+    const expectedTimeSeconds =
+      totalDurationSecondsFromGoogle > 0 ? totalDurationSecondsFromGoogle : fallbackTruckSeconds;
 
     return {
       route: {
         polyline, // Encoded polyline for drawing the route
         totalDistanceKm: totalKilometers, // Total distance for entire route (origin -> all stops -> destination)
+        totalDistanceMiles: totalMiles,
         lastStopToDestinationKm: lastStopToDestinationKm, // Distance from last stop to destination
+        lastStopToDestinationMiles: lastStopToDestinationMiles,
+        expectedTimeSeconds,
+        expectedTimeMinutes: Math.ceil(expectedTimeSeconds / 60),
+        expectedTimeText: formatDuration(expectedTimeSeconds),
+        estimatedForVehicle: "truck_or_small_truck",
       },
       optimizedStops, // Array of stops in optimized order with coordinates and distances
       waypointOrder, // Original indices in optimized order (for reference)
@@ -9774,17 +10011,52 @@ export class ManagerService {
 
         const newRoute = await DeliveryRoute.create(deliveryRoute, { transaction: t });
 
-        const stopsToInsert = deliveryRouteStops.map((stop: any) => ({
-          ...stop,
-          routeId: newRoute.id,
-        }));
+        const lastIndex = deliveryRouteStops.length - 1;
+        const orderNumbers: any[] = [];
+
+        const stopsToInsert = deliveryRouteStops.map((stop: any, index: number) => {
+          const isFirst = index === 0;
+          const isLast = index === lastIndex;
+
+          orderNumbers.push(stop.orderNumber);
+          // Chain: first stop starts from route origin, others start from previous stop's lat/lng
+          const startLatitude = isFirst
+            ? deliveryRoute.orderStartLat
+            : deliveryRouteStops[index - 1].latitude;
+          const startLongitude = isFirst
+            ? deliveryRoute.orderStartLong
+            : deliveryRouteStops[index - 1].longitude;
+
+          // Last stop ends at route destination
+          const endLatitude = isLast
+            ? deliveryRoute.orderEndLat
+            : deliveryRouteStops[index + 1].latitude;
+          const endLongitude = isLast
+            ? deliveryRoute.orderEndLong
+            : deliveryRouteStops[index + 1].longitude;
+
+          return {
+            ...stop,
+            stopSequence: index + 1,
+            routeId: newRoute.id,
+            startLatitude,
+            startLongitude,
+            endLatitude,
+            endLongitude,
+            isLastStop: isLast,
+          };
+        });
 
         await DeliveryRouteStop.bulkCreate(stopsToInsert, { transaction: t });
+
+        if(orderNumbers.length > 0){
+          await OrderHeader.update({ route_created: true }, { where: { Order_Number: { [Op.in]: orderNumbers as unknown as any[] } } });
+        }
 
         return { parentRoute: newRoute, children: [] };
       }
 
-    
+
 
       throw new Error("Invalid payload. Send either {deliveryRoute, deliveryRouteStops} OR {parentDeliveryRoute, children[]}");
     });
@@ -16853,10 +17125,10 @@ export class ManagerService {
       throw new AppError('Delivery route not found', 404);
     }
     await deliveryRoute.update(body);
-    return deliveryRoute;  
+    return deliveryRoute;
   }
   async getInventoryWithStatusAndTax(data: any) {
-    const {costCode, limit = 50000 } = data
+    const { costCode, limit = 50000 } = data
     return await Inventory.findAll({
       attributes: [
         'Item_Number',
@@ -17025,10 +17297,10 @@ export class ManagerService {
               `),
                 'STMP_VALUE25'
               ],
-             
+
             ],
-             
-            
+
+
           }
         },
       ],
@@ -17090,7 +17362,7 @@ export class ManagerService {
           model: Inventory,
           as: 'inventory',
           required: true,
-          attributes: ['Description', 'Sales_Category', 'Price_Class', 'OTP_Number','Primary_Vendor','Location','Section','PickArea'],
+          attributes: ['Description', 'Sales_Category', 'Price_Class', 'OTP_Number', 'Primary_Vendor', 'Location', 'Section', 'PickArea'],
           where: {
             Track_ExpirationDate: true,
           },
@@ -17126,11 +17398,11 @@ export class ManagerService {
   async buyerGuideInventoryHistory(query: any) {
     const { startDate, endDate } = query
     return await Inventory.findAll({
-       where: {
-            Date_LastChange: {
-              [Op.between]: [startDate, endDate],
-            },
-          },
+      where: {
+        Date_LastChange: {
+          [Op.between]: [startDate, endDate],
+        },
+      },
       attributes: {
         include: [
           // classDesc
@@ -17269,7 +17541,7 @@ export class ManagerService {
   }
 
   async getVelocityReportVendorGroup(data: any) {
-    const { startDate , endDate } = data;
+    const { startDate, endDate } = data;
 
     return await OrderDetail.findAll({
       attributes: [
@@ -17319,7 +17591,7 @@ export class ManagerService {
         [literal(`(ISNULL([OrderDetail].BaseCost, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_BaseCost'],
 
         [literal(`(ISNULL([OrderDetail].Price, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_Price'],
-       
+
         [col('inventory.I_PrepaidStatus'), 'I_PrepaidStatus'],
         [col('inventory.Description'), 'Description'],
         [col('inventory.UOM'), 'UOM'],
@@ -17452,7 +17724,7 @@ export class ManagerService {
         [col('inventory.OTP_Number'), 'OTP_Number'],
 
         [literal(`ISNULL([OrderDetail].Price, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_Price'],
-         [literal(`ISNULL([OrderDetail].Price, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)`), 'Ext_InvoicePrice'],
+        [literal(`ISNULL([OrderDetail].Price, 0) + ISNULL([OrderDetail].OTP_Amount_State, 0)`), 'Ext_InvoicePrice'],
         [literal(`ISNULL([OrderDetail].OTP_Amount_State, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_StateTax'],
         [literal(`ISNULL([OrderDetail].OTP_Amount_County, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_CountyTax'],
         [literal(`ISNULL([OrderDetail].OTP_Amount_City, 0) * ISNULL([OrderDetail].Quantity_Shipped, 0)`), 'Ext_CityTax'],
@@ -17533,7 +17805,7 @@ export class ManagerService {
         [col('orderHeader.Invoice_Date'), 'ASC'],
         [col('orderHeader.Order_Number'), 'ASC'],
       ],
-      limit:50,
+      limit: 50,
 
       raw: true,
     });
@@ -17905,6 +18177,10 @@ export class ManagerService {
           [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
           [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
           [col('orderHeader.Order_Date'), 'Order_Date'],
+          [col('orderHeader.Picklist_Printed'), 'Picklist_Printed'],
+          [col('orderHeader.Order_Source'), 'Order_Source'],
+          [col('orderHeader.Order_Type'), 'Order_Type'],
+          [col('orderHeader.Labels_Printed'), 'Labels_Printed'],
           [literal(`FORMAT([orderHeader].Order_Date, 'MM/dd/yyyy')`), 'Order_Date_Text'],
           [literal(`FORMAT([orderHeader].Invoice_Date, 'MM/dd/yyyy')`), 'Invoice_Date_Text'],
 
@@ -17982,7 +18258,7 @@ export class ManagerService {
           ],
 
           // Order_Header_Costs fields via subqueries to avoid column ambiguity
-          ...[1,2,3,4,5,6,7,8,9,10,11,12].map(i => {
+          ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(i => {
             const pad = String(i).padStart(2, '0');
             return [
               [literal(`ISNULL(${ohc(`Sales${pad}`)},0) + ISNULL(${ohc(`Taxes${pad}`)},0)`), `totalSales${pad}`],
@@ -18027,9 +18303,9 @@ export class ManagerService {
           literal(`EXISTS (SELECT 1 FROM Order_Header_Costs WHERE Order_Header_Costs.Order_Number = [OrderHeader].Order_Number AND Value_Code = 0)`),
         ],
         Order_Date: {
-              [Op.gte]: startDate,
-              [Op.lte]: endDate,
-            },
+          [Op.gte]: startDate,
+          [Op.lte]: endDate,
+        },
       },
 
       order: [['Order_Number', 'ASC']],
@@ -18159,9 +18435,9 @@ export class ManagerService {
       where: {
         Order_Deleted: 'True',
         Order_Date: {
-              [Op.gte]: startDate,
-              [Op.lte]: endDate,
-            }, 
+          [Op.gte]: startDate,
+          [Op.lte]: endDate,
+        },
       },
 
       order: [['Order_Number', 'ASC']],
@@ -18345,5 +18621,22 @@ export class ManagerService {
     }
 
     return items;
+  }
+
+  async updateSetting(data:any){
+    return await Setting.update(data, { where: {} })
+  }
+
+  async getSettingDeliveryAddress() {
+    return await Setting.findOne({
+      attributes: [
+        'deliveryStartAddress',
+        'deliveryEndAddress',
+        'deliveryStartLat',
+        'deliveryStartLong',
+        'deliveryEndLat',
+        'deliveryEndLong',
+      ],
+    })
   }
 }
