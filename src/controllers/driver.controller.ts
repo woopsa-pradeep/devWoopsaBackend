@@ -67,6 +67,11 @@ export class DriverController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async orderStopCompleted(req: AuthRequest, res: Response) {
+        const data = await this.driverService.orderStopCompleted(Number(req.params.stopId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async getDriverCurrentOrder(req: AuthRequest, res: Response) {
         const driverId = Number(req.user?.id);
         const data = await this.driverService.getDriverCurrentOrder(driverId);

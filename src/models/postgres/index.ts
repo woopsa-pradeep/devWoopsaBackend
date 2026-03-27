@@ -3,7 +3,7 @@ import { applyAssociations } from './associate';
 
 
 applyAssociations();
- 
+
 // Sync all PostgreSQL models
 export const syncPostgresModels = async () => {
   try {

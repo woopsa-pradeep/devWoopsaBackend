@@ -258,11 +258,13 @@ export function applyAssociations(): void {
 DeliveryRouteGroup.hasMany(DeliveryRoute, {
   foreignKey: 'routeGroupId',
   as: 'childRoutes',
+  constraints: false,
 });
 
 DeliveryRoute.belongsTo(DeliveryRouteGroup, {
   foreignKey: 'routeGroupId',
   as: 'routeGroup',
+  constraints: false,
 });
 
 

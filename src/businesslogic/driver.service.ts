@@ -793,6 +793,11 @@ export class DriverService {
       },
     });
 
+    await DeliveryRouteStop.update({
+      status: DeliveryStopStatus.IN_PROGRESS,
+    }, { where: { id: nextStop?.id } });
+
+
     return {
       orderCompleted: false,
       nextStop: nextStop ? nextStop.get({ plain: true }) : null,
