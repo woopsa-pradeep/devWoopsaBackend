@@ -126,6 +126,19 @@ export const signUpValidation = Joi.object({
     }),
 });
 
+export const startDeliveryRouteSchema = Joi.object({
+  routeId: Joi.number().integer().required().messages({
+    "number.base": "Route ID must be a number",
+    "number.integer": "Route ID must be an integer",
+    "any.required": "Route ID is required",
+  }),
+  stopId: Joi.number().integer().required().messages({
+    "number.base": "Stop ID must be a number",
+    "number.integer": "Stop ID must be an integer",
+    "any.required": "Stop ID is required",
+  }),
+});
+
 export const updateDriverLatLongSchema = Joi.object({
   currentLocation: Joi.string().trim().required().messages({
     "string.base": "Current location must be a string",

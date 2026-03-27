@@ -4,7 +4,7 @@ import router from './routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { setupErrorHandlers } from './utils/errorHandler';
 import { sequelize } from './models/mmsql'; // ✅ MSSQL Sequelize instance
-import { testConnections } from './db';
+import { mssqlSequelize, postgresSequelize, testConnections } from './db';
 import { syncPostgresModels } from './models/postgres';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -33,7 +33,11 @@ startCronJobs();
 // }
 
 
-
+process.on('SIGINT', async () => {
+  await postgresSequelize.close();
+  await mssqlSequelize.close();
+  process.exit(0);
+});
 
 dotenv.config();
 

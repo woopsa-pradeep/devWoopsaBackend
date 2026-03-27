@@ -19,6 +19,14 @@ const poolConfig = {
   idle: 10000,    // close connection if unused for 10s
 };
 
+const PostgresPoolConfig = {
+  max: 10,
+  min: 2,
+  acquire: 30000,
+  idle: 10000,
+  evict: 10000,  // check for idle connections every 1s
+};
+
 // MSSQL
 export const mssqlSequelize = new Sequelize(process.env.DB_NAME!, process.env.DB_USER!, process.env.DB_PASSWORD!, {
   dialect: "mssql",
@@ -44,13 +52,25 @@ export const postgresSequelize = new Sequelize(
     dialect: "postgres",
     host: process.env.POSTGRES_DB_HOST || "localhost",
     port: parseInt(process.env.POSTGRES_DB_PORT || "5432"),
-    pool: poolConfig, // ✅ added
+    pool: PostgresPoolConfig, // ✅ added
     logging: false,
   }
 );
 
+export const resetPools = async () => {
+  try {
+    await mssqlSequelize.connectionManager.close();
+    await postgresSequelize.connectionManager.close();
+    console.log('All connection pools closed successfully.');
+  } catch (error) {
+    console.error('Error closing connection pools:', error);
+  }
+};
+
 export const testConnections = async () => {
   try {
+    // await resetPools();
+
     await mssqlSequelize.authenticate();
     console.log('MSSQL Database connection has been established successfully.');
 

@@ -6407,6 +6407,10 @@ export class SalesService {
 
 
   async updateUpc(id: number, body: any) {
+    const existing = await InventoryUPC.findOne({ where: { UPC_Number: body.UPC_Number } });
+    if (existing) {
+      throw new AppError('UPC number already exists', 400);
+    }
     const result = await InventoryUPC.update(body, { where: { myKey: id } });
     return result;
   }

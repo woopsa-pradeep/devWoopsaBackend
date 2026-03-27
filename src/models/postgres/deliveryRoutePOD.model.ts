@@ -12,6 +12,7 @@ export enum OrderPODStatus {
   DELIVERED = 'delivered',
   NOT_DELIVERED = 'not_delivered',
   IN_PROGRESS = 'in_progress',
+  NOT_STARTED = 'not_started',
   PARTIAL = 'partial',
   RETURNED = 'returned',
   FAILED = 'failed',
@@ -21,8 +22,8 @@ interface DeliveryRoutePODAttributes {
   id: number;
 
   // Foreign Keys
-  routeId: number;              
-  routeStopId: number;          
+  routeId: number;
+  routeStopId: number;
   driverId: number;             // FK → Driver
   orderNumber: number;          // order from MSSQL
   C_Number: number;             // customer number
@@ -50,7 +51,7 @@ interface DeliveryRoutePODAttributes {
 
   // Notes
   notes: string | null;
-
+  amount: number;
   // Timestamps
   podAt: Date;                  // jab POD capture hua
   isActive: boolean;
@@ -65,8 +66,7 @@ type DeliveryRoutePODCreation = Optional<
 
 export class DeliveryRoutePOD
   extends Model<DeliveryRoutePODAttributes, DeliveryRoutePODCreation>
-  implements DeliveryRoutePODAttributes
-{
+  implements DeliveryRoutePODAttributes {
   public id!: number;
   public routeId!: number;
   public routeStopId!: number;
@@ -80,6 +80,7 @@ export class DeliveryRoutePOD
   public paymentTerms!: PaymentTerms;
   public paymentInCheck!: boolean;
   public checkNumber!: string | null;
+  public amount!: number;
   public checkImage!: string | null;
   public customerSignature!: string | null;
   public signBy!: string | null;
@@ -100,6 +101,11 @@ DeliveryRoutePOD.init(
       type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
+    },
+    amount: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
     },
 
     // Foreign Keys
@@ -155,7 +161,7 @@ DeliveryRoutePOD.init(
     orderStatus: {
       type: DataTypes.ENUM(...Object.values(OrderPODStatus)),
       allowNull: false,
-      defaultValue: OrderPODStatus.IN_PROGRESS,
+      defaultValue: OrderPODStatus.NOT_STARTED,
     },
 
     // Payment
