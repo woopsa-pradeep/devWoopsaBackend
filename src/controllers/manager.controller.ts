@@ -2118,7 +2118,7 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
-  
+
   async getInventoryWithStatusAndTax(req: AuthRequest, res: Response) {
     const data = await this.managerService.getInventoryWithStatusAndTax(req.query);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -2212,6 +2212,21 @@ export class ManagerController {
   async getSettingDeliveryAddress(req: AuthRequest, res: Response) {
     const data = await this.managerService.getSettingDeliveryAddress();
     sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getCreatedRoutes(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCreatedRoutes(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getRouteFullStops(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getRouteFullStops(Number(req.params.id));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async createManualRoute(req: AuthRequest, res: Response) {
+    const data = await this.managerService.createManualRoute(req.body);
+    sendResponse(res, 201, true, data, General.SUCCESS);
   }
 
 }

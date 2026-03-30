@@ -83,4 +83,9 @@ export class DriverController {
         const data = await this.driverService.getTodayDriverStops(driverId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async updateDriverLation(req: AuthRequest, res: Response) {
+        const data = await this.driverService.updateDriverLation(Number(req.user.id), req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

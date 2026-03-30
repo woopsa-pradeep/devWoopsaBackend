@@ -255,6 +255,18 @@ export function applyAssociations(): void {
 
   // In your associations.ts or index.ts where all models are linked
 
+Driver.hasMany(DeliveryRoute, {
+  foreignKey: 'driverId',
+  as: 'routes',
+  constraints: false,
+});
+
+DeliveryRoute.belongsTo(Driver, {
+  foreignKey: 'driverId',
+  as: 'driver',
+  constraints: false,
+});
+
 DeliveryRouteGroup.hasMany(DeliveryRoute, {
   foreignKey: 'routeGroupId',
   as: 'childRoutes',

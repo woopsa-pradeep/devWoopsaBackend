@@ -17,7 +17,7 @@ interface DriverAttributes {
   licenseClass: 'A' | 'B' | 'C' | 'D' | null;
   driverPicture: string | null;
   dotMedicalCertificate: string | null;
-
+  phoneNumber: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -34,13 +34,13 @@ type DriverCreation = Optional<
   | 'driverPicture'
   | 'dotMedicalCertificate'
   | 'createdAt'
+  | 'phoneNumber'
   | 'updatedAt'
 >;
 
 export class Driver
   extends Model<DriverAttributes, DriverCreation>
-  implements DriverAttributes
-{
+  implements DriverAttributes {
   public id!: number;
   public firstName!: string;
   public lastName!: string;
@@ -50,7 +50,7 @@ export class Driver
   public currentLatitude!: number | null;
   public currentLongitude!: number | null;
   public currentLocation!: string | null;
-
+  public phoneNumber!: string | null;
   public driverLicenseNo!: string | null;
   public licenseExpirationDate!: Date | null;
   public licenseClass!: 'A' | 'B' | 'C' | 'D' | null;
@@ -70,6 +70,10 @@ Driver.init(
     },
 
     currentLocation: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    phoneNumber: {
       type: DataTypes.STRING,
       allowNull: true,
     },

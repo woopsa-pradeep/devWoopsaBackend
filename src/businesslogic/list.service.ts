@@ -45,6 +45,8 @@ import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Driver } from "../models/postgres/driver.model";
 import { Vehicle } from "../models/postgres/vehicle.model";
+import { DeliveryRoute, RouteStatus } from "../models/postgres/deliveryRoute.model";
+import moment from "moment";
 import { OrderType } from "../models/mmsql/orderType.model";
 
 export class ListService {
@@ -861,19 +863,53 @@ export class ListService {
   }
 
 
-  async getDriverList() {
+  async getDriverList(date: string) {
+
+    if (!date) {
+      date = moment().format("YYYY-MM-DD");
+    }
+    const bookedDriverIds = await DeliveryRoute.findAll({
+      where: { day: date, isActive: true, routeStatus: { [Op.in]: [RouteStatus.COMPLETED, RouteStatus.CANCELLED] } },
+      attributes: ['driverId'],
+      group: ['driverId'],
+      raw: true,
+    });
+
+    const bookedIds = bookedDriverIds.map((r: any) => r.driverId);
+
     const drivers = await Driver.findAll({
-      attributes: ['id', 'firstName', 'lastName'],
-      order: [['firstName', 'ASC']]
-    })
+      where: {
+        ...(bookedIds.length > 0 && { id: { [Op.notIn]: bookedIds } }),
+      },
+      attributes: ['id', 'firstName', 'lastName', 'driverPicture', 'phoneNumber'],
+      order: [['firstName', 'ASC']],
+    });
+
     return drivers;
   }
 
-  async getVehicleList() {
+  async getVehicleList(date: string) {
+    if (!date) {
+      date = moment().format("YYYY-MM-DD");
+    }
+
+    const bookedVehicleIds = await DeliveryRoute.findAll({
+      where: { day: date, isActive: true, routeStatus: { [Op.in]: [RouteStatus.COMPLETED, RouteStatus.CANCELLED] } },
+      attributes: ['truckId'],
+      group: ['truckId'],
+      raw: true,
+    });
+
+    const bookedIds = bookedVehicleIds.map((r: any) => r.truckId);
+
     const vehicles = await Vehicle.findAll({
-      attributes: ['id', 'description', 'vinNumber'],
-      order: [['description', 'ASC']]
-    })
+      where: {
+        ...(bookedIds.length > 0 && { id: { [Op.notIn]: bookedIds } }),
+      },
+      attributes: ['id', 'description', 'vinNumber', 'loadCapacityLbs', 'mileageHours'],
+      order: [['description', 'ASC']],
+    });
+
     return vehicles;
   }
 

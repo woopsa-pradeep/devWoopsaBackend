@@ -105,9 +105,10 @@ import { RetailerLocation } from "../models/postgres/retailerLocation.model";
 import Vehicle from "../models/postgres/vehicle.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
 import { formatCustomerVelocityItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
-import { getOptimizedDirections } from "../utils/map.utlis";
+import { getDirectionsInOrder, getDistanceMatrix, getOptimizedDirections } from "../utils/map.utlis";
 import { DeliveryRoute } from "../models/postgres/deliveryRoute.model";
 import { DeliveryRouteStop } from "../models/postgres/deliveryRouteStop.model";
+import DeliveryRouteGroup from "../models/postgres/driverRoutesGroup.model";
 import { CustBillTo } from "../models/mmsql/custBillTo.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
 import { Record_Locks } from "../models/mmsql/recordLock.model";
@@ -10049,7 +10050,7 @@ export class ManagerService {
 
         await DeliveryRouteStop.bulkCreate(stopsToInsert, { transaction: t });
 
-        if(orderNumbers.length > 0){
+        if (orderNumbers.length > 0) {
           await OrderHeader.update({ route_created: true }, { where: { Order_Number: { [Op.in]: orderNumbers as unknown as any[] } } });
         }
 
@@ -18623,7 +18624,7 @@ export class ManagerService {
     return items;
   }
 
-  async updateSetting(data:any){
+  async updateSetting(data: any) {
     return await Setting.update(data, { where: {} })
   }
 
@@ -18639,4 +18640,333 @@ export class ManagerService {
       ],
     })
   }
+
+
+  async getCreatedRoutes(query: PaginationOptions) {
+    const { fromDate } = query;
+    const groups = await DeliveryRouteGroup.findAll({
+      where: {
+        day: { [Op.eq]: fromDate },
+        isActive: true,
+      },
+      include: [
+        {
+          model: DeliveryRoute,
+          as: 'childRoutes',
+          where: { isActive: true },
+          required: false,
+          include: [
+            {
+              model: Driver,
+              as: 'driver',
+              attributes: ['id', 'firstName', 'lastName', 'phoneNumber'],
+            },
+            {
+              model: Vehicle,
+              as: 'vehicle',
+              attributes: ['id', 'description', 'vinNumber'],
+            },
+          ],
+          order: [['id', 'ASC']],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+    return groups;
+  }
+
+  async getRouteFullStops(id: number) {
+    const group = await DeliveryRouteGroup.findOne({
+      where: { id, isActive: true },
+      include: [
+        {
+          model: DeliveryRoute,
+          as: 'childRoutes',
+          where: { isActive: true },
+          required: false,
+          include: [
+            {
+              model: DeliveryRouteStop,
+              as: 'stops',
+              where: { isActive: true },
+              required: false,
+            },
+            {
+              model: Driver,
+              as: 'driver',
+              attributes: ['id', 'firstName', 'lastName', 'phoneNumber', 'currentLatitude', 'currentLongitude'],
+            },
+            {
+              model: Vehicle,
+              as: 'vehicle',
+              attributes: ['id', 'description', 'vinNumber'],
+            },
+          ],
+          order: [['id', 'ASC']],
+        },
+      ],
+      order: [
+        [{ model: DeliveryRoute, as: 'childRoutes' }, 'id', 'ASC'],
+        [{ model: DeliveryRoute, as: 'childRoutes' }, { model: DeliveryRouteStop, as: 'stops' }, 'stopSequence', 'ASC'],
+      ],
+    });
+
+    if (!group) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+
+    const plainGroup: any = group.get({ plain: true });
+    const allStops = (plainGroup.childRoutes || []).flatMap((r: any) => r.stops || []);
+    const cNumbers = [...new Set(allStops.map((s: any) => s.C_Number))];
+
+    if (cNumbers.length === 0) return plainGroup;
+
+    const customers = await Customer.findAll({
+      where: { C_Number: { [Op.in]: cNumbers as number[] } },
+      attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Phone'],
+      raw: true,
+    });
+
+    const customerMap = new Map(
+      customers.map((c: any) => [c.C_Number, c])
+    );
+
+    plainGroup.childRoutes = (plainGroup.childRoutes || []).map((route: any) => ({
+      ...route,
+      stops: (route.stops || []).map((stop: any) => {
+        const customer = customerMap.get(stop.C_Number);
+        return {
+          ...stop,
+          C_Name: customer?.C_Name || null,
+          C_Address: customer?.C_Address || null,
+          C_City: customer?.C_City || null,
+          C_State: customer?.C_State || null,
+          C_Zip: customer?.C_Zip || null,
+          C_Phone: customer?.C_Phone || null,
+        };
+      }),
+    }));
+
+    return plainGroup;
+  }
+
+
+  // services/deliveryRoute.service.ts
+
+  async createManualRoute(body: any) {
+    const { day, origin, destination, driverId, truckId, orders } = body;
+
+    // ── Validations ──────────────────────────────────────────────
+    if (!day) throw new AppError('day is required', 400);
+    if (!origin) throw new AppError('origin is required', 400);
+    if (!destination) throw new AppError('destination is required', 400);
+    if (!driverId) throw new AppError('driverId is required', 400);
+    if (!truckId) throw new AppError('truckId is required', 400);
+    if (!orders?.length) throw new AppError('At least 1 order is required', 400);
+
+    // ── Validate each order has stopSequence ─────────────────────
+    for (const order of orders) {
+      if (!order.stopSequence) {
+        throw new AppError(
+          `stopSequence is required for orderNumber ${order.orderNumber}`,
+          400
+        );
+      }
+    }
+
+    // ── Check duplicate orderNumbers ─────────────────────────────
+    const orderNumbers = orders.map((o: any) => o.orderNumber);
+    if (new Set(orderNumbers).size !== orderNumbers.length) {
+      throw new AppError('Duplicate orderNumbers found in payload', 400);
+    }
+
+    // ── Check duplicate stopSequences ────────────────────────────
+    const sequences = orders.map((o: any) => o.stopSequence);
+    if (new Set(sequences).size !== sequences.length) {
+      throw new AppError('Duplicate stopSequence found in payload', 400);
+    }
+
+    // ── Sort by stopSequence (FE order guaranteed) ───────────────
+    const sortedOrders = [...orders].sort(
+      (a: any, b: any) => a.stopSequence - b.stopSequence
+    );
+
+    // ── Check driver not already assigned on this day ────────────
+    const alreadyAssignedDriver = await DeliveryRoute.findOne({
+      where: { day, driverId, isActive: true },
+    });
+    if (alreadyAssignedDriver) {
+      throw new AppError(
+        `Driver ${driverId} already has a route on ${day}`,
+        400
+      );
+    }
+
+    // ── Check truck not already assigned on this day ─────────────
+    const alreadyAssignedTruck = await DeliveryRoute.findOne({
+      where: { day, truckId, isActive: true },
+    });
+    if (alreadyAssignedTruck) {
+      throw new AppError(
+        `Truck ${truckId} already has a route on ${day}`,
+        400
+      );
+    }
+
+    // ── Calculate distance + ETA per leg (no reorder) ────────────
+    const { legs, polyline, totalKilometers, totalMiles, totalDurationInMinutes } =
+      await getDirectionsInOrder(
+        origin,
+        destination,
+        sortedOrders.map((o: any) => ({ lat: o.lat, lng: o.lng }))
+      );
+    // ── Build stops with distance + ETA ──────────────────────────
+    const stopsWithDistance = sortedOrders.map((order: any, index: number) => {
+      const leg = legs[index];
+
+      const legKm = Number((leg.distanceMeters / 1000).toFixed(3));
+
+      const cumulativeKm = Number(
+        (
+          legs
+            .slice(0, index + 1)
+            .reduce((sum: number, l: any) => sum + l.distanceMeters, 0) / 1000
+        ).toFixed(3)
+      );
+
+      const etaSeconds = legs
+        .slice(0, index + 1)
+        .reduce((sum: number, l: any) => sum + l.durationSeconds, 0);
+
+      const etaMinutes = Math.ceil(etaSeconds / 60);
+
+      const startLat = index === 0 ? origin.lat : sortedOrders[index - 1].lat;
+      const startLng = index === 0 ? origin.lng : sortedOrders[index - 1].lng;
+
+      return {
+        orderNumber: order.orderNumber,
+        C_Number: order.C_Number,
+        stopSequence: order.stopSequence,  // FE sequence kept as-is
+        latitude: order.lat,
+        longitude: order.lng,
+        startLatitude: startLat,
+        startLongitude: startLng,
+        endLatitude: order.lat,
+        endLongitude: order.lng,
+        totalKilometers: legKm,
+        cumulativeKm,
+        etaMinutes,
+        isLastStop: index === sortedOrders.length - 1,
+      };
+    });
+
+    // ── Save in one transaction ───────────────────────────────────
+    let finalResult: any = {};
+
+    await postgresSequelize.transaction(async (t) => {
+
+      // ── Create Route Group ──────────────────────────────────
+      const groupNumber = `GRP-MANUAL-${day}-${Date.now()}`;
+
+      const routeGroup = await DeliveryRouteGroup.create(
+        {
+          groupNumber,
+          day,
+          totalOrders: sortedOrders.length,
+          totalRoutes: 1,
+          totalStops: sortedOrders.length,
+          totalKilometers,
+          totalMiles,
+          originLat: origin.lat,
+          originLng: origin.lng,
+          destinationLat: destination.lat,
+          destinationLng: destination.lng,
+          status: 'not_started',
+          isActive: true,
+        },
+        { transaction: t }
+      );
+
+      const routeNumber = `R-MANUAL-${day}-D${driverId}`;
+
+      // ── Create DeliveryRoute ────────────────────────────────
+      const route = await DeliveryRoute.create(
+        {
+          routeGroupId: routeGroup.id,
+          routeNumber,
+          routeGroupKey: routeNumber,
+          day,
+          driverId,
+          truckId,
+          orderStartLat: origin.lat,
+          orderStartLong: origin.lng,
+          orderEndLat: destination.lat,
+          orderEndLong: destination.lng,
+          routeStatus: 'not_started',
+          totalStops: sortedOrders.length,
+          completedStops: 0,
+          totalKilometers,
+          totalMiles,
+          totalDurationInMinutes,
+          hasChildren: false,
+          parentRouteId: 0,
+          splitIndex: 0,
+          isActive: true,
+        },
+        { transaction: t }
+      );
+
+      // ── Create Stops ────────────────────────────────────────
+      const stopsToInsert = stopsWithDistance.map((s: any) => ({
+        routeId: route.id,
+        routeName: routeNumber,
+        day,
+        orderNumber: s.orderNumber,
+        C_Number: s.C_Number,
+        stopSequence: s.stopSequence,
+        latitude: s.latitude,
+        longitude: s.longitude,
+        startLatitude: s.startLatitude,
+        startLongitude: s.startLongitude,
+        endLatitude: s.endLatitude,
+        endLongitude: s.endLongitude,
+        totalKilometers: s.totalKilometers,
+        status: 'not_delivered',
+        isLastStop: s.isLastStop,
+        isActive: true,
+      }));
+
+      await DeliveryRouteStop.bulkCreate(stopsToInsert, { transaction: t });
+
+      finalResult = {
+        message: 'Manual route created successfully',
+        routeGroup: {
+          id: routeGroup.id,
+          groupNumber: routeGroup.groupNumber,
+          day,
+          totalOrders: sortedOrders.length,
+          totalRoutes: 1,
+          totalStops: sortedOrders.length,
+          totalKilometers,
+          totalMiles,
+        },
+        route: {
+          routeId: route.id,
+          routeNumber,
+          driverId,
+          truckId,
+          totalStops: sortedOrders.length,
+          totalKilometers,
+          totalMiles,
+          totalDurationInMinutes,
+          day,
+        },
+        stops: stopsWithDistance,
+      };
+    });
+
+    return finalResult;
+  }
+
 }
+

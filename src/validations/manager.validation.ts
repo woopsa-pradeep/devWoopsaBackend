@@ -1803,6 +1803,9 @@ export const createDriverSchema = Joi.object({
     'string.empty': 'Email cannot be empty',
     'any.required': 'Email is required',
   }),
+  phoneNumber: Joi.string().trim().allow(null).optional().messages({
+    'string.base': 'Phone number must be a string',
+  }),
 
 
 
@@ -3855,3 +3858,80 @@ export const createCustomerSchema = Joi.object({
     'string.empty': 'Customer name cannot be empty',
   }),
 }).options({ allowUnknown: true });
+
+export const createManualRouteSchema = Joi.object({
+  day: Joi.string().required().messages({
+    'string.base': 'Day must be a string',
+    'string.empty': 'Day is required',
+    'any.required': 'Day is required',
+  }),
+  origin: Joi.object({
+    lat: Joi.number().required().messages({
+      'number.base': 'Origin latitude must be a number',
+      'any.required': 'Origin latitude is required',
+    }),
+    lng: Joi.number().required().messages({
+      'number.base': 'Origin longitude must be a number',
+      'any.required': 'Origin longitude is required',
+    }),
+  }).required().messages({
+    'any.required': 'Origin is required',
+  }),
+  destination: Joi.object({
+    lat: Joi.number().required().messages({
+      'number.base': 'Destination latitude must be a number',
+      'any.required': 'Destination latitude is required',
+    }),
+    lng: Joi.number().required().messages({
+      'number.base': 'Destination longitude must be a number',
+      'any.required': 'Destination longitude is required',
+    }),
+  }).required().messages({
+    'any.required': 'Destination is required',
+  }),
+  driverId: Joi.number().integer().required().messages({
+    'number.base': 'Driver ID must be a number',
+    'number.integer': 'Driver ID must be an integer',
+    'any.required': 'Driver ID is required',
+  }),
+  truckId: Joi.number().integer().required().messages({
+    'number.base': 'Truck ID must be a number',
+    'number.integer': 'Truck ID must be an integer',
+    'any.required': 'Truck ID is required',
+  }),
+  orders: Joi.array()
+    .items(
+      Joi.object({
+        stopSequence: Joi.number().integer().required().messages({
+          'number.base': 'Stop sequence must be a number',
+          'number.integer': 'Stop sequence must be an integer',
+          'any.required': 'Stop sequence is required',
+        }),
+        orderNumber: Joi.number().integer().required().messages({
+          'number.base': 'Order number must be a number',
+          'number.integer': 'Order number must be an integer',
+          'any.required': 'Order number is required',
+        }),
+        C_Number: Joi.number().integer().required().messages({
+          'number.base': 'Customer number must be a number',
+          'number.integer': 'Customer number must be an integer',
+          'any.required': 'Customer number is required',
+        }),
+        lat: Joi.number().required().messages({
+          'number.base': 'Latitude must be a number',
+          'any.required': 'Latitude is required',
+        }),
+        lng: Joi.number().required().messages({
+          'number.base': 'Longitude must be a number',
+          'any.required': 'Longitude is required',
+        }),
+      })
+    )
+    .min(1)
+    .required()
+    .messages({
+      'array.base': 'Orders must be an array',
+      'array.min': 'At least 1 order is required',
+      'any.required': 'Orders are required',
+    }),
+});

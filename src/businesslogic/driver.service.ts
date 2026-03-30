@@ -177,73 +177,147 @@ export class DriverService {
       throw new AppError(Manager.RECORD_NOT_FOUND, 404);
     }
 
-    const firstStop = await DeliveryRouteStop.findOne({
+    const firstInProgressStop = await DeliveryRouteStop.findOne({
       where: {
         routeId,
-        status: DeliveryStopStatus.NOT_DELIVERED,
+        status: DeliveryStopStatus.IN_PROGRESS,
         isActive: true,
       },
       order: [["stopSequence", "ASC"]],
     });
 
-    if (!firstStop) {
-      throw new AppError("No pending delivery stop found for this route", 404);
-    }
-    let pod = await DeliveryRoutePOD.findOne({
-      where: {
-        routeId,
-        routeStopId: firstStop.id,
-        driverId,
-        isActive: true,
-      },
-    });
+    if (firstInProgressStop) {
 
-    await DeliveryRoute.update({
-      routeStatus: RouteStatus.IN_PROGRESS,
-    }, { where: { id: routeId } });
 
-    if (!pod) {
-      const epicBoxes = await OrderPickBox.findAll({
+      let pod = await DeliveryRoutePOD.findOne({
         where: {
-          orderNumber: firstStop.orderNumber,
+          routeId,
+          routeStopId: firstInProgressStop.id,
+          driverId,
+          isActive: true,
         },
       });
 
-      const boxBarCode: string[] = [];
-      const scanBarCode: string[] = [];
-      const expectedBundles = epicBoxes.length;
+      await DeliveryRoute.update({
+        routeStatus: RouteStatus.IN_PROGRESS,
+      }, { where: { id: routeId } });
 
-      for (const box of epicBoxes) {
-        if (box.barcode) {
-          boxBarCode.push(box.barcode);
+      if (!pod) {
+        const epicBoxes = await OrderPickBox.findAll({
+          where: {
+            orderNumber: firstInProgressStop.orderNumber,
+          },
+        });
+
+        const boxBarCode: string[] = [];
+        const scanBarCode: string[] = [];
+        const expectedBundles = epicBoxes.length;
+
+        for (const box of epicBoxes) {
+          if (box.barcode) {
+            boxBarCode.push(box.barcode);
+          }
         }
+
+        pod = await DeliveryRoutePOD.create({
+          routeId,
+          routeStopId: firstInProgressStop.id,
+          driverId,
+          orderNumber: firstInProgressStop.orderNumber,
+          C_Number: firstInProgressStop.C_Number,
+          boxBarCode,
+          scanBarCode,
+          amount: 0,
+          expectedBundles,
+          scannedBundles: 0,
+          allBundlesScanned: false,
+          orderStatus: OrderPODStatus.IN_PROGRESS,
+          paymentTerms: PaymentTerms.CASH,
+          paymentInCheck: false,
+          photos: [],
+          podAt: new Date(),
+          isActive: true,
+        });
       }
 
-      pod = await DeliveryRoutePOD.create({
-        routeId,
-        routeStopId: firstStop.id,
-        driverId,
-        orderNumber: firstStop.orderNumber,
-        C_Number: firstStop.C_Number,
-        boxBarCode,
-        scanBarCode,
-        amount: 0,
-        expectedBundles,
-        scannedBundles: 0,
-        allBundlesScanned: false,
-        orderStatus: OrderPODStatus.IN_PROGRESS,
-        paymentTerms: PaymentTerms.CASH,
-        paymentInCheck: false,
-        photos: [],
-        podAt: new Date(),
-        isActive: true,
+      return {
+        pod: pod!.get({ plain: true }),
+        firstStop: firstInProgressStop.get({ plain: true }),
+      };
+
+
+    } else {
+      const firstStop = await DeliveryRouteStop.findOne({
+        where: {
+          routeId,
+          status: DeliveryStopStatus.NOT_DELIVERED,
+          isActive: true,
+        },
+        order: [["stopSequence", "ASC"]],
       });
+
+      if (!firstStop) {
+        throw new AppError("No pending delivery stop found for this route", 404);
+      }
+      let pod = await DeliveryRoutePOD.findOne({
+        where: {
+          routeId,
+          routeStopId: firstStop.id,
+          driverId,
+          isActive: true,
+        },
+      });
+
+      await DeliveryRoute.update({
+        routeStatus: RouteStatus.IN_PROGRESS,
+      }, { where: { id: routeId } });
+
+      if (!pod) {
+        const epicBoxes = await OrderPickBox.findAll({
+          where: {
+            orderNumber: firstStop.orderNumber,
+          },
+        });
+
+        const boxBarCode: string[] = [];
+        const scanBarCode: string[] = [];
+        const expectedBundles = epicBoxes.length;
+
+        for (const box of epicBoxes) {
+          if (box.barcode) {
+            boxBarCode.push(box.barcode);
+          }
+        }
+
+        pod = await DeliveryRoutePOD.create({
+          routeId,
+          routeStopId: firstStop.id,
+          driverId,
+          orderNumber: firstStop.orderNumber,
+          C_Number: firstStop.C_Number,
+          boxBarCode,
+          scanBarCode,
+          amount: 0,
+          expectedBundles,
+          scannedBundles: 0,
+          allBundlesScanned: false,
+          orderStatus: OrderPODStatus.IN_PROGRESS,
+          paymentTerms: PaymentTerms.CASH,
+          paymentInCheck: false,
+          photos: [],
+          podAt: new Date(),
+          isActive: true,
+        });
+      }
+
+      return {
+        pod: pod!.get({ plain: true }),
+        firstStop: firstStop.get({ plain: true }),
+      };
     }
 
-    return {
-      pod: pod!.get({ plain: true }),
-      firstStop: firstStop.get({ plain: true }),
-    };
+
+
   }
 
   async getRouteFullDetails(routeId: number) {
@@ -915,6 +989,18 @@ export class DriverService {
     });
 
     return finalResult;
+  }
+
+  async updateDriverLation(driverId: number, body: any) {
+
+    const driver = await Driver.findOne({
+      where: { id: driverId, isActive: true },
+    });
+    if (!driver) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    await driver.update(body);
+    return driver;
   }
 
 

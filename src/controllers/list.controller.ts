@@ -142,19 +142,19 @@ export class ListController {
         const data = await this.listService.getListOfInventoryLogHistory();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
-    
+
     async getListOfOrderReports(req: Request, res: Response) {
         const data = await this.listService.getListOfOrderReports();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
     async getDriverList(req: Request, res: Response) {
-        const data = await this.listService.getDriverList();
+        const data = await this.listService.getDriverList(req.query.date as string);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
     async getVehicleList(req: Request, res: Response) {
-        const data = await this.listService.getVehicleList();
+        const data = await this.listService.getVehicleList(req.query.date as string);
         sendResponse(res, 200, true, data, General.SUCCESS);
-    }   
+    }
 }
