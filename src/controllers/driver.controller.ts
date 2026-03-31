@@ -20,6 +20,12 @@ export class DriverController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getDriverProfile(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const data = await this.driverService.getProfile(driverId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async getTodayDriverOrders(req: AuthRequest, res: Response) {
         const driverId = Number(req.user?.id);
         const data = await this.driverService.getTodayDriverOrders(driverId);

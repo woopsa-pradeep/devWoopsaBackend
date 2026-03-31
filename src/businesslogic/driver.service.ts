@@ -24,6 +24,7 @@ import { postgresSequelize } from "../db";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { PaginationOptions } from "../interfaces/pagination.interface";
+import { Distributor } from "../models/mmsql/distributor.model";
 
 interface DriverAssignment {
   driverId: number;
@@ -94,6 +95,22 @@ export class DriverService {
     };
   }
 
+  async getProfile(id: number) {
+    const driver = await Driver.findOne({
+      where: { id, isActive: true },
+    });
+    const wareHouse = await Distributor.findOne({ attributes: ['D_Name', 'D_Addr1', 'D_Addr2', 'D_City', 'D_State', 'D_Zip'] })
+    if (!wareHouse) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    if (!driver) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    return {
+      ...driver.get({ plain: true }),
+      wareHouse: wareHouse.get({ plain: true }),
+    };
+  }
 
   async getTodayDriverOrders(driverId: number) {
     const today = moment().format("YYYY-MM-DD");

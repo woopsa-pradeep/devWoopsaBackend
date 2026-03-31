@@ -42,7 +42,7 @@ interface DeliveryRoutePODAttributes {
   paymentInCheck: boolean;
   checkNumber: string | null;   // only if paymentInCheck = true
   checkImage: string | null;    // S3 URL of check photo
-
+  checkImage1: string | null;    // S3 URL of check photo
   // Proof
   customerSignature: string | null;  // S3 URL of signature
   signBy: string | null;             // naam jo sign kiya
@@ -92,7 +92,7 @@ export class DeliveryRoutePOD
   public scanBarCode!: string[];
   public paymentTermComplete!: boolean;
   public postDeliveryCompleted!: boolean;
-
+  public checkImage1!: string | null;
   public isActive!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -195,6 +195,11 @@ DeliveryRoutePOD.init(
       type: DataTypes.STRING,   // S3 URL
       allowNull: true,
     },
+    checkImage1: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
 
     // Proof of Delivery
     customerSignature: {

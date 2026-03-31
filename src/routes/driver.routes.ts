@@ -33,5 +33,6 @@ router.post('/orderStopCompleted/:stopId', verifyRole(ROLES.DRIVER), catchAsync(
 router.get('/getDriverCurrentOrder', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverCurrentOrder.bind(driverController)));
 router.get('/getTodayDriverStops', verifyRole(ROLES.DRIVER), catchAsync(driverController.getTodayDriverStops.bind(driverController)));
 router.put('/updateDriverLocation', verifyRole(ROLES.DRIVER), catchAsync(driverController.updateDriverLation.bind(driverController)));
+router.get('/getDriverProfile', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverProfile.bind(driverController)));
 export default router;
 
