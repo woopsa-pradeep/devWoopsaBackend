@@ -18,7 +18,7 @@ import DeliveryRoutePOD, {
   PaymentTerms,
 } from "../models/postgres/deliveryRoutePOD.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
-import { clusterOrdersByLocation, getOptimizedDirections } from "../utils/map.utlis";
+import { clusterOrdersByLocation, getDirectionsInOrder, getOptimizedDirections } from "../utils/map.utlis";
 import DeliveryRouteGroup from "../models/postgres/driverRoutesGroup.model";
 import { postgresSequelize } from "../db";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
@@ -604,7 +604,6 @@ export class DriverService {
     const alreadyAssignedDrivers = await DeliveryRoute.findAll({
       where: { day, driverId: driverIds, isActive: true },
     });
-
     if (alreadyAssignedDrivers.length) {
       const conflictIds = [...new Set(alreadyAssignedDrivers.map((r: any) => r.driverId))];
       throw new AppError(
@@ -617,7 +616,6 @@ export class DriverService {
     const alreadyAssignedTrucks = await DeliveryRoute.findAll({
       where: { day, truckId: truckIds, isActive: true },
     });
-
     if (alreadyAssignedTrucks.length) {
       const conflictIds = [...new Set(alreadyAssignedTrucks.map((r: any) => r.truckId))];
       throw new AppError(
@@ -626,7 +624,76 @@ export class DriverService {
       );
     }
 
-    // ── One transaction — create group + routes + stops ──────────
+    // ── Step 1: Enrich routes — call Google Maps if needed ───────
+    const enrichedRoutes: any[] = [];
+
+    for (const preview of previewedRoutes) {
+
+      const needsGoogleMaps =
+        !preview.polyline ||
+        preview.polyline === '' ||
+        Number(preview.totalKilometers) === 0 ||
+        Number(preview.totalDurationInMinutes) === 0;
+
+      let polyline = preview.polyline;
+      let totalKilometers = preview.totalKilometers;
+      let totalMiles = preview.totalMiles;
+      let totalDurationInMinutes = preview.totalDurationInMinutes;
+      let enrichedStops = preview.stops;
+
+      if (needsGoogleMaps) {
+        // Directions API — no optimize:true — keeps FE stop order
+        const directions = await getDirectionsInOrder(
+          origin,
+          destination,
+          preview.stops.map((s: any) => ({ lat: s.latitude, lng: s.longitude }))
+        );
+
+        polyline = directions.polyline;
+        totalKilometers = directions.totalKilometers;
+        totalMiles = directions.totalMiles;
+        totalDurationInMinutes = directions.totalDurationInMinutes;
+
+        // Enrich each stop with real distanceKm + etaMinutes
+        enrichedStops = preview.stops.map((stop: any, index: number) => {
+          const leg = directions.legs[index];
+
+          const legKm = Number(
+            ((leg?.distanceMeters ?? 0) / 1000).toFixed(3)
+          );
+
+          const cumulativeKm = Number(
+            (
+              directions.legs
+                .slice(0, index + 1)
+                .reduce((sum: number, l: any) => sum + (l?.distanceMeters ?? 0), 0) / 1000
+            ).toFixed(3)
+          );
+
+          const etaSeconds = directions.legs
+            .slice(0, index + 1)
+            .reduce((sum: number, l: any) => sum + (l?.durationSeconds ?? 0), 0);
+
+          return {
+            ...stop,
+            distanceKm: legKm,
+            cumulativeKm,
+            etaMinutes: Math.ceil(etaSeconds / 60),
+          };
+        });
+      }
+
+      enrichedRoutes.push({
+        ...preview,
+        polyline,
+        totalKilometers,
+        totalMiles,
+        totalDurationInMinutes,
+        stops: enrichedStops,
+      });
+    }
+
+    // ── Step 2: One transaction — create group + routes + stops ──
     let finalResult: any = {};
 
     await postgresSequelize.transaction(async (t) => {
@@ -634,7 +701,7 @@ export class DriverService {
       // ── Create Route Group ────────────────────────────────────
       const groupNumber = `GRP-${day}-${Date.now()}`;
 
-      const totalOrders = previewedRoutes.reduce(
+      const totalOrders = enrichedRoutes.reduce(
         (sum: number, r: any) => sum + r.stops.length, 0
       );
 
@@ -643,7 +710,7 @@ export class DriverService {
           groupNumber,
           day,
           totalOrders,
-          totalRoutes: previewedRoutes.length,
+          totalRoutes: enrichedRoutes.length,
           totalStops: 0,
           totalKilometers: 0,
           totalMiles: 0,
@@ -659,11 +726,11 @@ export class DriverService {
 
       const createdRoutes: any[] = [];
 
-      // ── Loop each previewed route ─────────────────────────────
-      for (const preview of previewedRoutes) {
+      // ── Loop each enriched route ──────────────────────────────
+      for (const preview of enrichedRoutes) {
         const routeNumber = `R-${day}-D${preview.driverId}`;
 
-        // ── Create DeliveryRoute ──────────────────────────────
+        // ── Create DeliveryRoute (polyline stored) ────────────
         const route = await DeliveryRoute.create(
           {
             routeGroupId: routeGroup.id,
@@ -682,6 +749,7 @@ export class DriverService {
             totalKilometers: preview.totalKilometers,
             totalMiles: preview.totalMiles,
             totalDurationInMinutes: preview.totalDurationInMinutes,
+            polyline: preview.polyline,    // ← stored
             hasChildren: false,
             parentRouteId: 0,
             splitIndex: 0,
@@ -690,10 +758,8 @@ export class DriverService {
           { transaction: t }
         );
 
-
         // ── Build Stops ───────────────────────────────────────
         const stops = preview.stops.map((stop: any) => ({
-
           routeId: route.id,
           routeName: routeNumber,
           day,
@@ -712,12 +778,17 @@ export class DriverService {
           isActive: true,
         }));
 
-
-
         await DeliveryRouteStop.bulkCreate(stops, { transaction: t });
-        let OrderNumberUpdate: number[] = preview.stops.map((stop: any) => stop.orderNumber);
-        if (OrderNumberUpdate.length > 0) {
-          await OrderHeader.update({ route_created: true }, { where: { Order_Number: { [Op.in]: OrderNumberUpdate as unknown as any[] } } });
+
+        // ── Update OrderHeader route_created flag ─────────────
+        const orderNumbersToUpdate: number[] = preview.stops.map(
+          (stop: any) => stop.orderNumber
+        );
+        if (orderNumbersToUpdate.length > 0) {
+          await OrderHeader.update(
+            { route_created: true },
+            { where: { Order_Number: { [Op.in]: orderNumbersToUpdate as any } } }
+          );
         }
 
         createdRoutes.push({

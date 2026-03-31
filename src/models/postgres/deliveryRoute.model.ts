@@ -9,31 +9,31 @@ interface DeliveryRouteAttributes {
   hasChildren: boolean;
   driverId: number;
   truckId: number;
-  parentRouteId ?: number;
+  parentRouteId?: number;
   orderStartLat: number;
   orderStartLong: number;
   orderEndLat: number;
   orderEndLong: number;
   totalKilometers: number;
   routeStatus: string;
-  routeGroupKey: string; 
+  routeGroupKey: string;
   totalMiles: number;
   totalDurationInMinutes: number;
   splitIndex: number;
   totalStops: number;
   completedStops: number;
   routeGroupId: number;
-
+  polyline: string;
   isActive: boolean;
 }
 
 export enum RouteStatus {
-    NOT_STARTED = 'not_started',
-    IN_PROGRESS = 'in_progress',
-    COMPLETED = 'completed',
-    CANCELLED = 'cancelled',
-  }
-  
+  NOT_STARTED = 'not_started',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+}
+
 /** Creation attributes */
 type DeliveryRouteCreationAttributes =
   Optional<
@@ -44,8 +44,7 @@ type DeliveryRouteCreationAttributes =
 /** Model */
 export class DeliveryRoute
   extends Model<DeliveryRouteAttributes, DeliveryRouteCreationAttributes>
-  implements DeliveryRouteAttributes
-{
+  implements DeliveryRouteAttributes {
   public id!: number;
   public routeNumber!: string;
   public day!: Date;
@@ -53,7 +52,7 @@ export class DeliveryRoute
   public hasChildren!: boolean;
   public driverId!: number;
   public truckId!: number;
-  public parentRouteId ?: number;
+  public parentRouteId?: number;
   public orderStartLat!: number;
   public orderStartLong!: number;
   public orderEndLat!: number;
@@ -61,10 +60,11 @@ export class DeliveryRoute
   public routeGroupKey!: string;
   public routeStatus!: string;
   public totalKilometers!: number;
-  public totalMiles!:number;
-  public totalDurationInMinutes!:number;
+  public totalMiles!: number;
+  public totalDurationInMinutes!: number;
   public totalStops!: number;
   public completedStops!: number;
+  public polyline!: string;
   public routeGroupId!: number;
   public isActive!: boolean;
 }
@@ -84,18 +84,18 @@ DeliveryRoute.init(
     },
     // Add this field in DeliveryRoute.init()
 
-routeGroupId: {
-  type: DataTypes.INTEGER,
-  allowNull: true,       // null for old routes, filled for new ones
-  defaultValue: null,
-},
+    routeGroupId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,       // null for old routes, filled for new ones
+      defaultValue: null,
+    },
 
     parentRouteId: {
       type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue: null,
     },
-    routeGroupKey : {
+    routeGroupKey: {
       type: DataTypes.STRING,
       allowNull: false,
     },
@@ -146,15 +146,15 @@ routeGroupId: {
     },
 
     routeStatus: {
-        type: DataTypes.ENUM(
-          RouteStatus.NOT_STARTED,
-          RouteStatus.IN_PROGRESS,
-          RouteStatus.COMPLETED,
-          RouteStatus.CANCELLED
-        ),
-        allowNull: false,
-        defaultValue: RouteStatus.NOT_STARTED,
-      },
+      type: DataTypes.ENUM(
+        RouteStatus.NOT_STARTED,
+        RouteStatus.IN_PROGRESS,
+        RouteStatus.COMPLETED,
+        RouteStatus.CANCELLED
+      ),
+      allowNull: false,
+      defaultValue: RouteStatus.NOT_STARTED,
+    },
 
     totalStops: {
       type: DataTypes.INTEGER,
@@ -178,7 +178,13 @@ routeGroupId: {
       allowNull: false,
       defaultValue: true,
     },
-  
+
+    polyline: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null,
+    },
+
     totalMiles: {
       type: DataTypes.DECIMAL(10, 4),
       allowNull: false,

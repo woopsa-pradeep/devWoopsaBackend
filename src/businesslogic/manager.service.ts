@@ -10064,8 +10064,6 @@ export class ManagerService {
   }
 
 
-
-
   async getDeliveryRoutes(query: PaginationOptions & {
     routeId?: number;
     day?: string;
@@ -18892,6 +18890,7 @@ export class ManagerService {
       // ── Create DeliveryRoute ────────────────────────────────
       const route = await DeliveryRoute.create(
         {
+          polyline: polyline,
           routeGroupId: routeGroup.id,
           routeNumber,
           routeGroupKey: routeNumber,
