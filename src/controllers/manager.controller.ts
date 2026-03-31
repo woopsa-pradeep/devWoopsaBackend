@@ -2229,4 +2229,9 @@ export class ManagerController {
     sendResponse(res, 201, true, data, General.SUCCESS);
   }
 
+  async uploadBulkImages(req: AuthRequest, res: Response) {
+    const data = await this.managerService.uploadBulkImages(req);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
 }

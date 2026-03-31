@@ -21,7 +21,7 @@ router.get('/getDriverDashboardDetails', verifyRole(ROLES.DRIVER), catchAsync(dr
 router.post('/previewMultiDriverRoutes', verifyRole(ROLES.DRIVER, ROLES.MANAGER), catchAsync(driverController.previewMultiDriverRoutes.bind(driverController)));
 router.post('/createMultiDriverRoutes', verifyRole(ROLES.DRIVER, ROLES.MANAGER), catchAsync(driverController.createMultiDriverRoutes.bind(driverController)));
 router.post(
-  '/updateDriverLatLong',
+  '/updateDriverLocation',
   verifyRole(ROLES.DRIVER),
   validateRequest(updateDriverLatLongSchema),
   catchAsync(driverController.updateDriverLatLong.bind(driverController))

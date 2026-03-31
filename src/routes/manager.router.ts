@@ -613,4 +613,7 @@ router.get('/created-routes', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync
 router.get('/route-full-stops/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getRouteFullStops.bind(managerController)));
 router.post('/create-manual-route', verifyRole(ROLES.MANAGER), validateRequest(createManualRouteSchema), catchAsync(managerController.createManualRoute.bind(managerController)));
 
+// Bulk Upload Item Images routes
+router.post('/bulk-upload-item-images', verifyRole(ROLES.MANAGER, ROLES.SALES), multerUpload.array("images", 30), catchAsync(managerController.uploadBulkImages.bind(managerController)));
+//
 export default router;

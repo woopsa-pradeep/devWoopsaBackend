@@ -35,7 +35,8 @@ interface DeliveryRoutePODAttributes {
 
   // Order Status
   orderStatus: OrderPODStatus;
-
+  paymentTermComplete: boolean;
+  postDeliveryCompleted: boolean;
   // Payment
   paymentTerms: PaymentTerms;
   paymentInCheck: boolean;
@@ -89,6 +90,8 @@ export class DeliveryRoutePOD
   public podAt!: Date;
   public boxBarCode!: string[];
   public scanBarCode!: string[];
+  public paymentTermComplete!: boolean;
+  public postDeliveryCompleted!: boolean;
 
   public isActive!: boolean;
   public readonly createdAt!: Date;
@@ -139,7 +142,16 @@ DeliveryRoutePOD.init(
       allowNull: false,
       defaultValue: [],
     },
-
+    paymentTermComplete: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    postDeliveryCompleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     // Bundle Scan
     scannedBundles: {
       type: DataTypes.INTEGER,

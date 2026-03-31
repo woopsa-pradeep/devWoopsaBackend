@@ -138,6 +138,7 @@ import ApiLog from "../models/postgres/apilogs.model";
 import { InventoryLogHistory } from "../models/mmsql/InventoryLogHistory.model";
 import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model"
 import { DEFAULT_INVOICE_TEMPLATE } from "../seeder/invoiceTemplate.seeder"
+import pLimit from "p-limit";
 type DisType = "PERCENT" | "FLAT";
 
 type BulkItemInput = {
@@ -18966,6 +18967,118 @@ export class ManagerService {
 
     return finalResult;
   }
+
+
+
+
+
+  async uploadBulkImages(req: any) {
+    const files = req.files as Express.Multer.File[];
+
+    if (!files || files.length === 0) {
+      throw new AppError("No files uploaded", 400);
+    }
+
+    const fileMap = new Map<string, Express.Multer.File>();
+
+    for (const file of files) {
+      const productNumber = file.originalname.split(".")[0];
+      if (!/^\d+$/.test(productNumber)) continue;
+      if (!fileMap.has(productNumber)) {
+        fileMap.set(productNumber, file);
+      }
+    }
+
+    const uniqueFiles = Array.from(fileMap.entries());
+
+    const existingImages = await ProductImage.findAll({
+      where: { product_number: { [Op.in]: uniqueFiles.map(([pn]) => pn) } },
+      attributes: ['id', 'product_number'],
+      raw: true,
+    });
+
+    const existingMap = new Map(
+      existingImages.map((img: any) => [img.product_number, img.id])
+    );
+
+    const limit = pLimit(5);
+
+    const uploadResults = await Promise.allSettled(
+      uniqueFiles.map(([productNumber, file]) =>
+        limit(async () => {
+          const uploadResult = await uploadFileToAzure(
+            file.buffer,
+            file.originalname,
+            file.mimetype,
+            "product-images"
+          );
+
+          if (!uploadResult.success) {
+            throw new Error(uploadResult.error);
+          }
+
+          return {
+            product_number: productNumber,
+            img_url: uploadResult.url,
+            existingId: existingMap.get(productNumber) || null,
+          };
+        })
+      )
+    );
+
+    const toCreate: any[] = [];
+    const toUpdate: any[] = [];
+    const failed: any[] = [];
+
+    uploadResults.forEach((res, index) => {
+      const fileName = uniqueFiles[index][1].originalname;
+
+      if (res.status === "fulfilled") {
+        const { product_number, img_url, existingId } = res.value;
+        if (existingId) {
+          toUpdate.push({ id: existingId, img_url });
+        } else {
+          toCreate.push({ product_number, img_url, isActive: true, isAllow: true });
+        }
+      } else {
+        failed.push({ file: fileName, error: res.reason.message });
+      }
+    });
+
+    const transaction = await postgresSequelize.transaction();
+
+    try {
+      if (toCreate.length > 0) {
+        await ProductImage.bulkCreate(toCreate, { transaction });
+      }
+
+      if (toUpdate.length > 0) {
+        await Promise.all(
+          toUpdate.map((item: any) =>
+            ProductImage.update(
+              { img_url: item.img_url },
+              { where: { id: item.id }, transaction }
+            )
+          )
+        );
+      }
+
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw new AppError("Database operation failed", 500);
+    }
+
+    return {
+      totalFiles: files.length,
+      processed: uniqueFiles.length,
+      created: toCreate.length,
+      updated: toUpdate.length,
+      failedCount: failed.length,
+      failed,
+    };
+  }
+
 
 }
 
