@@ -22,6 +22,7 @@ import { EpickConfirmation } from './epickConfirmation.model';
 import { DeliveryRouteStop } from './deliveryRouteStop.model';
 import { DeliveryRoute } from './deliveryRoute.model';
 import { Driver } from './driver.model';
+import { DriverExpense } from './driverExpense.model';
 import Vehicle from './vehicle.model';
 import { ReceivableUser } from './receivableUser.model';
 import { TradeShowItem } from './tradeShowItem.model';
@@ -265,6 +266,26 @@ DeliveryRoute.belongsTo(Driver, {
   foreignKey: 'driverId',
   as: 'driver',
   constraints: false,
+});
+
+Driver.hasMany(DriverExpense, {
+  foreignKey: 'driverId',
+  as: 'expenses',
+});
+
+DriverExpense.belongsTo(Driver, {
+  foreignKey: 'driverId',
+  as: 'driver',
+});
+
+Vehicle.hasMany(DriverExpense, {
+  foreignKey: 'vehicleId',
+  as: 'driverExpenses',
+});
+
+DriverExpense.belongsTo(Vehicle, {
+  foreignKey: 'vehicleId',
+  as: 'vehicle',
 });
 
 DeliveryRouteGroup.hasMany(DeliveryRoute, {

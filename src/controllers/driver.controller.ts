@@ -99,4 +99,37 @@ export class DriverController {
         const data = await this.driverService.getPaymentOptions();
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async createDriverExpense(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const data = await this.driverService.createDriverExpense(driverId, req.body);
+        sendResponse(res, 201, true, data, General.SUCCESS);
+    }
+
+    async listDriverExpenses(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const data = await this.driverService.listDriverExpenses(driverId, req.query as any);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getDriverExpenseById(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const expenseId = Number(req.params.expenseId);
+        const data = await this.driverService.getDriverExpenseById(driverId, expenseId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async updateDriverExpense(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const expenseId = Number(req.params.expenseId);
+        const data = await this.driverService.updateDriverExpense(driverId, expenseId, req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async deleteDriverExpense(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const expenseId = Number(req.params.expenseId);
+        const data = await this.driverService.deleteDriverExpense(driverId, expenseId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

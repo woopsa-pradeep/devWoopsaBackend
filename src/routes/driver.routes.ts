@@ -4,8 +4,14 @@ import verifyRole from "../middlewares/verifyUser.middleware";
 import { ROLES } from "../interfaces/request.body.interface";
 import { catchAsync } from "../utils/catchAsync";
 import { multerUpload } from "../middlewares/upload.middleware";
-import { validateRequest } from "../middlewares/validation.middleware";
+import { validateRequest, validateParams, validateQuery } from "../middlewares/validation.middleware";
 import { updateDriverLatLongSchema, startDeliveryRouteSchema } from "../validations/auth.validation";
+import {
+  createDriverExpenseSchema,
+  updateDriverExpenseSchema,
+  driverExpenseIdParamSchema,
+  driverExpenseListQuerySchema,
+} from "../validations/driver.validation";
 
 
 
@@ -35,5 +41,38 @@ router.get('/getTodayDriverStops', verifyRole(ROLES.DRIVER), catchAsync(driverCo
 router.put('/updateDriverLocation', verifyRole(ROLES.DRIVER), catchAsync(driverController.updateDriverLation.bind(driverController)));
 router.get('/getDriverProfile', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverProfile.bind(driverController)));
 router.get('/getPaymentOptions', verifyRole(ROLES.DRIVER), catchAsync(driverController.getPaymentOptions.bind(driverController)));
+
+router.post(
+  '/expenses',
+  verifyRole(ROLES.DRIVER),
+  validateRequest(createDriverExpenseSchema),
+  catchAsync(driverController.createDriverExpense.bind(driverController))
+);
+router.get(
+  '/expenses',
+  verifyRole(ROLES.DRIVER),
+  validateQuery(driverExpenseListQuerySchema),
+  catchAsync(driverController.listDriverExpenses.bind(driverController))
+);
+router.get(
+  '/expenses/:expenseId',
+  verifyRole(ROLES.DRIVER),
+  validateParams(driverExpenseIdParamSchema),
+  catchAsync(driverController.getDriverExpenseById.bind(driverController))
+);
+router.put(
+  '/expenses/:expenseId',
+  verifyRole(ROLES.DRIVER),
+  validateParams(driverExpenseIdParamSchema),
+  validateRequest(updateDriverExpenseSchema),
+  catchAsync(driverController.updateDriverExpense.bind(driverController))
+);
+router.delete(
+  '/expenses/:expenseId',
+  verifyRole(ROLES.DRIVER),
+  validateParams(driverExpenseIdParamSchema),
+  catchAsync(driverController.deleteDriverExpense.bind(driverController))
+);
+
 export default router;
 

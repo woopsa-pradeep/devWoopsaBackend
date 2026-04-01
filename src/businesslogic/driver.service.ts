@@ -25,6 +25,7 @@ import { uploadFileToAzure } from "../utils/azureUploader";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { Distributor } from "../models/mmsql/distributor.model";
 import { ARDefinitions } from "../models/mmsql/arDefinitions.model";
+import { DriverExpense } from "../models/postgres/driverExpense.model";
 
 interface DriverAssignment {
   driverId: number;
@@ -1116,6 +1117,191 @@ export class DriverService {
       attributes: ['AR_SubTypeRef'],
     });
     return paymentOptions;
+  }
+
+  async createDriverExpense(driverId: number, body: any) {
+    const driver = await Driver.findOne({
+      where: { id: driverId, isActive: true },
+    });
+    if (!driver) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    if (body.vehicleId != null) {
+      const vehicle = await Vehicle.findOne({
+        where: { id: body.vehicleId, isActive: true },
+      });
+      if (!vehicle) {
+        throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+      }
+    }
+    const receiptUrl =
+      typeof body.receiptUrl === 'string' && body.receiptUrl.trim() !== ''
+        ? body.receiptUrl.trim()
+        : null;
+    const notes =
+      typeof body.notes === 'string' && body.notes.trim() !== ''
+        ? body.notes.trim()
+        : null;
+    const arSubTypeRef = String(body.arSubTypeRef).toLowerCase().trim();
+    const expense = await DriverExpense.create({
+      driverId,
+      vehicleId: body.vehicleId ?? null,
+      expenseType: String(body.expenseType).trim(),
+      amount: body.amount,
+      expenseDate: moment(body.expenseDate).format('YYYY-MM-DD'),
+      arSubTypeRef,
+      receiptUrl,
+      notes,
+    });
+    return expense.reload({
+      include: [
+        {
+          model: Vehicle,
+          as: 'vehicle',
+          attributes: [
+            'id',
+            'description',
+            'truckType',
+            'licenseRegistrationNumber',
+          ],
+        },
+      ],
+    });
+  }
+
+  async listDriverExpenses(
+    driverId: number,
+    query?: { startDate?: Date; endDate?: Date }
+  ) {
+    const where: any = { driverId };
+    if (query?.startDate && query?.endDate) {
+      where.expenseDate = {
+        [Op.between]: [
+          moment(query.startDate).format('YYYY-MM-DD'),
+          moment(query.endDate).format('YYYY-MM-DD'),
+        ],
+      };
+    } else if (query?.startDate) {
+      where.expenseDate = {
+        [Op.gte]: moment(query.startDate).format('YYYY-MM-DD'),
+      };
+    } else if (query?.endDate) {
+      where.expenseDate = {
+        [Op.lte]: moment(query.endDate).format('YYYY-MM-DD'),
+      };
+    }
+    return DriverExpense.findAll({
+      where,
+      order: [
+        ['expenseDate', 'DESC'],
+        ['id', 'DESC'],
+      ],
+      include: [
+        {
+          model: Vehicle,
+          as: 'vehicle',
+          attributes: [
+            'id',
+            'description',
+            'truckType',
+            'licenseRegistrationNumber',
+          ],
+        },
+      ],
+    });
+  }
+
+  async getDriverExpenseById(driverId: number, expenseId: number) {
+    const expense = await DriverExpense.findOne({
+      where: { id: expenseId, driverId },
+      include: [
+        {
+          model: Vehicle,
+          as: 'vehicle',
+          attributes: [
+            'id',
+            'description',
+            'truckType',
+            'licenseRegistrationNumber',
+          ],
+        },
+      ],
+    });
+    if (!expense) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    return expense;
+  }
+
+  async updateDriverExpense(driverId: number, expenseId: number, body: any) {
+    const expense = await DriverExpense.findOne({
+      where: { id: expenseId, driverId },
+    });
+    if (!expense) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    if (body.vehicleId !== undefined && body.vehicleId !== null) {
+      const vehicle = await Vehicle.findOne({
+        where: { id: body.vehicleId, isActive: true },
+      });
+      if (!vehicle) {
+        throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+      }
+    }
+    const patch: any = {};
+    if (body.vehicleId !== undefined) {
+      patch.vehicleId = body.vehicleId;
+    }
+    if (body.expenseType !== undefined) {
+      patch.expenseType = String(body.expenseType).trim();
+    }
+    if (body.amount !== undefined) {
+      patch.amount = body.amount;
+    }
+    if (body.expenseDate !== undefined) {
+      patch.expenseDate = moment(body.expenseDate).format('YYYY-MM-DD');
+    }
+    if (body.arSubTypeRef !== undefined) {
+      patch.arSubTypeRef = String(body.arSubTypeRef).toLowerCase().trim();
+    }
+    if (body.receiptUrl !== undefined) {
+      patch.receiptUrl =
+        typeof body.receiptUrl === 'string' && body.receiptUrl.trim() !== ''
+          ? body.receiptUrl.trim()
+          : null;
+    }
+    if (body.notes !== undefined) {
+      patch.notes =
+        typeof body.notes === 'string' && body.notes.trim() !== ''
+          ? body.notes.trim()
+          : null;
+    }
+    await expense.update(patch);
+    return expense.reload({
+      include: [
+        {
+          model: Vehicle,
+          as: 'vehicle',
+          attributes: [
+            'id',
+            'description',
+            'truckType',
+            'licenseRegistrationNumber',
+          ],
+        },
+      ],
+    });
+  }
+
+  async deleteDriverExpense(driverId: number, expenseId: number) {
+    const expense = await DriverExpense.findOne({
+      where: { id: expenseId, driverId },
+    });
+    if (!expense) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    await expense.destroy();
+    return { deleted: true };
   }
 
 }
