@@ -25,6 +25,7 @@ import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { PaginationOptions } from "../interfaces/pagination.interface";
 import { Distributor } from "../models/mmsql/distributor.model";
+import { ARDefinitions } from "../models/mmsql/arDefinitions.model";
 
 interface DriverAssignment {
   driverId: number;
@@ -730,6 +731,7 @@ export class DriverService {
         {
           groupNumber,
           day,
+          routeType: 'auto',
           totalOrders,
           totalRoutes: enrichedRoutes.length,
           totalStops: 0,
@@ -1095,5 +1097,19 @@ export class DriverService {
     return driver;
   }
 
+
+  async getPaymentOptions() {
+    const paymentOptions = await ARDefinitions.findAll({
+      where: {
+        AR_Ref: 'PMT',
+        AR_SubTypeRef: {
+          [Op.notIn]: [''],
+        },
+
+      },
+      attributes: ['AR_SubTypeRef'],
+    });
+    return paymentOptions;
+  }
 
 }

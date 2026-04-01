@@ -14170,6 +14170,7 @@ export class ManagerService {
         'Quantity_Shipped',
         'Pack',
         'Price',
+        ['Retail', 'Retail1'],
         'CaseCount',
         'Taxable', 'EBT', 'CasesPerPallet', 'Item_Message', 'ItemDescription', 'Special_ID', 'Tote_ID', 'OTP_Amount_State', 'OTP_Amount_County', 'OTP_Amount_City',
         'OffInvoice_Amount', 'OffInvoice_OffCost', 'OffInvoice_Special', 'Points', 'PrepaidTax_Amount', 'DepositAmount'],
@@ -14177,7 +14178,7 @@ export class ManagerService {
         {
           model: Inventory,
           as: 'inventory',
-          attributes: ['Item_Number', 'Description', 'UOM', 'Price_Class', 'location', 'section', 'PickArea', 'Retail1', 'Retail2', 'Retail3', 'UnitOunces', 'CaseLength', 'CaseWidth', 'CaseHeight', 'CasesPerPallet',
+          attributes: ['Item_Number', 'Description', 'UOM', 'Price_Class', 'location', 'section', 'PickArea', 'Retail2', 'Retail3', 'UnitOunces', 'CaseLength', 'CaseWidth', 'CaseHeight', 'CasesPerPallet',
             'EBT', 'FrozenFlag', 'CoolerFlag', 'HazMatFlag', 'StandardUnitDescription', 'MSA_Promotion_Code', 'MSA_Promotion', 'Lot_ID', 'NACS_Unit', 'Brand_ID', 'NACS', 'MSA_Category_Code', 'Sequence', 'Retail1', 'Retail2', 'Retail3',
           ],
           include: [
@@ -18592,6 +18593,76 @@ export class ManagerService {
     return items;
   }
 
+  async getInvoiceReprint(data: any) {
+    const { startDate, endDate, C_Number, Document_Number } = data
+
+    const orderHeaderWhere: any = {
+      Order_Deleted: 'False',
+    };
+
+    if (C_Number) orderHeaderWhere.C_Number = C_Number;
+    if (startDate && endDate) {
+      orderHeaderWhere.Invoice_Date = { [Op.between]: [startDate, endDate] };
+    }
+    if (Document_Number) orderHeaderWhere.Invoice_Number = Document_Number;
+
+    const invoices = await OrderDetail.findAll({
+      attributes: [
+        [
+          literal(`
+          IIF([orderHeader].Invoice_Number_Legacy <> 0,
+            CONVERT(VARCHAR(10), [orderHeader].Invoice_Number_Legacy),
+            IIF([orderHeader].Invoice_Number > 1,
+              CONCAT([orderHeader].Order_Number, '-', [orderHeader].Invoice_Number),
+              CONVERT(VARCHAR(10), [orderHeader].Order_Number)
+            )
+          )
+        `),
+          'Document_Number'
+        ],
+
+        'Order_Number',
+        'Item_Number',
+        'Quantity_Ordered',
+        'Quantity_Shipped',
+        'Unit_Code',
+        'Price',
+        'Sales_Category',
+
+        [col('orderHeader.Invoice_Date'), 'Invoice_Date'],
+        [col('orderHeader.Invoice_Number'), 'Invoice_Number'],
+        [col('orderHeader.Invoice_Total'), 'Invoice_Total'],
+        [col('orderHeader.C_Number'), 'C_Number'],
+        [col('orderHeader->customer.C_Name'), 'C_Name'],
+        [col('orderHeader->customer.C_Address'), 'C_Address'],
+        [col('orderHeader->customer.C_City'), 'C_City'],
+        [col('orderHeader->customer.C_State'), 'C_State'],
+        [col('orderHeader->customer.C_Zip'), 'C_Zip'],
+        [col('orderHeader->customer.C_Country'), 'C_Country'],
+      ],
+      include: [
+        {
+          model: OrderHeader,
+          as: 'orderHeader',
+          attributes: [],
+          required: true,
+          where: orderHeaderWhere,
+          include: [
+            {
+              model: Customer,
+              as: 'customer',
+              attributes: [],
+              required: false,
+            },
+          ],
+        },
+      ],
+      raw: true,
+    })
+    return invoices
+
+  }
+
   async getItemGroupPromotionMaintenanceReport(data: any) {
     const { Sales_Category, Price_Class, Description, Brand_ID, Item_GroupID, Vendor } = data;
 
@@ -18870,6 +18941,7 @@ export class ManagerService {
       const routeGroup = await DeliveryRouteGroup.create(
         {
           groupNumber,
+          routeType: 'manual',
           day,
           totalOrders: sortedOrders.length,
           totalRoutes: 1,
@@ -18970,6 +19042,90 @@ export class ManagerService {
 
 
 
+  async updateDeliveryRouteDriverVehicle(routeId: number, body: { driverId: number; truckId: number }) {
+    const { driverId, truckId } = body;
+
+    const route = await DeliveryRoute.findOne({
+      where: { id: routeId, isActive: true },
+    });
+
+    if (!route) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+
+    const [driver, vehicle] = await Promise.all([
+      Driver.findOne({ where: { id: driverId, isActive: true } }),
+      Vehicle.findOne({ where: { id: truckId, isActive: true } }),
+    ]);
+
+    if (!driver) {
+      throw new AppError('Driver not found', 404);
+    }
+    if (!vehicle) {
+      throw new AppError('Vehicle not found', 404);
+    }
+
+    const day =
+      typeof route.day === 'string'
+        ? route.day
+        : moment(route.day).format('YYYY-MM-DD');
+
+    if (Number(route.driverId) !== Number(driverId)) {
+      const driverConflict = await DeliveryRoute.findOne({
+        where: {
+          day,
+          driverId,
+          isActive: true,
+          id: { [Op.ne]: routeId },
+        },
+      });
+      if (driverConflict) {
+        throw new AppError(
+          `Driver ${driverId} already has a route on ${day}`,
+          400
+        );
+      }
+    }
+
+    if (Number(route.truckId) !== Number(truckId)) {
+      const truckConflict = await DeliveryRoute.findOne({
+        where: {
+          day,
+          truckId,
+          isActive: true,
+          id: { [Op.ne]: routeId },
+        },
+      });
+      if (truckConflict) {
+        throw new AppError(
+          `Truck ${truckId} already has a route on ${day}`,
+          400
+        );
+      }
+    }
+
+    await route.update({ driverId, truckId });
+
+    const updated = await DeliveryRoute.findByPk(routeId, {
+      include: [
+        {
+          model: Driver,
+          as: 'driver',
+          attributes: ['id', 'firstName', 'lastName', 'phoneNumber'],
+        },
+        {
+          model: Vehicle,
+          as: 'vehicle',
+          attributes: ['id', 'description', 'vinNumber'],
+        },
+      ],
+    });
+
+    return {
+      message: 'Driver and vehicle updated successfully',
+      route: updated?.get({ plain: true }),
+    };
+  }
 
 
   async uploadBulkImages(req: any) {

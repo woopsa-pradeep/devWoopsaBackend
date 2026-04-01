@@ -3935,3 +3935,16 @@ export const createManualRouteSchema = Joi.object({
       'any.required': 'Orders are required',
     }),
 });
+
+export const updateDeliveryRouteDriverVehicleSchema = Joi.object({
+  driverId: Joi.number().integer().required().messages({
+    'number.base': 'Driver ID must be a number',
+    'number.integer': 'Driver ID must be an integer',
+    'any.required': 'Driver ID is required',
+  }),
+  truckId: Joi.number().integer().required().messages({
+    'number.base': 'Truck ID must be a number',
+    'number.integer': 'Truck ID must be an integer',
+    'any.required': 'Truck ID is required',
+  }),
+});

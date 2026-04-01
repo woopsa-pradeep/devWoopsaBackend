@@ -851,6 +851,12 @@ export class ListService {
       order: [['Type_Description', 'ASC']]
     })
 
+    const salesCategory = await SalesCategory.findAll(
+      {
+        attributes: ['Sales_Category', 'Category_Desc']
+      }
+    );
+
     return {
       routes,
       salesRep,
@@ -859,6 +865,7 @@ export class ListService {
       otherTaxes,
       vendor,
       orderType,
+      salesCategory
     }
   }
 
@@ -868,18 +875,33 @@ export class ListService {
     if (!date) {
       date = moment().format("YYYY-MM-DD");
     }
-    const bookedDriverIds = await DeliveryRoute.findAll({
-      where: { day: date, isActive: true, routeStatus: { [Op.in]: [RouteStatus.COMPLETED, RouteStatus.CANCELLED] } },
+
+    // ── Drivers who are currently BUSY on this day ───────────────
+    // Exclude NOT_STARTED and IN_PROGRESS — they are still assigned
+    // COMPLETED and CANCELLED → driver is free again ✅
+    const busyDriverIds = await DeliveryRoute.findAll({
+      where: {
+        day: date,
+        isActive: true,
+        routeStatus: {
+          [Op.in]: [
+            RouteStatus.NOT_STARTED,
+            RouteStatus.IN_PROGRESS,
+          ],
+        },
+      },
       attributes: ['driverId'],
       group: ['driverId'],
       raw: true,
     });
 
-    const bookedIds = bookedDriverIds.map((r: any) => r.driverId);
+    const busyIds = busyDriverIds.map((r: any) => r.driverId);
 
+    // ── Return all drivers except busy ones ──────────────────────
     const drivers = await Driver.findAll({
       where: {
-        ...(bookedIds.length > 0 && { id: { [Op.notIn]: bookedIds } }),
+        isActive: true,
+        ...(busyIds.length > 0 && { id: { [Op.notIn]: busyIds } }),
       },
       attributes: ['id', 'firstName', 'lastName', 'driverPicture', 'phoneNumber'],
       order: [['firstName', 'ASC']],
@@ -893,18 +915,32 @@ export class ListService {
       date = moment().format("YYYY-MM-DD");
     }
 
-    const bookedVehicleIds = await DeliveryRoute.findAll({
-      where: { day: date, isActive: true, routeStatus: { [Op.in]: [RouteStatus.COMPLETED, RouteStatus.CANCELLED] } },
+    // ── Vehicles currently BUSY on this day ──────────────────────
+    // Exclude NOT_STARTED and IN_PROGRESS — still assigned
+    // COMPLETED and CANCELLED → vehicle is free again ✅
+    const busyVehicleIds = await DeliveryRoute.findAll({
+      where: {
+        day: date,
+        isActive: true,
+        routeStatus: {
+          [Op.in]: [
+            RouteStatus.NOT_STARTED,
+            RouteStatus.IN_PROGRESS,
+          ],
+        },
+      },
       attributes: ['truckId'],
       group: ['truckId'],
       raw: true,
     });
 
-    const bookedIds = bookedVehicleIds.map((r: any) => r.truckId);
+    const busyIds = busyVehicleIds.map((r: any) => r.truckId);
 
+    // ── Return all active vehicles except busy ones ──────────────
     const vehicles = await Vehicle.findAll({
       where: {
-        ...(bookedIds.length > 0 && { id: { [Op.notIn]: bookedIds } }),
+        isActive: true,
+        ...(busyIds.length > 0 && { id: { [Op.notIn]: busyIds } }),
       },
       attributes: ['id', 'description', 'vinNumber', 'loadCapacityLbs', 'mileageHours'],
       order: [['description', 'ASC']],

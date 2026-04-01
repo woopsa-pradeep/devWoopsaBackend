@@ -15,6 +15,7 @@ interface DeliveryRouteGroupAttributes {
   originLat: number;
   originLng: number;
   destinationLat: number;
+  routeType: 'manual' | 'auto';
   destinationLng: number;
   status: 'not_started' | 'in_progress' | 'completed' | 'cancelled';
   isActive: boolean;
@@ -22,7 +23,7 @@ interface DeliveryRouteGroupAttributes {
   updatedAt?: Date;
 }
 
-type DeliveryRouteGroupCreation = Optional< 
+type DeliveryRouteGroupCreation = Optional<
   DeliveryRouteGroupAttributes,
   | 'id'
   | 'totalKilometers'
@@ -34,8 +35,7 @@ type DeliveryRouteGroupCreation = Optional<
 
 export class DeliveryRouteGroup
   extends Model<DeliveryRouteGroupAttributes, DeliveryRouteGroupCreation>
-  implements DeliveryRouteGroupAttributes
-{
+  implements DeliveryRouteGroupAttributes {
   public id!: number;
   public groupNumber!: string;
   public day!: string;
@@ -47,6 +47,7 @@ export class DeliveryRouteGroup
   public originLat!: number;
   public originLng!: number;
   public destinationLat!: number;
+  public routeType!: 'manual' | 'auto';
   public destinationLng!: number;
   public status!: 'not_started' | 'in_progress' | 'completed' | 'cancelled';
   public isActive!: boolean;
@@ -65,6 +66,11 @@ DeliveryRouteGroup.init(
       type: DataTypes.STRING,
       allowNull: false,
       unique: true,              // no duplicate group numbers
+    },
+    routeType: {
+      type: DataTypes.ENUM('manual', 'auto'),
+      allowNull: false,
+      defaultValue: 'auto',
     },
     day: {
       type: DataTypes.DATEONLY,

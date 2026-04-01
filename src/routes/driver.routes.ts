@@ -34,5 +34,6 @@ router.get('/getDriverCurrentOrder', verifyRole(ROLES.DRIVER), catchAsync(driver
 router.get('/getTodayDriverStops', verifyRole(ROLES.DRIVER), catchAsync(driverController.getTodayDriverStops.bind(driverController)));
 router.put('/updateDriverLocation', verifyRole(ROLES.DRIVER), catchAsync(driverController.updateDriverLation.bind(driverController)));
 router.get('/getDriverProfile', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverProfile.bind(driverController)));
+router.get('/getPaymentOptions', verifyRole(ROLES.DRIVER), catchAsync(driverController.getPaymentOptions.bind(driverController)));
 export default router;
 

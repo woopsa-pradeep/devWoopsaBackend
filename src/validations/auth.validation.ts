@@ -38,7 +38,7 @@ export const loginSchema = Joi.object({
     "any.required": "Email is required",
     "string.email": "Email must be a valid email address"
   }),
-  deviceToken: Joi.string().optional().allow('',null).messages({
+  deviceToken: Joi.string().optional().allow('', null).messages({
     "string.empty": "Device Token is optional",
     "any.required": "Device Token is optional",
   })
@@ -140,11 +140,7 @@ export const startDeliveryRouteSchema = Joi.object({
 });
 
 export const updateDriverLatLongSchema = Joi.object({
-  currentLocation: Joi.string().trim().required().messages({
-    "string.base": "Current location must be a string",
-    "string.empty": "Current location is required",
-    "any.required": "Current location is required",
-  }),
+
   currentLatitude: Joi.number().required().messages({
     "number.base": "Current latitude must be a number",
     "any.required": "Current latitude is required",

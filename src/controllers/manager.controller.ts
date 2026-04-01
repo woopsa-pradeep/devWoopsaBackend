@@ -2194,6 +2194,11 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getInvoiceReprint(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getInvoiceReprint(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async getItemGroupPromotionMaintenanceReport(req: AuthRequest, res: Response) {
     const data = await this.managerService.getItemGroupPromotionMaintenanceReport(req.query);
     sendResponse(res, 200, true, data, General.SUCCESS);
@@ -2231,6 +2236,14 @@ export class ManagerController {
 
   async uploadBulkImages(req: AuthRequest, res: Response) {
     const data = await this.managerService.uploadBulkImages(req);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async updateDeliveryRouteDriverVehicle(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateDeliveryRouteDriverVehicle(
+      Number(req.params.id),
+      req.body
+    );
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
