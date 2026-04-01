@@ -9716,7 +9716,7 @@ export class ManagerService {
   }
 
   async getAllOrderForDriver(query: PaginationOptions) {
-    let { page = 1, limit = 10, routeNumber } = query;
+    let { page = 1, limit = 10, routeNumber, orderType } = query;
 
     page = Number(page);
     limit = Number(limit);
@@ -18987,6 +18987,14 @@ export class ManagerService {
         },
         { transaction: t }
       );
+
+      let orderNumbers: any[] = [];
+      orderNumbers.push(stopsWithDistance.map((s: any) => s.orderNumber));
+      if (orderNumbers.length > 0) {
+        await OrderHeader.update({
+          route_created: true,
+        }, { where: { Order_Number: { [Op.in]: orderNumbers as any[] } } });
+      }
 
       // ── Create Stops ────────────────────────────────────────
       const stopsToInsert = stopsWithDistance.map((s: any) => ({

@@ -71,4 +71,5 @@ export interface PaginationOptions {
   salesCategory?: any;
   userSalesCategory?: any;
   vendor?: any;
+  orderType?: string;
 }

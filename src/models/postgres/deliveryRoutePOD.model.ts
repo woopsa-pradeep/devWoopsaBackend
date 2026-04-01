@@ -1,12 +1,6 @@
 import { DataTypes, Model, Optional } from 'sequelize';
 import { postgresSequelize } from '../../db';
 
-export enum PaymentTerms {
-  CASH = 'cash',
-  CHECK = 'check',
-  CREDIT = 'credit',
-  NO_PAYMENT = 'no_payment',
-}
 
 export enum OrderPODStatus {
   DELIVERED = 'delivered',
@@ -38,7 +32,7 @@ interface DeliveryRoutePODAttributes {
   paymentTermComplete: boolean;
   postDeliveryCompleted: boolean;
   // Payment
-  paymentTerms: PaymentTerms;
+  paymentTerms: string;
   paymentInCheck: boolean;
   checkNumber: string | null;   // only if paymentInCheck = true
   checkImage: string | null;    // S3 URL of check photo
@@ -78,7 +72,7 @@ export class DeliveryRoutePOD
   public expectedBundles!: number;
   public allBundlesScanned!: boolean;
   public orderStatus!: OrderPODStatus;
-  public paymentTerms!: PaymentTerms;
+  public paymentTerms!: string;
   public paymentInCheck!: boolean;
   public checkNumber!: string | null;
   public amount!: number;
@@ -178,9 +172,9 @@ DeliveryRoutePOD.init(
 
     // Payment
     paymentTerms: {
-      type: DataTypes.ENUM(...Object.values(PaymentTerms)),
+      type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: PaymentTerms.CASH,
+      defaultValue: 'cash',
     },
     paymentInCheck: {
       type: DataTypes.BOOLEAN,

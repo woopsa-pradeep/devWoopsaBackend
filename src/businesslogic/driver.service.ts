@@ -15,7 +15,6 @@ import Vehicle from "../models/postgres/vehicle.model";
 import { Customer } from "../models/mmsql/customer.model";
 import DeliveryRoutePOD, {
   OrderPODStatus,
-  PaymentTerms,
 } from "../models/postgres/deliveryRoutePOD.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { clusterOrdersByLocation, getDirectionsInOrder, getOptimizedDirections } from "../utils/map.utlis";
@@ -252,7 +251,7 @@ export class DriverService {
           scannedBundles: 0,
           allBundlesScanned: false,
           orderStatus: OrderPODStatus.IN_PROGRESS,
-          paymentTerms: PaymentTerms.CASH,
+          paymentTerms: 'cash',
           paymentInCheck: false,
           photos: [],
           podAt: new Date(),
@@ -324,7 +323,7 @@ export class DriverService {
           scannedBundles: 0,
           allBundlesScanned: false,
           orderStatus: OrderPODStatus.IN_PROGRESS,
-          paymentTerms: PaymentTerms.CASH,
+          paymentTerms: 'cash',
           paymentInCheck: false,
           photos: [],
           podAt: new Date(),
@@ -781,8 +780,11 @@ export class DriverService {
           { transaction: t }
         );
 
+
+
         // ── Build Stops ───────────────────────────────────────
         const stops = preview.stops.map((stop: any) => ({
+
           routeId: route.id,
           routeName: routeNumber,
           day,
@@ -807,6 +809,8 @@ export class DriverService {
         const orderNumbersToUpdate: number[] = preview.stops.map(
           (stop: any) => stop.orderNumber
         );
+
+        console.log(orderNumbersToUpdate, 'orderNumbersToUpdate');
         if (orderNumbersToUpdate.length > 0) {
           await OrderHeader.update(
             { route_created: true },
@@ -844,6 +848,8 @@ export class DriverService {
         },
         { where: { id: routeGroup.id }, transaction: t }
       );
+
+
 
       finalResult = {
         message: `${createdRoutes.length} routes created successfully`,
