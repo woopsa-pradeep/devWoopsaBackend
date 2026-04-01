@@ -11,6 +11,8 @@ import {
   updateDriverExpenseSchema,
   driverExpenseIdParamSchema,
   driverExpenseListQuerySchema,
+  rescheduleStopParamSchema,
+  reScheduleStopBodySchema,
 } from "../validations/driver.validation";
 
 
@@ -77,6 +79,13 @@ router.get(
   '/currentVehicle',
   verifyRole(ROLES.DRIVER),
   catchAsync(driverController.getDriverCurrentVehicle.bind(driverController))
+);
+
+router.put(
+  '/reScheduleStop/:stopId',
+  verifyRole(ROLES.DRIVER),
+  validateRequest(reScheduleStopBodySchema),
+  catchAsync(driverController.reScheduleStop.bind(driverController))
 );
 
 export default router;

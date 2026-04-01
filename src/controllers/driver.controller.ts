@@ -138,4 +138,11 @@ export class DriverController {
         const data = await this.driverService.getDriverCurrentVehicle(driverId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async reScheduleStop(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const stopId = Number(req.params.stopId);
+        const data = await this.driverService.reScheduleStop(driverId, stopId, req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

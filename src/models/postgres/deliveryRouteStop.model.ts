@@ -17,6 +17,13 @@ interface DeliveryRouteStopAttributes {
   startLongitude: number;
   routeName: string;
   endLatitude: number;
+  reSchedule: boolean;
+  reScheduleDate: Date | null;
+  reScheduleTime: string | null;
+  reScheduleReason: string | null;
+  reScheduleNotes: string | null;
+  reScheduleCreatedAt: Date | null;
+  reScheduleUpdatedAt: Date | null;
   endLongitude: number;
   arrivedAt?: Date | null;
   isLastStop: boolean;
@@ -38,8 +45,7 @@ export class DeliveryRouteStop
     DeliveryRouteStopAttributes,
     DeliveryRouteStopCreationAttributes
   >
-  implements DeliveryRouteStopAttributes
-{
+  implements DeliveryRouteStopAttributes {
   public id!: number;
   public routeId!: number;
   public orderNumber!: number;
@@ -58,6 +64,14 @@ export class DeliveryRouteStop
   public endLatitude!: number;
   public endLongitude!: number;
 
+  public reSchedule!: boolean;
+  public reScheduleDate!: Date | null;
+  public reScheduleTime!: string | null;
+  public reScheduleReason!: string | null;
+  public reScheduleNotes!: string | null;
+  public reScheduleCreatedAt!: Date | null;
+  public reScheduleUpdatedAt!: Date | null;
+
   public arrivedAt!: Date | null;
   public isLastStop!: boolean;
   public deliveredAt!: Date | null;
@@ -72,7 +86,7 @@ export enum DeliveryStopStatus {
   RETURNED = 'returned',
   IN_PROGRESS = 'in_progress',
 }
-  
+
 
 /** Init */
 DeliveryRouteStop.init(
@@ -98,7 +112,7 @@ DeliveryRouteStop.init(
       defaultValue: '',
       allowNull: true,
     },
-    
+
 
     orderNumber: {
       type: DataTypes.INTEGER,
@@ -168,6 +182,35 @@ DeliveryRouteStop.init(
       defaultValue: DeliveryStopStatus.NOT_DELIVERED,
     },
 
+    reSchedule: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    reScheduleDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    reScheduleTime: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    reScheduleReason: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    reScheduleNotes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    reScheduleCreatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    reScheduleUpdatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     arrivedAt: {
       type: DataTypes.DATE,
       allowNull: true,

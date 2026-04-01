@@ -9,6 +9,7 @@ export interface DriverExpenseAttributes {
   amount: string;
   expenseDate: string;
   arSubTypeRef: string;
+  expenseCategory: string;
   receiptUrl: string | null;
   notes: string | null;
   createdAt?: Date;
@@ -27,13 +28,13 @@ type DriverExpenseCreation = Optional<
 
 export class DriverExpense
   extends Model<DriverExpenseAttributes, DriverExpenseCreation>
-  implements DriverExpenseAttributes
-{
+  implements DriverExpenseAttributes {
   public id!: number;
   public driverId!: number;
   public vehicleId!: number | null;
   public expenseType!: string;
   public amount!: string;
+  public expenseCategory!: string;
   public expenseDate!: string;
   public arSubTypeRef!: string;
   public receiptUrl!: string | null;
@@ -52,6 +53,11 @@ DriverExpense.init(
     driverId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+    expenseCategory: {
+      type: DataTypes.STRING(120),
+      defaultValue: 'null',
+      allowNull: true,
     },
     vehicleId: {
       type: DataTypes.INTEGER,

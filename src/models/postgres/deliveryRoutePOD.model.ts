@@ -210,6 +210,7 @@ DeliveryRoutePOD.init(
       defaultValue: [],
     },
 
+
     // Notes
     notes: {
       type: DataTypes.TEXT,

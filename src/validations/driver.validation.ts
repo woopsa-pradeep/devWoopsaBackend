@@ -13,6 +13,10 @@ export const DRIVER_EXPENSE_PAYMENT_METHODS = [
 
 export const createDriverExpenseSchema = Joi.object({
   vehicleId: Joi.number().integer().positive().allow(null).optional(),
+  expenseCategory: Joi.string().trim().min(1).max(120).required().messages({
+    'string.empty': 'Expense category is required',
+    'any.required': 'Expense category is required',
+  }),
   expenseType: Joi.string().trim().min(1).max(120).required().messages({
     'string.empty': 'Expense type is required',
     'any.required': 'Expense type is required',
@@ -70,4 +74,26 @@ export const driverExpenseIdParamSchema = Joi.object({
 export const driverExpenseListQuerySchema = Joi.object({
   startDate: Joi.date().iso().optional(),
   endDate: Joi.date().iso().optional(),
+});
+
+export const rescheduleStopParamSchema = Joi.object({
+  stopId: Joi.number().integer().positive().required(),
+});
+
+/**
+ * insertAfterStopSequence: place this stop after the stop that currently has this sequence (1-based).
+ * Use 0 to place the stop at the beginning of the route.
+ * inProgressStopSequence: optional; after reorder, which new sequence (1..n) is in_progress.
+ * If omitted, defaults to the moved stop's new position.
+ */
+export const reScheduleStopBodySchema = Joi.object({
+  insertAfterStopSequence: Joi.number().integer().min(0).required().messages({
+    'any.required': 'insertAfterStopSequence is required',
+  }),
+  inProgressStopSequence: Joi.number().integer().min(1).optional(),
+  reScheduleDate: Joi.date().optional().allow(null),
+  reScheduleTime: Joi.string().trim().max(80).allow(null, '').optional(),
+  reScheduleReason: Joi.string().trim().max(500).allow(null, '').optional(),
+  reScheduleNotes: Joi.string().trim().max(5000).allow(null, '').optional(),
+  notes: Joi.string().trim().max(5000).allow(null, '').optional(),
 });

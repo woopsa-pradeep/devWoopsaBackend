@@ -1145,12 +1145,14 @@ export class DriverService {
     const arSubTypeRef = String(body.arSubTypeRef).toLowerCase().trim();
     const expense = await DriverExpense.create({
       driverId,
+      expenseCategory: String(body.expenseCategory).trim(),
       vehicleId: body.vehicleId ?? null,
       expenseType: String(body.expenseType).trim(),
       amount: body.amount,
       expenseDate: moment(body.expenseDate).format('YYYY-MM-DD'),
       arSubTypeRef,
       receiptUrl,
+
       notes,
     });
     return expense.reload({
@@ -1327,5 +1329,220 @@ export class DriverService {
     const row = currentRoute.get({ plain: true }) as { vehicle?: Record<string, unknown> };
     return row.vehicle ?? null;
   }
+  /**
+   * Moves a stop to a new position (after `insertAfterStopSequence`), applies reschedule metadata,
+   * sets the moved stop to not_delivered, and marks one stop as in_progress (default: moved stop's new index).
+   */
+  async reScheduleStop(driverId: number, stopId: number, body: any) {
+    const {
+      insertAfterStopSequence,
+      inProgressStopSequence: inProgressFromBody,
+      reScheduleDate,
+      reScheduleTime,
+      reScheduleReason,
+      reScheduleNotes,
+      notes,
+    } = body;
+
+    // ── Validate required fields ──────────────────────────────────
+    if (insertAfterStopSequence === undefined || insertAfterStopSequence === null) {
+      throw new AppError('insertAfterStopSequence is required', 400);
+    }
+
+    return postgresSequelize.transaction(async (transaction) => {
+
+      // ── Find moving stop ────────────────────────────────────────
+      const movingStop = await DeliveryRouteStop.findOne({
+        where: { id: stopId, isActive: true },
+        transaction,
+        lock: true,
+      });
+      if (!movingStop) throw new AppError('Stop not found', 404);
+
+      // ── Validate route belongs to this driver ───────────────────
+      const route = await DeliveryRoute.findOne({
+        where: { id: movingStop.routeId, driverId, isActive: true },
+        transaction,
+      });
+      if (!route) throw new AppError('Route not found for this driver', 404);
+
+      // ── Cannot reschedule a delivered stop ──────────────────────
+      if (movingStop.status === DeliveryStopStatus.DELIVERED) {
+        throw new AppError('Cannot reschedule a delivered stop', 400);
+      }
+
+      // ── Cannot reschedule on a completed/cancelled route ─────────
+      if (
+        route.routeStatus === RouteStatus.COMPLETED ||
+        route.routeStatus === RouteStatus.CANCELLED
+      ) {
+        throw new AppError(
+          `Cannot reschedule on a ${route.routeStatus} route`,
+          400
+        );
+      }
+
+      // ── Fetch all stops for this route ──────────────────────────
+      const allRows = await DeliveryRouteStop.findAll({
+        where: { routeId: movingStop.routeId, isActive: true },
+        order: [['stopSequence', 'ASC']],
+        transaction,
+      });
+
+      const allStops = allRows.map((r) => r.get({ plain: true })) as Array<Record<string, any>>;
+
+      // ── Validate insertAfterStopSequence ─────────────────────────
+      if (insertAfterStopSequence > 0) {
+        const anchor = allStops.find(
+          (s) => s.stopSequence === insertAfterStopSequence
+        );
+        if (!anchor) {
+          throw new AppError(
+            'insertAfterStopSequence does not match any stop on this route',
+            400
+          );
+        }
+        if (anchor.id === stopId) {
+          throw new AppError(
+            'Cannot insert after the same stop being moved',
+            400
+          );
+        }
+      }
+
+      // ── Build new stop order ─────────────────────────────────────
+      const without = allStops
+        .filter((s) => s.id !== stopId)
+        .sort((a, b) => a.stopSequence - b.stopSequence);
+
+      const moving = allStops.find((s) => s.id === stopId)!;
+
+      let newOrder: typeof allStops;
+      if (insertAfterStopSequence === 0) {
+        // Move to first position
+        newOrder = [moving, ...without];
+      } else {
+        const anchorIndex = without.findIndex(
+          (s) => s.stopSequence === insertAfterStopSequence
+        );
+        if (anchorIndex === -1) {
+          throw new AppError(
+            'insertAfterStopSequence not found after excluding moved stop',
+            400
+          );
+        }
+        newOrder = [
+          ...without.slice(0, anchorIndex + 1),
+          moving,
+          ...without.slice(anchorIndex + 1),
+        ];
+      }
+
+      // ── Determine effective inProgress stop ──────────────────────
+      const currentInProgressStop = allStops.find(
+        (s) => s.status === DeliveryStopStatus.IN_PROGRESS
+      );
+
+      const effectiveInProgress =
+        inProgressFromBody ??
+        currentInProgressStop?.stopSequence ??
+        1;
+
+      if (effectiveInProgress < 1 || effectiveInProgress > newOrder.length) {
+        throw new AppError('inProgressStopSequence is out of range', 400);
+      }
+
+      if (newOrder[effectiveInProgress - 1].status === DeliveryStopStatus.DELIVERED) {
+        throw new AppError(
+          'Cannot set a delivered stop as in progress',
+          400
+        );
+      }
+
+      // ── Update all stops ─────────────────────────────────────────
+      const now = new Date();
+      const targetStopId = newOrder[effectiveInProgress - 1].id;
+      const oldInProgressIds = allStops
+        .filter((s) => s.status === DeliveryStopStatus.IN_PROGRESS)
+        .map((s) => s.id);
+
+      for (let i = 0; i < newOrder.length; i++) {
+        const seq = i + 1;
+        const row = newOrder[i];
+        const inst = allRows.find((r) => r.id === row.id)!;
+        const isMoved = row.id === stopId;
+        const isTargetInProgress = row.id === targetStopId;
+
+        const patch: any = {
+          stopSequence: seq,
+          isLastStop: seq === newOrder.length,
+        };
+
+        // ── Rescheduled stop fields ──
+        if (isMoved) {
+          patch.reSchedule = true;
+          patch.reScheduleDate = reScheduleDate ?? null;
+          patch.reScheduleTime = reScheduleTime?.trim() || null;
+          patch.reScheduleReason = reScheduleReason?.trim() || null;
+          patch.reScheduleNotes = reScheduleNotes?.trim() || null;
+          patch.reScheduleUpdatedAt = now;
+          if (!inst.reScheduleCreatedAt) patch.reScheduleCreatedAt = now;
+          if (notes !== undefined) patch.notes = notes?.trim() || '';
+
+          // Reset delivery fields since it's being rescheduled
+          patch.status = DeliveryStopStatus.NOT_DELIVERED;
+          patch.arrivedAt = null;
+          patch.deliveredAt = null;
+        }
+
+        // ── In-progress stop ──
+        if (isTargetInProgress && !isMoved) {
+          patch.status = DeliveryStopStatus.IN_PROGRESS;
+          if (!inst.arrivedAt) patch.arrivedAt = now;
+        }
+
+        // ── Clear old in-progress stops (that are no longer target) ──
+        if (
+          oldInProgressIds.includes(row.id) &&
+          row.id !== targetStopId &&
+          !isMoved
+        ) {
+          patch.status = DeliveryStopStatus.NOT_DELIVERED;
+          patch.arrivedAt = null;
+        }
+
+        await inst.update(patch, { transaction });
+      }
+
+      // ── Update route completedStops count ────────────────────────
+      const completedCount = await DeliveryRouteStop.count({
+        where: {
+          routeId: movingStop.routeId,
+          isActive: true,
+          status: DeliveryStopStatus.DELIVERED,
+        },
+        transaction,
+      });
+
+      await DeliveryRoute.update(
+        { completedStops: completedCount },
+        { where: { id: movingStop.routeId }, transaction }
+      );
+
+      // ── Return refreshed stops ───────────────────────────────────
+      const refreshed = await DeliveryRouteStop.findAll({
+        where: { routeId: movingStop.routeId, isActive: true },
+        order: [['stopSequence', 'ASC']],
+        transaction,
+      });
+
+      return {
+        routeId: movingStop.routeId,
+        inProgressStopSequence: effectiveInProgress,
+        stops: refreshed.map((s) => s.get({ plain: true })),
+      };
+    });
+  }
+
 
 }
