@@ -73,6 +73,11 @@ router.delete(
   validateParams(driverExpenseIdParamSchema),
   catchAsync(driverController.deleteDriverExpense.bind(driverController))
 );
+router.get(
+  '/currentVehicle',
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.getDriverCurrentVehicle.bind(driverController))
+);
 
 export default router;
 

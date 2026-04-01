@@ -132,4 +132,10 @@ export class DriverController {
         const data = await this.driverService.deleteDriverExpense(driverId, expenseId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getDriverCurrentVehicle(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const data = await this.driverService.getDriverCurrentVehicle(driverId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

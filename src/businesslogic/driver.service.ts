@@ -1304,4 +1304,28 @@ export class DriverService {
     return { deleted: true };
   }
 
+  async getDriverCurrentVehicle(driverId: number) {
+    const currentRoute = await DeliveryRoute.findOne({
+      where: {
+        driverId,
+        isActive: true,
+        routeStatus: RouteStatus.IN_PROGRESS,
+      },
+      include: [
+        {
+          model: Vehicle,
+          as: 'vehicle',
+          attributes: ['id', 'description', 'truckType', 'licenseRegistrationNumber'],
+        },
+      ],
+    });
+
+    if (!currentRoute) {
+      return null;
+    }
+
+    const row = currentRoute.get({ plain: true }) as { vehicle?: Record<string, unknown> };
+    return row.vehicle ?? null;
+  }
+
 }
