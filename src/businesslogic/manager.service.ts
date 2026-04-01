@@ -19004,6 +19004,7 @@ export class ManagerService {
         orderNumber: s.orderNumber,
         C_Number: s.C_Number,
         stopSequence: s.stopSequence,
+        routeStarted: false,
         latitude: s.latitude,
         longitude: s.longitude,
         startLatitude: s.startLatitude,

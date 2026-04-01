@@ -33,9 +33,16 @@ startCronJobs();
 // }
 
 
+// app.ts
+
+process.on('SIGTERM', async () => {
+  console.log('Shutting down gracefully...');
+  await postgresSequelize.close();  // ← releases all pool connections
+  process.exit(0);
+});
+
 process.on('SIGINT', async () => {
   await postgresSequelize.close();
-  await mssqlSequelize.close();
   process.exit(0);
 });
 

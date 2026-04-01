@@ -15,6 +15,7 @@ interface DeliveryRouteStopAttributes {
   status: string;
   startLatitude: number;
   startLongitude: number;
+  routeStarted: boolean;
   routeName: string;
   endLatitude: number;
   reSchedule: boolean;
@@ -59,6 +60,7 @@ export class DeliveryRouteStop
   public totalKilometers!: number;
   public day!: Date;
   public status!: string;
+  public routeStarted!: boolean;
   public startLatitude!: number;
   public startLongitude!: number;
   public endLatitude!: number;
@@ -113,7 +115,11 @@ DeliveryRouteStop.init(
       allowNull: true,
     },
 
-
+    routeStarted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     orderNumber: {
       type: DataTypes.INTEGER,
       allowNull: false,

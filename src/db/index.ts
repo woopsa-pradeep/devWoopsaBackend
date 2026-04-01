@@ -76,6 +76,11 @@ export const testConnections = async () => {
 
     await postgresSequelize.authenticate();
     console.log('PostgreSQL Database connection has been established successfully.');
+
+    const pool = (postgresSequelize as any).connectionManager.pool;
+    console.log('Pool size:', pool?.size);
+    console.log('Pool available:', pool?.available)
+
   } catch (error) {
     console.error('Unable to connect to the databases:', error);
   }

@@ -88,5 +88,11 @@ router.put(
   catchAsync(driverController.reScheduleStop.bind(driverController))
 );
 
+router.get(
+  '/pendingStop/:routeId',
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.getDriverPendingStop.bind(driverController))
+);
+
 export default router;
 

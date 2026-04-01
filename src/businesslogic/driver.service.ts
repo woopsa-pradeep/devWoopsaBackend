@@ -115,6 +115,7 @@ export class DriverService {
 
   async getTodayDriverOrders(driverId: number) {
     const today = moment().format("YYYY-MM-DD");
+    console.log("today", today);
 
     // Fetch routes with vehicle + stops included via association (routeId FK)
     const routes = await DeliveryRoute.findAll({
@@ -890,6 +891,7 @@ export class DriverService {
     await DeliveryRouteStop.update({
       status: DeliveryStopStatus.IN_PROGRESS,
       arrivedAt: new Date(),
+      routeStarted: true,
     }, { where: { id: stopId } });
 
     const updatedRoute = await DeliveryRoute.update({
@@ -1001,6 +1003,7 @@ export class DriverService {
     if (!currentStop) {
       throw new AppError(Manager.RECORD_NOT_FOUND, 404);
     }
+    console.log(currentRoute.id, currentStop.id, 'currentRoute.id, currentStop.id')
     const deliveryPod = await DeliveryRoutePOD.findOne({
       where: {
         routeId: currentRoute.id,
@@ -1351,7 +1354,7 @@ export class DriverService {
 
     return postgresSequelize.transaction(async (transaction) => {
 
-      // ── Find moving stop ────────────────────────────────────────
+      // ── Find moving stop ──────────────────────────────────────────
       const movingStop = await DeliveryRouteStop.findOne({
         where: { id: stopId, isActive: true },
         transaction,
@@ -1359,19 +1362,19 @@ export class DriverService {
       });
       if (!movingStop) throw new AppError('Stop not found', 404);
 
-      // ── Validate route belongs to this driver ───────────────────
+      // ── Validate route belongs to this driver ─────────────────────
       const route = await DeliveryRoute.findOne({
         where: { id: movingStop.routeId, driverId, isActive: true },
         transaction,
       });
       if (!route) throw new AppError('Route not found for this driver', 404);
 
-      // ── Cannot reschedule a delivered stop ──────────────────────
+      // ── Cannot reschedule a delivered stop ────────────────────────
       if (movingStop.status === DeliveryStopStatus.DELIVERED) {
         throw new AppError('Cannot reschedule a delivered stop', 400);
       }
 
-      // ── Cannot reschedule on a completed/cancelled route ─────────
+      // ── Cannot reschedule on completed/cancelled route ────────────
       if (
         route.routeStatus === RouteStatus.COMPLETED ||
         route.routeStatus === RouteStatus.CANCELLED
@@ -1382,16 +1385,18 @@ export class DriverService {
         );
       }
 
-      // ── Fetch all stops for this route ──────────────────────────
+      // ── Fetch all active stops for this route ─────────────────────
       const allRows = await DeliveryRouteStop.findAll({
         where: { routeId: movingStop.routeId, isActive: true },
         order: [['stopSequence', 'ASC']],
         transaction,
       });
 
-      const allStops = allRows.map((r) => r.get({ plain: true })) as Array<Record<string, any>>;
+      const allStops = allRows.map((r) =>
+        r.get({ plain: true })
+      ) as Array<Record<string, any>>;
 
-      // ── Validate insertAfterStopSequence ─────────────────────────
+      // ── Validate insertAfterStopSequence ──────────────────────────
       if (insertAfterStopSequence > 0) {
         const anchor = allStops.find(
           (s) => s.stopSequence === insertAfterStopSequence
@@ -1410,7 +1415,7 @@ export class DriverService {
         }
       }
 
-      // ── Build new stop order ─────────────────────────────────────
+      // ── Build new stop order ──────────────────────────────────────
       const without = allStops
         .filter((s) => s.id !== stopId)
         .sort((a, b) => a.stopSequence - b.stopSequence);
@@ -1418,6 +1423,7 @@ export class DriverService {
       const moving = allStops.find((s) => s.id === stopId)!;
 
       let newOrder: typeof allStops;
+
       if (insertAfterStopSequence === 0) {
         // Move to first position
         newOrder = [moving, ...without];
@@ -1438,7 +1444,7 @@ export class DriverService {
         ];
       }
 
-      // ── Determine effective inProgress stop ──────────────────────
+      // ── Determine effective inProgress stop ───────────────────────
       const currentInProgressStop = allStops.find(
         (s) => s.status === DeliveryStopStatus.IN_PROGRESS
       );
@@ -1452,33 +1458,62 @@ export class DriverService {
         throw new AppError('inProgressStopSequence is out of range', 400);
       }
 
-      if (newOrder[effectiveInProgress - 1].status === DeliveryStopStatus.DELIVERED) {
+      if (
+        newOrder[effectiveInProgress - 1].status === DeliveryStopStatus.DELIVERED
+      ) {
         throw new AppError(
           'Cannot set a delivered stop as in progress',
           400
         );
       }
 
-      // ── Update all stops ─────────────────────────────────────────
+      // ── Route origin + destination for start/end coordinates ──────
+      const routeOriginLat = Number(route.orderStartLat);
+      const routeOriginLng = Number(route.orderStartLong);
+      const routeDestLat = Number(route.orderEndLat);
+      const routeDestLng = Number(route.orderEndLong);
+
       const now = new Date();
       const targetStopId = newOrder[effectiveInProgress - 1].id;
       const oldInProgressIds = allStops
         .filter((s) => s.status === DeliveryStopStatus.IN_PROGRESS)
         .map((s) => s.id);
 
+      // ── Update all stops ──────────────────────────────────────────
       for (let i = 0; i < newOrder.length; i++) {
         const seq = i + 1;
         const row = newOrder[i];
         const inst = allRows.find((r) => r.id === row.id)!;
+
+        const isLast = seq === newOrder.length;
         const isMoved = row.id === stopId;
         const isTargetInProgress = row.id === targetStopId;
 
+        // Next stop for endLat/endLng
+        const nextStop = newOrder[i + 1] ?? null;
+
         const patch: any = {
           stopSequence: seq,
-          isLastStop: seq === newOrder.length,
+          isLastStop: isLast,
+
+          // startLat/Lng: warehouse origin if first, else previous stop
+          startLatitude: i === 0
+            ? routeOriginLat
+            : Number(newOrder[i - 1].latitude),
+          startLongitude: i === 0
+            ? routeOriginLng
+            : Number(newOrder[i - 1].longitude),
+
+          // endLat/Lng: warehouse destination if last, else next stop
+          endLatitude: isLast
+            ? routeDestLat
+            : Number(nextStop?.latitude),
+          endLongitude: isLast
+            ? routeDestLng
+            : Number(nextStop?.longitude),
         };
 
-        // ── Rescheduled stop fields ──
+        // ── Rescheduled stop fields ──────────────────────────────
         if (isMoved) {
           patch.reSchedule = true;
           patch.reScheduleDate = reScheduleDate ?? null;
@@ -1486,22 +1521,28 @@ export class DriverService {
           patch.reScheduleReason = reScheduleReason?.trim() || null;
           patch.reScheduleNotes = reScheduleNotes?.trim() || null;
           patch.reScheduleUpdatedAt = now;
-          if (!inst.reScheduleCreatedAt) patch.reScheduleCreatedAt = now;
-          if (notes !== undefined) patch.notes = notes?.trim() || '';
 
-          // Reset delivery fields since it's being rescheduled
+          if (!inst.reScheduleCreatedAt) {
+            patch.reScheduleCreatedAt = now;
+          }
+
+          if (notes !== undefined) {
+            patch.notes = notes?.trim() || '';
+          }
+
+          // Reset delivery fields
           patch.status = DeliveryStopStatus.NOT_DELIVERED;
           patch.arrivedAt = null;
           patch.deliveredAt = null;
         }
 
-        // ── In-progress stop ──
+        // ── Set in-progress on target stop ───────────────────────
         if (isTargetInProgress && !isMoved) {
           patch.status = DeliveryStopStatus.IN_PROGRESS;
           if (!inst.arrivedAt) patch.arrivedAt = now;
         }
 
-        // ── Clear old in-progress stops (that are no longer target) ──
+        // ── Clear previously in-progress stops ───────────────────
         if (
           oldInProgressIds.includes(row.id) &&
           row.id !== targetStopId &&
@@ -1529,7 +1570,7 @@ export class DriverService {
         { where: { id: movingStop.routeId }, transaction }
       );
 
-      // ── Return refreshed stops ───────────────────────────────────
+      // ── Return refreshed stops ────────────────────────────────────
       const refreshed = await DeliveryRouteStop.findAll({
         where: { routeId: movingStop.routeId, isActive: true },
         order: [['stopSequence', 'ASC']],
@@ -1542,6 +1583,42 @@ export class DriverService {
         stops: refreshed.map((s) => s.get({ plain: true })),
       };
     });
+  }
+
+
+  async getDriverPendingStop(routeId: number) {
+    const pendingStop = await DeliveryRouteStop.findOne({
+      where: { routeId, isActive: true, status: DeliveryStopStatus.NOT_DELIVERED },
+      order: [['stopSequence', 'ASC']],
+    });
+    if (!pendingStop) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    const allCNumbers = [
+      ...new Set(
+        [pendingStop.C_Number]
+      ),
+    ];
+
+    const customers = await Customer.findAll({
+      where: { C_Number: { [Op.in]: allCNumbers } },
+      attributes: ["C_Number", "C_Name", "C_Address", "C_State", "C_Zip", "C_City", "C_Phone", "C_PhoneMobile"],
+      raw: true,
+    });
+
+    const customerMap = new Map(
+      customers.map((c: any) => [c.C_Number, c])
+    );
+    const finalStop = {
+      ...pendingStop.get({ plain: true }),
+      C_Name: customerMap.get(pendingStop.C_Number)?.C_Name || null,
+      C_Address: customerMap.get(pendingStop.C_Number)?.C_Address || null,
+      C_State: customerMap.get(pendingStop.C_Number)?.C_State || null,
+      C_Zip: customerMap.get(pendingStop.C_Number)?.C_Zip || null,
+      C_City: customerMap.get(pendingStop.C_Number)?.C_City || null,
+      C_Phone: customerMap.get(pendingStop.C_Number)?.C_Phone || null,
+    };
+    return finalStop;
   }
 
 

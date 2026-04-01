@@ -3,6 +3,7 @@ import { DriverService } from "../businesslogic/driver.service";
 import { sendResponse } from "../utils/sendResponse";
 import { General } from "../constants";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
+import { AppError } from "../utils/AppError";
 
 export class DriverController {
     private driverService: DriverService;
@@ -139,10 +140,30 @@ export class DriverController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
-    async reScheduleStop(req: AuthRequest, res: Response) {
-        const driverId = Number(req.user?.id);
-        const stopId = Number(req.params.stopId);
-        const data = await this.driverService.reScheduleStop(driverId, stopId, req.body);
+    async reScheduleStop(req: Request, res: Response) {
+        try {
+            const driverId = parseInt(req.params.driverId);
+            const stopId = parseInt(req.params.stopId);
+
+            if (isNaN(driverId)) throw new AppError('Invalid driverId', 400);
+            if (isNaN(stopId)) throw new AppError('Invalid stopId', 400);
+
+            const result = await this.driverService.reScheduleStop(
+                driverId,
+                stopId,
+                req.body
+            );
+
+            res.status(200).json({ success: true, data: result });
+        } catch (error) {
+            sendResponse(res, 500, false, null, (error as AppError).message);
+        }
+    }
+
+
+    async getDriverPendingStop(req: AuthRequest, res: Response) {
+        const routeId = Number(req.params.routeId);
+        const data = await this.driverService.getDriverPendingStop(routeId);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 }
