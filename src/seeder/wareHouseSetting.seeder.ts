@@ -70,6 +70,8 @@ export async function seedHomeSetting() {
       showCustomerHistory: false,
       showPromotedItems: false,
       maxPromotedItems: 0,
+      showManually: false,
+      retailerPromotedItems: [],
     });
   }
 }

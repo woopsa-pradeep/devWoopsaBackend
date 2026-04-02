@@ -91,9 +91,15 @@ export const reScheduleStopBodySchema = Joi.object({
     'any.required': 'insertAfterStopSequence is required',
   }),
   inProgressStopSequence: Joi.number().integer().min(1).optional(),
-  reScheduleDate: Joi.date().optional().allow(null),
-  reScheduleTime: Joi.string().trim().max(80).allow(null, '').optional(),
   reScheduleReason: Joi.string().trim().max(500).allow(null, '').optional(),
   reScheduleNotes: Joi.string().trim().max(5000).allow(null, '').optional(),
   notes: Joi.string().trim().max(5000).allow(null, '').optional(),
+});
+
+export const cancelStopParamSchema = Joi.object({
+  stopId: Joi.number().integer().positive().required(),
+});
+
+export const cancelStopBodySchema = Joi.object({
+  cancelledReason: Joi.string().trim().max(500).allow(null, '').optional(),
 });

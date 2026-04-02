@@ -1,8 +1,14 @@
 import { query, Request } from "express";
+
+function parseManualSettingDate(v: string | Date | null | undefined): Date | null {
+  if (v == null || v === '') return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 import moment from "moment";
 import { AuthMessage, EmailMessage, Manager } from "../constants";
 import { PaginationOptions } from "../interfaces/pagination.interface";
-import { ICreateBanner, ICreateLink, ICreateNotificationScheduler, ICreateRetailerProductCatalog, ICreateStory, ICreateWebView, IGetLinks, IGetNotificationSchedulers, IGetProductInformation, IGetRetailerProductCatalogs, IGetStories, IGetWebViews, IWebViewGroupedResponse, IHomeSettings, IUpdateBanner, IUpdateDevice, IUpdateLink, IUpdateNotificationScheduler, IUpdateRetailerProductCatalog, IUpdateStory, IUpdateWebView, IUpdateUploadProductImage, IUploadProductImage, IWarehouseSetting, IContactUs } from "../interfaces/request.body.interface";
+import { ICreateBanner, ICreateLink, ICreateNotificationScheduler, ICreateRetailerProductCatalog, ICreateStory, ICreateWebView, IGetLinks, IGetNotificationSchedulers, IGetProductInformation, IGetRetailerProductCatalogs, IGetStories, IGetWebViews, IWebViewGroupedResponse, IHomeSettings, IManualItemsSetting, IPopularItemsModeSetting, IUpdateBanner, IUpdateDevice, IUpdateLink, IUpdateNotificationScheduler, IUpdateRetailerProductCatalog, IUpdateStory, IUpdateWebView, IUpdateUploadProductImage, IUploadProductImage, IWarehouseSetting, IContactUs } from "../interfaces/request.body.interface";
 import { Customer } from "../models/mmsql/customer.model";
 import { Inventory } from "../models/mmsql/inventory.model";
 import { InventoryUPC } from "../models/mmsql/inventoryUpc.model";
@@ -39,6 +45,8 @@ import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { Distributor } from "../models/mmsql/distributor.model";
 import { OrderDetail } from "../models/mmsql/orderDetail.model";
 import HomeSettings from "../models/postgres/homeSetting.model";
+import NewItemsSetting from "../models/postgres/newItemsSetting.model";
+import PopularItemsModeSetting from "../models/postgres/popularItemsModeSetting.model";
 import Setting from "../models/postgres/setting.model";
 import { ItemLimit } from "../models/postgres/itemLimit.model";
 import { CustomerRoute } from "../models/mmsql/customerRoutes.model";
@@ -4104,6 +4112,80 @@ export class ManagerService {
 
   async updateHomeSetting(body: IHomeSettings) {
     return await HomeSettings.update(body, { where: {} });
+  }
+
+  async getNewItemsManualSetting() {
+    let row = await NewItemsSetting.findOne({ order: [['id', 'ASC']] });
+    if (!row) {
+      row = await NewItemsSetting.create({
+        showManually: false,
+        items: [],
+        startDate: null,
+        endDate: null,
+        isActive: true,
+      });
+    }
+    return row;
+  }
+
+  async updateNewItemsManualSetting(body: IManualItemsSetting) {
+    const startDate = parseManualSettingDate(body.startDate);
+    const endDate = parseManualSettingDate(body.endDate);
+    let row = await NewItemsSetting.findOne({ order: [['id', 'ASC']] });
+    if (!row) {
+      return await NewItemsSetting.create({
+        showManually: body.showManually,
+        items: body.items ?? [],
+        startDate,
+        endDate,
+        isActive: body.isActive,
+      });
+    }
+    await row.update({
+      showManually: body.showManually,
+      items: body.items ?? [],
+      startDate,
+      endDate,
+      isActive: body.isActive,
+    });
+    return row;
+  }
+
+  async getPopularItemsModeSetting() {
+    let row = await PopularItemsModeSetting.findOne({ order: [['id', 'ASC']] });
+    if (!row) {
+      row = await PopularItemsModeSetting.create({
+        mode: 'mostSale',
+        manualItems: [],
+        startDate: null,
+        endDate: null,
+        isActive: true,
+      });
+    }
+    return row;
+  }
+
+  async updatePopularItemsModeSetting(body: IPopularItemsModeSetting) {
+    const startDate = parseManualSettingDate(body.startDate);
+    const endDate = parseManualSettingDate(body.endDate);
+    let row = await PopularItemsModeSetting.findOne({ order: [['id', 'ASC']] });
+    if (!row) {
+      return await PopularItemsModeSetting.create({
+        mode: body.mode,
+        manualItems: body.manualItems ?? [],
+        startDate,
+        endDate,
+        isActive: body.isActive,
+      });
+    }
+    await row.update({
+      mode: body.mode,
+      manualItems: body.manualItems ?? [],
+      startDate,
+      endDate,
+      isActive: body.isActive,
+    });
+    return row;
   }
 
   async getProductInformation(body: IGetProductInformation) {

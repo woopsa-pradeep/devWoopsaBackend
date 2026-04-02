@@ -464,6 +464,39 @@ export const homeSettingsSchema = Joi.object({
   showCustomerHistory: Joi.boolean().required().messages({
     'any.required': 'Show customer history is required',
   }),
+  showManually: Joi.boolean().optional(),
+  retailerPromotedItems: Joi.array().items(Joi.number()).optional(),
+}).custom((value, helpers) => {
+  const trueCount = [
+    value.showMostSale === true,
+    value.showAsPerCustomer === true,
+    value.showCustomerHistory === true,
+    value.showManually === true,
+  ].filter(Boolean).length;
+  if (trueCount > 1) {
+    return helpers.error('any.invalid', {
+      message:
+        'Only one of showMostSale, showAsPerCustomer, showCustomerHistory, and showManually can be true at a time.',
+    });
+  }
+  return value;
+});
+
+/** Manual new items / discounted items dashboard settings (max 30 item numbers). */
+export const manualItemsSettingSchema = Joi.object({
+  showManually: Joi.boolean().required(),
+  items: Joi.array().items(Joi.number()).max(30).default([]),
+  startDate: Joi.date().allow(null).optional(),
+  endDate: Joi.date().allow(null).optional(),
+  isActive: Joi.boolean().required(),
+});
+
+export const popularItemsModeSettingSchema = Joi.object({
+  mode: Joi.string().valid('mostSale', 'asPerCustomer', 'customerHistory', 'manual').required(),
+  manualItems: Joi.array().items(Joi.number()).max(30).default([]),
+  startDate: Joi.date().allow(null).optional(),
+  endDate: Joi.date().allow(null).optional(),
+  isActive: Joi.boolean().required(),
 });
 
 // ItemLimit validation schemas

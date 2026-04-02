@@ -4,7 +4,7 @@ import { General, Manager } from "../constants";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
 import { sendResponse } from "../utils/sendResponse";
 import { PaginationOptions } from "../interfaces/pagination.interface";
-import { IGetProductInformation, ICreateLink, ICreateNotificationScheduler, ICreateStory, IUpdateLink, IUpdateNotificationScheduler, IUpdateStory, IGetNotificationSchedulers, IGetStories, ICreateRetailerProductCatalog, IGetRetailerProductCatalogs, IUpdateRetailerProductCatalog, ICreateWebView, IUpdateWebView, IGetWebViews, IWebViewGroupedResponse } from "../interfaces/request.body.interface";
+import { IGetProductInformation, ICreateLink, ICreateNotificationScheduler, ICreateStory, IUpdateLink, IUpdateNotificationScheduler, IUpdateStory, IGetNotificationSchedulers, IGetStories, ICreateRetailerProductCatalog, IGetRetailerProductCatalogs, IUpdateRetailerProductCatalog, ICreateWebView, IUpdateWebView, IGetWebViews, IWebViewGroupedResponse, IManualItemsSetting, IPopularItemsModeSetting } from "../interfaces/request.body.interface";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { parseReportFilters } from "../utils/parseReportFilters";
 import { number } from "joi";
@@ -299,6 +299,26 @@ export class ManagerController {
 
   async updateHomeSetting(req: AuthRequest, res: Response) {
     const data = await this.managerService.updateHomeSetting(req.body);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getNewItemsManualSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getNewItemsManualSetting();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async updateNewItemsManualSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updateNewItemsManualSetting(req.body as IManualItemsSetting);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getPopularItemsModeSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getPopularItemsModeSetting();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async updatePopularItemsModeSetting(req: AuthRequest, res: Response) {
+    const data = await this.managerService.updatePopularItemsModeSetting(req.body as IPopularItemsModeSetting);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 

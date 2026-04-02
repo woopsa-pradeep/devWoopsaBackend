@@ -712,6 +712,25 @@ export interface IHomeSettings {
   promotedItems?: any[];
   showPromotedItems?: boolean;
   maxPromotedItems?: number;
+  showManually?: boolean;
+  retailerPromotedItems?: number[];
+}
+
+/** Single-row settings for dashboard manual new items / discounted items (Postgres JSONB + flags). */
+export interface IManualItemsSetting {
+  showManually: boolean;
+  items: number[];
+  startDate?: string | Date | null;
+  endDate?: string | Date | null;
+  isActive: boolean;
+}
+
+export interface IPopularItemsModeSetting {
+  mode: 'mostSale' | 'asPerCustomer' | 'customerHistory' | 'manual';
+  manualItems: number[];
+  startDate?: string | Date | null;
+  endDate?: string | Date | null;
+  isActive: boolean;
 }
 
 export interface IGetProductInformation {

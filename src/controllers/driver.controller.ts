@@ -140,9 +140,9 @@ export class DriverController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
-    async reScheduleStop(req: Request, res: Response) {
+    async reScheduleStop(req: AuthRequest, res: Response) {
         try {
-            const driverId = parseInt(req.params.driverId);
+            const driverId = parseInt(req.user.id);
             const stopId = parseInt(req.params.stopId);
 
             if (isNaN(driverId)) throw new AppError('Invalid driverId', 400);
@@ -164,6 +164,17 @@ export class DriverController {
     async getDriverPendingStop(req: AuthRequest, res: Response) {
         const routeId = Number(req.params.routeId);
         const data = await this.driverService.getDriverPendingStop(routeId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async cancelStop(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const stopId = Number(req.params.stopId);
+        const data = await this.driverService.cancelStop(
+            driverId,
+            stopId,
+            req.body.cancelledReason
+        );
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 }

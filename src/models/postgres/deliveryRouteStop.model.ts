@@ -24,11 +24,13 @@ interface DeliveryRouteStopAttributes {
   reScheduleReason: string | null;
   reScheduleNotes: string | null;
   reScheduleCreatedAt: Date | null;
+  cancelledAt: Date | null;
   reScheduleUpdatedAt: Date | null;
   endLongitude: number;
   arrivedAt?: Date | null;
   isLastStop: boolean;
   deliveredAt?: Date | null;
+  cancelledReason?: string | null;
   day: Date;
   isActive: boolean;
 }
@@ -73,6 +75,8 @@ export class DeliveryRouteStop
   public reScheduleNotes!: string | null;
   public reScheduleCreatedAt!: Date | null;
   public reScheduleUpdatedAt!: Date | null;
+  public cancelledAt!: Date | null;
+  public cancelledReason!: string | null;
 
   public arrivedAt!: Date | null;
   public isLastStop!: boolean;
@@ -87,6 +91,7 @@ export enum DeliveryStopStatus {
   FAILED = 'failed',
   RETURNED = 'returned',
   IN_PROGRESS = 'in_progress',
+  CANCELLED = 'cancelled',
 }
 
 
@@ -138,7 +143,10 @@ DeliveryRouteStop.init(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
-
+    cancelledReason: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     C_Number: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -182,7 +190,8 @@ DeliveryRouteStop.init(
         DeliveryStopStatus.SKIPPED,
         DeliveryStopStatus.FAILED,
         DeliveryStopStatus.RETURNED,
-        DeliveryStopStatus.IN_PROGRESS
+        DeliveryStopStatus.IN_PROGRESS,
+        DeliveryStopStatus.CANCELLED
       ),
       allowNull: false,
       defaultValue: DeliveryStopStatus.NOT_DELIVERED,
@@ -214,6 +223,10 @@ DeliveryRouteStop.init(
       allowNull: true,
     },
     reScheduleUpdatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    cancelledAt: {
       type: DataTypes.DATE,
       allowNull: true,
     },

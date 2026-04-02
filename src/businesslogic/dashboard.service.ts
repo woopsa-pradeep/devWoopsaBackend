@@ -1,4 +1,6 @@
 import HomeSettings from "../models/postgres/homeSetting.model";
+import NewItemsSetting from "../models/postgres/newItemsSetting.model";
+import PopularItemsModeSetting, { PopularItemsMode } from "../models/postgres/popularItemsModeSetting.model";
 import { Inventory } from "../models/mmsql/inventory.model";
 import { OrderDetail } from "../models/mmsql/orderDetail.model";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
@@ -38,9 +40,21 @@ export class DashboardService {
             salesCategory = await getAllowedSalesCategories(userId);
         }
         const homeSetting = await HomeSettings.findOne();
+        const popularModeSetting = await PopularItemsModeSetting.findOne({ order: [['id', 'ASC']] });
         const currentYear = new Date().getFullYear();
         const startOfYear = new Date(currentYear, 0, 1); // January 1st of current year
         const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59); // December 31st of current year
+        const defaultMode: PopularItemsMode =
+            homeSetting?.showAsPerCustomer
+                ? 'asPerCustomer'
+                : homeSetting?.showCustomerHistory
+                    ? 'customerHistory'
+                    : 'mostSale';
+        const settingWindowActive = popularModeSetting ? this.isManualScheduleActive(popularModeSetting) : false;
+        const selectedMode: PopularItemsMode =
+            popularModeSetting?.isActive && settingWindowActive
+                ? popularModeSetting.mode
+                : defaultMode;
         let mostSaleData = null;
         let customerHistoryData = null;
         let asPerCustomerData = null;
@@ -76,7 +90,23 @@ export class DashboardService {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
         }
 
-        if (homeSetting?.showMostSale) {
+        const roleNormPopular = String(query?.role || '').trim().toLowerCase();
+        const isRetailerRolePopular = roleNormPopular === 'retailer' || roleNormPopular === 'reatiler';
+        if (homeSetting?.showManually === true && isRetailerRolePopular) {
+            const retailerIds = this.normalizeManualItemIds(homeSetting?.retailerPromotedItems, 30);
+            const uniqueExcludedRetail = allExcludedItems.length > 0 ? [...new Set(allExcludedItems)] : [];
+            const filteredRetailerIds = retailerIds.filter((id) => !uniqueExcludedRetail.includes(id));
+            return this.popularItemsListFromManualItemIds(filteredRetailerIds, query, userId, salesCategory);
+        }
+
+        if (selectedMode === 'manual') {
+            const manualIds = this.normalizeManualItemIds(popularModeSetting?.manualItems, 30);
+            const uniqueExcluded = allExcludedItems.length > 0 ? [...new Set(allExcludedItems)] : [];
+            const filteredManualIds = manualIds.filter((id) => !uniqueExcluded.includes(id));
+            return this.popularItemsListFromManualItemIds(filteredManualIds, query, userId, salesCategory);
+        }
+
+        if (selectedMode === 'mostSale') {
             // Get most sold inventory items in the current year
             const allMostSaleData = await OrderDetail.findAll({
                 where: {
@@ -276,7 +306,7 @@ export class DashboardService {
             }
         }
 
-        if (homeSetting?.showAsPerCustomer) {
+        if (selectedMode === 'asPerCustomer') {
             // Get current customer's city
             const currentCustomer = await Customer.findByPk(userId);
             console.log(currentCustomer, 'currentCustomer')
@@ -529,7 +559,7 @@ export class DashboardService {
             }
         }
 
-        if (homeSetting?.showCustomerHistory) {
+        if (selectedMode === 'customerHistory') {
 
             let whereClause: any = {};
             if (state || zip || jurisdiction) {
@@ -763,27 +793,26 @@ export class DashboardService {
             }
         }
 
-        let response: any;
-
-        if (mostSaleData !== null) {
-            response = mostSaleData;
-        }
-
-        if (customerHistoryData !== null) {
-            response = customerHistoryData;
-        }
-
-        if (asPerCustomerData !== null) {
-            response = asPerCustomerData;
-        }
-
-        return response;
+        if (selectedMode === 'mostSale') return mostSaleData ?? { totalCount: 0, finalProductList: [] };
+        if (selectedMode === 'asPerCustomer') return asPerCustomerData ?? { totalCount: 0, finalProductList: [] };
+        if (selectedMode === 'customerHistory') return customerHistoryData ?? { totalCount: 0, finalProductList: [] };
+        return { totalCount: 0, finalProductList: [] };
     }
 
     async getPromotedItems(query: PaginationOptions) {
-        let { customerNumber, state = '', zip = '', jurisdiction = '', salesCategory = [] } = query
+        let { customerNumber, state = '', zip = '', jurisdiction = '', salesCategory = [], role = '' } = query
         const homeSetting: any = await HomeSettings.findOne({});
-        const promotedItems = homeSetting?.promotedItems || [];
+        const roleNorm = String(role || '').trim().toLowerCase();
+        const isRetailerRole = roleNorm === 'retailer' || roleNorm === 'reatiler';
+        const useRetailerManualList =
+            homeSetting?.showManually === true && isRetailerRole;
+        const promotedItems = useRetailerManualList
+            ? (homeSetting?.retailerPromotedItems || [])
+            : (homeSetting?.promotedItems || []);
+
+        if (!promotedItems.length) {
+            return { totalCount: 0, promotedItemsList: [] };
+        }
 
         let allExcludedItems: any[] = [];
         let whereClause: any = {};
@@ -977,6 +1006,17 @@ export class DashboardService {
         page = Number(page);
         limit = Number(limit);
 
+        const newSetting = await NewItemsSetting.findOne({ order: [['id', 'ASC']] });
+        const manualIdsRaw = this.normalizeManualItemIds(newSetting?.items, 30);
+        const manualEligible =
+            !!newSetting?.showManually &&
+            !!newSetting &&
+            this.isManualScheduleActive(newSetting);
+
+        if (manualEligible && manualIdsRaw.length === 0) {
+            return { totalCount: 0, finalProductList: [], sourceType: 'manual' as const };
+        }
+
         let whereClause: any = {
             I_Inactive: false,
             ShortOrderForm: true,
@@ -987,8 +1027,6 @@ export class DashboardService {
         }
 
         let allExcludedItems: any[] = [];
-
-
 
         if (state || zip || jurisdiction) {
             const customerExcluded = await getCustomerExcludeItem(
@@ -1002,15 +1040,100 @@ export class DashboardService {
             }
         }
 
-
         const userExcluded = await excludeItemByUser(customerId);
         if (userExcluded && userExcluded.length > 0) {
             allExcludedItems = allExcludedItems.concat(userExcluded);
         }
 
+        const uniqueExcluded = allExcludedItems.length > 0 ? [...new Set(allExcludedItems)] : [];
 
-        if (allExcludedItems.length > 0) {
-            const uniqueExcluded = [...new Set(allExcludedItems)];
+        const useManualList = manualEligible && manualIdsRaw.length > 0;
+        if (useManualList) {
+            let manualIdsFiltered = manualIdsRaw.filter((id) => !uniqueExcluded.includes(id));
+            if (manualIdsFiltered.length === 0) {
+                return { totalCount: 0, finalProductList: [], sourceType: 'manual' as const };
+            }
+
+            const whereManual: any = {
+                ...whereClause,
+                Item_Number: { [Op.in]: manualIdsFiltered },
+            };
+
+            if (search) {
+                const searchValue = `%${search}%`;
+                whereManual[Op.or] = [
+                    { Item_Number: { [Op.like]: searchValue } },
+                    { Description: { [Op.like]: searchValue } },
+                    { ALT_Description2: { [Op.like]: searchValue } },
+                ];
+            }
+
+            const rows = await Inventory.findAll({
+                attributes: [
+                    'Pack',
+                    'Description',
+                    'Item_Number',
+                    'CaseCount',
+                    'UOM',
+                    'Price1',
+                    'Price2',
+                    'BaseCost',
+                    'Invoice_Cost',
+                    'AvgCost',
+                    'NetCost',
+                    'eCommerce',
+                    'I_Inactive',
+                    'Date_Created',
+                    'OTP_Number',
+                    'UnitOunces',
+                    'Cig_Pack',
+                    'Cig_Sticks'
+                ],
+                where: whereManual,
+                include: [
+                    {
+                        model: SalesCategory,
+                        as: 'SalesCategory',
+                        attributes: ['Category_Desc', 'Sales_Category'],
+                        required: false
+                    },
+                    {
+                        model: PriceClass,
+                        as: 'PriceClass',
+                        attributes: ['Class_Desc'],
+                        required: false
+                    },
+                    {
+                        model: InventoryUPC,
+                        as: 'UPCList',
+                        attributes: ['UPC_Number'],
+                        where: {
+                            Status: 0,
+                            ...(search && {
+                                UPC_Number: { [Op.like]: `%${search}%` },
+                            }),
+                        },
+                        required: false
+                    }
+                ],
+            });
+
+            const byNum = new Map(rows.map((r: any) => [r.Item_Number, r]));
+            const ordered = manualIdsFiltered.map((id) => byNum.get(id)).filter(Boolean);
+            const offset = (page - 1) * limit;
+            const pageRows = ordered.slice(offset, offset + limit);
+            const finalProductList = await Promise.all(
+                pageRows.map((e: any) => this.mapInventoryRowToNewItemResponse(e, query, customerId))
+            );
+
+            return {
+                totalCount: ordered.length,
+                finalProductList,
+                sourceType: 'manual' as const,
+            };
+        }
+
+        if (uniqueExcluded.length > 0) {
             whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
         }
 
@@ -1022,7 +1145,6 @@ export class DashboardService {
                 { ALT_Description2: { [Op.like]: searchValue } },
             ];
         }
-
 
         const { count: totalCount, rows: productList } = await Inventory.findAndCountAll({
             attributes: [
@@ -1074,134 +1196,230 @@ export class DashboardService {
             ],
             order: [
                  ['Item_Number', 'DESC'],
-                // ['Description', 'ASC']
             ],
             limit,
             offset: (page - 1) * limit,
         });
 
-        const finalProductList = await Promise.all(productList.map(async (e: any) => {
-            const productImage = await ProductImage.findOne({
-                where: {
-                    product_number: e.Item_Number.toString(),
-                    isAllow: true
-                },
-                order: [['id', 'DESC']],
-            });
-
-            let taxRate = 0;
-            let price = await getFirstValidPrice(e);
-            // price = Math.ceil(price * 100) / 100;
-
-            let prepaidTaxRate = 0
-
-            if (role === 'retailer') {
-                const userJurisdiction = await getJurisdiction(customerId);
-
-                price = await getDiscount(e.Item_Number, customerId) || price;
-                if (userJurisdiction) {
-                    taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
-                    taxRate = Math.ceil(taxRate * 100) / 100;
-                }
-
-
-
-                if (userJurisdiction != null && e.SalesCategory) {
-
-                    console.log(e, 'the e', e?.SalesCategory?.Sales_Category, 'e?.SalesCategory?.Sales_Category')
-                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
-                }
-            } else if (role === 'sales' && customerNumber) {
-                const userJurisdiction = await getJurisdiction(customerNumber);
-
-                price = await getDiscount(e.Item_Number, customerNumber) || price;
-                if (userJurisdiction) {
-                    taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
-                    taxRate = Math.ceil(taxRate * 100) / 100;
-                }
-
-                if (userJurisdiction != null && e.SalesCategory) {
-                    prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
-                }
-            }
-            const productLimit = await getProductLimit(e.Item_Number);
-
-
-            const inventoryOnHand = await getInventoryOnHand(e.Item_Number)
-
-
-            let allowToOrderSalesRep = true;
-            let allowToOrder = true;
-            let wareHouseSetting: any = await Setting.findOne({});
-            wareHouseSetting = wareHouseSetting?.dataValues || null;
-
-            if (wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible) {
-                allowToOrderSalesRep = true;
-            }
-            else if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
-                allowToOrderSalesRep = false;
-            }
-
-            if (wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible) {
-                allowToOrder = true;
-            }
-            else if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
-                allowToOrder = false;
-            }
-
-            let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerNumber || 0, price + taxRate);
-
-            const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
-
-            return {
-                Pack: e.Pack,
-                Description: e.Description,
-                Item_Number: e.Item_Number,
-                CaseCount: e.CaseCount,
-                UOM: e.UOM,
-                Price1: e.Price1,
-                price: price,
-                Tax_Rate: taxRate,
-                priceWithTax: price + taxRate,
-                BaseCost: e.BaseCost,
-                Invoice_Cost: e.Invoice_Cost,
-                AvgCost: e.AvgCost,
-                NetCost: e.NetCost,
-                productDiscount: discount ?? null,
-                UPCList: e.UPCList,
-                hasProductLimit: productLimit ? true : false,
-                productLimit,
-                UnitOunces: e.UnitOunces,
-                hasPrepaidTaxRate: prepaidTaxRate ? true : false,
-                prepaidTaxRate: prepaidTaxRate,
-                showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
-                showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
-                showPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
-                allowToOrderSalesRep: allowToOrderSalesRep || null,
-                showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
-
-                hasQtyDiscount:discount ? false : hasQtyDiscount.allowToDiscount,
-                qtyDiscount: hasQtyDiscount,
-
-                Inventory_OnHand: inventoryOnHand || 0,
-                allowToOrder,
-                showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
-                showLowStock: wareHouseSetting?.retailer?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
-                showWithOutPrice: wareHouseSetting?.retailer?.showWithOutPrice || false,
-
-
-                SalesCategory: e.SalesCategory?.Category_Desc || null,
-                PriceClass: e.PriceClass?.Class_Desc || null,
-                showDistributorImage: productImage?.isAllow ?? false,
-                distributorImage: productImage?.img_url || null,
-                masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
-            };
-        }));
+        const finalProductList = await Promise.all(
+            productList.map((e: any) => this.mapInventoryRowToNewItemResponse(e, query, customerId))
+        );
 
         return {
-
-            totalCount: limit,
+            totalCount,
             finalProductList,
+            sourceType: 'algorithm' as const,
+        };
+    }
+
+    private isManualScheduleActive(setting: { isActive: boolean; startDate: Date | null; endDate: Date | null }): boolean {
+        if (!setting.isActive) return false;
+        const now = new Date();
+        if (setting.startDate && now < new Date(setting.startDate)) return false;
+        if (setting.endDate && now > new Date(setting.endDate)) return false;
+        return true;
+    }
+
+    private normalizeManualItemIds(raw: unknown, max: number): number[] {
+        if (!Array.isArray(raw)) return [];
+        const nums = raw.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+        return [...new Set(nums)].slice(0, max);
+    }
+
+    private async popularItemsListFromManualItemIds(
+        filteredManualIds: number[],
+        query: any,
+        userId: number,
+        salesCategory: any[]
+    ): Promise<{ totalCount: number; finalProductList: any[] }> {
+        if (filteredManualIds.length === 0) {
+            return { totalCount: 0, finalProductList: [] };
+        }
+
+        const manualWhereClause: any = {
+            Item_Number: { [Op.in]: filteredManualIds },
+            ShortOrderForm: true,
+            I_Inactive: false,
+            ...(salesCategory.length > 0 && { Sales_Category: { [Op.in]: salesCategory } }),
+        };
+
+        const manualProducts = await Inventory.findAll({
+            attributes: [
+                'Pack',
+                'Description',
+                'Item_Number',
+                'CaseCount',
+                'UOM',
+                'Price1',
+                'Price2',
+                'BaseCost',
+                'Invoice_Cost',
+                'AvgCost',
+                'NetCost',
+                'eCommerce',
+                'I_Inactive',
+                'ShortOrderForm',
+                'Date_Created',
+                'OTP_Number',
+                'UnitOunces',
+                'Cig_Pack',
+                'Cig_Sticks',
+            ],
+            where: manualWhereClause,
+            include: [
+                {
+                    model: SalesCategory,
+                    as: 'SalesCategory',
+                    attributes: ['Category_Desc', 'Sales_Category'],
+                    required: false,
+                },
+                {
+                    model: PriceClass,
+                    as: 'PriceClass',
+                    attributes: ['Class_Desc'],
+                    required: false,
+                },
+                {
+                    model: InventoryUPC,
+                    as: 'UPCList',
+                    attributes: ['UPC_Number'],
+                    where: {
+                        Status: 0,
+                    },
+                    required: false,
+                },
+            ],
+        });
+
+        const rowByItem = new Map(manualProducts.map((row: any) => [row.Item_Number, row]));
+        const orderedManualProducts = filteredManualIds.map((id) => rowByItem.get(id)).filter(Boolean);
+        const finalProductList = await Promise.all(
+            orderedManualProducts.map((row: any) =>
+                this.mapInventoryRowToNewItemResponse(
+                    row,
+                    {
+                        ...query,
+                        role: query?.role || 'retailer',
+                        customerNumber: query?.customerNumber || userId,
+                    },
+                    userId
+                )
+            )
+        );
+
+        return {
+            totalCount: finalProductList.length,
+            finalProductList,
+        };
+    }
+
+    private async mapInventoryRowToNewItemResponse(e: any, query: any, customerId: number) {
+        const { role, customerNumber } = query;
+        const productImage = await ProductImage.findOne({
+            where: {
+                product_number: e.Item_Number.toString(),
+                isAllow: true
+            },
+            order: [['id', 'DESC']],
+        });
+
+        let taxRate = 0;
+        let price = await getFirstValidPrice(e);
+        let prepaidTaxRate = 0;
+
+        if (role === 'retailer') {
+            const userJurisdiction = await getJurisdiction(customerId);
+
+            price = await getDiscount(e.Item_Number, customerId) || price;
+            if (userJurisdiction) {
+                taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
+                taxRate = Math.ceil(taxRate * 100) / 100;
+            }
+
+            if (userJurisdiction != null && e.SalesCategory) {
+                console.log(e, 'the e', e?.SalesCategory?.Sales_Category, 'e?.SalesCategory?.Sales_Category')
+                prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
+            }
+        } else if (role === 'sales' && customerNumber) {
+            const userJurisdiction = await getJurisdiction(customerNumber);
+
+            price = await getDiscount(e.Item_Number, customerNumber) || price;
+            if (userJurisdiction) {
+                taxRate = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
+                taxRate = Math.ceil(taxRate * 100) / 100;
+            }
+
+            if (userJurisdiction != null && e.SalesCategory) {
+                prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, e?.SalesCategory?.Sales_Category, e, price + taxRate);
+            }
+        }
+        const productLimit = await getProductLimit(e.Item_Number);
+
+        const inventoryOnHand = await getInventoryOnHand(e.Item_Number)
+        let allowToOrderSalesRep = true;
+        let allowToOrder = true;
+        let wareHouseSetting: any = await Setting.findOne({});
+        wareHouseSetting = wareHouseSetting?.dataValues || null;
+
+        if (wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible) {
+            allowToOrderSalesRep = true;
+        }
+        else if (!wareHouseSetting?.salesRep?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+            allowToOrderSalesRep = false;
+        }
+
+        if (wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible) {
+            allowToOrder = true;
+        }
+        else if (!wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible && inventoryOnHand <= 0) {
+            allowToOrder = false;
+        }
+
+        let hasQtyDiscount = await checkQtyDiscount(e.Item_Number, customerNumber || 0, price + taxRate);
+
+        const discount = await getProductDiscountFromRedis(Number(e.Item_Number));
+
+        return {
+            Pack: e.Pack,
+            Description: e.Description,
+            Item_Number: e.Item_Number,
+            CaseCount: e.CaseCount,
+            UOM: e.UOM,
+            Price1: e.Price1,
+            price: price,
+            Tax_Rate: taxRate,
+            priceWithTax: price + taxRate,
+            BaseCost: e.BaseCost,
+            Invoice_Cost: e.Invoice_Cost,
+            AvgCost: e.AvgCost,
+            NetCost: e.NetCost,
+            productDiscount: discount ?? null,
+            UPCList: e.UPCList,
+            hasProductLimit: productLimit ? true : false,
+            productLimit,
+            UnitOunces: e.UnitOunces,
+            hasPrepaidTaxRate: prepaidTaxRate ? true : false,
+            prepaidTaxRate: prepaidTaxRate,
+            showTheInventoryStockToSalesRep: wareHouseSetting?.salesRep?.showStock || false,
+            showLowStockToSalesRep: wareHouseSetting?.salesRep?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+            showPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+            allowToOrderSalesRep: allowToOrderSalesRep || null,
+            showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
+
+            hasQtyDiscount:discount ? false : hasQtyDiscount.allowToDiscount,
+            qtyDiscount: hasQtyDiscount,
+
+            Inventory_OnHand: inventoryOnHand || 0,
+            allowToOrder,
+            showTheInventoryStock: wareHouseSetting?.retailer?.showStock || false,
+            showLowStock: wareHouseSetting?.retailer?.showStock ? false : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+            showWithOutPrice: wareHouseSetting?.retailer?.showWithOutPrice || false,
+
+            SalesCategory: e.SalesCategory?.Category_Desc || null,
+            PriceClass: e.PriceClass?.Class_Desc || null,
+            showDistributorImage: productImage?.isAllow ?? false,
+            distributorImage: productImage?.img_url || null,
+            masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
         };
     }
 
@@ -1843,7 +2061,6 @@ export class DashboardService {
         const currentDate = today.toISOString().split("T")[0];  // "2025-08-25"
         console.log(currentDate, 'currentDate---->')
 
-
         const whereClause: any = {
             [Op.and]: [
                 {
@@ -1902,7 +2119,6 @@ export class DashboardService {
             const uniqueExcluded = [...new Set(allExcludedItems)];
             whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
         }
-
 
         console.log(allExcludedItems, 'allExcludedItems')
         // Add search functionality if needed

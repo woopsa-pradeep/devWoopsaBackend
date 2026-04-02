@@ -1341,8 +1341,6 @@ export class DriverService {
     const {
       insertAfterStopSequence,
       inProgressStopSequence: inProgressFromBody,
-      reScheduleDate,
-      reScheduleTime,
       reScheduleReason,
       reScheduleNotes,
       notes,
@@ -1517,8 +1515,8 @@ export class DriverService {
         // ── Rescheduled stop fields ──────────────────────────────
         if (isMoved) {
           patch.reSchedule = true;
-          patch.reScheduleDate = reScheduleDate ?? null;
-          patch.reScheduleTime = reScheduleTime?.trim() || null;
+          patch.reScheduleDate = moment(now).format('YYYY-MM-DD');
+          patch.reScheduleTime = moment(now).format('HH:mm:ss');
           patch.reScheduleReason = reScheduleReason?.trim() || null;
           patch.reScheduleNotes = reScheduleNotes?.trim() || null;
           patch.reScheduleUpdatedAt = now;
@@ -1587,19 +1585,62 @@ export class DriverService {
   }
 
 
+  async cancelStop(
+    driverId: number,
+    stopId: number,
+    cancelledReason?: string | null
+  ) {
+    const stop = await DeliveryRouteStop.findOne({
+      where: { id: stopId, isActive: true },
+    });
+    if (!stop) throw new AppError('Stop not found', 404);
+
+    const route = await DeliveryRoute.findOne({
+      where: { id: stop.routeId, driverId, isActive: true },
+    });
+    if (!route) throw new AppError('Route not found for this driver', 404);
+
+    if (
+      route.routeStatus === RouteStatus.COMPLETED ||
+      route.routeStatus === RouteStatus.CANCELLED
+    ) {
+      throw new AppError(
+        `Cannot cancel stop on a ${route.routeStatus} route`,
+        400
+      );
+    }
+
+    if (stop.status === DeliveryStopStatus.DELIVERED) {
+      throw new AppError('Cannot cancel a delivered stop', 400);
+    }
+
+    await stop.update({
+      status: DeliveryStopStatus.CANCELLED,
+      cancelledReason: cancelledReason ?? null,
+      cancelledAt: new Date(),
+    });
+
+    const updateNextStop = await DeliveryRouteStop.findOne({
+      where: { routeId: stop.routeId, isActive: true, stopSequence: stop.stopSequence + 1 },
+    });
+    if (updateNextStop) {
+      await updateNextStop.update({
+        status: DeliveryStopStatus.IN_PROGRESS,
+      });
+    }
+    return stop;
+  }
+
   async getDriverPendingStop(routeId: number) {
-    const pendingStop = await DeliveryRouteStop.findOne({
+    const pendingStops = await DeliveryRouteStop.findAll({
       where: { routeId, isActive: true, status: DeliveryStopStatus.NOT_DELIVERED },
       order: [['stopSequence', 'ASC']],
     });
-    if (!pendingStop) {
+    if (!pendingStops.length) {
       throw new AppError(Manager.RECORD_NOT_FOUND, 404);
     }
-    const allCNumbers = [
-      ...new Set(
-        [pendingStop.C_Number]
-      ),
-    ];
+
+    const allCNumbers = [...new Set(pendingStops.map((s) => s.C_Number))];
 
     const customers = await Customer.findAll({
       where: { C_Number: { [Op.in]: allCNumbers } },
@@ -1610,16 +1651,20 @@ export class DriverService {
     const customerMap = new Map(
       customers.map((c: any) => [c.C_Number, c])
     );
-    const finalStop = {
-      ...pendingStop.get({ plain: true }),
-      C_Name: customerMap.get(pendingStop.C_Number)?.C_Name || null,
-      C_Address: customerMap.get(pendingStop.C_Number)?.C_Address || null,
-      C_State: customerMap.get(pendingStop.C_Number)?.C_State || null,
-      C_Zip: customerMap.get(pendingStop.C_Number)?.C_Zip || null,
-      C_City: customerMap.get(pendingStop.C_Number)?.C_City || null,
-      C_Phone: customerMap.get(pendingStop.C_Number)?.C_Phone || null,
-    };
-    return finalStop;
+
+    return pendingStops.map((stop) => {
+      const plain = stop.get({ plain: true });
+      const c = customerMap.get(plain.C_Number);
+      return {
+        ...plain,
+        C_Name: c?.C_Name ?? null,
+        C_Address: c?.C_Address ?? null,
+        C_State: c?.C_State ?? null,
+        C_Zip: c?.C_Zip ?? null,
+        C_City: c?.C_City ?? null,
+        C_Phone: c?.C_Phone ?? null,
+      };
+    });
   }
 
 

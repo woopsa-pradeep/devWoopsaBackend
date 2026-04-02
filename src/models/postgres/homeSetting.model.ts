@@ -9,6 +9,8 @@ export interface HomeSettingsAttributes {
   showPromotedItems: boolean;
   maxPromotedItems: number;
   promotedItems: any[];
+  showManually: boolean;
+  retailerPromotedItems: any[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -24,6 +26,8 @@ class HomeSettings extends Model<HomeSettingsAttributes, HomeSettingsCreationAtt
   public showPromotedItems!: boolean;
   public maxPromotedItems!: number;
   public promotedItems!: any[];
+  public showManually!: boolean;
+  public retailerPromotedItems!: any[];
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -58,7 +62,15 @@ HomeSettings.init(
     maxPromotedItems:{
       type: DataTypes.INTEGER,
       defaultValue: 0,
-    }
+    },
+    showManually: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    retailerPromotedItems: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+    },
   },
   {
     sequelize: postgresSequelize,

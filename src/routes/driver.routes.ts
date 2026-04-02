@@ -13,6 +13,8 @@ import {
   driverExpenseListQuerySchema,
   rescheduleStopParamSchema,
   reScheduleStopBodySchema,
+  cancelStopParamSchema,
+  cancelStopBodySchema,
 } from "../validations/driver.validation";
 
 
@@ -92,6 +94,13 @@ router.get(
   '/pendingStop/:routeId',
   verifyRole(ROLES.DRIVER),
   catchAsync(driverController.getDriverPendingStop.bind(driverController))
+);
+
+router.put(
+  '/cancelStop/:stopId',
+  verifyRole(ROLES.DRIVER),
+  validateRequest(cancelStopBodySchema),
+  catchAsync(driverController.cancelStop.bind(driverController))
 );
 
 export default router;
