@@ -625,7 +625,14 @@ export class DriverService {
 
     // ── Check drivers not already assigned on this day ───────────
     const alreadyAssignedDrivers = await DeliveryRoute.findAll({
-      where: { day, driverId: driverIds, isActive: true },
+      where: {
+        day, driverId: driverIds, routeStatus: {
+          [Op.in]: [
+            RouteStatus.NOT_STARTED,
+            RouteStatus.IN_PROGRESS,
+          ],
+        }, isActive: true
+      },
     });
     if (alreadyAssignedDrivers.length) {
       const conflictIds = [...new Set(alreadyAssignedDrivers.map((r: any) => r.driverId))];
@@ -637,7 +644,14 @@ export class DriverService {
 
     // ── Check trucks not already assigned on this day ────────────
     const alreadyAssignedTrucks = await DeliveryRoute.findAll({
-      where: { day, truckId: truckIds, isActive: true },
+      where: {
+        day, truckId: truckIds, routeStatus: {
+          [Op.in]: [
+            RouteStatus.NOT_STARTED,
+            RouteStatus.IN_PROGRESS,
+          ],
+        }, isActive: true
+      },
     });
     if (alreadyAssignedTrucks.length) {
       const conflictIds = [...new Set(alreadyAssignedTrucks.map((r: any) => r.truckId))];

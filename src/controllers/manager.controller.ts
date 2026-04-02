@@ -2267,4 +2267,17 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getCancelledStops(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getCancelledStops(req.query);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async cancelStop(req: AuthRequest, res: Response) {
+    const data = await this.managerService.cancelStop(
+      Number(req.params.stopId),
+      req.body
+    );
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
 }

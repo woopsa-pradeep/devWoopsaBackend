@@ -3981,3 +3981,22 @@ export const updateDeliveryRouteDriverVehicleSchema = Joi.object({
     'any.required': 'Truck ID is required',
   }),
 });
+
+export const managerCancelStopParamSchema = Joi.object({
+  stopId: Joi.number().integer().positive().required(),
+});
+
+export const managerCancelStopBodySchema = Joi.object({
+  allowReDeliver: Joi.boolean().required().messages({
+    'boolean.base': 'allowReDeliver must be a boolean',
+    'any.required': 'allowReDeliver is required',
+  }),
+  orderNumber: Joi.when('allowReDeliver', {
+    is: true,
+    then: Joi.number().integer().positive().required().messages({
+      'any.required': 'orderNumber is required when allowReDeliver is true',
+      'number.base': 'orderNumber must be a number',
+    }),
+    otherwise: Joi.number().integer().positive().optional(),
+  }),
+});

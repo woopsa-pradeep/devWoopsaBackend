@@ -114,8 +114,8 @@ import Vehicle from "../models/postgres/vehicle.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
 import { formatCustomerVelocityItemBreakdown } from '../utils/formatItemOrderBreakdown.helper';
 import { getDirectionsInOrder, getDistanceMatrix, getOptimizedDirections } from "../utils/map.utlis";
-import { DeliveryRoute } from "../models/postgres/deliveryRoute.model";
-import { DeliveryRouteStop } from "../models/postgres/deliveryRouteStop.model";
+import { DeliveryRoute, RouteStatus } from "../models/postgres/deliveryRoute.model";
+import { DeliveryRouteStop, DeliveryStopStatus } from "../models/postgres/deliveryRouteStop.model";
 import DeliveryRouteGroup from "../models/postgres/driverRoutesGroup.model";
 import { CustBillTo } from "../models/mmsql/custBillTo.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
@@ -18945,7 +18945,14 @@ export class ManagerService {
 
     // ── Check driver not already assigned on this day ────────────
     const alreadyAssignedDriver = await DeliveryRoute.findOne({
-      where: { day, driverId, isActive: true },
+      where: {
+        day, driverId, routeStatus: {
+          [Op.in]: [
+            RouteStatus.NOT_STARTED,
+            RouteStatus.IN_PROGRESS,
+          ],
+        }, isActive: true
+      },
     });
     if (alreadyAssignedDriver) {
       throw new AppError(
@@ -18956,7 +18963,14 @@ export class ManagerService {
 
     // ── Check truck not already assigned on this day ─────────────
     const alreadyAssignedTruck = await DeliveryRoute.findOne({
-      where: { day, truckId, isActive: true },
+      where: {
+        day, truckId, routeStatus: {
+          [Op.in]: [
+            RouteStatus.NOT_STARTED,
+            RouteStatus.IN_PROGRESS,
+          ],
+        }, isActive: true
+      },
     });
     if (alreadyAssignedTruck) {
       throw new AppError(
@@ -19333,6 +19347,96 @@ export class ManagerService {
     };
   }
 
+  async getCancelledStops(query: PaginationOptions) {
+    const { page = 1, limit = 10 } = query;
+    const where: any = {
+      isActive: true,
+      status: DeliveryStopStatus.CANCELLED,
+    };
+    const offset = (page - 1) * limit;
+    const { count: totalCount, rows: stops } = await DeliveryRouteStop.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [['cancelledAt', 'DESC']],
+      include: [
+        {
+          model: DeliveryRoute,
+          as: 'route',
+          required: true,
+          attributes: [
+            'id',
+            'routeNumber',
+            'day',
+            'driverId',
+            'truckId',
+            'routeStatus',
+            'routeGroupKey',
+          ],
+          include: [
+            {
+              model: Vehicle,
+              as: 'vehicle',
+              required: false,
+              attributes: [
+                'id',
+                'description',
+                'truckType',
+                'licenseRegistrationNumber',
+                'vinNumber',
+              ],
+            },
+            {
+              model: Driver,
+              as: 'driver',
+              required: false,
+              attributes: { exclude: ['password'] },
+            },
+          ],
+        },
+      ],
+    });
+
+    const stopsWithCustomer = await Promise.all(stops.map(async (stop: any) => {
+      const customer = await Customer.findByPk(stop.C_Number, { attributes: ['C_Name', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Phone'] });
+      return {
+        ...stop.toJSON(),
+        customer,
+      };
+    }));
+    return {
+      totalCount,
+      page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      stops: stopsWithCustomer,
+    };
+  }
+
+  async cancelStop(stopId: number, body: any) {
+    const { allowReDeliver, orderNumber } = body;
+    if (allowReDeliver) {
+
+      const stop = await DeliveryRouteStop.findOne({
+        where: { id: stopId, isActive: true },
+      });
+      if (!stop) throw new AppError('Stop not found', 404);
+      await stop.update({ isActive: false });
+      await OrderHeader.update({
+        route_created: false,
+      }, { where: { Order_Number: orderNumber } });
+      return stop;
+    } else {
+
+      const stop = await DeliveryRouteStop.findOne({
+        where: { id: stopId, isActive: true },
+      });
+      if (!stop) throw new AppError('Stop not found', 404);
+      await stop.update({ isActive: false });
+      return stop;
+    }
+
+  }
 
 }
 
