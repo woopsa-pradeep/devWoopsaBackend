@@ -1093,6 +1093,12 @@ export class DriverService {
       routeData.stops = (routeData.stops || []).map((stop: any) => {
         const customer = customerMap.get(stop.C_Number);
         return {
+          warehouse: {
+            endLatitude: stop.endLatitude,
+            endLongitude: stop.endLongitude,
+            startLatitude: stop.startLatitude,
+            startLongitude: stop.startLongitude,
+          },
           ...stop,
           C_Name: customer?.C_Name || null,
           C_Address: customer?.C_Address || null,
@@ -1101,10 +1107,7 @@ export class DriverService {
           C_City: customer?.C_City || null,
           C_Phone: customer?.C_Phone || null,
           C_PhoneMobile: customer?.C_PhoneMobile || null,
-          endLatitude: stop.endLatitude,
-          endLongitude: stop.endLongitude,
-          startLatitude: stop.startLatitude,
-          startLongitude: stop.startLongitude,
+
         };
       });
       return routeData;
