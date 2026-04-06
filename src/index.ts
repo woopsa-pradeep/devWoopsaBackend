@@ -25,6 +25,7 @@ import { emailQueue, emailNotificationQueue, testRedisConnection } from './confi
 import { getNextVendorNumber } from './utils/vendor';
 import { OrderHeader } from './models/mmsql/orderHeader.model';
 import { apiLoggerMiddleware } from './middlewares/apiLogger.middleware';
+import { globalApiLimiter } from './middlewares/rateLimiter.middleware';
 
 startCronJobs();
 
@@ -52,6 +53,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
+app.use(globalApiLimiter);
 app.use(apiLoggerMiddleware);
 
 // Bull Board UI Setup for Redis Queue Monitoring

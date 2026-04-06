@@ -19521,6 +19521,14 @@ export class ManagerService {
           'C_State',
           'C_Zip',
         ],
+        include: [
+          {
+            model: CustomerRoute,
+            as: "Routes",
+            attributes: ["Route_Number", "Stop_Number"],
+            required: false,
+          },
+        ],
         raw: true,
       })
       : [];
@@ -19557,6 +19565,7 @@ export class ManagerService {
             city: c.C_City ?? null,
             state: c.C_State ?? null,
             zip: c.C_Zip ?? null,
+            routes: c.Routes ?? [],
           }
           : null,
         deliveryPODs: podsByStopId.get(stop.id) ?? [],

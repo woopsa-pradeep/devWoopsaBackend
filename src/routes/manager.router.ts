@@ -12,8 +12,6 @@ import { itemGlobalSchema, retailerSchema, salesRepSchema, warehouseProfileSchem
 import { createRetailerProductCatalogSchema, updateRetailerProductCatalogSchema } from '../validations/retailer.validation';
 import { createInventoryItemGroupSchema, updateInventoryItemGroupSchema } from '../validations/manager.validation';
 import { createInventoryBrandSchema, updateInventoryBrandSchema, updateDistributorSchema, updatePriceClassSchema } from '../validations/manager.validation';
-
-
 const router = Router();
 const managerController = new ManagerController();
 
