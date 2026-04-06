@@ -19506,6 +19506,7 @@ export class ManagerService {
     const allStops = routes.flatMap((r) => (r as any).stops || []);
     const stopIds = allStops.map((s: DeliveryRouteStop) => s.id);
     const cNumbers = [...new Set(allStops.map((s: DeliveryRouteStop) => s.C_Number))];
+    const orderDetails = [...new Set(allStops.map((s: DeliveryRouteStop) => s.orderNumber))];
 
     const customers = cNumbers.length
       ? await Customer.findAll({
@@ -19533,6 +19534,14 @@ export class ManagerService {
       })
       : [];
 
+    const orderDetailsMap = orderDetails.length
+      ? await OrderHeader.findAll({
+        where: { Order_Number: { [Op.in]: orderDetails } },
+        attributes: ['Order_Number', 'Invoice_Date', 'Order_Date', 'Order_Source'],
+        raw: true,
+      })
+      : [];
+
     const customerMap = new Map<number, any>(
       customers.map((c: any) => [c.C_Number, c])
     );
@@ -19554,8 +19563,10 @@ export class ManagerService {
 
     const enrichStop = (stop: any) => {
       const c = customerMap.get(stop.C_Number);
+      const orderDetail = orderDetailsMap.find((o: any) => o.Order_Number === stop.orderNumber);
       return {
         ...stop,
+        orderDetail: orderDetail ?? null,
         customer: c
           ? {
             C_Name: c.C_Name ?? null,

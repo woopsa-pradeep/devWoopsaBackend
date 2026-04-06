@@ -1100,7 +1100,11 @@ export class DriverService {
           C_Zip: customer?.C_Zip || null,
           C_City: customer?.C_City || null,
           C_Phone: customer?.C_Phone || null,
-          C_PhoneMobile: customer?.C_PhoneMobile || null
+          C_PhoneMobile: customer?.C_PhoneMobile || null,
+          endLatitude: stop.endLatitude,
+          endLongitude: stop.endLongitude,
+          startLatitude: stop.startLatitude,
+          startLongitude: stop.startLongitude,
         };
       });
       return routeData;
