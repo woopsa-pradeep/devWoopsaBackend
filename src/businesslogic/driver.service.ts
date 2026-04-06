@@ -1090,14 +1090,15 @@ export class DriverService {
 
     const finalResult = routes.map((route: any) => {
       const routeData = route.get({ plain: true });
+
       routeData.stops = (routeData.stops || []).map((stop: any) => {
         const customer = customerMap.get(stop.C_Number);
         return {
           warehouse: {
-            endLatitude: route.endLatitude,
-            endLongitude: route.endLongitude,
-            startLatitude: route.startLatitude,
-            startLongitude: route.startLongitude,
+            endLatitude: route.orderEndLat,
+            endLongitude: route.orderEndLong,
+            startLatitude: route.orderStartLat,
+            startLongitude: route.orderStartLong,
           },
           ...stop,
           C_Name: customer?.C_Name || null,
