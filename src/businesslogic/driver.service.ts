@@ -1094,10 +1094,10 @@ export class DriverService {
         const customer = customerMap.get(stop.C_Number);
         return {
           warehouse: {
-            endLatitude: stop.endLatitude,
-            endLongitude: stop.endLongitude,
-            startLatitude: stop.startLatitude,
-            startLongitude: stop.startLongitude,
+            endLatitude: route.endLatitude,
+            endLongitude: route.endLongitude,
+            startLatitude: route.startLatitude,
+            startLongitude: route.startLongitude,
           },
           ...stop,
           C_Name: customer?.C_Name || null,
