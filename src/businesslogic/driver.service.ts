@@ -967,9 +967,6 @@ export class DriverService {
       if (!completedStops) {
         throw new AppError(Manager.RECORD_NOT_FOUND, 404);
       }
-      await DeliveryRoute.update({
-        routeStatus: RouteStatus.COMPLETED,
-      }, { where: { id: stop.routeId } });
 
     }
 
