@@ -177,11 +177,16 @@ export class DriverService {
             ((stopCountByStatus.delivered * 100) / totalStops).toFixed(1)
           );
 
+      const isCompleteRoute = !stops.some(
+        (s) => s.status === DeliveryStopStatus.IN_PROGRESS
+      );
+
       return {
         ...plain,
         totalStops,
         stopCountByStatus,
         completionPercentage,
+        isCompleteRoute,
       };
     });
   }
