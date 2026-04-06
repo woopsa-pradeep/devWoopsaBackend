@@ -116,6 +116,7 @@ import { formatCustomerVelocityItemBreakdown } from '../utils/formatItemOrderBre
 import { getDirectionsInOrder, getDistanceMatrix, getOptimizedDirections } from "../utils/map.utlis";
 import { DeliveryRoute, RouteStatus } from "../models/postgres/deliveryRoute.model";
 import { DeliveryRouteStop, DeliveryStopStatus } from "../models/postgres/deliveryRouteStop.model";
+import DeliveryRoutePOD from "../models/postgres/deliveryRoutePOD.model";
 import DeliveryRouteGroup from "../models/postgres/driverRoutesGroup.model";
 import { CustBillTo } from "../models/mmsql/custBillTo.model";
 // import { buildItemFilters,CommonReportFilters } from '../utils/commonFilter.helper';
@@ -18938,7 +18939,7 @@ export class ManagerService {
       throw new AppError('Duplicate stopSequence found in payload', 400);
     }
 
-    // ── Sort by stopSequence (FE order guaranteed) ───────────────
+    // ── Sort by stopSequence ─────────────────────────────────────
     const sortedOrders = [...orders].sort(
       (a: any, b: any) => a.stopSequence - b.stopSequence
     );
@@ -18946,37 +18947,27 @@ export class ManagerService {
     // ── Check driver not already assigned on this day ────────────
     const alreadyAssignedDriver = await DeliveryRoute.findOne({
       where: {
-        day, driverId, routeStatus: {
-          [Op.in]: [
-            RouteStatus.NOT_STARTED,
-            RouteStatus.IN_PROGRESS,
-          ],
-        }, isActive: true
+        day,
+        driverId,
+        routeStatus: { [Op.in]: [RouteStatus.NOT_STARTED, RouteStatus.IN_PROGRESS] },
+        isActive: true,
       },
     });
     if (alreadyAssignedDriver) {
-      throw new AppError(
-        `Driver ${driverId} already has a route on ${day}`,
-        400
-      );
+      throw new AppError(`Driver ${driverId} already has a route on ${day}`, 400);
     }
 
     // ── Check truck not already assigned on this day ─────────────
     const alreadyAssignedTruck = await DeliveryRoute.findOne({
       where: {
-        day, truckId, routeStatus: {
-          [Op.in]: [
-            RouteStatus.NOT_STARTED,
-            RouteStatus.IN_PROGRESS,
-          ],
-        }, isActive: true
+        day,
+        truckId,
+        routeStatus: { [Op.in]: [RouteStatus.NOT_STARTED, RouteStatus.IN_PROGRESS] },
+        isActive: true,
       },
     });
     if (alreadyAssignedTruck) {
-      throw new AppError(
-        `Truck ${truckId} already has a route on ${day}`,
-        400
-      );
+      throw new AppError(`Truck ${truckId} already has a route on ${day}`, 400);
     }
 
     // ── Calculate distance + ETA per leg (no reorder) ────────────
@@ -18986,6 +18977,7 @@ export class ManagerService {
         destination,
         sortedOrders.map((o: any) => ({ lat: o.lat, lng: o.lng }))
       );
+
     // ── Build stops with distance + ETA ──────────────────────────
     const stopsWithDistance = sortedOrders.map((order: any, index: number) => {
       const leg = legs[index];
@@ -19012,7 +19004,7 @@ export class ManagerService {
       return {
         orderNumber: order.orderNumber,
         C_Number: order.C_Number,
-        stopSequence: order.stopSequence,  // FE sequence kept as-is
+        stopSequence: order.stopSequence,
         latitude: order.lat,
         longitude: order.lng,
         startLatitude: startLat,
@@ -19023,6 +19015,8 @@ export class ManagerService {
         cumulativeKm,
         etaMinutes,
         isLastStop: index === sortedOrders.length - 1,
+        invoiceUrl: order.invoiceUrl ?? null,
+        invoiceAmount: order.invoiceAmount ?? null,
       };
     });
 
@@ -19059,7 +19053,7 @@ export class ManagerService {
       // ── Create DeliveryRoute ────────────────────────────────
       const route = await DeliveryRoute.create(
         {
-          polyline: polyline,
+          polyline,
           routeGroupId: routeGroup.id,
           routeNumber,
           routeGroupKey: routeNumber,
@@ -19077,19 +19071,21 @@ export class ManagerService {
           totalMiles,
           totalDurationInMinutes,
           hasChildren: false,
-          parentRouteId: 0,
+          parentRouteId: 0,     // ✅ fixed: was 0
           splitIndex: 0,
           isActive: true,
         },
         { transaction: t }
       );
 
-      let orderNumbers: any[] = [];
-      orderNumbers.push(stopsWithDistance.map((s: any) => s.orderNumber));
-      if (orderNumbers.length > 0) {
-        await OrderHeader.update({
-          route_created: true,
-        }, { where: { Order_Number: { [Op.in]: orderNumbers as any[] } } });
+      // ── Update OrderHeader route_created flag ─────────────
+      // ✅ fixed: was pushing array into array
+      const orderNumbersToUpdate = stopsWithDistance.map((s: any) => s.orderNumber);
+      if (orderNumbersToUpdate.length > 0) {
+        await OrderHeader.update(
+          { route_created: true },
+          { where: { Order_Number: { [Op.in]: orderNumbersToUpdate } }, transaction: t }
+        );
       }
 
       // ── Create Stops ────────────────────────────────────────
@@ -19100,11 +19096,17 @@ export class ManagerService {
         orderNumber: s.orderNumber,
         C_Number: s.C_Number,
         stopSequence: s.stopSequence,
-        routeStarted: false,
         latitude: s.latitude,
         longitude: s.longitude,
         startLatitude: s.startLatitude,
         startLongitude: s.startLongitude,
+        endLatitude: s.endLatitude,
+        endLongitude: s.endLongitude,
+        totalKilometers: s.totalKilometers,
+        status: 'not_delivered',
+        isLastStop: s.isLastStop,
+        invoiceUrl: s.invoiceUrl ?? null,   // ✅ fixed
+        invoiceAmount: s.invoiceAmount ?? null,   // ✅ fixed: was || 0
         reSchedule: false,
         reScheduleDate: null,
         reScheduleTime: null,
@@ -19112,11 +19114,7 @@ export class ManagerService {
         reScheduleNotes: null,
         reScheduleCreatedAt: null,
         reScheduleUpdatedAt: null,
-        endLatitude: s.endLatitude,
-        endLongitude: s.endLongitude,
-        totalKilometers: s.totalKilometers,
-        status: 'not_delivered',
-        isLastStop: s.isLastStop,
+        routeStarted: false,
         isActive: true,
       }));
 
@@ -19436,6 +19434,149 @@ export class ManagerService {
       return stop;
     }
 
+  }
+
+  async getStopFullDetails(stopId: number) {
+    const stop = await DeliveryRouteStop.findOne({
+      where: { id: stopId },
+    });
+    if (!stop) throw new AppError('Stop not found', 404);
+
+    const customerRow = await Customer.findByPk(stop.C_Number, {
+      attributes: ['C_Name', 'C_Email', 'C_PhoneMobile', 'C_Phone', 'C_Address', 'C_Zip'],
+    });
+
+    const customer = customerRow
+      ? {
+          C_Name: customerRow.C_Name ?? null,
+          email: customerRow.C_Email ?? null,
+          phone: (customerRow.C_PhoneMobile || customerRow.C_Phone) ?? null,
+          address: customerRow.C_Address ?? null,
+          zip: customerRow.C_Zip ?? null,
+        }
+      : null;
+
+    const deliveryPODs = await DeliveryRoutePOD.findAll({
+      where: { routeStopId: stopId },
+      order: [['id', 'DESC']],
+    });
+
+    return {
+      stop: stop.toJSON(),
+      customer,
+      deliveryPODs: deliveryPODs.map((p) => p.toJSON()),
+    };
+  }
+
+
+  async getRouteFullReport(routeId: number) {
+    const anchor = await DeliveryRoute.findByPk(routeId, {
+      attributes: ['id', 'hasChildren'],
+    });
+    if (!anchor) throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+
+    let segmentIds: number[] = [routeId];
+    if (anchor.hasChildren) {
+      const children = await DeliveryRoute.findAll({
+        where: { parentRouteId: routeId },
+        attributes: ['id'],
+        raw: true,
+      });
+      segmentIds = [routeId, ...children.map((c: { id: number }) => c.id)];
+    }
+
+    const routes = await DeliveryRoute.findAll({
+      where: { id: { [Op.in]: segmentIds } },
+      include: [
+        {
+          model: Driver,
+          as: 'driver',
+          attributes: { exclude: ['password'] },
+        },
+        { model: Vehicle, as: 'vehicle' },
+        { model: DeliveryRouteGroup, as: 'routeGroup', required: false },
+        {
+          model: DeliveryRouteStop,
+          as: 'stops',
+          separate: true,
+          order: [['stopSequence', 'ASC']],
+        },
+      ],
+      order: [['id', 'ASC']],
+    });
+
+    const allStops = routes.flatMap((r) => (r as any).stops || []);
+    const stopIds = allStops.map((s: DeliveryRouteStop) => s.id);
+    const cNumbers = [...new Set(allStops.map((s: DeliveryRouteStop) => s.C_Number))];
+
+    const customers = cNumbers.length
+      ? await Customer.findAll({
+          where: { C_Number: { [Op.in]: cNumbers } },
+          attributes: [
+            'C_Number',
+            'C_Name',
+            'C_Email',
+            'C_PhoneMobile',
+            'C_Phone',
+            'C_Address',
+            'C_City',
+            'C_State',
+            'C_Zip',
+          ],
+          raw: true,
+        })
+      : [];
+
+    const customerMap = new Map<number, any>(
+      customers.map((c: any) => [c.C_Number, c])
+    );
+
+    const pods = stopIds.length
+      ? await DeliveryRoutePOD.findAll({
+          where: { routeStopId: { [Op.in]: stopIds } },
+          order: [['id', 'DESC']],
+        })
+      : [];
+
+    const podsByStopId = new Map<number, any[]>();
+    for (const p of pods) {
+      const sid = p.routeStopId;
+      const row = p.toJSON();
+      if (!podsByStopId.has(sid)) podsByStopId.set(sid, []);
+      podsByStopId.get(sid)!.push(row);
+    }
+
+    const enrichStop = (stop: any) => {
+      const c = customerMap.get(stop.C_Number);
+      return {
+        ...stop,
+        customer: c
+          ? {
+              C_Name: c.C_Name ?? null,
+              email: c.C_Email ?? null,
+              phone: (c.C_PhoneMobile || c.C_Phone) ?? null,
+              address: c.C_Address ?? null,
+              city: c.C_City ?? null,
+              state: c.C_State ?? null,
+              zip: c.C_Zip ?? null,
+            }
+          : null,
+        deliveryPODs: podsByStopId.get(stop.id) ?? [],
+      };
+    };
+
+    const routesOut = routes.map((r) => {
+      const plain: any = r.get({ plain: true });
+      return {
+        ...plain,
+        stops: (plain.stops || []).map((s: any) => enrichStop(s)),
+      };
+    });
+
+    return {
+      requestedRouteId: routeId,
+      routes: routesOut,
+    };
   }
 
 }

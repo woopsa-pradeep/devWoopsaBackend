@@ -23,15 +23,15 @@ export class AuthController {
     const data = await this.authService.verfiyRetailerOtp(req.body);
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
-  
+
   async login(req: Request, res: Response) {
-  const data = await this.authService.loginUser(req.body, req); 
-  sendResponse(res, 200, true, data, AuthMessage.OTP_SENT);
-}
+    const data = await this.authService.loginUser(req.body, req);
+    sendResponse(res, 200, true, data, AuthMessage.OTP_SENT);
+  }
 
 
   async verfiyOtp(req: Request, res: Response) {
-    const data = await this.authService.verfifyOpt(req.body,req);
+    const data = await this.authService.verfifyOpt(req.body, req);
     sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
   }
   async test(req: Request, res: Response) {
@@ -49,25 +49,25 @@ export class AuthController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
- async forgotPassword(req: Request, res: Response) {
-  const data = await this.authService.forgotPassword(req.body);
-  sendResponse(res, 200, true, data, AuthMessage.FORGOT_EMAIL_SEND);
- }
- 
- async resetPassword(req: Request, res: Response) { 
-  const data = await this.authService.resetPasswordWord(req.body);
-  sendResponse(res, 200, true, data, AuthMessage.PASSWORD_CHANGE);
- }
+  async forgotPassword(req: Request, res: Response) {
+    const data = await this.authService.forgotPassword(req.body);
+    sendResponse(res, 200, true, data, AuthMessage.FORGOT_EMAIL_SEND);
+  }
 
-async loginWithPassword(req: Request, res: Response) {
-  const data = await this.authService.loginUserWithPassword(req.body, req);
-  sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
-}
- async verifyToken(req: Request, res: Response) {
-  const data = await this.authService.verifyToken(req.body.token);
-  if(data) sendResponse(res, 200, true, data, General.SUCCESS);
-  else sendResponse(res, 403, false, data, General.FAIL);
- }
+  async resetPassword(req: Request, res: Response) {
+    const data = await this.authService.resetPasswordWord(req.body);
+    sendResponse(res, 200, true, data, AuthMessage.PASSWORD_CHANGE);
+  }
+
+  async loginWithPassword(req: Request, res: Response) {
+    const data = await this.authService.loginUserWithPassword(req.body, req);
+    sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
+  }
+  async verifyToken(req: Request, res: Response) {
+    const data = await this.authService.verifyToken(req.body.token);
+    if (data) sendResponse(res, 200, true, data, General.SUCCESS);
+    else sendResponse(res, 403, false, data, General.FAIL);
+  }
 
   async loginSalesUser(req: Request, res: Response) {
     const data = await this.authService.loginSalesUser(req.body);
@@ -80,35 +80,40 @@ async loginWithPassword(req: Request, res: Response) {
   }
 
   async checkerLogin(req: Request, res: Response) {
-      const data = await this.authService.checkerLogin(req.body);
-      sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
+    const data = await this.authService.checkerLogin(req.body);
+    sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
   }
 
   async driverLogin(req: Request, res: Response) {
     const data = await this.authService.driverLogin(req.body);
     sendResponse(res, 200, true, data, AuthMessage.LOGIN_SUCCESS);
   }
- 
+
+  async driverLogout(req: AuthRequest, res: Response) {
+    const data = await this.authService.driverLogout(req);
+    sendResponse(res, 200, true, data, AuthMessage.LOGOUT_SUCCESS);
+  }
+
 
   async changePassword(req: AuthRequest, res: Response) {
-  const data = await this.authService.changePassword(req.body, req);
-  sendResponse(res, 200, true, data, AuthMessage.PASSWORD_CHANGED);
-}
-async logout(req: AuthRequest, res: Response) {
-  const data = await this.authService.logoutRetailer(req);
-  sendResponse(res, 200, true, data, AuthMessage.LOGOUT_SUCCESS);
-}
-async deleteAccount(req: AuthRequest, res: Response) {
-  const data = await this.authService.deleteAccount(req);
-  sendResponse(res, 200, true, data, "Account deactivated successfully.");
-}
-async resendOtp(req: AuthRequest, res: Response) {
-  const data = await this.authService.resendOpt(req.body);
-  sendResponse(res, 200, true, data, "OTP sent successfully.");
-}
+    const data = await this.authService.changePassword(req.body, req);
+    sendResponse(res, 200, true, data, AuthMessage.PASSWORD_CHANGED);
+  }
+  async logout(req: AuthRequest, res: Response) {
+    const data = await this.authService.logoutRetailer(req);
+    sendResponse(res, 200, true, data, AuthMessage.LOGOUT_SUCCESS);
+  }
+  async deleteAccount(req: AuthRequest, res: Response) {
+    const data = await this.authService.deleteAccount(req);
+    sendResponse(res, 200, true, data, "Account deactivated successfully.");
+  }
+  async resendOtp(req: AuthRequest, res: Response) {
+    const data = await this.authService.resendOpt(req.body);
+    sendResponse(res, 200, true, data, "OTP sent successfully.");
+  }
 
-async getServerDetail(req: Request, res: Response) {
-  const data = await this.authService.getServerDetail(req.params.serverId);
-  sendResponse(res, 200, true, data, General.SUCCESS);
-}
+  async getServerDetail(req: Request, res: Response) {
+    const data = await this.authService.getServerDetail(req.params.serverId);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
 }

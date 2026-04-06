@@ -15,6 +15,7 @@ import {
   reScheduleStopBodySchema,
   cancelStopParamSchema,
   cancelStopBodySchema,
+  allowToCompleteStopBodySchema,
 } from "../validations/driver.validation";
 
 
@@ -101,6 +102,20 @@ router.put(
   verifyRole(ROLES.DRIVER),
   validateRequest(cancelStopBodySchema),
   catchAsync(driverController.cancelStop.bind(driverController))
+);
+
+
+router.post(
+  '/allowToCompleteStop',
+  verifyRole(ROLES.DRIVER),
+  validateRequest(allowToCompleteStopBodySchema),
+  catchAsync(driverController.allowToCompleteStop.bind(driverController))
+);
+
+router.post(
+  '/completeRoute/:routeId',
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.completeRoute.bind(driverController))
 );
 
 export default router;

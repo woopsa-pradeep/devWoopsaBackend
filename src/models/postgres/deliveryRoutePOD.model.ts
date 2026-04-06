@@ -44,6 +44,11 @@ interface DeliveryRoutePODAttributes {
   boxBarCode: string[];
   scanBarCode: string[];
 
+  // InvoiceDetails
+  invoiceUrl: string | null;
+  invoiceAmount: number;
+  invoiceMessage: string;
+
   // Notes
   notes: string | null;
   amount: number;
@@ -90,6 +95,9 @@ export class DeliveryRoutePOD
   public isActive!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+  public invoiceUrl!: string | null;
+  public invoiceAmount!: number;
+  public invoiceMessage!: string;
 }
 
 DeliveryRoutePOD.init(
@@ -135,6 +143,19 @@ DeliveryRoutePOD.init(
       type: DataTypes.JSONB,
       allowNull: false,
       defaultValue: [],
+    },
+    invoiceUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    invoiceAmount: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    invoiceMessage: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     paymentTermComplete: {
       type: DataTypes.BOOLEAN,

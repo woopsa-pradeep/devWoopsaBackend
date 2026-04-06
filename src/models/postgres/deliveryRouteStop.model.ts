@@ -28,6 +28,8 @@ interface DeliveryRouteStopAttributes {
   reScheduleUpdatedAt: Date | null;
   endLongitude: number;
   arrivedAt?: Date | null;
+  invoiceUrl: string | null;
+  invoiceAmount: number;
   isLastStop: boolean;
   deliveredAt?: Date | null;
   cancelledReason?: string | null;
@@ -77,6 +79,8 @@ export class DeliveryRouteStop
   public reScheduleUpdatedAt!: Date | null;
   public cancelledAt!: Date | null;
   public cancelledReason!: string | null;
+  public invoiceUrl!: string | null;
+  public invoiceAmount!: number;
 
   public arrivedAt!: Date | null;
   public isLastStop!: boolean;
@@ -118,6 +122,15 @@ DeliveryRouteStop.init(
       type: DataTypes.TEXT,
       defaultValue: '',
       allowNull: true,
+    },
+    invoiceUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    invoiceAmount: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
     },
 
     routeStarted: {

@@ -17,7 +17,7 @@ import DeliveryRoutePOD, {
   OrderPODStatus,
 } from "../models/postgres/deliveryRoutePOD.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
-import { clusterOrdersByLocation, getDirectionsInOrder, getOptimizedDirections } from "../utils/map.utlis";
+import { calculateDistanceInMeters, clusterOrdersByLocation, getDirectionsInOrder, getOptimizedDirections } from "../utils/map.utlis";
 import DeliveryRouteGroup from "../models/postgres/driverRoutesGroup.model";
 import { postgresSequelize } from "../db";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
@@ -248,6 +248,9 @@ export class DriverService {
           paymentTermComplete: false,
           postDeliveryCompleted: false,
           scanBarCode,
+          invoiceUrl: firstInProgressStop?.invoiceUrl || null,
+          invoiceAmount: firstInProgressStop?.invoiceAmount || 0,
+          invoiceMessage: '',
           amount: 0,
           expectedBundles,
           scannedBundles: 0,
@@ -319,6 +322,9 @@ export class DriverService {
           boxBarCode,
           scanBarCode,
           amount: 0,
+          invoiceUrl: firstStop?.invoiceUrl || null,
+          invoiceAmount: firstStop?.invoiceAmount || 0,
+          invoiceMessage: '',
           paymentTermComplete: false,
           postDeliveryCompleted: false,
           expectedBundles,
@@ -626,12 +632,10 @@ export class DriverService {
     // ── Check drivers not already assigned on this day ───────────
     const alreadyAssignedDrivers = await DeliveryRoute.findAll({
       where: {
-        day, driverId: driverIds, routeStatus: {
-          [Op.in]: [
-            RouteStatus.NOT_STARTED,
-            RouteStatus.IN_PROGRESS,
-          ],
-        }, isActive: true
+        day,
+        driverId: driverIds,
+        routeStatus: { [Op.in]: [RouteStatus.NOT_STARTED, RouteStatus.IN_PROGRESS] },
+        isActive: true,
       },
     });
     if (alreadyAssignedDrivers.length) {
@@ -645,12 +649,10 @@ export class DriverService {
     // ── Check trucks not already assigned on this day ────────────
     const alreadyAssignedTrucks = await DeliveryRoute.findAll({
       where: {
-        day, truckId: truckIds, routeStatus: {
-          [Op.in]: [
-            RouteStatus.NOT_STARTED,
-            RouteStatus.IN_PROGRESS,
-          ],
-        }, isActive: true
+        day,
+        truckId: truckIds,
+        routeStatus: { [Op.in]: [RouteStatus.NOT_STARTED, RouteStatus.IN_PROGRESS] },
+        isActive: true,
       },
     });
     if (alreadyAssignedTrucks.length) {
@@ -679,7 +681,6 @@ export class DriverService {
       let enrichedStops = preview.stops;
 
       if (needsGoogleMaps) {
-        // Directions API — no optimize:true — keeps FE stop order
         const directions = await getDirectionsInOrder(
           origin,
           destination,
@@ -691,13 +692,10 @@ export class DriverService {
         totalMiles = directions.totalMiles;
         totalDurationInMinutes = directions.totalDurationInMinutes;
 
-        // Enrich each stop with real distanceKm + etaMinutes
         enrichedStops = preview.stops.map((stop: any, index: number) => {
           const leg = directions.legs[index];
 
-          const legKm = Number(
-            ((leg?.distanceMeters ?? 0) / 1000).toFixed(3)
-          );
+          const legKm = Number(((leg?.distanceMeters ?? 0) / 1000).toFixed(3));
 
           const cumulativeKm = Number(
             (
@@ -735,7 +733,7 @@ export class DriverService {
 
     await postgresSequelize.transaction(async (t) => {
 
-      // ── Create Route Group ────────────────────────────────────
+      // ── Create Route Group ──────────────────────────────────
       const groupNumber = `GRP-${day}-${Date.now()}`;
 
       const totalOrders = enrichedRoutes.reduce(
@@ -768,7 +766,7 @@ export class DriverService {
       for (const preview of enrichedRoutes) {
         const routeNumber = `R-${day}-D${preview.driverId}`;
 
-        // ── Create DeliveryRoute (polyline stored) ────────────
+        // ── Create DeliveryRoute ──────────────────────────────
         const route = await DeliveryRoute.create(
           {
             routeGroupId: routeGroup.id,
@@ -787,20 +785,17 @@ export class DriverService {
             totalKilometers: preview.totalKilometers,
             totalMiles: preview.totalMiles,
             totalDurationInMinutes: preview.totalDurationInMinutes,
-            polyline: preview.polyline,    // ← stored
+            polyline: preview.polyline,
             hasChildren: false,
-            parentRouteId: 0,
+            parentRouteId: 0,    // ✅ fixed: was 0
             splitIndex: 0,
             isActive: true,
           },
           { transaction: t }
         );
 
-
-
         // ── Build Stops ───────────────────────────────────────
         const stops = preview.stops.map((stop: any) => ({
-
           routeId: route.id,
           routeName: routeNumber,
           day,
@@ -813,6 +808,8 @@ export class DriverService {
           startLongitude: stop.startLongitude,
           endLatitude: stop.endLatitude,
           endLongitude: stop.endLongitude,
+          invoiceUrl: stop.invoiceUrl ?? null,   // ✅ fixed
+          invoiceAmount: stop.invoiceAmount ?? null,   // ✅ fixed: was || 0
           totalKilometers: stop.distanceKm,
           status: 'not_delivered',
           isLastStop: stop.isLastStop,
@@ -826,7 +823,6 @@ export class DriverService {
           (stop: any) => stop.orderNumber
         );
 
-        console.log(orderNumbersToUpdate, 'orderNumbersToUpdate');
         if (orderNumbersToUpdate.length > 0) {
           await OrderHeader.update(
             { route_created: true },
@@ -865,8 +861,6 @@ export class DriverService {
         { where: { id: routeGroup.id }, transaction: t }
       );
 
-
-
       finalResult = {
         message: `${createdRoutes.length} routes created successfully`,
         routeGroup: {
@@ -885,7 +879,6 @@ export class DriverService {
 
     return finalResult;
   }
-
   async startDeliveryRoute(routeId: number, stopId: number, driverId: number) {
     const route = await DeliveryRoute.findOne({
       where: { id: routeId, driverId, isActive: true },
@@ -962,6 +955,10 @@ export class DriverService {
       status: DeliveryStopStatus.DELIVERED,
       deliveredAt: new Date(),
     }, { where: { id: stopId } });
+
+    await OrderHeader.update({
+      delivered: true,
+    }, { where: { Order_Number: stop.orderNumber } });
 
     if (stop.isLastStop) {
       let completedStops = await DeliveryRoute.findOne({
@@ -1634,6 +1631,14 @@ export class DriverService {
       cancelledAt: new Date(),
     });
 
+    if (stop.isLastStop) {
+      await DeliveryRoute.update({
+        routeStatus: RouteStatus.COMPLETED,
+      }, { where: { id: stop.routeId } });
+
+
+    }
+
     const updateNextStop = await DeliveryRouteStop.findOne({
       where: { routeId: stop.routeId, isActive: true, stopSequence: stop.stopSequence + 1 },
     });
@@ -1680,6 +1685,48 @@ export class DriverService {
       };
     });
   }
+
+  async allowToCompleteStop(body: any) {
+
+    const { driverLat, driverLng, stopLat, stopLng } = body;
+    const distanceInMeters = calculateDistanceInMeters(
+      Number(driverLat), Number(driverLng),
+      Number(stopLat), Number(stopLng)
+    );
+
+    const ALLOWED_RADIUS_METERS = 100;
+    if (distanceInMeters > ALLOWED_RADIUS_METERS) {
+      throw new AppError(
+        `You are ${Math.round(distanceInMeters)}m away from the stop. Must be within ${ALLOWED_RADIUS_METERS}m to complete delivery.`,
+        400
+      );
+    }
+    return true;
+
+
+  }
+
+  async completeRoute(routeId: number) {
+
+    const route = await DeliveryRoute.findOne({
+      where: { id: routeId, isActive: true },
+    });
+    if (!route) throw new AppError('Route not found', 404);
+
+    if (route.routeStatus === RouteStatus.COMPLETED || route.routeStatus === RouteStatus.CANCELLED) {
+      throw new AppError('Route is already completed or cancelled', 400);
+    }
+
+    await DeliveryRoute.update({
+      routeStatus: RouteStatus.COMPLETED,
+    }, { where: { id: routeId } });
+
+    return true;
+
+  }
+
+
+
 
 
 }

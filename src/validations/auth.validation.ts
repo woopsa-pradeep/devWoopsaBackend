@@ -28,6 +28,10 @@ export const loginSalesSchema = Joi.object({
     "string.empty": "Password is required",
     "any.required": "Password is required"
   }),
+  deviceToken: Joi.string().required().allow('', null).messages({
+    "string.empty": "Device Token is optional",
+    "any.required": "Device Token is optional",
+  })
 });
 
 

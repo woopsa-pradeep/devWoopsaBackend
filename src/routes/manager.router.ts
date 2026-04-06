@@ -616,6 +616,8 @@ router.get('/itemGroupPromotionMaintenanceReport', verifyRole(ROLES.MANAGER, ROL
 // Created Routes routes
 router.get('/created-routes', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getCreatedRoutes.bind(managerController)));
 router.get('/route-full-stops/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getRouteFullStops.bind(managerController)));
+router.get('/stop/:stopId/full-details', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getStopFullDetails.bind(managerController)));
+router.get('/route/:routeId/full-report', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getRouteFullReport.bind(managerController)));
 router.post('/create-manual-route', verifyRole(ROLES.MANAGER), validateRequest(createManualRouteSchema), catchAsync(managerController.createManualRoute.bind(managerController)));
 router.put('/delivery-route/:id/driver-vehicle', verifyRole(ROLES.MANAGER), validateRequest(updateDeliveryRouteDriverVehicleSchema), catchAsync(managerController.updateDeliveryRouteDriverVehicle.bind(managerController)));
 

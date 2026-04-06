@@ -177,4 +177,14 @@ export class DriverController {
         );
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async allowToCompleteStop(req: AuthRequest, res: Response) {
+        const data = await this.driverService.allowToCompleteStop(req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async completeRoute(req: AuthRequest, res: Response) {
+        const data = await this.driverService.completeRoute(Number(req.params.routeId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

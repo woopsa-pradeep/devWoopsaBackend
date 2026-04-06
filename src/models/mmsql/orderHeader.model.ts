@@ -75,7 +75,7 @@ OrderHeader.init(
     POS_Other: DataTypes.DECIMAL(18, 0),
     POS_House: DataTypes.DECIMAL(18, 0),
     POS_ChangeDue: DataTypes.DECIMAL(18, 0),
-    POS_Time: { type: DataTypes.DATE},
+    POS_Time: { type: DataTypes.DATE },
     HouseChargeApplied: DataTypes.DECIMAL(19, 4),
     Points: DataTypes.INTEGER,
     Commission_Paid: DataTypes.SMALLINT,
@@ -106,8 +106,8 @@ OrderHeader.init(
     pPaidOut: DataTypes.INTEGER,
     Delivery_Charge_Select: DataTypes.BOOLEAN,
     Other_Charge_Select: DataTypes.BOOLEAN,
-    Invoice_Time: { type: DataTypes.DATE},
-    Picklist_Time: { type: DataTypes.STRING  },
+    Invoice_Time: { type: DataTypes.DATE },
+    Picklist_Time: { type: DataTypes.STRING },
     Manifest_Printed: DataTypes.BOOLEAN,
     Manifest_Time: { type: DataTypes.DATE },
     CardType_ID_Credit: DataTypes.TINYINT,
@@ -125,12 +125,13 @@ OrderHeader.init(
     OrderedOn: { type: DataTypes.DATE, allowNull: true },
     Order_Source: { type: DataTypes.INTEGER, allowNull: true },
     route_created: { type: DataTypes.BOOLEAN, defaultValue: false },
+    delivered: { type: DataTypes.BOOLEAN, defaultValue: false },
   },
   {
     sequelize,
     tableName: "Order_Header",
     timestamps: false,
     freezeTableName: true,
-    
+
   }
 );

@@ -3958,6 +3958,16 @@ export const createManualRouteSchema = Joi.object({
           'number.base': 'Longitude must be a number',
           'any.required': 'Longitude is required',
         }),
+        invoiceUrl: Joi.string().optional().allow('', null).messages({
+          'string.base': 'Invoice URL must be a string',
+          'string.empty': 'Invoice URL cannot be empty',
+          'any.required': 'Invoice URL is required',
+        }),
+        invoiceAmount: Joi.number().optional().allow(0, null).messages({
+          'number.base': 'Invoice amount must be a number',
+          'number.empty': 'Invoice amount cannot be empty',
+          'any.required': 'Invoice amount is required',
+        })
       })
     )
     .min(1)

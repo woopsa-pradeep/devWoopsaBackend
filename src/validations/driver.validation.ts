@@ -103,3 +103,11 @@ export const cancelStopParamSchema = Joi.object({
 export const cancelStopBodySchema = Joi.object({
   cancelledReason: Joi.string().trim().max(500).allow(null, '').optional(),
 });
+
+
+export const allowToCompleteStopBodySchema = Joi.object({
+  driverLat: Joi.number().required(),
+  driverLng: Joi.number().required(),
+  stopLat: Joi.number().required(),
+  stopLng: Joi.number().required(),
+});

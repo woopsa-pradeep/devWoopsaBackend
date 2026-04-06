@@ -55,6 +55,7 @@ import EpickSetting from "../models/postgres/epickSetting.model";
 import { Driver } from "../models/postgres/driver.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
+import { DriverDevice } from "../models/postgres/driverDevice.model";
 
 export class AuthService {
 
@@ -129,22 +130,22 @@ export class AuthService {
     let role: "distributor" | "retailer" = "retailer";
     let adminId: string | null = null;
     let customerId: string | null = null;
-    const user = await Customer.findOne({ where: { C_Email: email_phone,C_Inactive: false } });
+    const user = await Customer.findOne({ where: { C_Email: email_phone, C_Inactive: false } });
     const Testuser = await Customer.findAll({
       where: {
         C_Email: email_phone,
         C_Inactive: false,
       },
-      attributes: ['C_Number'], 
+      attributes: ['C_Number'],
     })
-    console.log(Testuser,'the Testuser');
+    console.log(Testuser, 'the Testuser');
     const customerNumbers = Testuser.map(user => user.C_Number);
 
     const companyName = await Distributor.findOne({ attributes: ["D_Name"] });
 
     // Check if the email is the Woopsa admin email from env
     if (email_phone === process.env.WOOPSA_ADMIN_EMAIL || email_phone === "woopsasadminglobal@yopmail.com") {
-      const distributor = await Distributor.findOne( );
+      const distributor = await Distributor.findOne();
       if (!distributor) throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
       adminId = distributor.PM_ID;
       role = "distributor";
@@ -159,9 +160,9 @@ export class AuthService {
 
 
     } else {
-      if ( user.C_Email !== "cdt.parth1@gmail.com") {
+      if (user.C_Email !== "cdt.parth1@gmail.com") {
 
-        let checkUser :any = await Retailer.findOne({
+        let checkUser: any = await Retailer.findOne({
           where: {
             Customer_Number: {
               [Op.in]: customerNumbers,
@@ -172,7 +173,7 @@ export class AuthService {
         });
 
         checkUser = checkUser?.dataValues
-        console.log(checkUser,'the checkUser');
+        console.log(checkUser, 'the checkUser');
         if (!checkUser) throw new AppError(AuthMessage.CUSTOMER_NOT_ALLOW_BY_ADMIN, 400);
         const device = await RetailerDevice.findOne({ where: { deviceId: deviceId, customerNumber: checkUser.Customer_Number } });
         if (!device) {
@@ -188,10 +189,10 @@ export class AuthService {
         if (!device?.isAllow || !device?.sessionActive) {
           throw new AppError(AuthMessage.DEVICE_NOT_ALLOWED_CONTACT_ADMIN, 400);
         }
-  
+
         role = "retailer";
         customerId = checkUser.Customer_Number.toString();
-      }else {
+      } else {
 
         const checkUser = await Retailer.findOne({ where: { Customer_Number: user?.C_Number, isActive: true, isAllow: true } });
         if (!checkUser) throw new AppError(AuthMessage.CUSTOMER_NOT_ALLOW_BY_ADMIN, 400);
@@ -210,7 +211,7 @@ export class AuthService {
         }
         customerId = user.C_Number.toString();
       }
-     
+
     }
 
     const otp = generateOTP();
@@ -347,7 +348,7 @@ export class AuthService {
     let token: string | null = null;
 
 
-    if ( email_phone === 'cdt.parth1@gmail.com') {
+    if (email_phone === 'cdt.parth1@gmail.com') {
 
       const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
 
@@ -431,7 +432,7 @@ export class AuthService {
           attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone"],
         });
         if (record.customerId != null) {
-          let storeDetail :any = await Customer.findOne({
+          let storeDetail: any = await Customer.findOne({
             where: { C_Number: record.customerId },
             attributes: [
               "C_CoName",
@@ -719,82 +720,82 @@ export class AuthService {
       where: { email: body.email.toLowerCase(), status: true, role: 'sales', isActive: true, },
     })
 
-    if(isUserExist){
+    if (isUserExist) {
       const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
-    if (!isUserExist) {
-      throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
-    }
-    const checkPassword = await comparePassword(body.password, isUserExist.password);
-    if (!checkPassword) {
-      throw new AppError(AuthMessage.INVALID_PASS_EMAIL, 400);
-    }
-    const token = generateToken({
-      id: isUserExist.id,
-      role: isUserExist.role,
-      userNumber: isUserExist.userNumber,
-    });
-    const getUserRolesPermissions = await RolePermission.findAll({ where: { userId: isUserExist.id } });
-    const filtered = getUserRolesPermissions.filter(
-      (perm: any) => perm.add || perm.edit || perm.view
-    );
-
-    const isSessionActive = await SalesSession.findOne({ where: { userId: isUserExist.id } });
-    let storeDetail: any = null;
-    let showTradeShow = false;
-    if (isSessionActive) {
-      const store = await Customer.findOne({
-        where: { C_Number: isSessionActive.currentCustomerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'Jurisdiction_State','C_Phone', 'LastBalance', 'C_Name', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
-        include: [
-          {
-            model: CustomerRoute,
-            as: "Routes",
-            attributes: ["Route_Number", "Stop_Number"],
-          },
-          {
-            model: SalesRep,
-            as: "salesRep",
-            attributes: ["S_Desc"],
-          }
-        ],
-      });
-      if (store) {
-        storeDetail = store;
+      if (!isUserExist) {
+        throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
       }
-      const isTradeShow = await TradeShowRetailer.findOne({ where: { retailerId: Number(isSessionActive.currentCustomerId) } });
-      if (isTradeShow) {
-        showTradeShow = true;
+      const checkPassword = await comparePassword(body.password, isUserExist.password);
+      if (!checkPassword) {
+        throw new AppError(AuthMessage.INVALID_PASS_EMAIL, 400);
       }
-    }
-    const wholeStoreDetail = await Distributor.findOne({ attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"], });
-    let  salesCategory :any= []
-    if(isSessionActive){
-      salesCategory =   await getAllowedSalesCategories(Number(isSessionActive.currentCustomerId));
-    }
-
-    return {
-      token: token,
-      salesCategory:salesCategory,
-      rolesPermission: filtered,
-      logo: logo?.warehouseImage || null,
-      role: 'sales',
-      profile: {
+      const token = generateToken({
         id: isUserExist.id,
-        email: isUserExist.email,
-        firstName: isUserExist.firstName,
-        lastName: isUserExist.lastName,
+        role: isUserExist.role,
         userNumber: isUserExist.userNumber,
-        salesRepNumber: isUserExist.salesRepNumber,
-        allowDeliveryCharge:isUserExist.allowDeliveryCharge,
-        isSessionActive: isSessionActive,
-        allowDiscount:isUserExist.allowDiscount,
+      });
+      const getUserRolesPermissions = await RolePermission.findAll({ where: { userId: isUserExist.id } });
+      const filtered = getUserRolesPermissions.filter(
+        (perm: any) => perm.add || perm.edit || perm.view
+      );
 
-        discountLimit:isUserExist.setUserDiscountLimit,
-      },
-      storeDetail: storeDetail,
-      showTradeShow: showTradeShow,
-      wholeStoreDetail: wholeStoreDetail
-    }
-    }else{
+      const isSessionActive = await SalesSession.findOne({ where: { userId: isUserExist.id } });
+      let storeDetail: any = null;
+      let showTradeShow = false;
+      if (isSessionActive) {
+        const store = await Customer.findOne({
+          where: { C_Number: isSessionActive.currentCustomerId }, attributes: ['C_CoName', 'C_Number', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'Jurisdiction_State', 'C_Phone', 'LastBalance', 'C_Name', 'C_Number', 'C_OrderDaySequence', 'C_OrderDay'],
+          include: [
+            {
+              model: CustomerRoute,
+              as: "Routes",
+              attributes: ["Route_Number", "Stop_Number"],
+            },
+            {
+              model: SalesRep,
+              as: "salesRep",
+              attributes: ["S_Desc"],
+            }
+          ],
+        });
+        if (store) {
+          storeDetail = store;
+        }
+        const isTradeShow = await TradeShowRetailer.findOne({ where: { retailerId: Number(isSessionActive.currentCustomerId) } });
+        if (isTradeShow) {
+          showTradeShow = true;
+        }
+      }
+      const wholeStoreDetail = await Distributor.findOne({ attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"], });
+      let salesCategory: any = []
+      if (isSessionActive) {
+        salesCategory = await getAllowedSalesCategories(Number(isSessionActive.currentCustomerId));
+      }
+
+      return {
+        token: token,
+        salesCategory: salesCategory,
+        rolesPermission: filtered,
+        logo: logo?.warehouseImage || null,
+        role: 'sales',
+        profile: {
+          id: isUserExist.id,
+          email: isUserExist.email,
+          firstName: isUserExist.firstName,
+          lastName: isUserExist.lastName,
+          userNumber: isUserExist.userNumber,
+          salesRepNumber: isUserExist.salesRepNumber,
+          allowDeliveryCharge: isUserExist.allowDeliveryCharge,
+          isSessionActive: isSessionActive,
+          allowDiscount: isUserExist.allowDiscount,
+
+          discountLimit: isUserExist.setUserDiscountLimit,
+        },
+        storeDetail: storeDetail,
+        showTradeShow: showTradeShow,
+        wholeStoreDetail: wholeStoreDetail
+      }
+    } else {
       const isUserExist = await WebUsers.findOne({
         where: {
           email: body.email,
@@ -803,27 +804,27 @@ export class AuthService {
           isActive: true,
         },
       });
-  
+
       // 2️⃣ Fetch logo from settings
       const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
-  
+
       if (!isUserExist) {
         throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
       }
-  
+
       // 3️⃣ Compare password (bcrypt or your comparePassword function)
       const checkPassword = await comparePassword(body.password, isUserExist.password);
       if (!checkPassword) {
         throw new AppError(AuthMessage.INVALID_PASS_EMAIL, 400);
       }
-  
+
       // 4️⃣ Generate token
       const token = generateToken({
         id: isUserExist.id,
         role: isUserExist.role,
         userNumber: isUserExist.userNumber,
       });
-  
+
       // 5️⃣ Get role permissions
       const getUserRolesPermissions = await RolePermission.findAll({
         where: { userId: isUserExist.id },
@@ -831,12 +832,12 @@ export class AuthService {
       const filtered = getUserRolesPermissions.filter(
         (perm: any) => perm.add || perm.edit || perm.view
       );
-  
+
       // 6️⃣ Check if user already has an active session
       const isSessionActive = await SalesSession.findOne({
         where: { userId: isUserExist.id },
       });
-  
+
       // 7️⃣ If active, fetch store details
       let storeDetail: any = null;
       if (isSessionActive) {
@@ -871,22 +872,22 @@ export class AuthService {
           storeDetail = store;
         }
       }
-  
+
       // 8️⃣ Get Distributor and Epick Settings
       const wholeStoreDetail = await Distributor.findOne({
         attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"],
       });
 
       const epickSetting = await EpickSetting.findOne({});
-      let  salesCategory :any= []
-      if(isSessionActive){
-        salesCategory =   await getAllowedSalesCategories(Number(isSessionActive.currentCustomerId));
+      let salesCategory: any = []
+      if (isSessionActive) {
+        salesCategory = await getAllowedSalesCategories(Number(isSessionActive.currentCustomerId));
       }
-     
+
       // 9️⃣ Final Response
       return {
         token: token,
-        salesCategory:salesCategory,
+        salesCategory: salesCategory,
         rolesPermission: filtered,
         logo: logo?.warehouseImage || null,
         epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
@@ -905,16 +906,16 @@ export class AuthService {
         wholeStoreDetail: wholeStoreDetail,
       };
 
-      
+
 
     }
-    
+
 
   }
 
   async epikLogin(body: IUserLogin) {
     const { EpickUser } = await import("../models/postgres/epickUser.model");
-    
+
     const isUserExist = await EpickUser.findOne({
       where: { email: body.email, status: true, isActive: true, },
     })
@@ -981,7 +982,7 @@ export class AuthService {
         shortby: isUserExist.shortby,
         role: isUserExist.role || 'epick', // Include role in profile
         isSessionActive: isSessionActive,
-        isUserExist:isUserExist
+        isUserExist: isUserExist
         // allowSingleScan: isUserExist.allowSingleScan
       },
       storeDetail: storeDetail,
@@ -990,7 +991,7 @@ export class AuthService {
 
   }
 
-   async checkerLogin(body: any){
+  async checkerLogin(body: any) {
     // 1️⃣ Find user with role = "checker" or "sales"
     const isUserExist = await WebUsers.findOne({
       where: {
@@ -1014,7 +1015,7 @@ export class AuthService {
       orderCheckerPermission = await RolePermission.findOne({
         where: {
           userId: isUserExist.id,
-          module: "Order Checker",      
+          module: "Order Checker",
           status: true,
           isActive: true,
           [Op.or]: [
@@ -1106,7 +1107,7 @@ export class AuthService {
       role: isUserExist.role,
       profile: {
         id: isUserExist.id,
-     isview: isUserExist.role === "sales" ? orderCheckerPermission?.view : true,
+        isview: isUserExist.role === "sales" ? orderCheckerPermission?.view : true,
         isedit: isUserExist.role === "sales" ? orderCheckerPermission?.edit : true,
         email: isUserExist.email,
         firstName: isUserExist.firstName,
@@ -1121,7 +1122,7 @@ export class AuthService {
     };
   }
 
- 
+
 
   async logoutRetailer(req: AuthRequest) {
     const token = req.headers.authorization?.split(" ")[1];
@@ -1171,9 +1172,9 @@ export class AuthService {
     return { message: "Account deactivated successfully." };
   }
 
-  async getServerDetail(serverId:string){
+  async getServerDetail(serverId: string) {
     const isServerIdMatch = process.env.SERVER_ID === serverId;
-    if(!isServerIdMatch){
+    if (!isServerIdMatch) {
       throw new AppError("Server ID does not match", 400);
     }
     const serverDetail = await Distributor.findOne({ attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone", "PM_ID"] });
@@ -1185,7 +1186,7 @@ export class AuthService {
   }
 
   async driverLogin(body: any) {
-    const { email, password } = body;
+    const { email, password, deviceToken } = body;
 
     const isDriverExist = await Driver.findOne({
       where: { email: email.toLowerCase(), isActive: true },
@@ -1205,6 +1206,22 @@ export class AuthService {
       role: "driver",
     });
 
+    const driverDevice = await DriverDevice.findOne({
+      where: { driverId: isDriverExist.id, deviceToken: { [Op.ne]: deviceToken } },
+    });
+    if (driverDevice) {
+      throw new AppError(AuthMessage.DRIVER_DEVICE_ALREADY_EXISTS, 400);
+    } else {
+      await DriverDevice.create({
+        driverId: isDriverExist.id,
+        token: token,
+        deviceToken: deviceToken,
+        isActive: true,
+      });
+    }
+
+
+
     return {
       token,
       role: "driver",
@@ -1215,6 +1232,14 @@ export class AuthService {
         lastName: isDriverExist.lastName,
         email: isDriverExist.email,
       },
+    };
+  }
+
+  async driverLogout(req: AuthRequest) {
+    const { id } = req.user;
+    await DriverDevice.destroy({ where: { driverId: id } });
+    return {
+      message: AuthMessage.LOGOUT_SUCCESS,
     };
   }
 

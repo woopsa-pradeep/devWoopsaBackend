@@ -2249,6 +2249,16 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getStopFullDetails(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getStopFullDetails(Number(req.params.stopId));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getRouteFullReport(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getRouteFullReport(Number(req.params.routeId));
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async createManualRoute(req: AuthRequest, res: Response) {
     const data = await this.managerService.createManualRoute(req.body);
     sendResponse(res, 201, true, data, General.SUCCESS);

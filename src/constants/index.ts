@@ -139,6 +139,7 @@ export const Manager = {
 }
 
 export const AuthMessage = {
+  DRIVER_DEVICE_ALREADY_EXISTS: "Driver already logged in other device",
   LOGIN_SUCCESS: "Login Successfully",
   PROFILE_UPDATE: "Profile Update Successfully",
   REGISTER_SUCCESS: "Register Successfully",
