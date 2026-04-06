@@ -18905,7 +18905,6 @@ export class ManagerService {
 
 
   // services/deliveryRoute.service.ts
-
   async createManualRoute(body: any) {
     const { day, origin, destination, driverId, truckId, orders } = body;
 
@@ -18997,7 +18996,6 @@ export class ManagerService {
         .reduce((sum: number, l: any) => sum + l.durationSeconds, 0);
 
       const etaMinutes = Math.ceil(etaSeconds / 60);
-
       const startLat = index === 0 ? origin.lat : sortedOrders[index - 1].lat;
       const startLng = index === 0 ? origin.lng : sortedOrders[index - 1].lng;
 
@@ -19020,7 +19018,17 @@ export class ManagerService {
       };
     });
 
-    // ── Save in one transaction ───────────────────────────────────
+    // ── Update OrderHeader BEFORE transaction (MSSQL — separate connection) ──
+    const orderNumbersToUpdate = stopsWithDistance.map((s: any) => s.orderNumber);
+    if (orderNumbersToUpdate.length > 0) {
+      await OrderHeader.update(
+        { route_created: true },
+        { where: { Order_Number: { [Op.in]: orderNumbersToUpdate } } }
+        // ✅ No transaction — MSSQL has its own connection
+      );
+    }
+
+    // ── Save in one PostgreSQL transaction ────────────────────────
     let finalResult: any = {};
 
     await postgresSequelize.transaction(async (t) => {
@@ -19071,22 +19079,12 @@ export class ManagerService {
           totalMiles,
           totalDurationInMinutes,
           hasChildren: false,
-          parentRouteId: 0,     // ✅ fixed: was 0
+          parentRouteId: 0,
           splitIndex: 0,
           isActive: true,
         },
         { transaction: t }
       );
-
-      // ── Update OrderHeader route_created flag ─────────────
-      // ✅ fixed: was pushing array into array
-      const orderNumbersToUpdate = stopsWithDistance.map((s: any) => s.orderNumber);
-      if (orderNumbersToUpdate.length > 0) {
-        await OrderHeader.update(
-          { route_created: true },
-          { where: { Order_Number: { [Op.in]: orderNumbersToUpdate } }, transaction: t }
-        );
-      }
 
       // ── Create Stops ────────────────────────────────────────
       const stopsToInsert = stopsWithDistance.map((s: any) => ({
@@ -19105,8 +19103,8 @@ export class ManagerService {
         totalKilometers: s.totalKilometers,
         status: 'not_delivered',
         isLastStop: s.isLastStop,
-        invoiceUrl: s.invoiceUrl ?? null,   // ✅ fixed
-        invoiceAmount: s.invoiceAmount ?? null,   // ✅ fixed: was || 0
+        invoiceUrl: s.invoiceUrl ?? null,
+        invoiceAmount: s.invoiceAmount ?? null,
         reSchedule: false,
         reScheduleDate: null,
         reScheduleTime: null,
@@ -19448,12 +19446,12 @@ export class ManagerService {
 
     const customer = customerRow
       ? {
-          C_Name: customerRow.C_Name ?? null,
-          email: customerRow.C_Email ?? null,
-          phone: (customerRow.C_PhoneMobile || customerRow.C_Phone) ?? null,
-          address: customerRow.C_Address ?? null,
-          zip: customerRow.C_Zip ?? null,
-        }
+        C_Name: customerRow.C_Name ?? null,
+        email: customerRow.C_Email ?? null,
+        phone: (customerRow.C_PhoneMobile || customerRow.C_Phone) ?? null,
+        address: customerRow.C_Address ?? null,
+        zip: customerRow.C_Zip ?? null,
+      }
       : null;
 
     const deliveryPODs = await DeliveryRoutePOD.findAll({
@@ -19511,20 +19509,20 @@ export class ManagerService {
 
     const customers = cNumbers.length
       ? await Customer.findAll({
-          where: { C_Number: { [Op.in]: cNumbers } },
-          attributes: [
-            'C_Number',
-            'C_Name',
-            'C_Email',
-            'C_PhoneMobile',
-            'C_Phone',
-            'C_Address',
-            'C_City',
-            'C_State',
-            'C_Zip',
-          ],
-          raw: true,
-        })
+        where: { C_Number: { [Op.in]: cNumbers } },
+        attributes: [
+          'C_Number',
+          'C_Name',
+          'C_Email',
+          'C_PhoneMobile',
+          'C_Phone',
+          'C_Address',
+          'C_City',
+          'C_State',
+          'C_Zip',
+        ],
+        raw: true,
+      })
       : [];
 
     const customerMap = new Map<number, any>(
@@ -19533,9 +19531,9 @@ export class ManagerService {
 
     const pods = stopIds.length
       ? await DeliveryRoutePOD.findAll({
-          where: { routeStopId: { [Op.in]: stopIds } },
-          order: [['id', 'DESC']],
-        })
+        where: { routeStopId: { [Op.in]: stopIds } },
+        order: [['id', 'DESC']],
+      })
       : [];
 
     const podsByStopId = new Map<number, any[]>();
@@ -19552,14 +19550,14 @@ export class ManagerService {
         ...stop,
         customer: c
           ? {
-              C_Name: c.C_Name ?? null,
-              email: c.C_Email ?? null,
-              phone: (c.C_PhoneMobile || c.C_Phone) ?? null,
-              address: c.C_Address ?? null,
-              city: c.C_City ?? null,
-              state: c.C_State ?? null,
-              zip: c.C_Zip ?? null,
-            }
+            C_Name: c.C_Name ?? null,
+            email: c.C_Email ?? null,
+            phone: (c.C_PhoneMobile || c.C_Phone) ?? null,
+            address: c.C_Address ?? null,
+            city: c.C_City ?? null,
+            state: c.C_State ?? null,
+            zip: c.C_Zip ?? null,
+          }
           : null,
         deliveryPODs: podsByStopId.get(stop.id) ?? [],
       };
