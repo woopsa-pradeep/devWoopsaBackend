@@ -957,7 +957,7 @@ export class DriverService {
     }, { where: { id: stopId } });
 
     await OrderHeader.update({
-      delivered: true,
+      deliverd: true,
     }, { where: { Order_Number: stop.orderNumber } });
 
     if (stop.isLastStop) {

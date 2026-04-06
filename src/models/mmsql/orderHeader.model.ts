@@ -125,7 +125,7 @@ OrderHeader.init(
     OrderedOn: { type: DataTypes.DATE, allowNull: true },
     Order_Source: { type: DataTypes.INTEGER, allowNull: true },
     route_created: { type: DataTypes.BOOLEAN, defaultValue: false },
-    delivered: { type: DataTypes.BOOLEAN, defaultValue: false },
+    deliverd: { type: DataTypes.BOOLEAN, defaultValue: false },
   },
   {
     sequelize,

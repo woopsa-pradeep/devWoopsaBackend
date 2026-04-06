@@ -30,6 +30,7 @@ router.post('/epikLogin', validateRequest(loginSalesSchema), catchAsync(authCont
 router.post('/checkerLogin', validateRequest(loginSalesSchema), catchAsync(authController.checkerLogin.bind(authController)));
 router.post('/driverLogin', validateRequest(loginSalesSchema), catchAsync(authController.driverLogin.bind(authController)));
 router.post('/driverLogout', verifyToken, catchAsync(authController.driverLogout.bind(authController)));
+router.put('/driverLogout', verifyToken, catchAsync(authController.driverLogout.bind(authController)));
 router.post('/changePassword', verifyToken, validateRequest(changePasswordSchema), catchAsync(authController.changePassword.bind(authController)));
 //  router.post('/epikLogout', verifyToken, catchAsync(authController.epikLogout.bind(authController)));
 router.post('/logout', verifyToken, catchAsync(authController.logout.bind(authController)));
