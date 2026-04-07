@@ -42,6 +42,7 @@ router.post('/updateDeliveryPod/:podId', verifyRole(ROLES.DRIVER), catchAsync(dr
 router.post('/uploadImages', verifyRole(ROLES.DRIVER), multerUpload.single('image'), catchAsync(driverController.uploadImages.bind(driverController)));
 router.post('/orderStopCompleted/:stopId', verifyRole(ROLES.DRIVER), catchAsync(driverController.orderStopCompleted.bind(driverController)));
 router.get('/getDriverCurrentOrder', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverCurrentOrder.bind(driverController)));
+router.get('/getDriverCurrentLocation', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverCurrentLocation.bind(driverController)));
 router.get('/getTodayDriverStops', verifyRole(ROLES.DRIVER), catchAsync(driverController.getTodayDriverStops.bind(driverController)));
 router.put('/updateDriverLocation', verifyRole(ROLES.DRIVER), catchAsync(driverController.updateDriverLation.bind(driverController)));
 router.get('/getDriverProfile', verifyRole(ROLES.DRIVER), catchAsync(driverController.getDriverProfile.bind(driverController)));

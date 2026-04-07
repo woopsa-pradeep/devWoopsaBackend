@@ -85,6 +85,12 @@ export class DriverController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getDriverCurrentLocation(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const data = await this.driverService.getDriverCurrentLocation(driverId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async getTodayDriverStops(req: AuthRequest, res: Response) {
         const driverId = Number(req.user?.id);
         const data = await this.driverService.getTodayDriverStops(driverId);

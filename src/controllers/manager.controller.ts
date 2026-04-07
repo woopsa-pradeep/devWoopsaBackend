@@ -2244,6 +2244,21 @@ export class ManagerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getDriverCurrentLocationsFromRedis(req: AuthRequest, res: Response) {
+    const data = await this.managerService.getAllDriverCurrentLocationsFromRedis();
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
+  async getDriverLatLong(req: AuthRequest, res: Response) {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id < 1) {
+      sendResponse(res, 400, false, null, "Invalid driver id");
+      return;
+    }
+    const data = await this.managerService.getDriverLatLong(id);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async getRouteFullStops(req: AuthRequest, res: Response) {
     const data = await this.managerService.getRouteFullStops(Number(req.params.id));
     sendResponse(res, 200, true, data, General.SUCCESS);

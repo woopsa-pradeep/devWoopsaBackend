@@ -16,16 +16,28 @@ import { seedWoopsaSalesUser } from './seeder/woopsaSalesUser.seeder';
 import { startCronJobs } from './cron'; // adjust path if needed
 import { getAllowedSalesCategories, getDiscount, getPrepaidTaxRate } from './utils/helper';
 import moment from 'moment';
-import './workers/emailWorker'; // Start the email worker
-import './workers/emailNotificationWorker'; // Start the email notification worker
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
-import { emailQueue, emailNotificationQueue, testRedisConnection } from './configuration/config';
+import {
+  emailQueue,
+  emailNotificationQueue,
+  testRedisConnection,
+  REDIS_WORKERS_ENABLED,
+  REDIS_BULL_BOARD_ENABLED,
+} from './configuration/config';
+
+if (REDIS_WORKERS_ENABLED) {
+  require('./workers/emailWorker');
+  require('./workers/emailNotificationWorker');
+} else {
+  console.log('ℹ️ Email workers skipped (REDIS_WORKERS_ENABLED=false). No Redis required for workers.');
+}
 import { getNextVendorNumber } from './utils/vendor';
 import { OrderHeader } from './models/mmsql/orderHeader.model';
 import { apiLoggerMiddleware } from './middlewares/apiLogger.middleware';
 import { globalApiLimiter } from './middlewares/rateLimiter.middleware';
+import { DriverService } from './businesslogic/driver.service';
 
 startCronJobs();
 
@@ -40,24 +52,31 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const driverService = new DriverService();
+let isShuttingDown = false;
+let server: ReturnType<typeof app.listen> | null = null;
 app.use(express.json());
 app.use(cors());
 // app.use(globalApiLimiter);
 app.use(apiLoggerMiddleware);
 
-// Bull Board UI Setup for Redis Queue Monitoring
-const serverAdapter = new ExpressAdapter();
-serverAdapter.setBasePath('/admin/queues');
+// Bull Board UI Setup for Redis Queue Monitoring (optional when Redis is down locally)
+if (REDIS_BULL_BOARD_ENABLED) {
+  const serverAdapter = new ExpressAdapter();
+  serverAdapter.setBasePath('/admin/queues');
 
-createBullBoard({
-  queues: [
-    new BullMQAdapter(emailQueue),
-    new BullMQAdapter(emailNotificationQueue),
-  ],
-  serverAdapter: serverAdapter,
-});
+  createBullBoard({
+    queues: [
+      new BullMQAdapter(emailQueue),
+      new BullMQAdapter(emailNotificationQueue),
+    ],
+    serverAdapter: serverAdapter,
+  });
 
-app.use('/admin/queues', serverAdapter.getRouter());
+  app.use('/admin/queues', serverAdapter.getRouter());
+} else {
+  console.log('ℹ️ Bull Board skipped (REDIS_BULL_BOARD_ENABLED=false).');
+}
 
 app.get('/', (async (req: Request, res: Response) => {
   const data = await getPrepaidTaxRate(1, 1, { Cig_Pack: 20, Cig_Sticks: 200 }, 100);
@@ -178,6 +197,34 @@ async function safeMssqlSync() {
   }
 }
 
+async function gracefulShutdown(signal: string) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`⚠️ ${signal} received. Flushing driver location cache before shutdown...`);
+
+  try {
+    const result = await driverService.syncCachedDriverLocationsToDbOnShutdown();
+    console.log(`✅ Driver location cache flush complete. Synced: ${result.syncedCount}`);
+  } catch (error: any) {
+    console.error('❌ Failed to flush driver location cache:', error?.message || error);
+  }
+
+  if (server) {
+    await new Promise<void>((resolve) => {
+      server!.close(() => resolve());
+    });
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => {
+  void gracefulShutdown('SIGTERM');
+});
+
+process.on('SIGINT', () => {
+  void gracefulShutdown('SIGINT');
+});
+
 // Startup sequence
 testConnections()
   .then(async () => {
@@ -205,7 +252,7 @@ testConnections()
     await seedInvoiceTemplates();
     await seedCustomerBalanceSetting();
     await seedWoopsaSalesUser();
-    app.listen(Number(PORT), 'localhost', () => {
+    server = app.listen(Number(PORT), 'localhost', () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
       console.log(`📊 Dual database setup: MSSQL + PostgreSQL`);
       console.log(`📧 Redis Queue UI available at http://localhost:${PORT}/admin/queues`);

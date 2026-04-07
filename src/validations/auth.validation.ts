@@ -144,10 +144,9 @@ export const startDeliveryRouteSchema = Joi.object({
 });
 
 export const updateDriverLatLongSchema = Joi.object({
-  currentLocation: Joi.string().trim().required().messages({
+  currentLocation: Joi.string().trim().optional().allow(null, "").messages({
     "string.base": "Current location must be a string",
-    "string.empty": "Current location is required",
-    "any.required": "Current location is required",
+    "string.empty": "Current location must be a string",
   }),
 
   currentLatitude: Joi.number().required().messages({

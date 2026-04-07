@@ -26,6 +26,12 @@ import { PaginationOptions } from "../interfaces/pagination.interface";
 import { Distributor } from "../models/mmsql/distributor.model";
 import { ARDefinitions } from "../models/mmsql/arDefinitions.model";
 import { DriverExpense } from "../models/postgres/driverExpense.model";
+import { redisConnection } from "../configuration/config";
+import {
+  getDriverLastSyncKey,
+  getDriverLocationKey,
+  getDriverLocationPattern,
+} from "../utils/redis.keys";
 
 interface DriverAssignment {
   driverId: number;
@@ -55,6 +61,15 @@ interface CreateMultiRouteBody {
   orders: OrderInput[];
 }
 
+interface DriverLocationCachePayload {
+  driverId: number;
+  currentLatitude: number;
+  currentLongitude: number;
+  updatedAt: string;
+}
+
+const DRIVER_LOCATION_TTL_SECONDS = 2100;
+const DRIVER_LOCATION_DB_SYNC_MS = 5 * 60 * 1000;
 
 
 export class DriverService {
@@ -67,7 +82,6 @@ export class DriverService {
     const { currentLocation, currentLatitude, currentLongitude } = body;
 
     if (
-      currentLocation === undefined ||
       currentLatitude === undefined ||
       currentLongitude === undefined
     ) {
@@ -82,18 +96,96 @@ export class DriverService {
       throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
     }
 
-    await driver.update({
-      currentLocation,
-      currentLatitude,
-      currentLongitude,
-    });
+    const now = Date.now();
+    const updatedAt = new Date(now).toISOString();
+    const locationKey = getDriverLocationKey(driverId);
+    const lastSyncKey = getDriverLastSyncKey(driverId);
+
+    const payload: DriverLocationCachePayload = {
+      driverId,
+      currentLatitude: Number(currentLatitude),
+      currentLongitude: Number(currentLongitude),
+      updatedAt,
+    };
+
+    let syncedToDb = false;
+
+    try {
+      await redisConnection.setex(
+        locationKey,
+        DRIVER_LOCATION_TTL_SECONDS,
+        JSON.stringify(payload)
+      );
+
+      const lastSyncValue = await redisConnection.get(lastSyncKey);
+      const shouldSyncDb =
+        !lastSyncValue || now - Number(lastSyncValue) >= DRIVER_LOCATION_DB_SYNC_MS;
+
+      if (shouldSyncDb) {
+        await driver.update({
+          currentLatitude: payload.currentLatitude,
+          currentLongitude: payload.currentLongitude,
+          ...(currentLocation !== undefined ? { currentLocation } : {}),
+        });
+        await redisConnection.setex(
+          lastSyncKey,
+          DRIVER_LOCATION_TTL_SECONDS,
+          String(now)
+        );
+        syncedToDb = true;
+      }
+    } catch (error: any) {
+      console.error("Driver location write-behind cache failed:", error?.message || error);
+      await driver.update({
+        currentLatitude: payload.currentLatitude,
+        currentLongitude: payload.currentLongitude,
+        ...(currentLocation !== undefined ? { currentLocation } : {}),
+      });
+      syncedToDb = true;
+    }
 
     return {
-      driverId: driver.id,
-      currentLocation: driver.currentLocation,
-      currentLatitude: driver.currentLatitude,
-      currentLongitude: driver.currentLongitude,
+      ...payload,
+      currentLocation: currentLocation ?? driver.currentLocation,
+      syncedToDb,
     };
+  }
+
+  async getDriverCurrentLocation(driverId: number) {
+    const locationKey = getDriverLocationKey(driverId);
+    const cachedValue = await redisConnection.get(locationKey);
+
+    if (cachedValue) {
+      try {
+        const parsed = JSON.parse(cachedValue) as DriverLocationCachePayload;
+        return { ...parsed, source: "redis" };
+      } catch (error: any) {
+        console.warn(
+          `Invalid driver location cache payload for driver ${driverId}:`,
+          error?.message || error
+        );
+      }
+    }
+
+    const driver = await Driver.findOne({
+      where: { id: driverId, isActive: true },
+      attributes: ["id", "currentLatitude", "currentLongitude", "updatedAt"],
+    });
+
+    if (!driver) {
+      throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
+    }
+
+    const fallbackPayload: DriverLocationCachePayload = {
+      driverId: driver.id,
+      currentLatitude: Number(driver.currentLatitude ?? 0),
+      currentLongitude: Number(driver.currentLongitude ?? 0),
+      updatedAt: driver.updatedAt
+        ? new Date(driver.updatedAt).toISOString()
+        : new Date().toISOString(),
+    };
+
+    return { ...fallbackPayload, source: "db" };
   }
 
   async getProfile(id: number) {
@@ -314,7 +406,7 @@ export class DriverService {
 
         for (const box of epicBoxes) {
           if (box.barcode) {
-            boxBarCode.push(box.barcode);
+            boxBarCode.push(box.value ?? '');
           }
         }
 
@@ -1118,15 +1210,7 @@ export class DriverService {
   }
 
   async updateDriverLation(driverId: number, body: any) {
-
-    const driver = await Driver.findOne({
-      where: { id: driverId, isActive: true },
-    });
-    if (!driver) {
-      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
-    }
-    await driver.update(body);
-    return driver;
+    return this.updateDriverLatLong(driverId, body);
   }
 
 
@@ -1734,6 +1818,49 @@ export class DriverService {
 
     return true;
 
+  }
+
+  async syncCachedDriverLocationsToDbOnShutdown() {
+    const keys = await redisConnection.keys(getDriverLocationPattern());
+    if (!keys.length) {
+      return { syncedCount: 0 };
+    }
+
+    let syncedCount = 0;
+
+    for (const key of keys) {
+      try {
+        const raw = await redisConnection.get(key);
+        if (!raw) continue;
+
+        const payload = JSON.parse(raw) as DriverLocationCachePayload;
+        if (!payload?.driverId) continue;
+
+        // ── Update DB with last known location ──────────────────
+        const [updatedRows] = await Driver.update(
+          {
+            currentLatitude: payload.currentLatitude,
+            currentLongitude: payload.currentLongitude,
+          },
+          { where: { id: payload.driverId, isActive: true } }
+        );
+
+        if (updatedRows > 0) {
+          syncedCount++;
+          console.log(`✅ Synced driver ${payload.driverId} → lat: ${payload.currentLatitude}, lng: ${payload.currentLongitude}`);
+        }
+
+
+      } catch (error: any) {
+        console.error(
+          `❌ Failed to sync driver ${key}:`,
+          error?.message || error
+        );
+
+      }
+    }
+
+    return { syncedCount };
   }
 
 

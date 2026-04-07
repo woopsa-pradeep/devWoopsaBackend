@@ -4,6 +4,19 @@ dotenv.config();
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
 
+/** Set `REDIS_WORKERS_ENABLED=false` when Redis is not running locally to avoid BullMQ worker spam. */
+export const REDIS_WORKERS_ENABLED = process.env.REDIS_WORKERS_ENABLED !== 'false';
+/** Set `REDIS_BULL_BOARD_ENABLED=false` to disable `/admin/queues` when Redis is unavailable. */
+export const REDIS_BULL_BOARD_ENABLED = process.env.REDIS_BULL_BOARD_ENABLED !== 'false';
+
+const redisMaxReconnectAttempts = (() => {
+  const raw = process.env.REDIS_MAX_RECONNECT_ATTEMPTS;
+  if (raw === undefined || raw === '') return 10;
+  const n = Number(raw);
+  if (Number.isNaN(n) || n < 0) return 10;
+  return n;
+})();
+
 export const config = {
   azureConnectionString: process.env.AZURE_STORAGE_CONNECTION_STRING || "",
   hostURL: process.env.AZURE_STORAGE_CONNECTION_STRING || "",
@@ -18,12 +31,27 @@ export const redisConnection = new Redis({
   port: Number(process.env.REDIS_PORT || 6379),
   maxRetriesPerRequest: null,
   enableReadyCheck: true,
+  lazyConnect: false,
   retryStrategy: (times) => {
+    if (redisMaxReconnectAttempts > 0 && times > redisMaxReconnectAttempts) {
+      console.warn(
+        `⚠️ Redis: stopped reconnecting after ${redisMaxReconnectAttempts} attempts. Start Redis or set REDIS_HOST / REDIS_PORT. ` +
+          `To silence BullMQ errors without Redis, set REDIS_WORKERS_ENABLED=false`
+      );
+      return null;
+    }
     const delay = Math.min(times * 50, 2000);
-    console.log(`🔄 Redis reconnecting... (attempt ${times}, delay ${delay}ms)`);
+    if (times === 1 || times % 5 === 0) {
+      console.log(
+        `🔄 Redis reconnecting... (attempt ${times}${redisMaxReconnectAttempts ? `/${redisMaxReconnectAttempts}` : ''}, delay ${delay}ms)`
+      );
+    }
     return delay;
   },
 });
+
+let lastRedisErrorLogAt = 0;
+const REDIS_ERROR_LOG_THROTTLE_MS = 30_000;
 
 // Handle Redis connection events
 redisConnection.on('connect', () => {
@@ -35,15 +63,15 @@ redisConnection.on('ready', () => {
 });
 
 redisConnection.on('error', (err) => {
-  console.error('❌ Redis connection error:', err.message);
+  const now = Date.now();
+  if (now - lastRedisErrorLogAt >= REDIS_ERROR_LOG_THROTTLE_MS) {
+    lastRedisErrorLogAt = now;
+    console.error('❌ Redis connection error:', err.message);
+  }
 });
 
 redisConnection.on('close', () => {
   console.log('⚠️ Redis connection closed');
-});
-
-redisConnection.on('reconnecting', () => {
-  console.log('🔄 Redis reconnecting...');
 });
 
 // Test Redis connection
@@ -60,7 +88,7 @@ export const testRedisConnection = async (): Promise<boolean> => {
 
 // Get server identifier from environment variable (e.g., 'cdt' or 'aimrok')
 // This ensures each server only processes its own email jobs
-const SERVER_ID = process.env.QUEUE_NAME || process.env.QUEUE_NAME || 'default';
+const SERVER_ID = process.env.QUEUE_NAME || 'default';
 console.log(`🖥️ Server ID: ${SERVER_ID} - Using server-specific queues`);
 
 // Create server-specific queue names

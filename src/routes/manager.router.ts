@@ -343,6 +343,8 @@ router.put('/updateCustomer/:id', verifyRole(ROLES.MANAGER, ROLES.SALES),
   catchAsync(managerController.updateCustomer.bind(managerController)));
 
 // Driver CRUD routes
+router.get('/drivers/current-locations', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getDriverCurrentLocationsFromRedis.bind(managerController)));
+router.get('/drivers/:id/lat-long', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getDriverLatLong.bind(managerController)));
 router.post('/drivers', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(createDriverSchema), catchAsync(managerController.createDriver.bind(managerController)));
 router.get('/drivers', verifyRole(ROLES.MANAGER, ROLES.SALES), validateRequest(getDriversQuerySchema), catchAsync(managerController.getAllDrivers.bind(managerController)));
 router.get('/drivers/:id', verifyRole(ROLES.MANAGER, ROLES.SALES), catchAsync(managerController.getDriverById.bind(managerController)));

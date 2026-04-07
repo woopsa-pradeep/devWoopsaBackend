@@ -86,7 +86,8 @@ import { getDefaultVendorValues, getNextVendorNumber } from "../utils/vendor";
 import { getDefaultErpUserValues, getNextUserNumber } from "../utils/erpUsers";
 import settings from "../models/postgres/setting.model"
 import InventorySpecials from "../models/mmsql/inventorySpecail.model";
-import { emailNotificationQueue } from "../configuration/config";
+import { emailNotificationQueue, redisConnection } from "../configuration/config";
+import { getDriverLocationKey, getDriverLocationPattern } from "../utils/redis.keys";
 import { markAsUntransferable } from "worker_threads";
 import { PriceSubclass_Defs } from "../models/mmsql/priceSubClassDefs.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
@@ -18838,6 +18839,101 @@ export class ManagerService {
     return groups;
   }
 
+  async getAllDriverCurrentLocationsFromRedis() {
+    const keys = await redisConnection.keys(getDriverLocationPattern());
+    if (!keys.length) return [];
+
+    const rows = await redisConnection.mget(...keys);
+    const result: Array<{
+      driverId: number;
+      currentLatitude: number;
+      currentLongitude: number;
+      updatedAt: string;
+    }> = [];
+
+    for (const raw of rows) {
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw) as {
+          driverId?: number;
+          currentLatitude?: number;
+          currentLongitude?: number;
+          updatedAt?: string;
+        };
+
+        if (
+          typeof parsed.driverId === "number" &&
+          typeof parsed.currentLatitude === "number" &&
+          typeof parsed.currentLongitude === "number"
+        ) {
+          result.push({
+            driverId: parsed.driverId,
+            currentLatitude: parsed.currentLatitude,
+            currentLongitude: parsed.currentLongitude,
+            updatedAt: parsed.updatedAt || new Date().toISOString(),
+          });
+        }
+      } catch (error: any) {
+        console.warn("Skipping invalid driver location cache row:", error?.message || error);
+      }
+    }
+
+    return result.sort((a, b) => a.driverId - b.driverId);
+  }
+
+  /** Single driver: Redis cache first, else `drivers` table. */
+  async getDriverLatLong(driverId: number) {
+    const locationKey = getDriverLocationKey(driverId);
+    const cachedValue = await redisConnection.get(locationKey);
+
+    if (cachedValue) {
+      try {
+        const parsed = JSON.parse(cachedValue) as {
+          driverId?: number;
+          currentLatitude?: number;
+          currentLongitude?: number;
+          updatedAt?: string;
+        };
+        if (
+          typeof parsed.currentLatitude === "number" &&
+          typeof parsed.currentLongitude === "number"
+        ) {
+          return {
+            driverId: parsed.driverId ?? driverId,
+            currentLatitude: parsed.currentLatitude,
+            currentLongitude: parsed.currentLongitude,
+            updatedAt: parsed.updatedAt || new Date().toISOString(),
+            source: "redis" as const,
+          };
+        }
+      } catch (error: any) {
+        console.warn(
+          `Invalid driver location cache for driver ${driverId}:`,
+          error?.message || error
+        );
+      }
+    }
+
+    const driver = await Driver.findOne({
+      where: { id: driverId, isActive: true },
+      attributes: ["id", "currentLatitude", "currentLongitude", "updatedAt"],
+    });
+
+    if (!driver) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+
+    return {
+      driverId: driver.id,
+      currentLatitude: Number(driver.currentLatitude ?? 0),
+      currentLongitude: Number(driver.currentLongitude ?? 0),
+      updatedAt: driver.updatedAt
+        ? new Date(driver.updatedAt).toISOString()
+        : new Date().toISOString(),
+      source: "db" as const,
+    };
+  }
+
   async getRouteFullStops(id: number) {
     const group = await DeliveryRouteGroup.findOne({
       where: { id, isActive: true },
@@ -18879,10 +18975,76 @@ export class ManagerService {
     }
 
     const plainGroup: any = group.get({ plain: true });
-    const allStops = (plainGroup.childRoutes || []).flatMap((r: any) => r.stops || []);
+    const childRoutes: any[] = plainGroup.childRoutes || [];
+    const driverIds = [
+      ...new Set(
+        childRoutes
+          .map((r: any) => r.driver?.id)
+          .filter((id: unknown): id is number => typeof id === 'number')
+      ),
+    ];
+
+    const locationByDriverId = new Map<
+      number,
+      { currentLatitude: number; currentLongitude: number; updatedAt?: string }
+    >();
+
+    if (driverIds.length > 0) {
+      const keys = driverIds.map((id) => getDriverLocationKey(id));
+      const values = await redisConnection.mget(...keys);
+      driverIds.forEach((id, i) => {
+        const raw = values[i];
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw) as {
+            currentLatitude?: number;
+            currentLongitude?: number;
+            updatedAt?: string;
+          };
+          if (
+            typeof parsed.currentLatitude === 'number' &&
+            typeof parsed.currentLongitude === 'number'
+          ) {
+            locationByDriverId.set(id, {
+              currentLatitude: parsed.currentLatitude,
+              currentLongitude: parsed.currentLongitude,
+              updatedAt: parsed.updatedAt,
+            });
+          }
+        } catch (error: any) {
+          console.warn(
+            `Invalid driver location cache for driver ${id}:`,
+            error?.message || error
+          );
+        }
+      });
+    }
+
+    const mergeDriverLocation = (route: any) => {
+      const d = route.driver;
+      if (!d?.id) return route;
+      const cached = locationByDriverId.get(d.id);
+      if (!cached) return route;
+      return {
+        ...route,
+        driver: {
+          ...d,
+          currentLatitude: cached.currentLatitude,
+          currentLongitude: cached.currentLongitude,
+          ...(cached.updatedAt ? { locationUpdatedAt: cached.updatedAt } : {}),
+        },
+      };
+    };
+
+    const allStops = childRoutes.flatMap((r: any) => r.stops || []);
     const cNumbers = [...new Set(allStops.map((s: any) => s.C_Number))];
 
-    if (cNumbers.length === 0) return plainGroup;
+    if (cNumbers.length === 0) {
+      plainGroup.childRoutes = childRoutes.map((route: any) =>
+        mergeDriverLocation(route)
+      );
+      return plainGroup;
+    }
 
     const customers = await Customer.findAll({
       where: { C_Number: { [Op.in]: cNumbers as number[] } },
@@ -18894,21 +19056,24 @@ export class ManagerService {
       customers.map((c: any) => [c.C_Number, c])
     );
 
-    plainGroup.childRoutes = (plainGroup.childRoutes || []).map((route: any) => ({
-      ...route,
-      stops: (route.stops || []).map((stop: any) => {
-        const customer = customerMap.get(stop.C_Number);
-        return {
-          ...stop,
-          C_Name: customer?.C_Name || null,
-          C_Address: customer?.C_Address || null,
-          C_City: customer?.C_City || null,
-          C_State: customer?.C_State || null,
-          C_Zip: customer?.C_Zip || null,
-          C_Phone: customer?.C_Phone || null,
-        };
-      }),
-    }));
+    plainGroup.childRoutes = childRoutes.map((route: any) => {
+      const withStops = {
+        ...route,
+        stops: (route.stops || []).map((stop: any) => {
+          const customer = customerMap.get(stop.C_Number);
+          return {
+            ...stop,
+            C_Name: customer?.C_Name || null,
+            C_Address: customer?.C_Address || null,
+            C_City: customer?.C_City || null,
+            C_State: customer?.C_State || null,
+            C_Zip: customer?.C_Zip || null,
+            C_Phone: customer?.C_Phone || null,
+          };
+        }),
+      };
+      return mergeDriverLocation(withStops);
+    });
 
     return plainGroup;
   }
@@ -19554,6 +19719,16 @@ export class ManagerService {
       })
       : [];
 
+    const epickOrderDetails = orderDetails.length ? await OrderPick.findAll({
+      where: { Order_Number: { [Op.in]: orderDetails } },
+      attributes: ['images', 'Order_Number'],
+      raw: true,
+    }) : [];
+
+    const epickOrderDetailsMap = new Map<number, any>(
+      epickOrderDetails.map((o: any) => [o.Order_Number, o])
+    );
+
     const customerMap = new Map<number, any>(
       customers.map((c: any) => [c.C_Number, c])
     );
@@ -19576,9 +19751,12 @@ export class ManagerService {
     const enrichStop = (stop: any) => {
       const c = customerMap.get(stop.C_Number);
       const orderDetail = orderDetailsMap.find((o: any) => o.Order_Number === stop.orderNumber);
+      const epickOrderDetail = epickOrderDetailsMap.get(stop.orderNumber);
+
       return {
         ...stop,
         orderDetail: orderDetail ?? null,
+        epickOrderDetail: epickOrderDetail ?? null,
         customer: c
           ? {
             C_Name: c.C_Name ?? null,
