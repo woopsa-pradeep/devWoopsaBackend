@@ -178,7 +178,7 @@ export class DriverService {
           );
 
       const isCompleteRoute = !stops.some(
-        (s) => s.status === DeliveryStopStatus.IN_PROGRESS
+        (s) => s.status === DeliveryStopStatus.IN_PROGRESS || s.status === DeliveryStopStatus.NOT_DELIVERED
       );
 
       return {

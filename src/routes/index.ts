@@ -12,6 +12,7 @@ import checkerRoutes from './checker.router';
 import appUpdateRoutes from './appUpdate.routes';
 import redisRoutes from './redis.routes';
 import driverRoute from './driver.routes';
+import liteDriverRoutes from './liteDriver.routes';
 import receivableRoutes from './receivable.router';
 import adminRoutes from './admin.routes';
 
@@ -31,6 +32,7 @@ router.use('/checker', checkerRoutes);
 router.use('/app', appUpdateRoutes);
 router.use('/redis', redisRoutes);
 router.use('/driver', driverRoute);
+router.use('/lite-driver', liteDriverRoutes);
 router.use('/receivable', receivableRoutes);
 router.use('/admin', adminRoutes);
 export default router; 

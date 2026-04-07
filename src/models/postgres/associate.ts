@@ -160,7 +160,7 @@ export function applyAssociations(): void {
     foreignKey: 'truckId',
     as: 'deliveryRoutes',
   });
-  
+
 
   // TradeShow associations
   TradeShow.hasMany(TradeShowItem, {
@@ -300,7 +300,7 @@ DeliveryRoute.belongsTo(DeliveryRouteGroup, {
   constraints: false,
 });
 
-
+ 
 
 
 

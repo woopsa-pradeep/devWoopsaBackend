@@ -5497,19 +5497,25 @@ export class SalesService {
 
     let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
     taxRate = Math.ceil(taxRate * 100) / 100;
+    const priceWithTax = price + taxRate;
 
     // Step 4: Build response object (same format as your example)
-    const productImage = await ProductImage.findOne({
-      where: { product_number: item.Item_Number.toString(), isAllow: true }
-    });
+    const [productImage, inventoryOnHand, wareHouseSetting, productLimit, hasQtyDiscount, topLatestItems] = await Promise.all([
+      ProductImage.findOne({ where: { product_number: item.Item_Number.toString(), isAllow: true } }),
+      getInventoryOnHand(item.Item_Number),
+      Setting.findOne({}) as any,
+      getProductLimit(Number(item.Item_Number)),
+      checkQtyDiscount(item.Item_Number, userId, priceWithTax),
+      getTopLatestItems(),
+    ]);
 
-    const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
-    const wareHouseSetting: any = await Setting.findOne({});
     const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
+    const isNewItem = topLatestItems.some((latestItem: any) => latestItem.Item_Number === item.Item_Number);
     let prepaidTaxRate = 0
     if (userJurisdiction != null && item.SalesCategory) {
-      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category, item, price + taxRate);
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category, item, priceWithTax);
     }
+
     const formattedItem = {
       Pack: item.Pack,
       Description: item.Description,
@@ -5521,32 +5527,22 @@ export class SalesService {
       Tax_Rate: taxRate,
       OTP_Number: item.OTP_Number,
       price,
-      isNewItem: true,
+      isNewItem: isNewItem,
       hasPrepaidTaxRate: prepaidTaxRate ? true : false,
       prepaidTaxRate: prepaidTaxRate,
-      priceWithTax: price + taxRate,
+      priceWithTax,
       BaseCost: item.BaseCost,
       Invoice_Cost: item.Invoice_Cost,
       AvgCost: item.AvgCost,
       NetCost: item.NetCost,
-      hasProductLimit: false,
-      productLimit: null,
+      hasProductLimit: productLimit !== null && productLimit > 0,
+      productLimit,
       UPCList: item.UPCList || [{ UPC_Number: barcode }],
       Inventory_OnHand: inventoryOnHand,
       UnitOunces: 0,
       allowToOrder,
-      hasQtyDiscount: false,
-      qtyDiscount: {
-        allowToDiscount: false,
-        hasCaseDiscount: false,
-        hasQtyDiscount: false,
-        isCaseDiscount: false,
-        isQtyDiscount: false,
-        percentageCaseDiscount: 0,
-        minimumQtyForCaseDiscount: 0,
-        qtyDiscount: [],
-        price,
-      },
+      hasQtyDiscount: isDiscounted ? false : hasQtyDiscount.allowToDiscount,
+      qtyDiscount: hasQtyDiscount,
       showTheInventoryStock: true,
       showLowStock: false,
       showWithOutPrice: false,
@@ -5578,6 +5574,7 @@ export class SalesService {
       const Item_Number = Number(item.Item_Number);
       const quantity = Number(item.Qty ?? item.quantity ?? 1);
       const price = Number(item.Price ?? item.price ?? 0);
+      const originalPrice = Number(item.originalPrice ?? item.originalPrice ?? 0);
       const Tax_Rate = item.Tax_Rate ?? 0;
       const Price_With_Tax =
         Number(item.Price_With_Tax ?? item.priceWithTax ?? price + (price * Tax_Rate) / 100);
@@ -5623,7 +5620,7 @@ export class SalesService {
           TotalPrice: totalPrice,
           TotalPriceWithTax: totalPriceWithTax,
           discount: 0,
-          originalPrice: price,
+          originalPrice: originalPrice,
           isActive: true,
           TotalprepaidTaxRate: item.TotalprepaidTaxRate || 0,
           prepaidTaxRate: item.prepaidTaxRate || 0,
@@ -6336,40 +6333,35 @@ export class SalesService {
       priceClassId = [],       // array of price class IDs
     } = body;
 
-    const whereClause: any = {
-      I_Inactive: false,
-      ShortOrderForm: true,
-    };
+    console.log('body>>>>>>>>>', body)
 
-    // 1) PRIMARY FILTER: Sales_Category wins
+    const conditions: any[] = [
+      { I_Inactive: false },
+      { ShortOrderForm: true },
+    ];
+
     if (Array.isArray(salesCategoryIds) && salesCategoryIds.length > 0) {
-      // Only these categories
-      whereClause.Sales_Category = { [Op.in]: salesCategoryIds };
-    } else if (Array.isArray(priceClassId) && priceClassId.length > 0) {
-      // Only if category filter is NOT provided
-      whereClause.Price_Class = { [Op.in]: priceClassId };
+      conditions.push({ Sales_Category: { [Op.in]: salesCategoryIds } });
+    }
+    if (Array.isArray(priceClassId) && priceClassId.length > 0) {
+      conditions.push({ Price_Class: { [Op.in]: priceClassId } });
     }
 
-    // 2) SEARCH: must be AND-ed with above filters
     const trimmed = search.trim();
     if (trimmed !== '') {
       const likeAnywhere = `%${trimmed}%`;
       const likePrefix = `${trimmed}%`;
 
-      if (!whereClause[Op.and]) {
-        whereClause[Op.and] = [];
-      }
-
-      whereClause[Op.and].push({
+      conditions.push({
         [Op.or]: [
-          { Item_Number: { [Op.like]: likePrefix } },   // starts with "se"
-          { Description: { [Op.like]: likeAnywhere } }, // contains "se"
+          { Item_Number: { [Op.like]: likePrefix } },
+          { Description: { [Op.like]: likeAnywhere } },
           { ALT_Description2: { [Op.like]: likeAnywhere } },
-          // uncomment if you want UPC search too:
-          // { '$UPCList.UPC_Number$': { [Op.like]: likePrefix } },
         ],
       });
     }
+
+    const whereClause: any = { [Op.and]: conditions };
 
     console.log('WHERE:', JSON.stringify(whereClause, null, 2));
 
@@ -6402,7 +6394,8 @@ export class SalesService {
         },
       ],
       order: [
-        [{ model: InventoryUPC, as: 'UPCList' }, 'Status', 'ASC']
+        ['Description', 'ASC'],
+        [{ model: InventoryUPC, as: 'UPCList' }, 'Status', 'ASC'],
       ],
     });
 

@@ -4,7 +4,7 @@ import verifyRole from "../middlewares/verifyUser.middleware";
 import { ROLES } from "../interfaces/request.body.interface";
 import { catchAsync } from "../utils/catchAsync";
 import { multerUpload } from "../middlewares/upload.middleware";
-import { validateRequest, validateParams, validateQuery } from "../middlewares/validation.middleware";
+import { validateRequest, validateQuery } from "../middlewares/validation.middleware";
 import { updateDriverLatLongSchema, startDeliveryRouteSchema } from "../validations/auth.validation";
 import {
   createDriverExpenseSchema,
@@ -62,20 +62,17 @@ router.get(
 router.get(
   '/expenses/:expenseId',
   verifyRole(ROLES.DRIVER),
-  validateParams(driverExpenseIdParamSchema),
   catchAsync(driverController.getDriverExpenseById.bind(driverController))
 );
 router.put(
   '/expenses/:expenseId',
   verifyRole(ROLES.DRIVER),
-  validateParams(driverExpenseIdParamSchema),
   validateRequest(updateDriverExpenseSchema),
   catchAsync(driverController.updateDriverExpense.bind(driverController))
 );
 router.delete(
   '/expenses/:expenseId',
   verifyRole(ROLES.DRIVER),
-  validateParams(driverExpenseIdParamSchema),
   catchAsync(driverController.deleteDriverExpense.bind(driverController))
 );
 router.get(

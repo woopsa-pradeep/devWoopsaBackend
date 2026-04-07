@@ -3,7 +3,19 @@ import { Model, DataTypes, Optional } from 'sequelize';
 import { postgresSequelize } from '../../db';
 import { IRetailerLocation } from '../../interfaces/postgress/retailerLocation.interface';
 
-type RetailerLocationCreationAttributes = Optional<IRetailerLocation, 'id' | 'lat' | 'long' | 'City' | 'Country' | 'Address' | 'State' | 'Zip'>;
+type RetailerLocationCreationAttributes = Optional<
+  IRetailerLocation,
+  | 'id'
+  | 'lat'
+  | 'long'
+  | 'City'
+  | 'Country'
+  | 'Address'
+  | 'State'
+  | 'Zip'
+  | 'addedBy'
+  | 'driverId'
+>;
 
 export class RetailerLocation extends Model<IRetailerLocation, RetailerLocationCreationAttributes> implements IRetailerLocation {
   public id!: number;
@@ -15,6 +27,8 @@ export class RetailerLocation extends Model<IRetailerLocation, RetailerLocationC
   public Address!: string | null;
   public State!: string | null;
   public Zip!: string | null;
+  public addedBy!: 'admin' | 'driver';
+  public driverId!: number | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -62,6 +76,16 @@ RetailerLocation.init(
     },
     Zip: {
       type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
+    },
+    addedBy: {
+      type: DataTypes.ENUM('admin', 'driver'),
+      allowNull: false,
+      defaultValue: 'admin',
+    },
+    driverId: {
+      type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue: null,
     },

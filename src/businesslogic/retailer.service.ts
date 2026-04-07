@@ -1949,6 +1949,7 @@ export class RetailerService {
       const Item_Number = Number(item.Item_Number);
       const quantity = Number(item.Qty ?? item.quantity ?? 1);
       const price = Number(item.Price ?? item.price ?? 0);
+      const originalPrice = Number(item.originalPrice ?? item.originalPrice ?? 0);
       const Tax_Rate = item.Tax_Rate ?? 0;
       const Price_With_Tax =
         Number(item.Price_With_Tax ?? item.priceWithTax ?? price + (price * Tax_Rate) / 100);
@@ -1991,7 +1992,7 @@ export class RetailerService {
           TotalPrice: totalPrice,
           TotalPriceWithTax: totalPriceWithTax,
           discount: 0,
-          originalPrice: price,
+          originalPrice: originalPrice,
           isActive: true,
         };
         console.log(price, 'price>>>>>>>>>>>>>>>>')
@@ -4441,22 +4442,24 @@ export class RetailerService {
 
     let taxRate = await getTaxRateV1(item.OTP_Number as number, userJurisdiction as number, item.Item_Number, price);
     taxRate = Math.ceil(taxRate * 100) / 100;
+    const priceWithTax = price + taxRate;
 
     // Step 4: Build response object (same format as your example)
-    const productImage = await ProductImage.findOne({
-      where: { product_number: item.Item_Number.toString(), isAllow: true }
-    });
+    const [productImage, inventoryOnHand, wareHouseSetting, productLimit, hasQtyDiscount, topLatestItems] = await Promise.all([
+      ProductImage.findOne({ where: { product_number: item.Item_Number.toString(), isAllow: true } }),
+      getInventoryOnHand(item.Item_Number),
+      Setting.findOne({}) as any,
+      getProductLimit(Number(item.Item_Number)),
+      checkQtyDiscount(item.Item_Number, userId, priceWithTax),
+      getTopLatestItems(),
+    ]);
 
-    const inventoryOnHand = await getInventoryOnHand(item.Item_Number);
-
-    const wareHouseSetting: any = await Setting.findOne({});
     const allowToOrder = wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
-
+    const isNewItem = topLatestItems.some((latestItem: any) => latestItem.Item_Number === item.Item_Number);
     let prepaidTaxRate = 0
     if (userJurisdiction != null && item.SalesCategory) {
-      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category, item, price + taxRate);
+      prepaidTaxRate = await getPrepaidTaxRate(userJurisdiction as number, item?.SalesCategory?.Sales_Category, item, priceWithTax);
     }
-
 
     const formattedItem = {
       Pack: item.Pack,
@@ -4471,30 +4474,20 @@ export class RetailerService {
       Tax_Rate: taxRate,
       OTP_Number: item.OTP_Number,
       price,
-      isNewItem: true,
-      priceWithTax: price + taxRate,
+      isNewItem,
+      priceWithTax,
       BaseCost: item.BaseCost,
       Invoice_Cost: item.Invoice_Cost,
       AvgCost: item.AvgCost,
       NetCost: item.NetCost,
-      hasProductLimit: false,
-      productLimit: null,
+      hasProductLimit: productLimit !== null && productLimit > 0,
+      productLimit,
       UPCList: item.UPCList || [{ UPC_Number: barcode }],
       Inventory_OnHand: inventoryOnHand,
       UnitOunces: 0,
       allowToOrder,
-      hasQtyDiscount: false,
-      qtyDiscount: {
-        allowToDiscount: false,
-        hasCaseDiscount: false,
-        hasQtyDiscount: false,
-        isCaseDiscount: false,
-        isQtyDiscount: false,
-        percentageCaseDiscount: 0,
-        minimumQtyForCaseDiscount: 0,
-        qtyDiscount: [],
-        price,
-      },
+      hasQtyDiscount: isDiscounted ? false : hasQtyDiscount.allowToDiscount,
+      qtyDiscount: hasQtyDiscount,
       showTheInventoryStock: true,
       showLowStock: false,
       showWithOutPrice: false,

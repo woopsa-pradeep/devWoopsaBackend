@@ -14594,7 +14594,13 @@ export class ManagerService {
       // Invoices
       OrderHeader.findAll({
         ...commonQuery,
-        where: { ...baseWhere, Invoice_Number: { [Op.gt]: 0 } },
+        where: { ...baseWhere, Invoice_Number: { [Op.gt]: 0 }, },
+      }),
+
+      // Invoices Pending
+      OrderHeader.findAll({
+        ...commonQuery,
+        where: { ...baseWhere, Invoice_Number: { [Op.eq]: 0 }, Confirmed: true },
       }),
 
       // Non Invoices (FIXED)
@@ -14607,6 +14613,12 @@ export class ManagerService {
       OrderHeader.findAll({
         ...commonQuery,
         where: { ...baseWhere, Picklist_Printed: true },
+      }),
+
+      //Picklist Pending
+      OrderHeader.findAll({
+        ...commonQuery,
+        where: { ...baseWhere, Picklist_Printed: false },
       }),
 
       // Epick Completed
@@ -14653,8 +14665,10 @@ export class ManagerService {
 
     const [
       invoices,
+      invoicePending,
       non_invoices,
       picklist,
+      picklistPending,
       epickCompleted,
       orderConfirmation,
       lockedOrders,
@@ -14664,8 +14678,10 @@ export class ManagerService {
 
     return {
       invoices,
+      invoicePending,
       non_invoices,
       picklist,
+      picklistPending,
       epickCompleted,
       orderConfirmation,
       recordLocks: lockedOrders,
@@ -18646,15 +18662,9 @@ export class ManagerService {
           [literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [Inventory].Item_Number = Inventory_UPC.Item_Number AND Status = 1 AND Priority = 1)`), 'CaseUPC'],
           [literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [Inventory].Item_Number = Inventory_UPC.Item_Number AND Status = 2 AND Priority = 1)`), 'RetailUPC'],
           [literal(`(SELECT UPC_Number FROM Inventory_UPC WHERE [Inventory].Item_Number = Inventory_UPC.Item_Number AND Status = 4 AND Priority = 1)`), 'AltItem'],
-          [literal(`0.00`), 'Price'],
-          [literal(`0.00`), 'otpState'],
-          [literal(`0.00`), 'otpCounty'],
-          [literal(`0.00`), 'otpCity'],
-          [literal(`0.00`), 'TotalPrice'],
-          [literal(`0.00`), 'Retail'],
-          [literal(`0.00`), 'UnitPrice'],
-          [literal(`0.00`), 'subclassAmount'],
+
           [literal(`(SELECT ISNULL(SUM(ISNULL(Inventory_OnHand, 0)), 0) FROM Inventory_Status WHERE Inventory_Status.Item_Number = [Inventory].Item_Number AND Code = 0)`), 'Inventory_OnHand'],
+          [literal(`ISNULL([Inventory].Price1, 0) + ISNULL([Inventory].Jurisdiction_State, 0)`), 'totalPrice'],
         ],
       },
       raw: true,
@@ -19342,6 +19352,8 @@ export class ManagerService {
       failed,
     };
   }
+
+
 
   async getCancelledStops(query: PaginationOptions) {
     const { page = 1, limit = 10 } = query;
