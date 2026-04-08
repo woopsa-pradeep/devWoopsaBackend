@@ -270,7 +270,7 @@ export class DriverService {
           );
 
       const isCompleteRoute = !stops.some(
-        (s) => s.status === DeliveryStopStatus.IN_PROGRESS || s.status === DeliveryStopStatus.NOT_DELIVERED || s.status === DeliveryStopStatus.FAILED || s.status === DeliveryStopStatus.RETURNED || s.status === DeliveryStopStatus.CANCELLED
+        (s) => s.status === DeliveryStopStatus.IN_PROGRESS || s.status === DeliveryStopStatus.NOT_DELIVERED
       );
 
       return {
@@ -1725,13 +1725,6 @@ export class DriverService {
       cancelledAt: new Date(),
     });
 
-    if (stop.isLastStop) {
-      await DeliveryRoute.update({
-        routeStatus: RouteStatus.COMPLETED,
-      }, { where: { id: stop.routeId } });
-
-
-    }
 
     const updateNextStop = await DeliveryRouteStop.findOne({
       where: { routeId: stop.routeId, isActive: true, stopSequence: stop.stopSequence + 1 },
