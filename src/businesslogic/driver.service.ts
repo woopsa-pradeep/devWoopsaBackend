@@ -330,8 +330,8 @@ export class DriverService {
         const expectedBundles = epicBoxes.length;
 
         for (const box of epicBoxes) {
-          if (box.barcode) {
-            boxBarCode.push(box.barcode);
+          if (box.value) {
+            boxBarCode.push(box.value ?? '');
           }
         }
 
