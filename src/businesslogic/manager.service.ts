@@ -19720,13 +19720,13 @@ export class ManagerService {
       : [];
 
     const epickOrderDetails = orderDetails.length ? await OrderPick.findAll({
-      where: { Order_Number: { [Op.in]: orderDetails } },
-      attributes: ['images', 'Order_Number'],
+      where: { orderNumber: { [Op.in]: orderDetails } },
+      attributes: ['images', 'orderNumber'],
       raw: true,
     }) : [];
 
     const epickOrderDetailsMap = new Map<number, any>(
-      epickOrderDetails.map((o: any) => [o.Order_Number, o])
+      epickOrderDetails.map((o: any) => [o.orderNumber, o])
     );
 
     const customerMap = new Map<number, any>(
