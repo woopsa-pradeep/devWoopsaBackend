@@ -48,6 +48,7 @@ interface DeliveryRoutePODAttributes {
   invoiceUrl: string | null;
   invoiceAmount: number;
   invoiceMessage: string;
+  checkAmount: number;
 
   // Notes
   notes: string | null;
@@ -87,6 +88,7 @@ export class DeliveryRoutePOD
   public photos!: string[];
   public notes!: string | null;
   public podAt!: Date;
+  public checkAmount!: number;
   public boxBarCode!: string[];
   public scanBarCode!: string[];
   public paymentTermComplete!: boolean;
@@ -121,6 +123,11 @@ DeliveryRoutePOD.init(
     routeStopId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+    checkAmount: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
     },
     driverId: {
       type: DataTypes.INTEGER,
