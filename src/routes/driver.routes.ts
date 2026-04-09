@@ -119,7 +119,7 @@ router.post(
 router.post(
   '/uploadSignature',
   verifyRole(ROLES.DRIVER),
-  multerUpload.single('signature'),
+  multerUpload.single('image'),
   catchAsync(driverController.uploadSignature.bind(driverController))
 );
 
