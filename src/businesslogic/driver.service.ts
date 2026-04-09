@@ -1785,11 +1785,11 @@ export class DriverService {
 
     const ALLOWED_RADIUS_METERS = 100;
     if (distanceInMeters > ALLOWED_RADIUS_METERS) {
-      // throw new AppError(
-      //   `You are ${Math.round(distanceInMeters)}m away from the stop. Must be within ${ALLOWED_RADIUS_METERS}m to complete delivery.`,
-      //   400
-      // );
-      return true;
+      throw new AppError(
+        `You are ${Math.round(distanceInMeters)}m away from the stop. Must be within ${ALLOWED_RADIUS_METERS}m to complete delivery.`,
+        400
+      );
+
     }
     return true;
 
