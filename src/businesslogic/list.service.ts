@@ -857,6 +857,11 @@ export class ListService {
       }
     );
 
+    const users = await Users.findAll({
+      attributes: ['UserNumber', 'UserID'],
+      order: [['UserNumber', 'ASC']]
+    })
+
     return {
       routes,
       salesRep,
@@ -865,7 +870,8 @@ export class ListService {
       otherTaxes,
       vendor,
       orderType,
-      salesCategory
+      salesCategory,
+      users
     }
   }
 

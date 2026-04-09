@@ -53,6 +53,7 @@ import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import TradeShowOrderHistory from "../models/postgres/tradeShowOrderHistory.model";
 import { getProductDiscountFromRedis } from "../utils/productDiscount.redis";
+import { OrderNotification } from "../models/mmsql/orderNotification.model";
 
 export class SalesService {
 
@@ -382,6 +383,16 @@ export class SalesService {
     } catch (error) {
       console.log(error, 'error-->')
       throw new AppError('Failed to create order details', 500);
+    }
+
+    try {
+
+      await OrderNotification.create({
+        order_number: orderHeaderCreated.Order_Number
+      });
+    } catch (error) {
+      console.log(error, 'error--> in OrderNotification')
+
     }
 
 
@@ -6722,6 +6733,18 @@ export class SalesService {
           },
           required: false,
 
+        },
+        {
+          model: SalesCategory,
+          as: 'SalesCategory',
+          attributes: ['Category_Desc', 'Sales_Category'],
+          required: false
+        },
+        {
+          model: PriceClass,
+          as: 'PriceClass',
+          attributes: ['Class_Desc'],
+          required: false
         }]
       })
       product = product?.dataValues || null;
@@ -6761,6 +6784,8 @@ export class SalesService {
 
         isNewItem,
         Description: product.Description,
+        salesCategory: product.SalesCategory?.Category_Desc,
+        priceClass: product.PriceClass?.Class_Desc,
         isDiscounted,
         hasPrepaidTaxRate: prepaidTaxRate ? true : false,
         prepaidTaxRate: prepaidTaxRate,

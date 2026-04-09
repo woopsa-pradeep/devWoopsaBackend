@@ -149,6 +149,7 @@ import { InventoryLogHistory } from "../models/mmsql/InventoryLogHistory.model";
 import { Order_Header_Costs } from "../models/mmsql/orderHeaderCost.model"
 import { DEFAULT_INVOICE_TEMPLATE } from "../seeder/invoiceTemplate.seeder"
 import pLimit from "p-limit";
+import { InvoicePdfStorage } from "../models/mmsql/invoicePdfStorage.model";
 type DisType = "PERCENT" | "FLAT";
 
 type BulkItemInput = {
@@ -9875,8 +9876,14 @@ export class ManagerService {
           C_Number: orderData.C_Number,
         },
       });
+      const invoiceUrl = await InvoicePdfStorage.findOne({
+        where: {
+          OrderNumber: orderData.Order_Number,
+        },
+      });
       return {
         ...orderData,
+        invoiceUrl: invoiceUrl ? invoiceUrl.dataValues : null,
         customerLocation: customerLocation ? customerLocation.dataValues : null,
       };
     }));
@@ -18568,6 +18575,7 @@ export class ManagerService {
         [col('orderHeader.C_Number'), 'C_Number'],
         [col('orderHeader.S_Number'), 'S_Number'],
         [col('orderHeader.Route_Number'), 'Route_Number'],
+        [col('orderHeader.User_ID'), 'User_ID'],
 
         'Order_Number',
         'Promo_Number',

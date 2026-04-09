@@ -6,6 +6,7 @@ import { Router } from "express";
 import { changePasswordSchema } from "../validations/auth.validation";
 import { validateRequest } from "../middlewares/validation.middleware";
 import { verifySalesSession } from "../middlewares/sales.middleware";
+import { placeOrderSchema } from '../validations/order.validation';
 import { createSalesCallTimeSchema, updateSalesCallTimeSchema, createSalesNoteSchema, updateSalesNoteSchema, createOrderConfirmationSchema, updateOrderConfirmationSchema, inventoryUPCValidation } from "../validations/sales.validation";
 
 
@@ -21,7 +22,7 @@ router.post('/customerListPaginated', verifyRole(ROLES.CHECKER, ROLES.SALES), ca
 
 router.get('/orderHistoryByOrderNumber/:orderNumber', verifyRole(ROLES.CHECKER, ROLES.SALES), catchAsync(listController.getOrderHistoryByOrderNumber.bind(listController)));
 router.get('/orderHistory/:customerId', verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession, catchAsync(listController.getOrderHistory.bind(listController)));
-router.post('/placeOrder/:customerId', verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession, catchAsync(listController.placeOrder.bind(listController)));
+router.post('/placeOrder/:customerId', verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession, validateRequest(placeOrderSchema), catchAsync(listController.placeOrder.bind(listController)));
 router.post('/placeTradeShowOrder/:customerId', verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession, catchAsync(listController.placeTradeShowOrder.bind(listController)));
 
 // return order

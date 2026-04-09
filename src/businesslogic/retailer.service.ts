@@ -62,6 +62,7 @@ import { TradeShowItem } from "../models/postgres/tradeShowItem.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import TradeShowOrderHistory from "../models/postgres/tradeShowOrderHistory.model";
 import { getProductDiscountFromRedis } from "../utils/productDiscount.redis";
+import { OrderNotification } from "../models/mmsql/orderNotification.model";
 
 
 
@@ -1973,6 +1974,8 @@ export class RetailerService {
           Qty: newQty,
           TotalPrice: updatedPrice,
           TotalPriceWithTax: updatedPriceWithTax,
+          TotalprepaidTaxRate: item.TotalprepaidTaxRate || 0,
+          prepaidTaxRate: item.prepaidTaxRate || 0,
         });
 
         cartItemsData.push(existingCartItem);
@@ -1994,6 +1997,8 @@ export class RetailerService {
           discount: 0,
           originalPrice: originalPrice,
           isActive: true,
+          TotalprepaidTaxRate: item.TotalprepaidTaxRate || 0,
+          prepaidTaxRate: item.prepaidTaxRate || 0,
         };
         console.log(price, 'price>>>>>>>>>>>>>>>>')
 
@@ -2432,11 +2437,23 @@ export class RetailerService {
 
 
 
+
     let orderHeaderCreated: any;
     try {
       orderHeaderCreated = await OrderHeader.create(finalOrderHeader) as any;
     } catch (error) {
       throw new AppError('Failed to create order header', 500);
+    }
+
+    try {
+
+      await OrderNotification.create({
+        order_number: orderHeaderCreated.Order_Number,
+        entry_date: new Date()
+      });
+    } catch (error) {
+      console.log(error, 'error--> in OrderNotification')
+
     }
 
     // Fetch products and options
