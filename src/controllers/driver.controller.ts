@@ -193,4 +193,9 @@ export class DriverController {
         const data = await this.driverService.completeRoute(Number(req.params.routeId));
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async uploadSignature(req: AuthRequest, res: Response) {
+        const data = await this.driverService.uploadSignature(req);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

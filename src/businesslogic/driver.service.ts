@@ -1858,7 +1858,21 @@ export class DriverService {
     return { syncedCount };
   }
 
-
+  async uploadSignature(req: any) {
+    const file = req.file;
+    if (!file) {
+      throw new AppError('File not found', 404);
+    }
+    const fileExtension = file.originalname?.includes(".")
+      ? `.${file.originalname.split(".").pop()}`
+      : "";
+    const generatedFileName = `signature-${Date.now()}${fileExtension}`;
+    const result = await uploadFileToAzure(file.buffer, generatedFileName, file.mimetype, 'driver-attachments');
+    if (!result.success) {
+      throw new AppError(result.error || 'Failed to upload image', 500);
+    }
+    return result;
+  }
 
 
 

@@ -116,5 +116,12 @@ router.post(
   catchAsync(driverController.completeRoute.bind(driverController))
 );
 
+router.post(
+  '/uploadSignature',
+  verifyRole(ROLES.DRIVER),
+  multerUpload.single('signature'),
+  catchAsync(driverController.uploadSignature.bind(driverController))
+);
+
 export default router;
 
