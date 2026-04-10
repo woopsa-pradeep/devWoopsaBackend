@@ -198,4 +198,59 @@ export class DriverController {
         const data = await this.driverService.uploadSignature(req);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    async getDriverHistory(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const data = await this.driverService.getDriverHistory(driverId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getDriverHistoryByRouteId(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const routeId = Number(req.params.routeId);
+        const data = await this.driverService.getDriverHistoryByRouteId(routeId, driverId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async createDeliveryRouteReturn(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const data = await this.driverService.createDeliveryRouteReturn(
+            driverId,
+            req.body
+        );
+        sendResponse(res, 201, true, data, General.SUCCESS);
+    }
+
+    async getCustomerRouteNumber(req: AuthRequest, res: Response) {
+        const customerId = Number(req.params.customerId);
+        if (Number.isNaN(customerId)) {
+            throw new AppError("Invalid customerId", 400);
+        }
+        const data = await this.driverService.getCustomerRouteNumber(customerId);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async getDriverNearByCustomer(req: AuthRequest, res: Response) {
+        const routeNumber = Number(req.params.routeNumber);
+        if (Number.isNaN(routeNumber)) {
+            throw new AppError("Invalid routeNumber", 400);
+        }
+        const data = await this.driverService.getDriverNearByCustomer(routeNumber);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async setCustomerLocation(req: AuthRequest, res: Response) {
+        const driverId = Number(req.user?.id);
+        const data = await this.driverService.setCustomerLocation(driverId, req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async updateTransferredStop(req: AuthRequest, res: Response) {
+        const stopId = Number(req.params.stopId);
+        if (Number.isNaN(stopId)) {
+            throw new AppError("Invalid stopId", 400);
+        }
+        const data = await this.driverService.updateTransferredStop(stopId, req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
 }

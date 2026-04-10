@@ -16,6 +16,9 @@ import { Customer } from "../models/mmsql/customer.model";
 import DeliveryRoutePOD, {
   OrderPODStatus,
 } from "../models/postgres/deliveryRoutePOD.model";
+import DeliveryRouteReturn, {
+  DeliveryRouteReturnStatus,
+} from "../models/postgres/deliveryRouteReturn.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { calculateDistanceInMeters, clusterOrdersByLocation, getDirectionsInOrder, getOptimizedDirections } from "../utils/map.utlis";
 import DeliveryRouteGroup from "../models/postgres/driverRoutesGroup.model";
@@ -32,6 +35,9 @@ import {
   getDriverLocationKey,
   getDriverLocationPattern,
 } from "../utils/redis.keys";
+import { ICustomerAttributes } from "../interfaces/customer.interface";
+import { CustomerRoute } from "../models/mmsql/customerRoutes.model";
+import { RetailerLocation } from "../models/postgres/retailerLocation.model";
 
 interface DriverAssignment {
   driverId: number;
@@ -66,6 +72,22 @@ interface DriverLocationCachePayload {
   currentLatitude: number;
   currentLongitude: number;
   updatedAt: string;
+}
+
+interface CreateDeliveryRouteReturnBody {
+  routeId: number;
+  C_Number: number;
+  orderNumber: number;
+  pickupLatitude?: number | null;
+  pickupLongitude?: number | null;
+  returnReason?: string | null;
+  returnNotes?: string | null;
+  photos?: string[];
+  customerSignature?: string | null;
+  signBy?: string | null;
+  boxBarCode?: string[];
+  scanBarCode?: string[];
+  status?: DeliveryRouteReturnStatus;
 }
 
 const DRIVER_LOCATION_TTL_SECONDS = 2100;
@@ -1874,6 +1896,262 @@ export class DriverService {
     return result;
   }
 
+  async getDriverHistory(driverId: number) {
+    const driver = await Driver.findOne({
+      where: { id: driverId, isActive: true },
+    });
+    if (!driver) throw new AppError('Driver not found', 404);
+
+    const routes = await DeliveryRoute.findAll({
+      where: { driverId, isActive: true },
+      include: [
+        {
+          model: Vehicle,
+          as: 'vehicle',
+          attributes: ['id', 'description', 'vinNumber'],
+        }
+
+      ],
+      order: [['id', 'DESC']],
+    });
+    return routes;
+
+  }
+
+  async getDriverHistoryByRouteId(routeId: number, driverId: number) {
+    const route = await DeliveryRoute.findOne({
+      where: { id: routeId, driverId, isActive: true },
+      include: [
+        {
+          model: Vehicle,
+          as: "vehicle",
+          attributes: ["id", "description", "vinNumber"],
+        },
+        {
+          model: DeliveryRouteStop,
+          as: "stops",
+          where: { isActive: true },
+          required: false,
+          separate: true,
+          order: [["stopSequence", "ASC"]],
+        },
+        {
+          model: DeliveryRoutePOD,
+          as: "pods",
+          where: { isActive: true },
+          required: false,
+          separate: true,
+          order: [["id", "ASC"]],
+        },
+      ],
+    });
+
+    if (!route) {
+      throw new AppError("Route not found", 404);
+    }
+
+    const pods = (route.get("pods") as DeliveryRoutePOD[] | undefined) ?? [];
+
+    const cNumbers = [
+      ...new Set(pods.map((p) => p.C_Number).filter((n) => n != null)),
+    ] as number[];
+
+    const customerByCNumber = new Map<number, ICustomerAttributes>();
+    if (cNumbers.length > 0) {
+      const customers = await Customer.findAll({
+        where: { C_Number: { [Op.in]: cNumbers } },
+        attributes: ["C_Number", "C_Name", "C_Address", "C_State", "C_Zip", "C_City", "C_Phone", "C_PhoneMobile"],
+      });
+      for (const c of customers) {
+        customerByCNumber.set(
+          c.C_Number,
+          c.get({ plain: true }) as ICustomerAttributes
+        );
+      }
+    }
+
+    const podsWithCustomer = pods.map((pod) => {
+      const plain = pod.get({ plain: true });
+      return {
+        ...plain,
+        customer: customerByCNumber.get(plain.C_Number) ?? null,
+      };
+    });
+
+    const podsByStopId = new Map<number, typeof podsWithCustomer>();
+    for (const pod of podsWithCustomer) {
+      const sid = pod.routeStopId;
+      if (!podsByStopId.has(sid)) {
+        podsByStopId.set(sid, []);
+      }
+      podsByStopId.get(sid)!.push(pod);
+    }
+
+    const routePlain = route.get({ plain: true }) as unknown as {
+      stops?: Array<Record<string, unknown>>;
+      pods?: unknown[];
+    } & Record<string, unknown>;
+    const { pods: _routePods, ...routeWithoutTopLevelPods } = routePlain;
+
+    const stopsWithPods = (routePlain.stops ?? []).map((stop) => ({
+      ...stop,
+      pods: podsByStopId.get(stop.id as number) ?? [],
+    }));
+
+    return {
+      route: {
+        ...routeWithoutTopLevelPods,
+        stops: stopsWithPods,
+      },
+    };
+  }
+
+  async createDeliveryRouteReturn(
+    driverId: number,
+    body: CreateDeliveryRouteReturnBody
+  ) {
+    const route = await DeliveryRoute.findOne({
+      where: { id: body.routeId, driverId, isActive: true },
+    });
+    if (!route) {
+      throw new AppError("Route not found", 404);
+    }
+
+    const row = await DeliveryRouteReturn.create({
+      routeId: body.routeId,
+      driverId,
+      C_Number: body.C_Number,
+      orderNumber: body.orderNumber,
+      pickupLatitude:
+        body.pickupLatitude != null ? String(body.pickupLatitude) : null,
+      pickupLongitude:
+        body.pickupLongitude != null ? String(body.pickupLongitude) : null,
+      returnReason: body.returnReason ?? null,
+      returnNotes: body.returnNotes ?? null,
+      photos: body.photos ?? [],
+      customerSignature: body.customerSignature ?? null,
+      signBy: body.signBy ?? null,
+      boxBarCode: body.boxBarCode ?? [],
+      scanBarCode: body.scanBarCode ?? [],
+      status: body.status ?? DeliveryRouteReturnStatus.PENDING,
+      pickedUpAt: null,
+      returnedToWarehouseAt: null,
+      isActive: true,
+    });
+
+    return row.get({ plain: true });
+  }
+
+  async updateTransferredStop(stopId: number, body: any) {
+    const stop = await DeliveryRouteStop.findOne({
+      where: { id: stopId, isActive: true },
+    });
+    if (!stop) throw new AppError('Stop not found', 404);
+
+    // ── Validate not already transferred ─────────────────────────
+    if (stop.isTransferred) {
+      throw new AppError('Stop already transferred', 400);
+    }
+
+    await stop.update({
+      // ── Save original customer info BEFORE overwriting ────────
+      originalC_Number: stop.C_Number,    // ← old customer saved
+      originalLatitude: stop.latitude,    // ← old lat saved
+      originalLongitude: stop.longitude,   // ← old lng saved
+
+      // ── Update to new customer ────────────────────────────────
+      C_Number: body.C_Number,
+      latitude: body.latitude,
+      longitude: body.longitude,
+
+      // ── Transfer metadata ─────────────────────────────────────
+      isTransferred: true,
+      transferredToC_Number: body.C_Number,
+      transferredToLatitude: body.latitude,
+      transferredToLongitude: body.longitude,
+      transferredAt: new Date(),
+      transferredReason: body.reason ?? null,
+    });
+
+    return stop;
+  }
+
+  async getCustomerRouteNumber(customerId: number) {
+    const findCustomerRoute = await CustomerRoute.findOne({
+      where: { C_Number: customerId }
+    });
+    if (!findCustomerRoute) throw new AppError('Customer route not found', 404);
+    return findCustomerRoute.Route_Number;
+
+  }
+
+
+  async getDriverNearByCustomer(routeNumber: number) {
+    const findCustomer = await CustomerRoute.findAll({
+      where: { Route_Number: routeNumber },
+    });
+    if (!findCustomer?.length) throw new AppError('Customer route not found', 404);
+
+    const customerList = await Customer.findAll({
+      where: { C_Number: { [Op.in]: findCustomer.map((c) => c.C_Number) } },
+      attributes: ['C_Number', 'C_Name', 'C_Address', 'C_City', 'C_State', 'C_Zip', 'C_Phone'],
+    });
+
+    const customerLocation = await RetailerLocation.findAll({
+      where: { C_Number: { [Op.in]: customerList.map((c) => c.C_Number) } },
+      attributes: ['C_Number', 'lat', 'long'],
+    });
+    const customerLocationMap = new Map<number, { lat: number | null, long: number | null }>();
+    for (const c of customerLocation) {
+      customerLocationMap.set(c.C_Number, { lat: c.lat ?? 0, long: c.long ?? 0 });
+    }
+    const customerListWithLocation = customerList.map((c) => ({
+      ...c.get({ plain: true }),
+      location: customerLocationMap.get(c.C_Number) ?? null,
+    }));
+    return customerListWithLocation;
+
+  }
+
+  async setCustomerLocation(
+    driverId: number,
+    body: {
+      customerId: number;
+      lat: number;
+      long: number;
+      city?: string | null;
+      state?: string | null;
+      zip?: string | null;
+      country?: string | null;
+      address?: string | null;
+    }
+  ) {
+    const cNumber = body.customerId;
+    const existing = await RetailerLocation.findOne({
+      where: { C_Number: cNumber },
+    });
+
+    const payload = {
+      C_Number: cNumber,
+      lat: body.lat,
+      long: body.long,
+      City: body.city?.trim() || null,
+      State: body.state?.trim() || null,
+      Zip: body.zip?.trim() || null,
+      Country: body.country?.trim() || null,
+      Address: body.address?.trim() || null,
+      addedBy: "driver" as const,
+      driverId,
+    };
+
+    if (existing) {
+      await existing.update(payload);
+      return existing.get({ plain: true });
+    }
+
+    const created = await RetailerLocation.create(payload);
+    return created.get({ plain: true });
+  }
 
 
 }

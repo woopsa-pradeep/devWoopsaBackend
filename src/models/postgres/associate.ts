@@ -35,6 +35,8 @@ import { EmailModule } from './emailModules.model';
 import { EmailModuleConfig } from './emailModuleConfig.model';
 import { CheckerActionLog } from './checkerActionLog.model';
 import DeliveryRouteGroup from './driverRoutesGroup.model';
+import DeliveryRoutePOD from './deliveryRoutePOD.model';
+import DeliveryRouteReturn from './deliveryRouteReturn.model';
 
 export function applyAssociations(): void {
 
@@ -147,6 +149,26 @@ export function applyAssociations(): void {
   });
 
   DeliveryRouteStop.belongsTo(DeliveryRoute, {
+    foreignKey: 'routeId',
+    as: 'route',
+  });
+
+  DeliveryRoute.hasMany(DeliveryRoutePOD, {
+    foreignKey: 'routeId',
+    as: 'pods',
+  });
+
+  DeliveryRoutePOD.belongsTo(DeliveryRoute, {
+    foreignKey: 'routeId',
+    as: 'route',
+  });
+
+  DeliveryRoute.hasMany(DeliveryRouteReturn, {
+    foreignKey: 'routeId',
+    as: 'routeReturns',
+  });
+
+  DeliveryRouteReturn.belongsTo(DeliveryRoute, {
     foreignKey: 'routeId',
     as: 'route',
   });
@@ -268,6 +290,18 @@ DeliveryRoute.belongsTo(Driver, {
   constraints: false,
 });
 
+Driver.hasMany(DeliveryRouteReturn, {
+  foreignKey: 'driverId',
+  as: 'deliveryRouteReturns',
+  constraints: false,
+});
+
+DeliveryRouteReturn.belongsTo(Driver, {
+  foreignKey: 'driverId',
+  as: 'driver',
+  constraints: false,
+});
+
 Driver.hasMany(DriverExpense, {
   foreignKey: 'driverId',
   as: 'expenses',
@@ -299,10 +333,6 @@ DeliveryRoute.belongsTo(DeliveryRouteGroup, {
   as: 'routeGroup',
   constraints: false,
 });
-
- 
-
-
 
   // Inventory.belongsTo(InventoryStatus, {
   //   foreignKey: 'Item_Number',

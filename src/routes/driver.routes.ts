@@ -16,6 +16,9 @@ import {
   cancelStopParamSchema,
   cancelStopBodySchema,
   allowToCompleteStopBodySchema,
+  createDeliveryRouteReturnSchema,
+  setCustomerLocationSchema,
+  updateTransferredStopBodySchema,
 } from "../validations/driver.validation";
 
 
@@ -121,6 +124,49 @@ router.post(
   verifyRole(ROLES.DRIVER),
   multerUpload.single('image'),
   catchAsync(driverController.uploadSignature.bind(driverController))
+);
+
+router.get(
+  '/getDriverHistory',
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.getDriverHistory.bind(driverController))
+);
+router.get(
+  '/getDriverHistory/:routeId',
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.getDriverHistoryByRouteId.bind(driverController))
+);
+
+router.post(
+  "/deliveryRouteReturn",
+  verifyRole(ROLES.DRIVER),
+  validateRequest(createDeliveryRouteReturnSchema),
+  catchAsync(driverController.createDeliveryRouteReturn.bind(driverController))
+);
+
+router.get(
+  "/getCustomerRouteNumber/:customerId",
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.getCustomerRouteNumber.bind(driverController))
+);
+router.get(
+  "/getDriverNearByCustomer/:routeNumber",
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.getDriverNearByCustomer.bind(driverController))
+);
+
+router.post(
+  "/setCustomerLocation",
+  verifyRole(ROLES.DRIVER),
+  validateRequest(setCustomerLocationSchema),
+  catchAsync(driverController.setCustomerLocation.bind(driverController))
+);
+
+router.put(
+  "/updateTransferredStop/:stopId",
+  verifyRole(ROLES.DRIVER),
+  validateRequest(updateTransferredStopBodySchema),
+  catchAsync(driverController.updateTransferredStop.bind(driverController))
 );
 
 export default router;

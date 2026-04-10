@@ -111,3 +111,61 @@ export const allowToCompleteStopBodySchema = Joi.object({
   stopLat: Joi.number().required(),
   stopLng: Joi.number().required(),
 });
+
+export const DELIVERY_ROUTE_RETURN_STATUSES = [
+  "pending",
+  "picked_up",
+  "returned_to_warehouse",
+] as const;
+
+export const setCustomerLocationSchema = Joi.object({
+  customerId: Joi.number().integer().positive().required().messages({
+    "any.required": "customerId is required",
+    "number.base": "customerId must be a number",
+  }),
+  lat: Joi.number().min(-90).max(90).required().messages({
+    "any.required": "lat is required",
+    "number.base": "lat must be a number",
+  }),
+  long: Joi.number().min(-180).max(180).required().messages({
+    "any.required": "long is required",
+    "number.base": "long must be a number",
+  }),
+  city: Joi.string().trim().max(200).allow(null, "").optional(),
+  state: Joi.string().trim().max(100).allow(null, "").optional(),
+  zip: Joi.string().trim().max(20).allow(null, "").optional(),
+  country: Joi.string().trim().max(100).allow(null, "").optional(),
+  address: Joi.string().trim().max(500).allow(null, "").optional(),
+});
+
+export const updateTransferredStopBodySchema = Joi.object({
+  C_Number: Joi.number().integer().positive().required().messages({
+    "any.required": "C_Number is required",
+  }),
+  latitude: Joi.number().min(-90).max(90).required().messages({
+    "any.required": "latitude is required",
+  }),
+  longitude: Joi.number().min(-180).max(180).required().messages({
+    "any.required": "longitude is required",
+  }),
+  reason: Joi.string().trim().max(500).allow(null, "").optional(),
+});
+
+export const createDeliveryRouteReturnSchema = Joi.object({
+  routeId: Joi.number().integer().positive().required(),
+  C_Number: Joi.number().integer().positive().required(),
+  orderNumber: Joi.number().integer().positive().required(),
+  pickupLatitude: Joi.number().min(-90).max(90).allow(null).optional(),
+  pickupLongitude: Joi.number().min(-180).max(180).allow(null).optional(),
+  returnReason: Joi.string().trim().max(500).allow(null, "").optional(),
+  returnNotes: Joi.string().trim().max(5000).allow(null, "").optional(),
+  photos: Joi.array().items(Joi.string().trim().max(2048)).default([]),
+  customerSignature: Joi.string().trim().max(2048).allow(null, "").optional(),
+  signBy: Joi.string().trim().max(200).allow(null, "").optional(),
+  boxBarCode: Joi.array().items(Joi.string().trim().max(200)).default([]),
+  scanBarCode: Joi.array().items(Joi.string().trim().max(200)).default([]),
+  status: Joi.string()
+    .valid(...DELIVERY_ROUTE_RETURN_STATUSES)
+    .optional()
+    .default("pending"),
+});

@@ -33,6 +33,17 @@ interface DeliveryRouteStopAttributes {
   isLastStop: boolean;
   deliveredAt?: Date | null;
   cancelledReason?: string | null;
+  isTransferred?: boolean;
+  transferredToC_Number?: number | null;
+  transferredToLatitude?: number | null;
+  transferredToLongitude?: number | null;
+
+  originalC_Number?: number | null;
+  originalLatitude?: number | null;
+  originalLongitude?: number | null;
+
+  transferredAt?: Date | null;
+  transferredReason?: string | null;
   day: Date;
   isActive: boolean;
 }
@@ -69,7 +80,12 @@ export class DeliveryRouteStop
   public startLongitude!: number;
   public endLatitude!: number;
   public endLongitude!: number;
-
+  public isTransferred!: boolean;
+  public transferredToC_Number!: number | null;
+  public transferredToLatitude!: number | null;
+  public transferredToLongitude!: number | null;
+  public transferredAt!: Date | null;
+  public transferredReason!: string | null;
   public reSchedule!: boolean;
   public reScheduleDate!: Date | null;
   public reScheduleTime!: string | null;
@@ -82,12 +98,17 @@ export class DeliveryRouteStop
   public invoiceUrl!: string | null;
   public invoiceAmount!: number;
 
+  public originalC_Number!: number | null;
+  public originalLatitude!: number | null;
+  public originalLongitude!: number | null;
+
   public arrivedAt!: Date | null;
   public isLastStop!: boolean;
   public deliveredAt!: Date | null;
 
   public isActive!: boolean;
 }
+
 export enum DeliveryStopStatus {
   NOT_DELIVERED = 'not_delivered',
   DELIVERED = 'delivered',
@@ -258,11 +279,60 @@ DeliveryRouteStop.init(
       allowNull: false,
       defaultValue: true,
     },
-  },
-  {
-    sequelize: postgresSequelize,
-    tableName: 'Delivery_Route_Stops',
-    modelName: 'DeliveryRouteStop',
-    timestamps: true,
-  }
+
+    // Add these fields to DeliveryRouteStop.init()
+
+    isTransferred: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    transferredToC_Number: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+    },
+    transferredToLatitude: {
+      type: DataTypes.DECIMAL(9, 6),
+      allowNull: true,
+      defaultValue: null,
+    },
+    transferredToLongitude: {
+      type: DataTypes.DECIMAL(9, 6),
+      allowNull: true,
+      defaultValue: null,
+    },
+    transferredAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    },
+    transferredReason: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
+    },
+    // Add to DeliveryRouteStop.init()
+
+    originalC_Number: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
+    },
+    originalLatitude: {
+      type: DataTypes.DECIMAL(9, 6),
+      allowNull: true,
+      defaultValue: null,
+    },
+    originalLongitude: {
+      type: DataTypes.DECIMAL(9, 6),
+      allowNull: true,
+      defaultValue: null,
+    },
+  }, {
+  sequelize: postgresSequelize,
+  tableName: 'Delivery_Route_Stops',
+  modelName: 'DeliveryRouteStop',
+  timestamps: true,
+}
 );
