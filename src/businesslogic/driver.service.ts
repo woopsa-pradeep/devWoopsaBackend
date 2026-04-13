@@ -16,13 +16,10 @@ import { Customer } from "../models/mmsql/customer.model";
 import DeliveryRoutePOD, {
   OrderPODStatus,
 } from "../models/postgres/deliveryRoutePOD.model";
-import DeliveryRouteReturn, {
-  DeliveryRouteReturnStatus,
-} from "../models/postgres/deliveryRouteReturn.model";
 import { OrderPickBox } from "../models/postgres/epickOrderBox.model";
 import { calculateDistanceInMeters, clusterOrdersByLocation, getDirectionsInOrder, getOptimizedDirections } from "../utils/map.utlis";
 import DeliveryRouteGroup from "../models/postgres/driverRoutesGroup.model";
-import { postgresSequelize } from "../db";
+import { postgresSequelize, mssqlSequelize } from "../db";
 import { OrderHeader } from "../models/mmsql/orderHeader.model";
 import { uploadFileToAzure } from "../utils/azureUploader";
 import { PaginationOptions } from "../interfaces/pagination.interface";
@@ -38,6 +35,15 @@ import {
 import { ICustomerAttributes } from "../interfaces/customer.interface";
 import { CustomerRoute } from "../models/mmsql/customerRoutes.model";
 import { RetailerLocation } from "../models/postgres/retailerLocation.model";
+import { Retailer } from "../models/postgres/retailer.model";
+import { OrderDetail } from "../models/mmsql/orderDetail.model";
+import { Inventory } from "../models/mmsql/inventory.model";
+import { InventoryUPC } from "../models/mmsql/inventoryUpc.model";
+import PriceClass from "../models/mmsql/priceClass.mode";
+import SalesCategory from "../models/mmsql/salesCategory.model";
+import { PlaceOrder } from "../interfaces/cart.interface";
+import { getDefaultOrderDetailValues, getDefaultOrderValues, getNextOrderNumber, sendEmailToOrder } from "../utils/order";
+import { OptionDefsValues } from "../models/mmsql/optionDefsValue.model";
 
 interface DriverAssignment {
   driverId: number;
@@ -74,21 +80,6 @@ interface DriverLocationCachePayload {
   updatedAt: string;
 }
 
-interface CreateDeliveryRouteReturnBody {
-  routeId: number;
-  C_Number: number;
-  orderNumber: number;
-  pickupLatitude?: number | null;
-  pickupLongitude?: number | null;
-  returnReason?: string | null;
-  returnNotes?: string | null;
-  photos?: string[];
-  customerSignature?: string | null;
-  signBy?: string | null;
-  boxBarCode?: string[];
-  scanBarCode?: string[];
-  status?: DeliveryRouteReturnStatus;
-}
 
 const DRIVER_LOCATION_TTL_SECONDS = 2100;
 const DRIVER_LOCATION_DB_SYNC_MS = 5 * 60 * 1000;
@@ -1907,15 +1898,80 @@ export class DriverService {
       include: [
         {
           model: Vehicle,
-          as: 'vehicle',
-          attributes: ['id', 'description', 'vinNumber'],
-        }
-
+          as: "vehicle",
+          attributes: ["id", "description", "vinNumber"],
+        },
+        {
+          model: DeliveryRouteStop,
+          as: "stops",
+          where: { isActive: true },
+          required: false,
+          separate: true,
+          order: [["stopSequence", "ASC"]],
+        },
       ],
-      order: [['id', 'DESC']],
+      order: [["id", "DESC"]],
     });
-    return routes;
 
+    const allStops = routes.flatMap(
+      (r) =>
+        (r.get("stops") as DeliveryRouteStop[] | undefined) ?? []
+    );
+    const cNumbers = [
+      ...new Set(
+        allStops.map((s) => s.C_Number).filter((n) => n != null)
+      ),
+    ] as number[];
+
+    const retailerByCNumber = new Map<number, object>();
+    const locationByCNumber = new Map<number, object>();
+
+    if (cNumbers.length > 0) {
+      const [retailers, locations] = await Promise.all([
+        Retailer.findAll({
+          where: { Customer_Number: { [Op.in]: cNumbers } },
+        }),
+        RetailerLocation.findAll({
+          where: { C_Number: { [Op.in]: cNumbers } },
+        }),
+      ]);
+
+      for (const row of retailers) {
+        retailerByCNumber.set(row.Customer_Number, row.get({ plain: true }));
+      }
+      for (const row of locations) {
+        if (!locationByCNumber.has(row.C_Number)) {
+          locationByCNumber.set(row.C_Number, row.get({ plain: true }));
+        }
+      }
+    }
+
+    return routes.map((route) => {
+      const stops =
+        (route.get("stops") as DeliveryRouteStop[] | undefined) ?? [];
+      const routePlain = route.get({ plain: true }) as unknown as Record<
+        string,
+        unknown
+      >;
+
+      const stopsWithCustomer = stops.map((stop) => {
+        const plain = stop.get({ plain: true });
+        const cn = plain.C_Number;
+        return {
+          ...plain,
+          customer: {
+            retailer: retailerByCNumber.get(cn) ?? null,
+            location: locationByCNumber.get(cn) ?? null,
+          },
+        };
+      });
+
+      return {
+        ...routePlain,
+        stops: stopsWithCustomer,
+        totalStops: stopsWithCustomer.length,
+      };
+    });
   }
 
   async getDriverHistoryByRouteId(routeId: number, driverId: number) {
@@ -2006,41 +2062,7 @@ export class DriverService {
     };
   }
 
-  async createDeliveryRouteReturn(
-    driverId: number,
-    body: CreateDeliveryRouteReturnBody
-  ) {
-    const route = await DeliveryRoute.findOne({
-      where: { id: body.routeId, driverId, isActive: true },
-    });
-    if (!route) {
-      throw new AppError("Route not found", 404);
-    }
 
-    const row = await DeliveryRouteReturn.create({
-      routeId: body.routeId,
-      driverId,
-      C_Number: body.C_Number,
-      orderNumber: body.orderNumber,
-      pickupLatitude:
-        body.pickupLatitude != null ? String(body.pickupLatitude) : null,
-      pickupLongitude:
-        body.pickupLongitude != null ? String(body.pickupLongitude) : null,
-      returnReason: body.returnReason ?? null,
-      returnNotes: body.returnNotes ?? null,
-      photos: body.photos ?? [],
-      customerSignature: body.customerSignature ?? null,
-      signBy: body.signBy ?? null,
-      boxBarCode: body.boxBarCode ?? [],
-      scanBarCode: body.scanBarCode ?? [],
-      status: body.status ?? DeliveryRouteReturnStatus.PENDING,
-      pickedUpAt: null,
-      returnedToWarehouseAt: null,
-      isActive: true,
-    });
-
-    return row.get({ plain: true });
-  }
 
   async updateTransferredStop(stopId: number, body: any) {
     const stop = await DeliveryRouteStop.findOne({
@@ -2151,6 +2173,366 @@ export class DriverService {
 
     const created = await RetailerLocation.create(payload);
     return created.get({ plain: true });
+  }
+
+
+  async getOrderDetails(orderNumber: number) {
+
+    const order = await OrderDetail.findAll({
+      where: { Order_Number: orderNumber },
+      attributes: [
+        "Order_Number",
+        "Line_Number",
+        "Item_Number",
+        "Quantity_Ordered",
+        "Quantity_Shipped",
+        "Sales_Category",
+        "OTP_Number",
+        "Pack",
+        "Price",
+        "OTP_Amount_State",
+        "PPD_PackType",
+        "PPD_Packs",
+        "Stamp_Qty",
+        "CaseCount",
+        "Price_Reference",
+        "Retail",
+        "NetCost",
+        "BaseCost",
+        "Invoice_Cost",
+        "AvgCost",
+        "OTP_Amount_City",
+        "OTP_Amount_County",
+        "Item_Message",
+        "DepositAmount",
+        "Price_Subclass",
+        "EBT",
+        "Points",
+        "ItemDescription",
+        "CaseWeight",
+      ],
+      include: [
+        {
+          model: Inventory,
+          as: 'inventory',
+          attributes: [
+            'Item_Number',
+            'Description',
+            'Pack',
+            'CaseCount',
+            'UOM',
+            'BaseCost',
+            'NetCost',
+            'Section',
+            'Location',
+            'Section2',
+            'Location2',
+            'Sequence',
+            'Vendor_ItemNumberAlpha',
+
+          ],
+          include: [
+            {
+              model: SalesCategory,
+              as: 'SalesCategory',
+              attributes: ['Sales_Category', 'Category_Desc'],
+            },
+            {
+              model: PriceClass,
+              as: 'PriceClass',
+              attributes: ['Price_Class', 'Class_Desc'],
+            },
+            {
+              model: InventoryUPC,
+              as: 'UPCList',
+              attributes: ['UPC_Number'],
+              where: {
+                Status: 0,
+              },
+              required: false,
+            }
+          ]
+        }
+      ]
+    });
+    return order;
+
+
+  }
+
+  async placeReturnOrder(orderData: PlaceOrder, req: any, customerId: any) {
+    const totalPrice = orderData.orderPlayload.reduce((sum: any, item: any) => sum + Number(item.TotalPriceWithTax), 0);
+    const isWebOrder = req.headers['is-web-order'];
+    const isWeb = isWebOrder === 'true' ? true : false;
+
+    const { orderPlayload } = orderData;
+
+    let deliveryId = 0;
+
+
+    // Get customer and route info
+
+    let customer = await Customer.findOne({ where: { C_Number: customerId } });
+
+
+    customer = customer?.dataValues as any;
+    const customerRoutes = await CustomerRoute.findOne({ where: { C_Number: customerId } });
+
+
+
+    if (!customer) {
+      throw new AppError("Customer not found", 404);
+    }
+    const orderNumber = await getNextOrderNumber();
+    let Order_Type = 5;
+
+
+
+    // Prepare dynamic header data
+    const orderHeaderObject = {
+      Order_Number: orderNumber,
+
+      C_Number: customerId,
+      S_Number: customer.C_Salesman || 0,
+      Order_Source: isWeb ? 13 : 12,
+      AR_C_Number: customer.C_StatementAccount || customerId,
+      Jurisdiction_State: customer.Jurisdiction_State || '',
+      Jurisdiction_County: customer.Jurisdiction_County || '',
+      Jurisdiction_City: customer.Jurisdiction_City || '',
+      Route_Number: customerRoutes?.Route_Number || 0,
+      Stop_Number: customerRoutes?.Stop_Number || 0,
+      Delivery_ID: deliveryId,
+      User_ID: 0,
+      Reference: `DRI-${customer.C_Number}`,
+      Invoice_Type: customer.C_InvoiceFormat || 0,
+      Invoice_Deposit: 0,
+      Delivery_Charge: 0,
+      Other_Charge: 0,
+      Invoice_Total: 0,
+      Sales_Taxable: 0,
+      Sales_NonTaxable: 0,
+      Cig20: 0,
+      Cig10tax: 0,
+      Cig20tax: 0,
+      Cig25tax: 0,
+      POS_ChangeDue: 0,
+      Order_Pricing_Account: customer.C_PricingAccount || customerId,
+      Order_Type: Order_Type || 0,
+      Points: 0,
+      Total_Weight: 0,
+      Delivery_Charge_Select: !!customer.Delivery_Charge,
+      Other_Charge_Select: !!customer.Other_Amount
+    };
+
+
+
+    // Combine with defaults (exclude Order_Number since it's auto-increment)
+    const { Order_Number, ...defaultValues } = getDefaultOrderValues();
+    const finalOrderHeader: any = {
+      ...defaultValues,
+      ...orderHeaderObject,
+    };
+
+
+
+    // Ensure no null values in required fields
+    Object.keys(finalOrderHeader).forEach(key => {
+      if (finalOrderHeader[key] === null || finalOrderHeader[key] === undefined) {
+        if (typeof finalOrderHeader[key] === 'number') {
+          finalOrderHeader[key] = 0;
+        } else if (typeof finalOrderHeader[key] === 'boolean') {
+          finalOrderHeader[key] = false;
+        } else if (typeof finalOrderHeader[key] === 'string') {
+          finalOrderHeader[key] = '';
+        }
+      }
+    });
+
+
+
+
+
+    let orderHeaderCreated: any;
+    try {
+      orderHeaderCreated = await OrderHeader.create(finalOrderHeader) as any;
+    } catch (error) {
+      console.log(error, 'error--> in create order header')
+      throw new AppError('Failed to create order header', 500);
+    }
+
+    // Fetch products and options
+    const itemNumbers = orderPlayload.map(item => item.Item_Number);
+    const [products] = await Promise.all([
+      Inventory.findAll({ where: { Item_Number: itemNumbers }, raw: true }),
+    ]);
+
+
+
+    const productMap = new Map(products.map(product => [product.Item_Number, product]));
+
+    const orderDetails = orderPlayload.map(async (item: any, index) => {
+      const product = productMap.get(item.Item_Number);
+
+      if (!product) {
+        throw new AppError(`Product with Item_Number ${item.Item_Number} not found`, 404);
+      }
+
+      if (item.Qty <= 0) {
+        throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
+      }
+
+
+      let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.Sales_Category }, raw: true })
+
+      if (!optionDefsValues) {
+        optionDefsValues = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.OTP_Number }, raw: true })
+      }
+
+      console.log(optionDefsValues, 'optionDefsValues-->')
+      if (!optionDefsValues) {
+        optionDefsValues = 0
+      } else {
+        optionDefsValues = Number(item.Qty)
+      }
+
+      let PPD_PackType = 0
+      let PPD_Packs = 0
+
+      if (product.OTP_Number == 255) {
+        if (product.Cig_Pack == 20) {
+          PPD_PackType = 20
+          PPD_Packs = 10
+        }
+        else if (product.Cig_Pack == 10) {
+          PPD_PackType = 10
+          PPD_Packs = 20
+        }
+
+      }
+
+      let adjprice = Number(item.Price);
+      const orderDetail = {
+        PrepaidTax_Amount: item.prepaidTaxRate ? Number(item.prepaidTaxRate) : 0,
+        Order_Number: orderHeaderCreated.Order_Number,
+        Item_Number: item.Item_Number,
+        Line_Number: index + 1,
+        Sales_Category: product.Sales_Category,
+        OTP_Number: product.OTP_Number,
+        Quantity_Ordered: Number(item.Qty),
+        Quantity_Shipped: item.Qty,
+        Pack: product.Pack,
+        UOM: product.UOM,
+        Price: Number(adjprice),
+        Price_Reference: Number(adjprice),
+        Retail: product.Retail1,
+        NetCost: product.NetCost,
+        BaseCost: product.BaseCost,
+        Invoice_Cost: product.Invoice_Cost,
+        AvgCost: product.AvgCost,
+        OTP_Amount_State: Number(item.Tax_Rate ?? 0),
+
+        OTP_Amount_County: 0,
+        OTP_Amount_City: 0,
+        Item_Message: product.Item_Message ? product.Item_Message : ' ',
+
+        DepositAmount: product.DepositAmount,
+        Price_Subclass: product.Price_Subclass,
+        OffInvoice_Amount: 0,
+        OffInvoice_OffCost: 0,
+        OffInvoice_Special: false,
+        EBT: product.EBT,
+        Points: product.Points,
+        Stamp_Qty: optionDefsValues || 0,
+        ItemDescription: product.Description,
+        CaseWeight: product.CaseWeight,
+        CaseCount: product.CaseCount,
+        PPD_PackType: PPD_PackType,
+        PPD_Packs: PPD_Packs,
+        // CasesPerPallet: product.CasesPerPallet,
+      };
+
+      return {
+        ...getDefaultOrderDetailValues(),
+        ...orderDetail
+      };
+    });
+
+
+    let resolvedOrderDetails: any[] = [];
+    try {
+      resolvedOrderDetails = await Promise.all(orderDetails);
+
+      await OrderDetail.bulkCreate(resolvedOrderDetails);
+
+      try {
+        sendEmailToOrder(orderHeaderCreated, resolvedOrderDetails, customer, 0);
+      } catch (error) {
+        console.log(error, 'error-->')
+      }
+
+      console.log('Order details created successfully');
+    } catch (error) {
+      console.log(error, 'error-->')
+      throw new AppError('Failed to create order details', 500);
+    }
+
+    return {
+      orderHeader: orderHeaderCreated,
+      orderDetails: resolvedOrderDetails,
+      message: "Order placed successfully"
+    };
+  }
+
+
+  async updateReturnOrder(
+    orderUpdateData: Array<{ Order_Number: number; Item_Number: number; Quantity_Shipped: number }>
+  ) {
+    if (!Array.isArray(orderUpdateData) || orderUpdateData.length === 0) {
+      throw new AppError("orderUpdateData must be a non-empty array", 400);
+    }
+
+    return mssqlSequelize.transaction(async (t) => {
+      const updates: Array<{
+        Order_Number: number;
+        Item_Number: number;
+        rowsAffected: number;
+      }> = [];
+
+      for (const row of orderUpdateData) {
+        const orderNum = Number(row.Order_Number);
+        const qtyShipped = Number(row.Quantity_Shipped);
+        const Item_Number = Number(row.Item_Number);
+        if (
+          !Number.isFinite(orderNum) ||
+          orderNum <= 0 ||
+          !Number.isFinite(Item_Number) ||
+          Item_Number <= 0 ||
+          !Number.isFinite(qtyShipped) ||
+          qtyShipped < 0
+        ) {
+          throw new AppError(
+            "Each item must have valid Order_Number, Item_Number, and Quantity_Shipped",
+            400
+          );
+        }
+
+        const [rowsAffected] = await OrderDetail.update(
+          { Quantity_Shipped: qtyShipped },
+          {
+            where: { Order_Number: orderNum, Item_Number },
+            transaction: t,
+          }
+        );
+
+        updates.push({
+          Order_Number: orderNum,
+          Item_Number,
+          rowsAffected,
+        });
+      }
+
+      return { updates };
+    });
   }
 
 

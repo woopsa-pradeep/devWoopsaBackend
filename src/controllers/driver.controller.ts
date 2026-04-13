@@ -4,6 +4,7 @@ import { sendResponse } from "../utils/sendResponse";
 import { General } from "../constants";
 import { AuthRequest } from "../middlewares/verifyToken.middleware";
 import { AppError } from "../utils/AppError";
+import { PlaceOrder } from "../interfaces/cart.interface";
 
 export class DriverController {
     private driverService: DriverService;
@@ -212,14 +213,6 @@ export class DriverController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
-    async createDeliveryRouteReturn(req: AuthRequest, res: Response) {
-        const driverId = Number(req.user?.id);
-        const data = await this.driverService.createDeliveryRouteReturn(
-            driverId,
-            req.body
-        );
-        sendResponse(res, 201, true, data, General.SUCCESS);
-    }
 
     async getCustomerRouteNumber(req: AuthRequest, res: Response) {
         const customerId = Number(req.params.customerId);
@@ -253,4 +246,33 @@ export class DriverController {
         const data = await this.driverService.updateTransferredStop(stopId, req.body);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+
+    async getOrderDetails(req: AuthRequest, res: Response) {
+        const orderNumber = Number(req.params.orderNumber);
+        if (Number.isNaN(orderNumber)) {
+            throw new AppError("Invalid orderNumber", 400);
+        }
+        const data = await this.driverService.getOrderDetails(orderNumber);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
+    async placeReturnOrder(req: AuthRequest, res: Response) {
+        const customerId = Number(req.params.customerId);
+        if (Number.isNaN(customerId)) {
+            throw new AppError("Invalid customerId", 400);
+        }
+        const data = await this.driverService.placeReturnOrder(
+            req.body as PlaceOrder,
+            req,
+            customerId
+        );
+        sendResponse(res, 201, true, data, General.SUCCESS);
+    }
+
+    async updateReturnOrder(req: AuthRequest, res: Response) {
+        const data = await this.driverService.updateReturnOrder(req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
 }

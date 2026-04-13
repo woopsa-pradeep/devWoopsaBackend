@@ -138,6 +138,40 @@ export const setCustomerLocationSchema = Joi.object({
   address: Joi.string().trim().max(500).allow(null, "").optional(),
 });
 
+const placeReturnOrderLineSchema = Joi.object({
+  id: Joi.number().optional(),
+  Customer_Number: Joi.number().optional(),
+  Item_Number: Joi.number().integer().positive().required(),
+  Price: Joi.number().min(0).required(),
+  Qty: Joi.number().positive().required(),
+  TotalPrice: Joi.number().min(0).required(),
+  Tax_Rate: Joi.number().optional().allow(null),
+  Price_With_Tax: Joi.number().optional(),
+  TotalPriceWithTax: Joi.number().min(0).optional(),
+  prepaidTaxRate: Joi.number().optional().allow(null, ""),
+  discountPrice: Joi.number().optional(),
+});
+
+export const placeReturnOrderSchema = Joi.object({
+  orderPlayload: Joi.array().items(placeReturnOrderLineSchema).min(1).required(),
+  Delivery_Charge: Joi.number().optional().default(0),
+  shippingDetails: Joi.any().optional(),
+  hasDiscount: Joi.boolean().optional().default(false),
+  discountAmount: Joi.number().optional().default(0),
+  order_type: Joi.string().allow("", null).optional(),
+});
+
+export const updateReturnOrderSchema = Joi.array()
+  .items(
+    Joi.object({
+      Order_Number: Joi.number().integer().positive().required(),
+      Item_Number: Joi.number().integer().positive().required(),
+      Quantity_Shipped: Joi.number().min(0).required(),
+    })
+  )
+  .min(1)
+  .required();
+
 export const updateTransferredStopBodySchema = Joi.object({
   C_Number: Joi.number().integer().positive().required().messages({
     "any.required": "C_Number is required",

@@ -19,6 +19,8 @@ import {
   createDeliveryRouteReturnSchema,
   setCustomerLocationSchema,
   updateTransferredStopBodySchema,
+  placeReturnOrderSchema,
+  updateReturnOrderSchema,
 } from "../validations/driver.validation";
 
 
@@ -137,12 +139,6 @@ router.get(
   catchAsync(driverController.getDriverHistoryByRouteId.bind(driverController))
 );
 
-router.post(
-  "/deliveryRouteReturn",
-  verifyRole(ROLES.DRIVER),
-  validateRequest(createDeliveryRouteReturnSchema),
-  catchAsync(driverController.createDeliveryRouteReturn.bind(driverController))
-);
 
 router.get(
   "/getCustomerRouteNumber/:customerId",
@@ -167,6 +163,25 @@ router.put(
   verifyRole(ROLES.DRIVER),
   validateRequest(updateTransferredStopBodySchema),
   catchAsync(driverController.updateTransferredStop.bind(driverController))
+);
+
+router.get(
+  "/getOrderDetails/:orderNumber",
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.getOrderDetails.bind(driverController))
+);
+
+router.post(
+  "/placeReturnOrder/:customerId",
+  verifyRole(ROLES.DRIVER),
+  catchAsync(driverController.placeReturnOrder.bind(driverController))
+);
+
+router.put(
+  "/updateReturnOrder",
+  verifyRole(ROLES.DRIVER),
+  validateRequest(updateReturnOrderSchema),
+  catchAsync(driverController.updateReturnOrder.bind(driverController))
 );
 
 export default router;

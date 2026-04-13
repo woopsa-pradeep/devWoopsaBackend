@@ -989,7 +989,7 @@ export async function getDiscount(Item_Number: number, C_Number: number) {
     // }
 
     //check with query
-let tempC_Number = C_Number;
+    let tempC_Number = C_Number;
 
     let customerPricingAccount: any = await Customer.findOne({
       where: {
@@ -1037,7 +1037,7 @@ let tempC_Number = C_Number;
       }
     });
 
-  
+
     const tempCustomerGroup = tempCustomerGroupData?.dataValues;
 
     console.log(tempCustomerGroup, 'tempCustomerGroup?.Special_GroupID--->>')
@@ -1095,7 +1095,7 @@ let tempC_Number = C_Number;
     let isInventorySubclass: any = await InventorySubclass.findOne({
       where: {
         Price_Subclass: InventoryItem.Price_Subclass,
-       
+
 
       }
     })
@@ -1176,7 +1176,7 @@ let tempC_Number = C_Number;
         Item_Number,
         Order_Source: { [Op.in]: [0, 1, 12, 13] },
         Special_GroupID: { [Op.in]: [0, tempCustomerGroup?.Special_GroupID || 0] },
-      }, 
+      },
       order: [['myKey', 'DESC']], // or createdAt
     });
 
@@ -1319,7 +1319,7 @@ let tempC_Number = C_Number;
           (isInventorySubclass.Jurisdiction_State === 0 || isInventorySubclass.Jurisdiction_State == null) &&
           isInventorySubclass.Special_GroupID == tempCustomerGroup?.Special_GroupID
         ) {
-         
+
           if (isInventorySubclass.UnlimitedFlag) {
             discountPrice += isInventorySubclass.Discount;
           } else if (startDate <= currentDate && currentDate <= endDate) {
@@ -1345,6 +1345,7 @@ let tempC_Number = C_Number;
 
 export async function getFirstValidPrice(data: PriceFields): Promise<number> {
 
+  console.log(data, 'data--->')
   for (let i = 1; i <= 12; i++) {
     const key = `Price${i}` as keyof PriceFields;
     const value = data[key];
@@ -1414,7 +1415,7 @@ export async function getTaxRateV1(
   });
   item = item?.dataValues;
 
-  console.log(item,'the item--->>>')
+  console.log(item, 'the item--->>>')
   let rate = taxRate?.dataValues?.OTP_Rate || 0;
   let value = taxRate?.dataValues?.OTP_Option || 0;
 
@@ -2717,7 +2718,7 @@ export async function getBatchInventoryOnHand(itemNumbers: number[]): Promise<Re
   const orderedMap: Record<number, number> = {};
   for (const r of orderedResults) {
     const itemNo = Number(r['orderDetails.Item_Number']);
-    const qty    = Number(r['orderDetails.totalQuantityOrdered'] || 0);
+    const qty = Number(r['orderDetails.totalQuantityOrdered'] || 0);
     orderedMap[itemNo] = (orderedMap[itemNo] ?? 0) + qty;
   }
 
@@ -2738,8 +2739,8 @@ export async function getBatchInventoryOnHand(itemNumbers: number[]): Promise<Re
   // ─── Merge into final map ─────────────────────────────────────────────────
   const result: Record<number, number> = {};
   for (const r of onHandResults) {
-    const itemNo  = Number(r.Item_Number);
-    const onHand  = Number(r.total_onhand || 0);
+    const itemNo = Number(r.Item_Number);
+    const onHand = Number(r.total_onhand || 0);
     const ordered = orderedMap[itemNo] ?? 0;
     result[itemNo] = onHand - ordered;
   }

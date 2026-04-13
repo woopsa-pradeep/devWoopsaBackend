@@ -36,7 +36,6 @@ import { EmailModuleConfig } from './emailModuleConfig.model';
 import { CheckerActionLog } from './checkerActionLog.model';
 import DeliveryRouteGroup from './driverRoutesGroup.model';
 import DeliveryRoutePOD from './deliveryRoutePOD.model';
-import DeliveryRouteReturn from './deliveryRouteReturn.model';
 
 export function applyAssociations(): void {
 
@@ -163,15 +162,6 @@ export function applyAssociations(): void {
     as: 'route',
   });
 
-  DeliveryRoute.hasMany(DeliveryRouteReturn, {
-    foreignKey: 'routeId',
-    as: 'routeReturns',
-  });
-
-  DeliveryRouteReturn.belongsTo(DeliveryRoute, {
-    foreignKey: 'routeId',
-    as: 'route',
-  });
 
   DeliveryRoute.belongsTo(Vehicle, {
     foreignKey: 'truckId',
@@ -278,61 +268,50 @@ export function applyAssociations(): void {
 
   // In your associations.ts or index.ts where all models are linked
 
-Driver.hasMany(DeliveryRoute, {
-  foreignKey: 'driverId',
-  as: 'routes',
-  constraints: false,
-});
+  Driver.hasMany(DeliveryRoute, {
+    foreignKey: 'driverId',
+    as: 'routes',
+    constraints: false,
+  });
 
-DeliveryRoute.belongsTo(Driver, {
-  foreignKey: 'driverId',
-  as: 'driver',
-  constraints: false,
-});
+  DeliveryRoute.belongsTo(Driver, {
+    foreignKey: 'driverId',
+    as: 'driver',
+    constraints: false,
+  });
 
-Driver.hasMany(DeliveryRouteReturn, {
-  foreignKey: 'driverId',
-  as: 'deliveryRouteReturns',
-  constraints: false,
-});
 
-DeliveryRouteReturn.belongsTo(Driver, {
-  foreignKey: 'driverId',
-  as: 'driver',
-  constraints: false,
-});
+  Driver.hasMany(DriverExpense, {
+    foreignKey: 'driverId',
+    as: 'expenses',
+  });
 
-Driver.hasMany(DriverExpense, {
-  foreignKey: 'driverId',
-  as: 'expenses',
-});
+  DriverExpense.belongsTo(Driver, {
+    foreignKey: 'driverId',
+    as: 'driver',
+  });
 
-DriverExpense.belongsTo(Driver, {
-  foreignKey: 'driverId',
-  as: 'driver',
-});
+  Vehicle.hasMany(DriverExpense, {
+    foreignKey: 'vehicleId',
+    as: 'driverExpenses',
+  });
 
-Vehicle.hasMany(DriverExpense, {
-  foreignKey: 'vehicleId',
-  as: 'driverExpenses',
-});
+  DriverExpense.belongsTo(Vehicle, {
+    foreignKey: 'vehicleId',
+    as: 'vehicle',
+  });
 
-DriverExpense.belongsTo(Vehicle, {
-  foreignKey: 'vehicleId',
-  as: 'vehicle',
-});
+  DeliveryRouteGroup.hasMany(DeliveryRoute, {
+    foreignKey: 'routeGroupId',
+    as: 'childRoutes',
+    constraints: false,
+  });
 
-DeliveryRouteGroup.hasMany(DeliveryRoute, {
-  foreignKey: 'routeGroupId',
-  as: 'childRoutes',
-  constraints: false,
-});
-
-DeliveryRoute.belongsTo(DeliveryRouteGroup, {
-  foreignKey: 'routeGroupId',
-  as: 'routeGroup',
-  constraints: false,
-});
+  DeliveryRoute.belongsTo(DeliveryRouteGroup, {
+    foreignKey: 'routeGroupId',
+    as: 'routeGroup',
+    constraints: false,
+  });
 
   // Inventory.belongsTo(InventoryStatus, {
   //   foreignKey: 'Item_Number',

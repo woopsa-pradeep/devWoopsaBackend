@@ -42,6 +42,7 @@ interface DeliveryRouteStopAttributes {
   originalLatitude?: number | null;
   originalLongitude?: number | null;
 
+  type?: string;
   transferredAt?: Date | null;
   transferredReason?: string | null;
   day: Date;
@@ -97,6 +98,7 @@ export class DeliveryRouteStop
   public cancelledReason!: string | null;
   public invoiceUrl!: string | null;
   public invoiceAmount!: number;
+  public type!: string;
 
   public originalC_Number!: number | null;
   public originalLatitude!: number | null;
@@ -311,6 +313,14 @@ DeliveryRouteStop.init(
       type: DataTypes.STRING,
       allowNull: true,
       defaultValue: null,
+    },
+    type: {
+      type: DataTypes.ENUM(
+        'regular',
+        'return'
+      ),
+      allowNull: false,
+      defaultValue: 'regular',
     },
     // Add to DeliveryRouteStop.init()
 
