@@ -2400,9 +2400,24 @@ export class ManagerService {
       status: { [Op.in]: ['completed', 'ready_for_delivery'] }
     };
 
-    // If userId is provided, filter by that user
+    // If userId is provided, resolve picker user number and filter by it
     if (userId) {
-      whereCondition.pickerUserNumber = userId;
+      const epickUser = await EpickUser.findByPk(userId, {
+        attributes: ['userNumber'],
+        raw: true,
+      }) as any;
+
+      const pickerUserNumber = epickUser?.userNumber != null ? Number(epickUser.userNumber) : NaN;
+      if (!Number.isFinite(pickerUserNumber)) {
+        return {
+          data: [],
+          totalCount: 0,
+          page,
+          limit,
+        };
+      }
+
+      whereCondition.pickerUserNumber = pickerUserNumber;
     }
 
     const { rows: data, count: totalCount } = await OrderPick.findAndCountAll({
@@ -2413,14 +2428,15 @@ export class ManagerService {
       order: [['completedAt', 'DESC']]
     });
 
-    // Get unique picker user IDs and customer numbers
-    const pickerUserIds = Array.from(new Set(data.map((e: any) => e.pickerUserNumber).filter((id: any) => id !== null && id !== undefined)));
+    // Get unique picker user numbers and customer numbers
+    const pickerUserNumbers = Array.from(new Set(data.map((e: any) => e.pickerUserNumber).filter((id: any) => id !== null && id !== undefined)));
     const customerNumbers = Array.from(new Set(data.map((e: any) => e.customerNumber).filter((num: any) => num !== null && num !== undefined)));
+    const orderNumbers = Array.from(new Set(data.map((e: any) => e.orderNumber).filter((num: any) => num !== null && num !== undefined)));
 
-    // Fetch picker user information
-    const pickers = await WebUsers.findAll({
+    // Fetch picker information from EpickUser by userNumber
+    const pickers = await EpickUser.findAll({
       where: {
-        id: { [Op.in]: pickerUserIds }
+        userNumber: { [Op.in]: pickerUserNumbers.map((n: any) => String(n)) }
       },
       attributes: ['id', 'firstName', 'lastName', 'email', 'userNumber'],
       raw: true
@@ -2428,7 +2444,7 @@ export class ManagerService {
 
     const pickerMap: any = {};
     pickers.forEach((picker: any) => {
-      pickerMap[picker.id] = picker;
+      pickerMap[Number(picker.userNumber)] = picker;
     });
 
     // Fetch customer information
@@ -2452,32 +2468,53 @@ export class ManagerService {
       customerMap[customer.C_Number] = customer;
     });
 
+    // Fetch route/stop from delivery route stops by orderNumber (fallback source)
+    const deliveryStops = await DeliveryRouteStop.findAll({
+      where: {
+        orderNumber: { [Op.in]: orderNumbers }
+      },
+      attributes: ['orderNumber', 'stopSequence'],
+      include: [
+        {
+          model: DeliveryRoute,
+          as: 'route',
+          attributes: ['routeNumber'],
+          required: false
+        }
+      ]
+    });
+
+    const deliveryStopMap: any = {};
+    deliveryStops.forEach((stop: any) => {
+      deliveryStopMap[stop.orderNumber] = stop;
+    });
+
     const finalData = data.map((e: any) => {
       const picker = pickerMap[e.pickerUserNumber] || null;
       const customer = customerMap[e.customerNumber] || null;
+      const routeFromCustomer = customer?.Routes?.[0]?.Route_Number ?? null;
+      const stopFromCustomer = customer?.Routes?.[0]?.Stop_Number ?? null;
+      const deliveryStop = deliveryStopMap[e.orderNumber] || null;
+      const route = routeFromCustomer ?? deliveryStop?.route?.routeNumber ?? null;
+      const stop = stopFromCustomer ?? deliveryStop?.stopSequence ?? null;
 
       return {
         orderNumber: e.orderNumber,
         customerNumber: e.customerNumber,
         pickerUserNumber: e.pickerUserNumber,
-        picker: picker ? {
-          id: picker.id,
-          userNumber: picker.userNumber,
-          name: `${picker.firstName} ${picker.lastName}`,
-          email: picker.email
-        } : null,
+        picker: picker ? [{ id: picker.id, name: `${picker.firstName || ''} ${picker.lastName || ''}`.trim(), email: picker.email }] : [],
         customer: customer ? {
           customerNumber: customer.C_Number,
           customerName: customer.C_Name,
-          route: customer.Routes?.[0]?.Route_Number || null,
-          stop: customer.Routes?.[0]?.Stop_Number || null
+          route,
+          stop
         } : null,
         startedAt: e.startedAt,
         completedAt: e.completedAt
       };
     });
 
-    const orderNumbers = finalData.map((d: any) => d.orderNumber).filter(Boolean);
+    const orderNumbersArray: any = finalData.map((d: any) => d.orderNumber).filter(Boolean);
     let checkerLogMap: Record<number, {
       totalQtyDeltaByChecker: number;
       totalBundlesDeltaByChecker: number;
@@ -2498,10 +2535,10 @@ export class ManagerService {
       }>;
     }> = {};
 
-    if (orderNumbers.length > 0) {
+    if (orderNumbersArray.length > 0) {
       const checkerLogs = await CheckerActionLog.findAll({
         where: {
-          orderNumber: { [Op.in]: orderNumbers }
+          orderNumber: { [Op.in]: orderNumbersArray }
         },
         attributes: [
           "id",

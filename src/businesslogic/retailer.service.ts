@@ -1002,6 +1002,313 @@ export class RetailerService {
     return { totalCount, page, limit, totalPages: Math.ceil(totalCount / limit), finalProductList };
   }
 
+  async getPriceBookInventoryItems(query: PaginationOptions & { search?: string; masterSearch?: string }, user: any) {
+    let {
+      page = 1,
+      limit = 10,
+      salesCategoryId,
+      search,
+      priceClassId,
+      masterSearch,
+      shortBy,
+      state = '',
+      zip = '',
+      jurisdiction = '',
+      salesCategory = [],
+    } = query;
+
+    // ─── Normalize array IDs to numbers up front ──────────────────────────────
+    if (Array.isArray(salesCategoryId) && salesCategoryId.length > 0)
+      salesCategoryId = salesCategoryId.map(Number);
+
+    if (Array.isArray(priceClassId) && priceClassId.length > 0)
+      priceClassId = priceClassId.map(Number);
+
+    page = Number(page);
+    limit = Number(limit);
+
+    // ─── Parallel bootstrap queries (no dependencies between them) ───────────
+    const [userJurisdiction, setting, topLatestItems] = await Promise.all([
+      getJurisdiction(user.id),
+      Setting.findOne({}),           // single fetch — reused for both wareHouseSetting & globalSearch
+      getTopLatestItems(),
+    ]);
+
+    const wareHouseSetting = setting?.dataValues ?? null;
+
+    // ─── Build base whereClause ───────────────────────────────────────────────
+    let whereClause: any = {
+      I_Inactive: false,
+      PriceBook_Include: true,
+      ShortOrderForm: true,
+    };
+
+    // Exclusion filters (run in parallel)
+    const [userExcluded, customerExcluded] = await Promise.all([
+      excludeItemByUser(user.id),
+      (state || zip || jurisdiction)
+        ? getCustomerExcludeItem(state as string, zip as string, jurisdiction as number)
+        : Promise.resolve([]),
+    ]);
+
+    const allExcluded = [...new Set([...userExcluded, ...customerExcluded])];
+    if (allExcluded.length > 0)
+      whereClause.Item_Number = { [Op.notIn]: allExcluded };
+
+    // ─── Search / filter logic ────────────────────────────────────────────────
+    let searchInUPC = false;
+    // Fully qualify Inventory.* in ORDER BY to avoid ambiguous-column issues after joins.
+    let orderClause: Order = [[col('Inventory.Date_Created'), 'DESC'] as const];
+
+    if (masterSearch && typeof masterSearch === 'string') {
+      // Master search: exact item-number list
+      whereClause.Item_Number = { [Op.in]: masterSearch.split(',').map(s => s.trim()) };
+
+      if (Array.isArray(salesCategory) && salesCategory.length > 0)
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+
+    } else {
+      // ── Category / price-class filters ──────────────────────────────────────
+      const hasCatFilter = Array.isArray(salesCategoryId) && salesCategoryId.length > 0;
+      const hasPriceFilter = Array.isArray(priceClassId) && priceClassId.length > 0;
+
+      if (hasCatFilter && hasPriceFilter) {
+        // FIX: was overwriting base flags (I_Inactive / ShortOrderForm) — keep them
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+        whereClause.Price_Class = { [Op.in]: priceClassId };
+      } else if (hasCatFilter) {
+        whereClause.Sales_Category = { [Op.in]: salesCategoryId };
+      } else if (hasPriceFilter) {
+        whereClause.Price_Class = { [Op.in]: priceClassId };
+      } else if (Array.isArray(salesCategory) && salesCategory.length > 0) {
+        // Fallback to salesCategory only when no explicit filter given
+        whereClause.Sales_Category = { [Op.in]: salesCategory };
+      }
+
+      // ── Text / UPC search ───────────────────────────────────────────────────
+      if (search) {
+        if (/^\d{8,}$/.test(search)) {
+          searchInUPC = true;
+          // salesCategory already applied above; nothing extra needed here
+        } else {
+          const term = search.toLowerCase().trim();
+          const anywhere = `%${term}%`;
+          const starts = `${term}%`;
+          const esc = (s: string) => s.replace(/'/g, "''");
+          const startsEsc = esc(starts);
+          const anyEsc = esc(anywhere);
+
+          if (wareHouseSetting?.splitSearchOption === true) {
+            // ── Split-token search ─────────────────────────────────────────────
+            const tokens = term.split(/\s+/).filter(Boolean);
+
+            // Every token must match the start of at least one word in any field
+            whereClause[Op.and] = tokens.map(tok => ({
+              [Op.or]: ['Description', 'AltDesc', 'ALT_Description2', 'Item_Number'].flatMap(field => [
+                Sequelize.where(Sequelize.fn('LOWER', Sequelize.col(field)), { [Op.like]: `${tok}%` }),
+                Sequelize.where(Sequelize.fn('LOWER', Sequelize.col(field)), { [Op.like]: `% ${tok}%` }),
+              ]),
+            }));
+
+            // Rank: sum of per-token scores (starts=0, word-start=1, contains=2, miss=3)
+            const fields = ['Description', 'AltDesc', 'ALT_Description2', 'Item_Number'];
+            const rankSql = tokens
+              .map(tok => {
+                const s = `'${esc(tok)}%'`;
+                const ws = `'% ${esc(tok)}%'`;
+                const a = `'%${esc(tok)}%'`;
+                // Qualify with the Inventory alias to avoid ambiguous column errors after joins.
+                const any = (tpl: string) => fields
+                  .map(f => `LOWER([Inventory].[${f}]) LIKE ${tpl}`)
+                  .join(' OR ');
+                return `(CASE WHEN (${any(s)}) THEN 0 WHEN (${any(ws)}) THEN 1 WHEN (${any(a)}) THEN 2 ELSE 3 END)`;
+              })
+              .join(' + ');
+
+            orderClause = [
+              [literal(rankSql), 'ASC'],
+              [col('Inventory.Description'), 'ASC'],
+            ] as Order;
+
+          } else {
+            // ── Standard full-term search ──────────────────────────────────────
+            whereClause[Op.or] = [
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('Item_Number')), { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('Description')), { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('AltDesc')), { [Op.like]: anywhere }),
+              Sequelize.where(Sequelize.fn('LOWER', Sequelize.col('ALT_Description2')), { [Op.like]: anywhere }),
+            ];
+
+            // Description-first ranking
+            orderClause = [
+              [
+                Sequelize.literal(`
+                  CASE
+                    WHEN LOWER([Inventory].[Description]) LIKE '${startsEsc}' THEN 0
+                    WHEN LOWER([Inventory].[Description]) LIKE '${anyEsc}'    THEN 1
+                    ELSE 2
+                  END
+                `),
+                'ASC',
+              ],
+              [col('Inventory.Description'), 'ASC'],
+            ];
+          }
+        }
+      }
+    }
+
+    // ─── Sort override (only when no text search) ────────────────────────────
+    if (!search) {
+      if (Number(shortBy) === 1) orderClause = [[col('Inventory.Description'), 'ASC']] as Order;
+      else if (Number(shortBy) === 2) orderClause = [[col('Inventory.Description'), 'DESC']] as Order;
+    }
+
+    // ─── UPC join ─────────────────────────────────────────────────────────────
+    const includeUPC = {
+      model: InventoryUPC,
+      as: 'UPCList',
+      attributes: ['UPC_Number'],
+      where: {
+        Status: 0,
+        ...(searchInUPC ? { UPC_Number: { [Op.like]: `%${search}%` } } : {}),
+      },
+      required: searchInUPC,
+    };
+
+    const sharedWhere = { ...whereClause, I_Inactive: false, ShortOrderForm: true };
+
+    // ─── Count ────────────────────────────────────────────────────────────────
+    let totalCount: number;
+
+    if (searchInUPC) {
+      const counted = await Inventory.findAll({
+        attributes: ['Item_Number'],
+        where: sharedWhere,
+        include: [{ ...includeUPC, attributes: [] }],
+        group: ['Inventory.Item_Number'],
+        raw: true,
+        logging: false,
+      });
+      totalCount = counted.length;
+    } else {
+      totalCount = await Inventory.count({ where: sharedWhere, logging: false });
+    }
+
+    // ─── Main product query ───────────────────────────────────────────────────
+    const productList = await Inventory.findAll({
+      attributes: [
+        'Pack', 'Description', 'Item_Number', 'CaseCount', 'UOM',
+        'Retail1', 'Retail2', 'Retail3', 'CasesPerPallet',
+        'Price1', 'Price2', 'BaseCost', 'Invoice_Cost', 'AvgCost', 'Unit_Price',
+        'NetCost', 'eCommerce', 'I_Inactive', 'Date_Created',
+        'OTP_Number', 'Price_Subclass', 'UnitOunces', 'EBT', 'Cig_Pack', 'Cig_Sticks', 'ALT_Description2', 'AltDesc'
+      ],
+      where: sharedWhere,
+      include: [
+        { model: SalesCategory, as: 'SalesCategory', attributes: ['Category_Desc', 'Sales_Category'], required: false },
+        { model: PriceClass, as: 'PriceClass', attributes: ['Class_Desc'], required: false },
+        includeUPC,
+      ],
+      order: orderClause,
+      limit,
+      offset: (page - 1) * limit,
+      logging: false,
+    });
+
+    const itemNumbers = productList.map(e => e.Item_Number);
+
+    // ─── Batch all per-page async lookups in parallel ─────────────────────────
+    const [productImages, discountMap, inventoryOnHandMap, productLimitsMap] =
+      await Promise.all([
+        ProductImage.findAll({
+          where: { product_number: { [Op.in]: itemNumbers.map(String) }, isAllow: true },
+        }),
+        getDiscountsForItemNumbers(itemNumbers, user.id),
+        getBatchInventoryOnHand(itemNumbers),   // ← replace individual getInventoryOnHand calls
+        getBatchProductLimits(itemNumbers),     // ← replace individual getProductLimit calls
+        // ← replace individual redis calls
+      ]);
+
+    const imageMap = new Map(productImages.map((img: any) => [img.product_number, img]));
+
+    // ─── Per-item mapping (only non-batchable calls remain inside) ───────────
+    const finalProductList = await Promise.all(
+      productList.map(async (e: any) => {
+        const itemStr = e.Item_Number.toString();
+        const productImage: any = imageMap.get(itemStr) ?? null;
+        const inventoryOnHand = inventoryOnHandMap[e.Item_Number] ?? 0;
+        const productLimit = productLimitsMap[e.Item_Number] ?? null;
+        const discount = false;
+
+        const price = discountMap[e.Item_Number] ?? await getFirstValidPrice(e);
+
+        // Tax rate calls are still per-item (depend on price); run them in parallel
+        const taxRateRaw = await getTaxRateV1(e.OTP_Number, userJurisdiction as number, e.Item_Number, price);
+        const taxRate = Math.ceil(taxRateRaw * 100) / 100;
+        const prepaidTaxRate = (userJurisdiction != null && e.SalesCategory)
+          ? await getPrepaidTaxRate(userJurisdiction as number, e.SalesCategory.Sales_Category, e, price + taxRate)
+          : 0;
+        const priceWithTax = price + taxRate;
+
+        const hasQtyDiscount = await checkQtyDiscount(e.Item_Number, user.id, priceWithTax);
+
+        const allowToOrder =
+          wareHouseSetting?.retailer?.allowOrderInventoryUnAvaible || inventoryOnHand > 0;
+
+        const isNewItem = topLatestItems.some((item: any) => item.Item_Number === e.Item_Number);
+
+        return {
+          Pack: e.Pack,
+          Description: e.Description,
+          Item_Number: e.Item_Number,
+          CaseCount: e.CaseCount,
+          UOM: e.UOM,
+          isDiscounted: false,
+          Price1: e.Price1,
+          Tax_Rate: taxRate,
+          OTP_Number: e.OTP_Number,
+          Unit_Price: e.Unit_Price,
+          productDiscount: discount,
+          price,
+          isNewItem,
+          hasPrepaidTaxRate: prepaidTaxRate > 0,
+          prepaidTaxRate,
+          priceWithTax,
+          BaseCost: e.BaseCost,
+          Invoice_Cost: e.Invoice_Cost,
+          AvgCost: e.AvgCost,
+          NetCost: e.NetCost,
+          hasProductLimit: productLimit !== null && productLimit > 0 ? true : false,
+          productLimit,
+          Retail1: e.Retail1,
+          Retail2: e.Retail2,
+          Retail3: e.Retail3,
+          CasesPerPallet: e.CasesPerPallet,
+          EBT: e.EBT,
+          UPCList: e.UPCList,
+          Inventory_OnHand: inventoryOnHand,
+          UnitOunces: e.UnitOunces,
+          allowToOrder,
+          salesCategory: e.SalesCategory ?? null,
+          hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
+          qtyDiscount: hasQtyDiscount,
+          showTheInventoryStock: wareHouseSetting?.retailer?.showStock ?? false,
+          showLowStock: wareHouseSetting?.retailer?.showStock
+            ? false
+            : inventoryOnHand < wareHouseSetting?.itemGlobal?.InventoryThreshold,
+          showWithOutPrice: wareHouseSetting?.retailer?.showWithOutPrice ?? false,
+          PriceClass: e.PriceClass?.Class_Desc ?? null,
+          showDistributorImage: productImage?.isAllow ?? false,
+          distributorImage: productImage?.img_url ?? null,
+          masterImage: `${process.env.AZUREIMAGESERVER}${e.UPCList?.[0]?.UPC_Number}.jpg`,
+        };
+      }),
+    );
+
+    return { totalCount, page, limit, totalPages: Math.ceil(totalCount / limit), finalProductList };
+  }
+
   async getTradeShowItems(query: PaginationOptions & { search?: string, masterSearch?: string }, user: any) {
     let { page = 1, limit = 10, salesCategoryId, search, priceClassId, masterSearch, shortBy, state = '', zip = '', jurisdiction = '', salesCategory = [], tradeShowId } = query;
 

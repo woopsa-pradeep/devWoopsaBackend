@@ -27,6 +27,11 @@ export class RetailerController {
     sendResponse(res, 200, true, data, General.SUCCESS);
   }
 
+  async getPriceBookInventoryItems(req: AuthRequest, res: Response) {
+    const data = await this.retailerService.getPriceBookInventoryItems(req.body, req.user);
+    sendResponse(res, 200, true, data, General.SUCCESS);
+  }
+
   async getTradeShowItems(req: AuthRequest, res: Response) {
     const data = await this.retailerService.getTradeShowItems(req.body, req.user);
     sendResponse(res, 200, true, data, General.SUCCESS);

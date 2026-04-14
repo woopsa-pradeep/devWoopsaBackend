@@ -81,6 +81,11 @@ export class SalesController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async getPriceBookInventoryItems(req: AuthRequest, res: Response) {
+        const data = await this.salesService.getPriceBookInventoryItems(req.body as PaginationOptions & { search?: string, masterSearch?: string }, Number(req.params.customerId));
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
 
     async getTradeShowItems(req: AuthRequest, res: Response) {
         const data = await this.salesService.getTradeShowItems(req.body as PaginationOptions & { search?: string, masterSearch?: string }, Number(req.params.customerId));
