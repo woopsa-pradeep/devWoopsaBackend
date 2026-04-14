@@ -33,6 +33,7 @@ interface DeliveryRouteStopAttributes {
   isLastStop: boolean;
   deliveredAt?: Date | null;
   cancelledReason?: string | null;
+  polyline?: string | null;
   isTransferred?: boolean;
   transferredToC_Number?: number | null;
   transferredToLatitude?: number | null;
@@ -99,6 +100,7 @@ export class DeliveryRouteStop
   public invoiceUrl!: string | null;
   public invoiceAmount!: number;
   public type!: string;
+  public polyline!: string;
 
   public originalC_Number!: number | null;
   public originalLatitude!: number | null;
@@ -173,6 +175,11 @@ DeliveryRouteStop.init(
     routeId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+    polyline: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null,
     },
 
     stopSequence: {
