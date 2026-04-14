@@ -35,6 +35,7 @@ interface DeliveryRouteStopAttributes {
   cancelledReason?: string | null;
   polyline?: string | null;
   isTransferred?: boolean;
+  estimatedTime?: number | null;
   transferredToC_Number?: number | null;
   transferredToLatitude?: number | null;
   transferredToLongitude?: number | null;
@@ -79,6 +80,7 @@ export class DeliveryRouteStop
   public status!: string;
   public routeStarted!: boolean;
   public startLatitude!: number;
+  public estimatedTime!: number | null;
   public startLongitude!: number;
   public endLatitude!: number;
   public endLongitude!: number;
@@ -175,6 +177,11 @@ DeliveryRouteStop.init(
     routeId: {
       type: DataTypes.INTEGER,
       allowNull: false,
+    },
+    estimatedTime: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null,
     },
     polyline: {
       type: DataTypes.TEXT,

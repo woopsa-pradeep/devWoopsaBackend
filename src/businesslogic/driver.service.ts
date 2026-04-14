@@ -1055,6 +1055,18 @@ export class DriverService {
     return result;
   }
 
+  async updateStop(id: number, body: any) {
+    const stop = await DeliveryRouteStop.findOne({
+      where: { id: id, isActive: true },
+    });
+    if (!stop) {
+      throw new AppError(Manager.RECORD_NOT_FOUND, 404);
+    }
+    await DeliveryRouteStop.update(body, { where: { id: id } });
+    return stop;
+  }
+
+
   async orderStopCompleted(stopId: number) {
     const stop = await DeliveryRouteStop.findOne({
       where: { id: stopId, isActive: true },

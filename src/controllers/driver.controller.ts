@@ -75,6 +75,11 @@ export class DriverController {
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
 
+    async updateStop(req: AuthRequest, res: Response) {
+        const data = await this.driverService.updateStop(Number(req.params.stopId), req.body);
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
+
     async orderStopCompleted(req: AuthRequest, res: Response) {
         const data = await this.driverService.orderStopCompleted(Number(req.params.stopId));
         sendResponse(res, 200, true, data, General.SUCCESS);
