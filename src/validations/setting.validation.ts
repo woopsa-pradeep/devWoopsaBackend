@@ -18,6 +18,7 @@ export const itemGlobalSchema = Joi.object({
     showWithPerpaidTax: Joi.boolean().optional().allow(null,false),
     globalSearchOption: Joi.boolean().optional().allow(null,false),
     splitSearchOption: Joi.boolean().optional().allow(null,false),
+    priceBook: Joi.boolean().optional().allow(null,false),
 });
 
 export const retailerSchema = Joi.object({

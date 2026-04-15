@@ -29,7 +29,7 @@ router.post('/placeTradeShowOrder/:customerId', verifyRole(ROLES.CHECKER, ROLES.
 
 router.post('/returnPlaceOrder/:customerId', verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession, catchAsync(listController.returnPlaceOrder.bind(listController)));
 router.post('/getInventoryItems/:customerId', verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession, catchAsync(listController.getInventoryItems.bind(listController)));
-router.post('/getPriceBookInventoryItems/:customerId', verifySalesSession, catchAsync(listController.getPriceBookInventoryItems.bind(listController)));
+router.post('/getPriceBookInventoryItems/:customerId', verifyRole(ROLES.SALES), verifySalesSession, catchAsync(listController.getPriceBookInventoryItems.bind(listController)));
 router.post('/getTradeShowItems/:customerId', verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession, catchAsync(listController.getTradeShowItems.bind(listController)));
 router.get('/getInventoryShowPrepaidTax', verifyRole(ROLES.SALES), catchAsync(listController.getInventoryShowPrepaidTax.bind(listController)));
 router.post('/getInventoryItemsBySalesMan/:customerId', verifyRole(ROLES.CHECKER, ROLES.SALES), verifySalesSession, catchAsync(listController.getInventoryItemsBySalesMan.bind(listController)));
