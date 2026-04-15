@@ -420,7 +420,8 @@ export class DriverService {
 
         for (const box of epicBoxes) {
           if (box.barcode) {
-            boxBarCode.push(box.value ?? '');
+            const normalizedBoxValue = String(box.value ?? '').replace(/\.0+$/, '');
+            boxBarCode.push(normalizedBoxValue);
           }
         }
 

@@ -350,7 +350,8 @@ export class AuthService {
 
     if (email_phone === 'cdt.parth1@gmail.com') {
 
-      const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
+      const logo: any = await Setting.findOne({ attributes: ["warehouseImage", "priceBook"] });
+      const priceBook = logo?.priceBook || false;
 
       const wareHouseDetail = await Distributor.findAll({
         attributes: ["D_Name", "D_Addr1", "D_City", "D_State", "D_Phone"],
@@ -408,6 +409,7 @@ export class AuthService {
         role: "retailer",
         token,
         logo: logo?.warehouseImage || null,
+        priceBook: priceBook,
         salesCategory,
         showTradeShow
       };
@@ -425,7 +427,8 @@ export class AuthService {
         throw new AppError(AuthMessage.OTP_EXPIRED, 400);
 
       await Otp.destroy({ where: { email: email_phone } });
-      const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
+      const logo: any = await Setting.findOne({ attributes: ["warehouseImage", "priceBook"] });
+      const priceBook = logo?.priceBook || false;
 
       if (record.role === "retailer") {
         const wareHouseDetail = await Distributor.findAll({
@@ -489,6 +492,7 @@ export class AuthService {
             role: "retailer",
             token,
             logo: logo?.warehouseImage || null,
+            priceBook: priceBook,
             salesCategory,
             showTradeShow
           };
@@ -721,7 +725,8 @@ export class AuthService {
     })
 
     if (isUserExist) {
-      const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
+      const logo: any = await Setting.findOne({ attributes: ["warehouseImage", "priceBook"] });
+      const priceBook = logo?.priceBook || false;
       if (!isUserExist) {
         throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
       }
@@ -777,6 +782,7 @@ export class AuthService {
         salesCategory: salesCategory,
         rolesPermission: filtered,
         logo: logo?.warehouseImage || null,
+        priceBook: priceBook,
         role: 'sales',
         profile: {
           id: isUserExist.id,
@@ -806,7 +812,8 @@ export class AuthService {
       });
 
       // 2️⃣ Fetch logo from settings
-      const logo: any = await Setting.findOne({ attributes: ["warehouseImage"] });
+      const logo: any = await Setting.findOne({ attributes: ["warehouseImage", "priceBook"] });
+      const priceBook = logo?.priceBook || false;
 
       if (!isUserExist) {
         throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
@@ -890,6 +897,7 @@ export class AuthService {
         salesCategory: salesCategory,
         rolesPermission: filtered,
         logo: logo?.warehouseImage || null,
+        priceBook: priceBook,
         epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
         role: "sales",
         profile: {
