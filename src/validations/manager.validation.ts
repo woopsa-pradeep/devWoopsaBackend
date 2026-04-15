@@ -466,6 +466,9 @@ export const homeSettingsSchema = Joi.object({
   }),
   showManually: Joi.boolean().optional(),
   retailerPromotedItems: Joi.array().items(Joi.number()).optional(),
+  id: Joi.number().optional(),
+  createdAt: Joi.any().optional(),
+  updatedAt: Joi.any().optional(),
 }).custom((value, helpers) => {
   const trueCount = [
     value.showMostSale === true,
@@ -489,6 +492,7 @@ export const manualItemsSettingSchema = Joi.object({
   startDate: Joi.date().allow(null).optional(),
   endDate: Joi.date().allow(null).optional(),
   isActive: Joi.boolean().required(),
+  deleteItems: Joi.boolean().optional().default(false),
 });
 
 export const popularItemsModeSettingSchema = Joi.object({

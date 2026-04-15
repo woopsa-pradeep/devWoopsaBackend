@@ -1093,6 +1093,15 @@ export class DriverService {
       }
 
     }
+    const updateLastStop = await DeliveryRoute.findOne({
+      where: { id: stop.routeId, isActive: true },
+    })
+
+    if (updateLastStop) {
+      await DeliveryRoute.update({
+        completedStops: updateLastStop.completedStops + 1,
+      }, { where: { id: stop.routeId } });
+    }
 
     const nextStop = await DeliveryRouteStop.findOne({
       where: {

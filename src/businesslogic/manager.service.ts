@@ -4150,12 +4150,24 @@ export class ManagerService {
     return homeSetting;
   }
 
-  async updateHomeSetting(body: IHomeSettings) {
-    return await HomeSettings.update(body, { where: {} });
+  async updateHomeSetting(body: IHomeSettings & { id?: number }) {
+    const { id, createdAt, updatedAt, ...updateData } = body as any;
+
+    let row = id
+      ? await HomeSettings.findByPk(id)
+      : await HomeSettings.findOne({ order: [['id', 'ASC']] });
+
+    if (!row) {
+      return await HomeSettings.create(updateData);
+    }
+    await row.update(updateData);
+    return row;
   }
 
   async getNewItemsManualSetting() {
-    let row = await NewItemsSetting.findOne({ order: [['id', 'ASC']] });
+    let row = await NewItemsSetting.findOne({
+      order: [['id', 'ASC']]
+    });
     if (!row) {
       row = await NewItemsSetting.create({
         showManually: false,
@@ -4171,11 +4183,13 @@ export class ManagerService {
   async updateNewItemsManualSetting(body: IManualItemsSetting) {
     const startDate = parseManualSettingDate(body.startDate);
     const endDate = parseManualSettingDate(body.endDate);
+    const shouldDeleteItems = !body.showManually && body.deleteItems === true;
+
     let row = await NewItemsSetting.findOne({ order: [['id', 'ASC']] });
     if (!row) {
       return await NewItemsSetting.create({
         showManually: body.showManually,
-        items: body.items ?? [],
+        items: shouldDeleteItems ? [] : (body.items ?? []),
         startDate,
         endDate,
         isActive: body.isActive,
@@ -4183,7 +4197,7 @@ export class ManagerService {
     }
     await row.update({
       showManually: body.showManually,
-      items: body.items ?? [],
+      items: shouldDeleteItems ? [] : (body.items ?? []),
       startDate,
       endDate,
       isActive: body.isActive,

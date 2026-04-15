@@ -19,9 +19,10 @@ import { postgresSequelize } from '../../db';
     globalSearchOption: boolean;
     warehouseImage: string;
     orderEmailNotification: string | null;
+    priceBook: boolean;
   }
 
-  type SettingCreationAttributes =  Optional<SettingAttributes, 'id' | 'showWithPerpaidTax' | 'warehouseImage' > 
+  type SettingCreationAttributes =  Optional<SettingAttributes, 'id' | 'showWithPerpaidTax' | 'warehouseImage' | 'priceBook' >
 
 
   class Setting
@@ -44,7 +45,8 @@ import { postgresSequelize } from '../../db';
     public deliveryStartLong!: number | null;
     public deliveryEndLat!: number | null;
     public deliveryEndLong!: number | null;
-  
+    public priceBook!: boolean;
+
   }
 
 Setting.init(
@@ -174,6 +176,10 @@ Setting.init(
       type: DataTypes.DECIMAL(11, 8),
       allowNull: true,
       defaultValue: null,
+    },
+    priceBook: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
   },
 

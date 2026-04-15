@@ -810,7 +810,7 @@ export class SalesService {
       SELECT od."Order_Number"
       FROM "Order_Detail" od
       GROUP BY od."Order_Number"
-      HAVING SUM(od."Quantity_Ordered") > 0
+      HAVING SUM(od."Quantity_Ordered") <> 0
     )`)
     };
 
@@ -5317,7 +5317,7 @@ export class SalesService {
       whereCondition.AR_Type = 'C';
     } else if (tab === 'charges') {
       whereCondition.AR_Type = { [Op.in]: ['I', 'A', 'R'] };
-      whereCondition.AR_Amount = { [Op.gt]: 0 };
+      whereCondition.AR_Amount = { [Op.gte]: 0 };
     } else if (tab === 'refunds') {
       whereCondition.AR_Type = 'I';
       whereCondition.AR_Amount = { [Op.lt]: 0 };
@@ -5395,7 +5395,7 @@ export class SalesService {
       limit,
       offset,
       distinct: true,
-      order: [['AR_CheckDate', 'DESC']],
+      order: [['AR_CheckDate', 'DESC'], ['Invoice_Number', 'DESC']],
     });
 
     const accountReceivablesList = rows.map((item: any) => {
@@ -6863,8 +6863,6 @@ export class SalesService {
       // if (item.Qty <= 0) {
       //   throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
       // }
-
-      console.log(item.Price, 'item.Price-->')
 
       const orderDetail = {
         Order_Number: orderHeaderCreated.Order_Number,

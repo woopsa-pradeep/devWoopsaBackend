@@ -18,6 +18,7 @@ import Setting from "../models/postgres/setting.model";
 import { AppError } from "../utils/AppError";
 import { CustomerRequest } from "../models/postgres/retailerRequest.model";
 import WebQuickLink from "../models/postgres/WebQuickLink";
+import NewItemsSetting from "../models/postgres/newItemsSetting.model";
 import { WebCategory } from "../models/postgres/webCategory.model";
 import { WebPriceClass } from "../models/postgres/webPriceClass";
 import { WebLocation } from "../models/postgres/webLocation.model";
@@ -142,16 +143,26 @@ export class HomeService {
     }
 
     async getNewItem() {
-        let page = 1;
-        let limit = 30;
-        page = Number(page);
-        limit = Number(limit);
+        const allSettings = await NewItemsSetting.findAll({ where: { showManually: true } });
+        const allItemIds: number[] = [];
+        for (const setting of allSettings) {
+            if (Array.isArray((setting as any).items)) {
+                for (const item of (setting as any).items) {
+                    const num = Number(item);
+                    if (Number.isFinite(num)) allItemIds.push(num);
+                }
+            }
+        }
+        const uniqueItemIds = [...new Set(allItemIds)];
+
+        if (uniqueItemIds.length === 0) {
+            return { totalCount: 0, finalProductList: [] };
+        }
 
         let whereClause: any = {
             I_Inactive: false,
+            Item_Number: { [Op.in]: uniqueItemIds },
         };
-
-
 
         const { count: totalCount, rows: productList } = await Inventory.findAndCountAll({
             attributes: [
@@ -197,8 +208,6 @@ export class HomeService {
                 }
             ],
             order: [['Item_Number', 'DESC']],
-            limit,
-            offset: (page - 1) * limit,
         });
 
         const finalProductList = await Promise.all(productList.map(async (e: any) => {
@@ -231,8 +240,7 @@ export class HomeService {
         }));
 
         return {
-
-            totalCount: limit,
+            totalCount,
             finalProductList,
         };
     }

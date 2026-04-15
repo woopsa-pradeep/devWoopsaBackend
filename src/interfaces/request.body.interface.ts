@@ -723,6 +723,7 @@ export interface IManualItemsSetting {
   startDate?: string | Date | null;
   endDate?: string | Date | null;
   isActive: boolean;
+  deleteItems?: boolean;
 }
 
 export interface IPopularItemsModeSetting {

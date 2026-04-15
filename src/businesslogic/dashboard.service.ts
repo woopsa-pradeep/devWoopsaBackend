@@ -39,7 +39,7 @@ export class DashboardService {
         if (userId) {
             salesCategory = await getAllowedSalesCategories(userId);
         }
-        const homeSetting = await HomeSettings.findOne();
+        const homeSetting = await HomeSettings.findOne({ where: { showManually: true } });
         const popularModeSetting = await PopularItemsModeSetting.findOne({ order: [['id', 'ASC']] });
         const currentYear = new Date().getFullYear();
         const startOfYear = new Date(currentYear, 0, 1); // January 1st of current year
@@ -90,13 +90,11 @@ export class DashboardService {
             whereClause.Sales_Category = { [Op.in]: salesCategory };
         }
 
-        const roleNormPopular = String(query?.role || '').trim().toLowerCase();
-        const isRetailerRolePopular = roleNormPopular === 'retailer' || roleNormPopular === 'reatiler';
-        if (homeSetting?.showManually === true && isRetailerRolePopular) {
-            const retailerIds = this.normalizeManualItemIds(homeSetting?.retailerPromotedItems, 30);
-            const uniqueExcludedRetail = allExcludedItems.length > 0 ? [...new Set(allExcludedItems)] : [];
-            const filteredRetailerIds = retailerIds.filter((id) => !uniqueExcludedRetail.includes(id));
-            return this.popularItemsListFromManualItemIds(filteredRetailerIds, query, userId, salesCategory);
+        if (homeSetting?.showManually === true) {
+            const manualItemIds = this.normalizeManualItemIds(homeSetting?.retailerPromotedItems, 30);
+            const uniqueExcludedManual = allExcludedItems.length > 0 ? [...new Set(allExcludedItems)] : [];
+            const filteredManualItemIds = manualItemIds.filter((id) => !uniqueExcludedManual.includes(id));
+            return this.popularItemsListFromManualItemIds(filteredManualItemIds, query, userId, salesCategory);
         }
 
         if (selectedMode === 'manual') {
@@ -967,7 +965,7 @@ export class DashboardService {
 
                 hasQtyDiscount: discount ? false : hasQtyDiscount?.allowToDiscount || false,
                 qtyDiscount: hasQtyDiscount,
-                
+
 
 
                 priceWithTax: price + taxRate,
@@ -1006,20 +1004,27 @@ export class DashboardService {
         page = Number(page);
         limit = Number(limit);
 
-        const newSetting = await NewItemsSetting.findOne({ order: [['id', 'ASC']] });
-        const manualIdsRaw = this.normalizeManualItemIds(newSetting?.items, 30);
-        const manualEligible =
-            !!newSetting?.showManually &&
-            !!newSetting &&
-            this.isManualScheduleActive(newSetting);
+        const allSettings = await NewItemsSetting.findAll({ where: { showManually: true } });
+        const allItemIds: number[] = [];
+        for (const setting of allSettings) {
+            if (Array.isArray(setting.items)) {
+                for (const item of setting.items) {
+                    const num = Number(item);
+                    if (Number.isFinite(num)) allItemIds.push(num);
+                }
+            }
+        }
+        const uniqueItemIds = [...new Set(allItemIds)];
+        console.log("usniqwwjhfguq", uniqueItemIds)
 
-        if (manualEligible && manualIdsRaw.length === 0) {
-            return { totalCount: 0, finalProductList: [], sourceType: 'manual' as const };
+        if (uniqueItemIds.length === 0) {
+            return { totalCount: 0, finalProductList: [] };
         }
 
         let whereClause: any = {
             I_Inactive: false,
             ShortOrderForm: true,
+            Item_Number: { [Op.in]: uniqueItemIds },
         };
 
         if (salesCategory.length > 0) {
@@ -1047,94 +1052,12 @@ export class DashboardService {
 
         const uniqueExcluded = allExcludedItems.length > 0 ? [...new Set(allExcludedItems)] : [];
 
-        const useManualList = manualEligible && manualIdsRaw.length > 0;
-        if (useManualList) {
-            let manualIdsFiltered = manualIdsRaw.filter((id) => !uniqueExcluded.includes(id));
-            if (manualIdsFiltered.length === 0) {
-                return { totalCount: 0, finalProductList: [], sourceType: 'manual' as const };
-            }
-
-            const whereManual: any = {
-                ...whereClause,
-                Item_Number: { [Op.in]: manualIdsFiltered },
-            };
-
-            if (search) {
-                const searchValue = `%${search}%`;
-                whereManual[Op.or] = [
-                    { Item_Number: { [Op.like]: searchValue } },
-                    { Description: { [Op.like]: searchValue } },
-                    { ALT_Description2: { [Op.like]: searchValue } },
-                ];
-            }
-
-            const rows = await Inventory.findAll({
-                attributes: [
-                    'Pack',
-                    'Description',
-                    'Item_Number',
-                    'CaseCount',
-                    'UOM',
-                    'Price1',
-                    'Price2',
-                    'BaseCost',
-                    'Invoice_Cost',
-                    'AvgCost',
-                    'NetCost',
-                    'eCommerce',
-                    'I_Inactive',
-                    'Date_Created',
-                    'OTP_Number',
-                    'UnitOunces',
-                    'Cig_Pack',
-                    'Cig_Sticks'
-                ],
-                where: whereManual,
-                include: [
-                    {
-                        model: SalesCategory,
-                        as: 'SalesCategory',
-                        attributes: ['Category_Desc', 'Sales_Category'],
-                        required: false
-                    },
-                    {
-                        model: PriceClass,
-                        as: 'PriceClass',
-                        attributes: ['Class_Desc'],
-                        required: false
-                    },
-                    {
-                        model: InventoryUPC,
-                        as: 'UPCList',
-                        attributes: ['UPC_Number'],
-                        where: {
-                            Status: 0,
-                            ...(search && {
-                                UPC_Number: { [Op.like]: `%${search}%` },
-                            }),
-                        },
-                        required: false
-                    }
-                ],
-            });
-
-            const byNum = new Map(rows.map((r: any) => [r.Item_Number, r]));
-            const ordered = manualIdsFiltered.map((id) => byNum.get(id)).filter(Boolean);
-            const offset = (page - 1) * limit;
-            const pageRows = ordered.slice(offset, offset + limit);
-            const finalProductList = await Promise.all(
-                pageRows.map((e: any) => this.mapInventoryRowToNewItemResponse(e, query, customerId))
-            );
-
-            return {
-                totalCount: ordered.length,
-                finalProductList,
-                sourceType: 'manual' as const,
-            };
-        }
-
         if (uniqueExcluded.length > 0) {
-            whereClause.Item_Number = { [Op.notIn]: uniqueExcluded };
+            const filteredIds = uniqueItemIds.filter((id) => !uniqueExcluded.includes(id));
+            if (filteredIds.length === 0) {
+                return { totalCount: 0, finalProductList: [] };
+            }
+            whereClause.Item_Number = { [Op.in]: filteredIds };
         }
 
         if (search) {
@@ -1195,7 +1118,7 @@ export class DashboardService {
                 }
             ],
             order: [
-                 ['Item_Number', 'DESC'],
+                ['Item_Number', 'DESC'],
             ],
             limit,
             offset: (page - 1) * limit,
@@ -1208,7 +1131,6 @@ export class DashboardService {
         return {
             totalCount,
             finalProductList,
-            sourceType: 'algorithm' as const,
         };
     }
 
@@ -1230,7 +1152,7 @@ export class DashboardService {
         filteredManualIds: number[],
         query: any,
         userId: number,
-        salesCategory: any[]
+        _salesCategory: any[]
     ): Promise<{ totalCount: number; finalProductList: any[] }> {
         if (filteredManualIds.length === 0) {
             return { totalCount: 0, finalProductList: [] };
@@ -1238,9 +1160,7 @@ export class DashboardService {
 
         const manualWhereClause: any = {
             Item_Number: { [Op.in]: filteredManualIds },
-            ShortOrderForm: true,
             I_Inactive: false,
-            ...(salesCategory.length > 0 && { Sales_Category: { [Op.in]: salesCategory } }),
         };
 
         const manualProducts = await Inventory.findAll({
@@ -1406,7 +1326,7 @@ export class DashboardService {
             allowToOrderSalesRep: allowToOrderSalesRep || null,
             showWithOutPriceToSalesRep: wareHouseSetting?.salesRep?.showWithOutPrice || false,
 
-            hasQtyDiscount:discount ? false : hasQtyDiscount.allowToDiscount,
+            hasQtyDiscount: discount ? false : hasQtyDiscount.allowToDiscount,
             qtyDiscount: hasQtyDiscount,
 
             Inventory_OnHand: inventoryOnHand || 0,
@@ -2040,7 +1960,7 @@ export class DashboardService {
         wareHouseSetting = wareHouseSetting?.dataValues || null;
         let customerGroup: any = null;
 
-        customerId =customerNumber || 0;
+        customerId = customerNumber || 0;
         console.log(customerNumber, 'customerNumber')
         // Get current date
         const today = new Date();
