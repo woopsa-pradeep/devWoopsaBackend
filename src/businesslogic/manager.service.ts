@@ -18943,7 +18943,9 @@ export class ManagerService {
   /** Single driver: Redis cache first, else `drivers` table. */
   async getDriverLatLong(driverId: number) {
     const locationKey = getDriverLocationKey(driverId);
-    const cachedValue = await redisConnection.get(locationKey);
+    // const cachedValue = await redisConnection.get(locationKey);
+
+    const cachedValue = false;
 
     if (cachedValue) {
       try {

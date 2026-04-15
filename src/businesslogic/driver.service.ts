@@ -109,6 +109,11 @@ export class DriverService {
       throw new AppError(AuthMessage.USER_NOT_FOUND, 400);
     }
 
+    await driver.update({
+      currentLatitude: currentLatitude,
+      currentLongitude: currentLongitude,
+    });
+
     const now = Date.now();
     const updatedAt = new Date(now).toISOString();
     const locationKey = getDriverLocationKey(driverId);
