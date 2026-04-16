@@ -9852,7 +9852,7 @@ export class ManagerService {
   }
 
   async getAllOrderForDriver(query: PaginationOptions) {
-    let { page = 1, limit = 10, routeNumber, orderType } = query;
+    let { page = 1, limit = 10, routeNumber, orderType = 'regular' } = query;
 
     page = Number(page);
     limit = Number(limit);
@@ -9868,16 +9868,41 @@ export class ManagerService {
       Delivery_ID: {
         [Op.not]: 99,
       },
-      Invoice_Number: {
-        [Op.gt]: 0,
-      },
-      Invoice_Total: {
-        [Op.gt]: 0,
-      },
+
       route_created: false,
       Order_Deleted: false,
+      deliverd: false,
       Suspend: false,
     };
+
+    if (orderType === 'all') {
+      whereCondition[Op.or] = [
+        {
+          Invoice_Number: { [Op.gt]: 0 },
+          Invoice_Total: { [Op.gt]: 0 },
+        },
+        {
+          Order_Type: 6,
+          Invoice_Number: { [Op.eq]: 0 },
+          Invoice_Total: { [Op.eq]: 0 },
+        },
+      ];
+    } else if (orderType === 'regular') {
+      whereCondition.Invoice_Number = {
+        [Op.gt]: 0,
+      };
+      whereCondition.Invoice_Total = {
+        [Op.gt]: 0,
+      };
+    } else if (orderType === 'return') {
+      whereCondition.Order_Type = 6;
+      whereCondition.Invoice_Number = {
+        [Op.eq]: 0,
+      };
+      whereCondition.Invoice_Total = {
+        [Op.eq]: 0,
+      };
+    }
 
     if (routeNumber) {
       whereCondition.Route_Number = routeNumber;
@@ -9895,8 +9920,22 @@ export class ManagerService {
           'Route_Number',
           'C_Number',
           'Stop_Number',
+          'Order_Type'
         ],
         include: [
+
+          {
+            model: OrderDetail,
+            as: 'orderDetails',
+            attributes: [
+              'Order_Number',
+              'Quantity_Ordered',
+              'Quantity_Shipped',
+              'OTP_Amount_State',
+              "Price",
+              "PrepaidTax_Amount"
+            ],
+          },
           {
             model: Customer,
             as: 'customer',
