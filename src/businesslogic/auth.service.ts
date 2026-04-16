@@ -52,6 +52,7 @@ import SalesCallTime from "../models/postgres/salesCallTime.model";
 import SalesNote from "../models/postgres/salesNotes";
 import { SupportTicket } from "../models/postgres/supportTicket.model";
 import EpickSetting from "../models/postgres/epickSetting.model";
+import { normalizeEpickSetting } from "../utils/epickSetting.helper";
 import { Driver } from "../models/postgres/driver.model";
 import { TradeShow } from "../models/postgres/tradeShow.model";
 import { TradeShowRetailer } from "../models/postgres/tradeShowRetailer.model";
@@ -897,8 +898,9 @@ export class AuthService {
         salesCategory: salesCategory,
         rolesPermission: filtered,
         logo: logo?.warehouseImage || null,
+        epickSetting: normalizeEpickSetting(epickSetting?.dataValues as any),
         priceBook: priceBook,
-        epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
+       
         role: "sales",
         profile: {
           id: isUserExist.id,
@@ -977,7 +979,7 @@ export class AuthService {
       token: token,
       rolesPermission: filtered,
       logo: logo?.warehouseImage || null,
-      epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
+      epickSetting: normalizeEpickSetting(epickSetting?.dataValues as any),
       role: isUserExist.role || 'epick', // Use role from database, fallback to 'epick' for backward compatibility
       profile: {
         id: isUserExist.id,
@@ -1111,7 +1113,7 @@ export class AuthService {
       token: token,
       rolesPermission: filtered,
       logo: logo?.warehouseImage || null,
-      epickSetting: epickSetting?.dataValues ? epickSetting.dataValues : null,
+      epickSetting: normalizeEpickSetting(epickSetting?.dataValues as any),
       role: isUserExist.role,
       profile: {
         id: isUserExist.id,

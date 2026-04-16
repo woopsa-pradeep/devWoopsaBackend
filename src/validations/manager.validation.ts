@@ -1720,6 +1720,9 @@ export const createEpickSettingSchema = Joi.object({
   }),
   capOrderQtyByInventory: Joi.boolean().optional().messages({
     'boolean.base': 'Cap order qty by inventory must be a boolean'
+  }),
+  autoApproveOverrideRequests: Joi.boolean().optional().messages({
+    'boolean.base': 'Auto approve override requests must be a boolean'
   })
 });
 
@@ -1732,6 +1735,9 @@ export const updateEpickSettingSchema = Joi.object({
   }),
   capOrderQtyByInventory: Joi.boolean().optional().messages({
     'boolean.base': 'Cap order qty by inventory must be a boolean'
+  }),
+  autoApproveOverrideRequests: Joi.boolean().optional().messages({
+    'boolean.base': 'Auto approve override requests must be a boolean'
   })
 });
 

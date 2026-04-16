@@ -32,6 +32,15 @@ EpickSetting.init(
       field: 'capOrderQtyByInventory',
     },
 
+    // When true, picker override requests are persisted as approved immediately (no manager step).
+    // Add column if missing: ALTER TABLE epick_settings ADD COLUMN "autoApproveOverrideRequests" BOOLEAN DEFAULT false;
+    autoApproveOverrideRequests: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+      field: 'autoApproveOverrideRequests',
+    },
+
   },
   {
     sequelize: postgresSequelize,

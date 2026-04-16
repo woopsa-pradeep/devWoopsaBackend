@@ -39,6 +39,7 @@ router.get('/getCompleteOrderDetails/:orderNumber',verifyRole(ROLES.MANAGER,ROLE
  router.post('/addSubsituteProduct',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.addSubsituteProduct.bind(epickController)));
  router.post('/putPassScanItem',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.putPassScanItem.bind(epickController)));
  router.post('/checkPin',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.checkPin.bind(epickController)));
+ router.get('/epickAppSettings',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.getEpickAppSettings.bind(epickController)));
 
 // Override Request routes
 router.post('/createOverrideRequest',verifyRole(ROLES.EPIK, ROLES.SALES),catchAsync(epickController.createOverrideRequest.bind(epickController)));

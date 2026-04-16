@@ -39,9 +39,71 @@ import { Notifications } from "../models/postgres/notification.model";
 import { RecordLock } from "../models/mmsql/recordLocks.model";
 import { ItemLimit } from "../models/postgres/itemLimit.model";
 import { CheckerActionLog } from "../models/postgres/checkerActionLog.model";
+import { normalizeEpickSetting } from "../utils/epickSetting.helper";
 
 
 export class EpickService {
+
+  /** Appended to note when override is auto-approved via distributor Epick setting */
+  private static readonly AUTO_APPROVE_OVERRIDE_NOTE_TAG =
+    "[AUTO_APPROVED: distributor setting autoApproveOverrideRequests]";
+
+  /** Read distributor Epick flag: when true, new override requests are created as approved */
+  private async getAutoApproveOverrideRequestsEnabled(): Promise<boolean> {
+    const row = (await EpickSetting.findOne({
+      attributes: ["autoApproveOverrideRequests"],
+      raw: true,
+    })) as { autoApproveOverrideRequests?: boolean } | null;
+    return row?.autoApproveOverrideRequests === true;
+  }
+
+  /**
+   * Same scan / order side effects as manager `approveOverrideRequest` for scan type.
+   */
+  private async applyApprovedScanOverrideEffects(overrideRequest: OverrideRequest): Promise<void> {
+    if (overrideRequest.requestType !== "scan" || !overrideRequest.qty || overrideRequest.qty <= 0) {
+      return;
+    }
+
+    const orderBox = await OrderPickBox.findOne({
+      where: { orderNumber: overrideRequest.orderNumber },
+      order: [["id", "ASC"]],
+    });
+
+    const boxId = orderBox?.id || null;
+
+    if (boxId) {
+      await OrderPickScan.create({
+        orderNumber: overrideRequest.orderNumber,
+        itemNumber: overrideRequest.itemNumber,
+        qty: overrideRequest.qty,
+        boxId: boxId,
+        isSubsitute: false,
+      });
+    }
+
+    await OrderDetail.update(
+      {
+        Quantity_Shipped: literal(`[Quantity_Shipped] + ${overrideRequest.qty}`),
+      },
+      {
+        where: {
+          Order_Number: overrideRequest.orderNumber,
+          Item_Number: overrideRequest.itemNumber,
+        },
+      }
+    );
+
+    await OrderPick.update(
+      {
+        scannedLines: literal(`"scannedLines" + 1`),
+        scannedQty: literal(`"scannedQty" + ${overrideRequest.qty}`),
+      },
+      {
+        where: { orderNumber: overrideRequest.orderNumber },
+      }
+    );
+  }
 
   /**
    * Helper function: Get order clause for item sorting
@@ -4358,6 +4420,15 @@ export class EpickService {
   }
 
   /**
+   * Current Epick app settings (distributor-controlled), with defaults for flags.
+   * Call after login or when refreshing policy without re-login.
+   */
+  async getEpickAppSettings() {
+    const row = await EpickSetting.findOne({});
+    return normalizeEpickSetting(row?.dataValues as Record<string, unknown> | undefined);
+  }
+
+  /**
    * Create a new override request
    */
   async createOverrideRequest(data: {
@@ -4414,8 +4485,50 @@ export class EpickService {
       throw new AppError(`A pending ${requestTypeLabel} override request already exists for this item`, 400);
     }
 
-    // Create the request
-    // qty defaults to 0 for 'pass' type, required for 'scan' type
+    const autoApprove = await this.getAutoApproveOverrideRequestsEnabled();
+    const qtyResolved =
+      finalRequestType === "scan"
+        ? qty || 0
+        : qty !== undefined && qty !== null
+          ? qty
+          : 0;
+
+    const noteWithAudit = autoApprove
+      ? [note?.trim() || null, EpickService.AUTO_APPROVE_OVERRIDE_NOTE_TAG]
+          .filter((s) => s && String(s).length > 0)
+          .join(" | ")
+      : note || null;
+
+    if (autoApprove) {
+      const overrideRequest = await OverrideRequest.create({
+        orderNumber,
+        itemNumber,
+        lineNumber: lineNumber ?? null,
+        pickerUserNumber: null,
+        pickerUserId: userId,
+        status: "approved",
+        requestType: finalRequestType,
+        qty: qtyResolved,
+        note: noteWithAudit || EpickService.AUTO_APPROVE_OVERRIDE_NOTE_TAG,
+      });
+
+      await this.applyApprovedScanOverrideEffects(overrideRequest);
+
+      return {
+        requestId: overrideRequest.id,
+        status: overrideRequest.status,
+        orderNumber: overrideRequest.orderNumber,
+        itemNumber: overrideRequest.itemNumber,
+        lineNumber: overrideRequest.lineNumber,
+        requestType: overrideRequest.requestType,
+        qty: overrideRequest.qty,
+        note: overrideRequest.note,
+        createdAt: overrideRequest.createdAt,
+        autoApproved: true,
+      };
+    }
+
+    // Create the request (pending — manager approval required)
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
@@ -4441,6 +4554,7 @@ export class EpickService {
       qty: overrideRequest.qty,
       note: overrideRequest.note,
       createdAt: overrideRequest.createdAt,
+      autoApproved: false,
     };
   }
 
@@ -4494,7 +4608,43 @@ export class EpickService {
       throw new AppError('A pending scan override request already exists for this item', 400);
     }
 
-    // Create the scan request
+    const autoApprove = await this.getAutoApproveOverrideRequestsEnabled();
+    const noteWithAudit = autoApprove
+      ? [note?.trim() || null, EpickService.AUTO_APPROVE_OVERRIDE_NOTE_TAG]
+          .filter((s) => s && String(s).length > 0)
+          .join(" | ")
+      : note || null;
+
+    if (autoApprove) {
+      const overrideRequest = await OverrideRequest.create({
+        orderNumber,
+        itemNumber,
+        lineNumber: lineNumber ?? null,
+        pickerUserNumber: null,
+        pickerUserId: userId,
+        status: "approved",
+        requestType: "scan",
+        qty: qty,
+        note: noteWithAudit || EpickService.AUTO_APPROVE_OVERRIDE_NOTE_TAG,
+      });
+
+      await this.applyApprovedScanOverrideEffects(overrideRequest);
+
+      return {
+        requestId: overrideRequest.id,
+        status: overrideRequest.status,
+        orderNumber: overrideRequest.orderNumber,
+        itemNumber: overrideRequest.itemNumber,
+        lineNumber: overrideRequest.lineNumber,
+        requestType: overrideRequest.requestType,
+        qty: overrideRequest.qty,
+        note: overrideRequest.note,
+        createdAt: overrideRequest.createdAt,
+        autoApproved: true,
+      };
+    }
+
+    // Create the scan request (pending)
     const overrideRequest = await OverrideRequest.create({
       orderNumber,
       itemNumber,
@@ -4520,6 +4670,7 @@ export class EpickService {
       qty: overrideRequest.qty,
       note: overrideRequest.note,
       createdAt: overrideRequest.createdAt,
+      autoApproved: false,
     };
   }
 
@@ -5609,57 +5760,7 @@ export class EpickService {
     overrideRequest.status = 'approved';
     await overrideRequest.save();
 
-    // If request type is 'scan', update qty_shipped like normal scan
-    if (overrideRequest.requestType === 'scan' && overrideRequest.qty > 0) {
-      // Get or create a box for this order (use first box or default)
-      const orderBox = await OrderPickBox.findOne({
-        where: {
-          orderNumber: overrideRequest.orderNumber
-        },
-        order: [['id', 'ASC']]
-      });
-
-      const boxId = orderBox?.id || null;
-
-      // Create OrderPickScan record (like normal scan)
-      if (boxId) {
-        await OrderPickScan.create({
-          orderNumber: overrideRequest.orderNumber,
-          itemNumber: overrideRequest.itemNumber,
-          qty: overrideRequest.qty,
-          boxId: boxId,
-          isSubsitute: false
-        });
-      }
-
-      // Update Quantity_Shipped in OrderDetail (like normal scan)
-      // Override approval is explicit manager action - update regardless of Confirmed status
-      // Use MSSQL syntax [column] instead of PostgreSQL "column"
-      await OrderDetail.update(
-        {
-          Quantity_Shipped: literal(`[Quantity_Shipped] + ${overrideRequest.qty}`)
-        },
-        {
-          where: {
-            Order_Number: overrideRequest.orderNumber,
-            Item_Number: overrideRequest.itemNumber
-          }
-        }
-      );
-
-      // Update OrderPick scannedLines and scannedQty
-      await OrderPick.update(
-        {
-          scannedLines: literal(`"scannedLines" + 1`),
-          scannedQty: literal(`"scannedQty" + ${overrideRequest.qty}`)
-        },
-        {
-          where: {
-            orderNumber: overrideRequest.orderNumber
-          }
-        }
-      );
-    }
+    await this.applyApprovedScanOverrideEffects(overrideRequest);
 
     // Note: Epick user will check status via polling API (checkOverrideRequest) every 5 seconds
     // No push notification needed

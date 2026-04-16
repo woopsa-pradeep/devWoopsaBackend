@@ -12,6 +12,11 @@ export enum OrderPODStatus {
   FAILED = 'failed',
 }
 
+interface OtherMethodPaymentAmountItem {
+  type: string;
+  amount: number;
+}
+
 interface DeliveryRoutePODAttributes {
   id: number;
 
@@ -49,6 +54,10 @@ interface DeliveryRoutePODAttributes {
   invoiceAmount: number;
   invoiceMessage: string;
   checkAmount: number;
+  otherMethodPayment: boolean;
+
+  otherMethodPaymentAmount: OtherMethodPaymentAmountItem[];
+
 
   // Notes
   notes: string | null;
@@ -100,6 +109,9 @@ export class DeliveryRoutePOD
   public invoiceUrl!: string | null;
   public invoiceAmount!: number;
   public invoiceMessage!: string;
+
+  public otherMethodPayment!: boolean;
+  public otherMethodPaymentAmount!: OtherMethodPaymentAmountItem[];
 }
 
 DeliveryRoutePOD.init(
@@ -222,6 +234,16 @@ DeliveryRoutePOD.init(
       allowNull: true,
     },
 
+    otherMethodPayment: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    otherMethodPaymentAmount: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: [],
+    },
 
     // Proof of Delivery
     customerSignature: {

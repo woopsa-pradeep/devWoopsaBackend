@@ -394,6 +394,12 @@ export class EpickController {
         const data = await this.epickService.checkPin(req.body.pin);
         sendResponse(res, 200, true, data, General.SUCCESS);
     }
+
+    /** Distributor Epick settings (flags incl. autoApproveOverrideRequests) — refreshed without re-login */
+    async getEpickAppSettings(req: AuthRequest, res: Response) {
+        const data = await this.epickService.getEpickAppSettings();
+        sendResponse(res, 200, true, data, General.SUCCESS);
+    }
  
     /**
      * Create override request (Epick user) - Supports both 'pass' and 'scan' types

@@ -102,6 +102,7 @@ export async function seedEpickSetting() {
     await EpickSetting.create({
       allowSingleScan: true,
       pin: number.toString(),
+      autoApproveOverrideRequests: false,
     });
   }
 }

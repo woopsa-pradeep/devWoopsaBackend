@@ -2431,7 +2431,7 @@ export class ManagerService {
     // Get unique picker user numbers and customer numbers
     const pickerUserNumbers = Array.from(new Set(data.map((e: any) => e.pickerUserNumber).filter((id: any) => id !== null && id !== undefined)));
     const customerNumbers = Array.from(new Set(data.map((e: any) => e.customerNumber).filter((num: any) => num !== null && num !== undefined)));
-    const orderNumbers = Array.from(new Set(data.map((e: any) => e.orderNumber).filter((num: any) => num !== null && num !== undefined)));
+    const reportOrderNumbers = Array.from(new Set(data.map((e: any) => e.orderNumber).filter((num: any) => num !== null && num !== undefined)));
 
     // Fetch picker information from EpickUser by userNumber
     const pickers = await EpickUser.findAll({
@@ -2471,7 +2471,7 @@ export class ManagerService {
     // Fetch route/stop from delivery route stops by orderNumber (fallback source)
     const deliveryStops = await DeliveryRouteStop.findAll({
       where: {
-        orderNumber: { [Op.in]: orderNumbers }
+        orderNumber: { [Op.in]: reportOrderNumbers }
       },
       attributes: ['orderNumber', 'stopSequence'],
       include: [
@@ -7315,7 +7315,7 @@ export class ManagerService {
   }
 
   // EpickSetting CRUD methods
-  async createEpickSetting(body: { pin: string; allowSingleScan: boolean; capOrderQtyByInventory?: boolean }) {
+  async createEpickSetting(body: { pin: string; allowSingleScan: boolean; capOrderQtyByInventory?: boolean; autoApproveOverrideRequests?: boolean }) {
     const epickSetting = await EpickSetting.create(body);
     return epickSetting;
   }
@@ -7407,7 +7407,7 @@ export class ManagerService {
     return item ? true : false;
   }
 
-  async updateEpickSetting(id: number, body: { pin?: string; allowSingleScan?: boolean; capOrderQtyByInventory?: boolean }) {
+  async updateEpickSetting(id: number, body: { pin?: string; allowSingleScan?: boolean; capOrderQtyByInventory?: boolean; autoApproveOverrideRequests?: boolean }) {
     const epickSetting = await EpickSetting.findByPk(id);
     if (!epickSetting) {
       throw new AppError('Epick setting not found', 404);
