@@ -2352,7 +2352,8 @@ export class DriverService {
       Points: 0,
       Total_Weight: 0,
       Delivery_Charge_Select: !!customer.Delivery_Charge,
-      Other_Charge_Select: !!customer.Other_Amount
+      Other_Charge_Select: !!customer.Other_Amount,
+      deliverd: true,
     };
 
 
