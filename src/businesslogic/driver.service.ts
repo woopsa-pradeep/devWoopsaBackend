@@ -924,6 +924,7 @@ export class DriverService {
           orderNumber: stop.orderNumber,
           C_Number: stop.C_Number,
           stopSequence: stop.stopSequence,
+          type: stop.type,
           latitude: stop.latitude,
           longitude: stop.longitude,
           startLatitude: stop.startLatitude,

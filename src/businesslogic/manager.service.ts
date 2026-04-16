@@ -19283,6 +19283,7 @@ export class ManagerService {
         startLatitude: startLat,
         startLongitude: startLng,
         endLatitude: order.lat,
+        type: order.type,
         endLongitude: order.lng,
         totalKilometers: legKm,
         cumulativeKm,
