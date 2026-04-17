@@ -2410,9 +2410,9 @@ export class DriverService {
         throw new AppError(`Product with Item_Number ${item.Item_Number} not found`, 404);
       }
 
-      if (item.Qty <= 0) {
-        throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
-      }
+      // if (item.Qty <= 0) {
+      //   throw new AppError(`Invalid quantity for item ${item.Item_Number}`, 400);
+      // }
 
 
       let optionDefsValues: any = await OptionDefsValues.findOne({ where: { ID_Number: 4003, Option_Value: product.Sales_Category }, raw: true })
