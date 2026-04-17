@@ -9911,6 +9911,8 @@ export class ManagerService {
     const { rows: orders, count: totalRecords } =
       await OrderHeader.findAndCountAll({
         where: whereCondition,
+        distinct: true,
+        col: 'Order_Number',
         attributes: [
           'Order_Number',
           'Order_Date',

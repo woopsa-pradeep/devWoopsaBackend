@@ -2316,7 +2316,7 @@ export class DriverService {
       throw new AppError("Customer not found", 404);
     }
     const orderNumber = await getNextOrderNumber();
-    let Order_Type = 5;
+    let Order_Type = 6;
 
 
 
