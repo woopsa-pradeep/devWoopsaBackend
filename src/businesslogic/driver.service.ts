@@ -2519,7 +2519,7 @@ export class DriverService {
 
 
   async updateReturnOrder(
-    orderUpdateData: Array<{ Order_Number: number; Item_Number: number; Quantity_Shipped: number }>
+    orderUpdateData: Array<{ Order_Number: number; Item_Number: number; Quantity_Shipped: number; Line_Number: number }>
   ) {
     if (!Array.isArray(orderUpdateData) || orderUpdateData.length === 0) {
       throw new AppError("orderUpdateData must be a non-empty array", 400);
@@ -2530,19 +2530,23 @@ export class DriverService {
         Order_Number: number;
         Item_Number: number;
         rowsAffected: number;
+        Line_Number: number;
       }> = [];
 
       for (const row of orderUpdateData) {
         const orderNum = Number(row.Order_Number);
         const qtyShipped = Number(row.Quantity_Shipped);
         const Item_Number = Number(row.Item_Number);
+        const Line_Number = Number(row.Line_Number);
         if (
           !Number.isFinite(orderNum) ||
           orderNum <= 0 ||
           !Number.isFinite(Item_Number) ||
           Item_Number <= 0 ||
           !Number.isFinite(qtyShipped) ||
-          qtyShipped < 0
+          qtyShipped < 0 ||
+          !Number.isFinite(Line_Number) ||
+          Line_Number <= 0
         ) {
           throw new AppError(
             "Each item must have valid Order_Number, Item_Number, and Quantity_Shipped",
@@ -2553,13 +2557,14 @@ export class DriverService {
         const [rowsAffected] = await OrderDetail.update(
           { Quantity_Shipped: qtyShipped },
           {
-            where: { Order_Number: orderNum, Item_Number },
+            where: { Order_Number: orderNum, Item_Number, Line_Number: Line_Number },
             transaction: t,
           }
         );
 
         updates.push({
           Order_Number: orderNum,
+          Line_Number: Line_Number,
           Item_Number,
           rowsAffected,
         });

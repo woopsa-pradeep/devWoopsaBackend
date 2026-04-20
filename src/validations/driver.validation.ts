@@ -167,6 +167,7 @@ export const updateReturnOrderSchema = Joi.array()
       Order_Number: Joi.number().integer().positive().required(),
       Item_Number: Joi.number().integer().positive().required(),
       Quantity_Shipped: Joi.number().min(0).required(),
+      Line_Number: Joi.number().integer().positive().required(),
     })
   )
   .min(1)
