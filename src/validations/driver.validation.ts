@@ -166,7 +166,7 @@ export const updateReturnOrderSchema = Joi.array()
     Joi.object({
       Order_Number: Joi.number().integer().positive().required(),
       Item_Number: Joi.number().integer().positive().required(),
-      Quantity_Shipped: Joi.number().min(0).required(),
+      Quantity_Shipped: Joi.any().required(),
       Line_Number: Joi.number().integer().positive().required(),
     })
   )
