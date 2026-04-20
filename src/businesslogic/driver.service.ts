@@ -1134,11 +1134,12 @@ export class DriverService {
     };
   }
 
-  async getDriverCurrentOrder(driverId: number) {
+  async getDriverCurrentOrder(driverId: number, orderId: number) {
     console.log(driverId, 'driverId')
     const currentRoute = await DeliveryRoute.findOne({
       where: {
         driverId,
+        id: orderId,
         isActive: true,
         routeStatus: RouteStatus.IN_PROGRESS,
       },
