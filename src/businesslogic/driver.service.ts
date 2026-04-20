@@ -2535,7 +2535,7 @@ export class DriverService {
 
       for (const row of orderUpdateData) {
         const orderNum = Number(row.Order_Number);
-        const qtyShipped = Number(row.Quantity_Shipped);
+        const qtyShipped = row.Quantity_Shipped;
         const Item_Number = Number(row.Item_Number);
         const Line_Number = Number(row.Line_Number);
         if (
@@ -2543,8 +2543,7 @@ export class DriverService {
           orderNum <= 0 ||
           !Number.isFinite(Item_Number) ||
           Item_Number <= 0 ||
-          !Number.isFinite(qtyShipped) ||
-          qtyShipped < 0 ||
+
           !Number.isFinite(Line_Number) ||
           Line_Number <= 0
         ) {
